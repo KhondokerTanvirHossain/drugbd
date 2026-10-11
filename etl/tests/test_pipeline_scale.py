@@ -292,6 +292,19 @@ def test_a_crash_at_product_7_keeps_committed_chunks_and_fails_the_rest(url, tmp
     assert curated_counts(url) == once
 
 
+def test_a_stage_abort_with_a_multi_line_postgres_error_gives_a_one_line_note(url, tmp_path):
+    """The stage-abort path: the public batch report shows the first line only, no CONTEXT / tuple internals."""
+    batch_id = "0203-crash-multiline"
+    exc = psycopg.errors.QueryCanceled("canceling statement due to statement timeout\n"
+                                       "CONTEXT:  while updating tuple (0,84) in relation \"batch_item\"")
+    h = Harness(url, FakeDDInter(raise_at={DD[7]: exc}))
+    f = loaded(h, tmp_path, batch_id, ALL)
+    assert h.main("--batch", f, "--stages", "ddinter") != 0
+    res = results(url, batch_id, "ddinter")
+    assert res[P[7]] == ("fail", "error: QueryCanceled: canceling statement due to statement timeout")
+    assert all("\n" not in note and "CONTEXT" not in note for _, note in res.values())
+
+
 def test_a_runtime_error_from_the_client_at_product_7_fails_only_that_product(url, tmp_path):
     """A non-connection error stays inside the product's savepoint (the per-product isolation rule)."""
     batch_id = "0204-runtime"

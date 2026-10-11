@@ -13,7 +13,7 @@ import psycopg
 from bddrug_etl.parse.content import ParsedIngredient, parse_generic_content
 from bddrug_etl.parse.names import normalize_name, strip_salt
 from bddrug_etl.rxnav.client import RxNavClient
-from bddrug_etl.stages.results import SharedChanges, StageResult
+from bddrug_etl.stages.results import SharedChanges, StageResult, error_note
 
 SOURCE = "dgda-ocl"
 
@@ -190,7 +190,7 @@ def build_substances(conn: psycopg.Connection, rxnav: RxNavClient, concept_ids: 
         except (psycopg.OperationalError, psycopg.InterfaceError):
             raise  # connection-level failure: abort the whole run
         except Exception as e:  # per-product isolation; the product's savepoint is already rolled back
-            results.append(StageResult(cid, "fail", f"error: {type(e).__name__}: {str(e)[:200]}", {}))
+            results.append(StageResult(cid, "fail", error_note(e), {}))
     return results
 
 

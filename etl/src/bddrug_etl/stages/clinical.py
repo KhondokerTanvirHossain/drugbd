@@ -7,7 +7,7 @@ import psycopg
 
 from bddrug_etl.parse.content import ParsedIngredient, parse_generic_content
 from bddrug_etl.parse.names import normalize_name, route_for_dosage_form, strip_salt
-from bddrug_etl.stages.results import StageResult
+from bddrug_etl.stages.results import StageResult, error_note
 
 
 def _num(d: Decimal | None) -> str:
@@ -100,7 +100,7 @@ def build_clinical_drugs(conn: psycopg.Connection, concept_ids: list[str]) -> li
         except (psycopg.OperationalError, psycopg.InterfaceError):
             raise
         except Exception as e:
-            results.append(StageResult(cid, "fail", f"error: {type(e).__name__}: {str(e)[:200]}", _empty_evidence(_raw_of(conn, cid))))
+            results.append(StageResult(cid, "fail", error_note(e), _empty_evidence(_raw_of(conn, cid))))
     return results
 
 

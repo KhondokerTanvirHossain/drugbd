@@ -265,6 +265,14 @@ def test_stage_exception_fails_every_product_stops_later_stages_and_keeps_earlie
     assert q(url, "SELECT trade_name FROM curated.brand_product WHERE concept_id = %s", (WARF,)) != [("MUST-ROLL-BACK",)]
 
 
+def test_a_stage_exception_note_is_one_line(url, tmp_path, monkeypatch):
+    def boom(conn, concept_ids):
+        raise RuntimeError("clinical exploded\nCONTEXT:  while updating tuple (0,84) in relation \"batch_item\"")
+    monkeypatch.setattr(run_pipeline, "build_clinical_drugs", boom)
+    assert Harness(url).main("--batch", batch_file(tmp_path, "0115-multiline", [WARF])) != 0
+    assert stage_rows(url, "0115-multiline")[(WARF, "clinical")] == ("fail", "error: RuntimeError: clinical exploded")
+
+
 def test_a_stage_is_one_transaction_so_its_per_product_work_is_rolled_back_on_exception(url, tmp_path, monkeypatch):
     real = run_pipeline.build_substances
 

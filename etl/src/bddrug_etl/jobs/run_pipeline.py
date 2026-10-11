@@ -18,8 +18,8 @@ The DDInter stage is planned once for the whole run, then commits every ``--ddin
 (default 5): each chunk's curated rows, stage results and review stamps go in one transaction. An
 exception that escapes the per-product isolation rolls back only the current chunk: the product being
 processed (or, when the chunk's own bookkeeping failed, every product of the chunk) gets
-``error: <Type>: <msg>``, every other product not yet committed gets ``not run: stage aborted at chunk N``,
-and the earlier chunks stay committed.
+``error: <Type>: <msg>`` (one line: ``results.error_note``), every other product not yet committed gets
+``not run: stage aborted at chunk N``, and the earlier chunks stay committed.
 
 ``--concept ID`` (repeatable) re-runs only those items of an already loaded batch: their dgda load,
 stage results and review stamps are rewritten, the other items are left untouched. An ID that is not in
@@ -50,7 +50,7 @@ from bddrug_etl.ocl.client import OclClient
 from bddrug_etl.rxnav.client import RxNavClient
 from bddrug_etl.stages.clinical import build_clinical_drugs
 from bddrug_etl.stages.ddinter import plan_ddinter
-from bddrug_etl.stages.results import SharedChanges, StageResult, write_stage_results
+from bddrug_etl.stages.results import SharedChanges, StageResult, error_note, write_stage_results
 from bddrug_etl.stages.substances import build_substances
 
 log = logging.getLogger("run_pipeline")
@@ -115,10 +115,6 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--ddinter-chunk", type=_positive_int, default=DDINTER_CHUNK, metavar="N",
                         help=f"commit the DDInter stage every N products (default {DDINTER_CHUNK})")
     return parser
-
-
-def _error_note(e: Exception) -> str:
-    return f"error: {type(e).__name__}: {str(e)[:200]}"
 
 
 def _batch_exists(conn: psycopg.Connection, batch_id: str) -> bool:
@@ -212,7 +208,7 @@ def _run_ddinter(conn: psycopg.Connection, clients: Clients, batch_id: str, targ
             # every other product without committed work from this run was not run
             raised = chunk if current is None else [current]
             uncommitted = chunk + [cid for later in chunks[n:] for cid in later]
-            failed = [StageResult(cid, "fail", _error_note(e) if cid in raised else NOT_RUN_NOTE.format(n), {})
+            failed = [StageResult(cid, "fail", error_note(e) if cid in raised else NOT_RUN_NOTE.format(n), {})
                       for cid in uncommitted]
             _write_failures(conn, "ddinter", batch_id, failed)
             raise _StageAborted(results + failed + skipped) from e
@@ -236,7 +232,7 @@ def _write_failures(conn: psycopg.Connection, stage: str, batch_id: str, results
 def _record_failure(conn: psycopg.Connection, stage: str, batch_id: str, targets: list[str],
                     skipped: list[StageResult], e: Exception) -> list[StageResult]:
     """Roll the stage back and mark every product in it ``fail``; skipped products keep their skip note."""
-    results = skipped + [StageResult(cid, "fail", _error_note(e), {}) for cid in targets]
+    results = skipped + [StageResult(cid, "fail", error_note(e), {}) for cid in targets]
     _write_failures(conn, stage, batch_id, results)
     return results
 
