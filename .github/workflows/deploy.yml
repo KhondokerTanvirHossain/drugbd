@@ -19,10 +19,27 @@ jobs:
       - env:
           OWNER: ${{ github.repository_owner }}
           TAG: ${{ github.event.workflow_run.head_sha }}
+          # Public values that `next build` inlines into the web image. Repo variables, not secrets.
+          # An unset variable builds an image with reviewer sign-in disabled.
+          FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
+          FIREBASE_AUTH_DOMAIN: ${{ vars.FIREBASE_AUTH_DOMAIN }}
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          FIREBASE_APP_ID: ${{ vars.FIREBASE_APP_ID }}
+          TURNSTILE_SITE_KEY: ${{ vars.TURNSTILE_SITE_KEY }}
         run: |
           owner="${OWNER,,}"
           for s in etl api web; do
-            docker build -t "ghcr.io/${owner}/bddrug-$s:${TAG}" "$s"
+            args=()
+            if [ "$s" = web ]; then
+              args=(
+                --build-arg "NEXT_PUBLIC_FIREBASE_API_KEY=${FIREBASE_API_KEY}"
+                --build-arg "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=${FIREBASE_AUTH_DOMAIN}"
+                --build-arg "FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID}"
+                --build-arg "NEXT_PUBLIC_FIREBASE_APP_ID=${FIREBASE_APP_ID}"
+                --build-arg "NEXT_PUBLIC_TURNSTILE_SITE_KEY=${TURNSTILE_SITE_KEY}"
+              )
+            fi
+            docker build "${args[@]}" -t "ghcr.io/${owner}/bddrug-$s:${TAG}" "$s"
             docker push "ghcr.io/${owner}/bddrug-$s:${TAG}"
           done
       # Copy the runtime files (compose, migrations, batch lists) to the host. No git checkout on the host.
@@ -50,6 +67,12 @@ jobs:
             cd "$APP_DIR/deploy"
             test -f .env || { echo "$APP_DIR/deploy/.env is missing; see README Deploy" >&2; exit 1; }
             grep -q '^IMAGE_TAG=' .env || { echo "deploy/.env has no IMAGE_TAG line" >&2; exit 1; }
+            # web and api refuse to start without these; stop here so the running containers stay up.
+            # Checks the length only and never prints a value.
+            for k in SESSION_SECRET INTERNAL_API_TOKEN; do
+              v="$(grep "^${k}=" .env | tail -n 1 | cut -d= -f2-)"
+              [ "${#v}" -ge 32 ] || { echo "deploy/.env: ${k} must be at least 32 characters (openssl rand -hex 32); see README Reviewer sign-in setup" >&2; exit 1; }
+            done
             sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=${TAG}/" .env
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
             trap 'docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
