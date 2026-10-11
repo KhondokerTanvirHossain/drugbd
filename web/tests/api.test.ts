@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getBatch, getProduct, searchProducts } from "../lib/api";
+import { checkInteractions, getBatch, getProduct, getSubstance, searchProducts } from "../lib/api";
 
 const ok = (data: unknown) => new Response(JSON.stringify({ success: true, data }), { status: 200 });
 beforeEach(() => vi.stubEnv("API_URL", "http://api:8080"));
@@ -62,5 +62,46 @@ describe("api client", () => {
     expect(f.mock.calls[0][0]).toBe("http://api:8080/v1/batches/a%2Fb%20c");
     expect(f.mock.calls[0][1].cache).toBe("no-store");
     expect(f.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("getSubstance encodes the id and passes timeout and no-store", async () => {
+    const f = vi.fn().mockResolvedValue(ok({ bdsId: "BDS-000001" })); vi.stubGlobal("fetch", f);
+    expect(await getSubstance("BDS-000001/x")).toEqual({ bdsId: "BDS-000001" });
+    expect(f.mock.calls[0][0]).toBe("http://api:8080/v1/substances/BDS-000001%2Fx");
+    expect(f.mock.calls[0][1].cache).toBe("no-store");
+    expect(f.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
+  });
+  it("getSubstance returns null on 404 and throws on 500", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("{}", { status: 404 })));
+    expect(await getSubstance("BDS-999999")).toBeNull();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("boom", { status: 500 })));
+    await expect(getSubstance("BDS-000001")).rejects.toThrow("API error 500");
+  });
+  it("checkInteractions posts the ids as JSON with timeout and no-store", async () => {
+    const data = { products: [], alerts: [], duplicates: [], noData: [] };
+    const f = vi.fn().mockResolvedValue(ok(data)); vi.stubGlobal("fetch", f);
+    expect(await checkInteractions(["a/b", "c d&e"])).toEqual({ result: data, error: null });
+    const [url, init] = f.mock.calls[0];
+    expect(url).toBe("http://api:8080/v1/interactions/check");
+    expect(init.method).toBe("POST");
+    expect(init.headers).toEqual({ "Content-Type": "application/json" });
+    expect(JSON.parse(init.body)).toEqual({ conceptIds: ["a/b", "c d&e"] });
+    expect(init.cache).toBe("no-store");
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+  });
+  it("checkInteractions returns the API's message on 400 or 404", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ success: false, errors: [{ field: "conceptIds", code: "NOT_FOUND", message: "Product not found: X" }] }),
+      { status: 404 })));
+    expect(await checkInteractions(["X", "Y"])).toEqual({ result: null, error: "Product not found: X" });
+  });
+  it("checkInteractions returns a readable error when fetch rejects or the body is not a result", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("fetch failed")));
+    expect(await checkInteractions(["a", "b"])).toEqual(
+      { result: null, error: "The interaction checker is temporarily unavailable. Please try again." });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("<html>boom</html>", { status: 500 })));
+    expect(await checkInteractions(["a", "b"])).toEqual({ result: null, error: "Interaction check failed" });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(ok({ alerts: [] })));
+    expect(await checkInteractions(["a", "b"])).toEqual({ result: null, error: "Interaction check failed" });
   });
 });
