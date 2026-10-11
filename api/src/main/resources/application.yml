@@ -1,0 +1,8 @@
+spring:
+  application.name: bddrug-api
+  r2dbc:
+    url: ${DB_R2DBC_URL:r2dbc:postgresql://localhost:5432/bddrug}
+    username: ${DB_USER:bddrug}
+    password: ${DB_PASSWORD:change-me}
+server.port: 8080
+management.endpoints.web.exposure.include: health
