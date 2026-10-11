@@ -20,6 +20,13 @@ PRODUCTS = [
     ("part", "Tablet", "Foo 5 mg + Bar", [("XMFOO", "Foo")]),
     ("fail", "Tablet", "", [("XMFOO", "Foo")]),
     ("noalign", "Tablet", "Mystery 5 mg", [("XM5DJ7", "Acetaminophen"), ("XM2TE7", "Chloramphenicol")]),
+    ("cov", "Tablet", "Amoxicillin 500 mg", [("XM2K88", "Clavulanic acid"), ("XM7CM1", "Amoxicillin")]),
+    ("mono", "Tablet", "Amoxicillin 500 mg", [("XM7CM1", "Amoxicillin")]),
+    ("chlor2", "Eye  Drops", "Chloramphenicol 5 mg/ml", [("XM2TE7", "Chloramphenicol")]),
+    ("rev", "Tablet", "Clavulanic Acid 125 mg + Amoxicillin 500 mg", [("XM2K88", "Clavulanic acid"), ("XM7CM1", "Amoxicillin")]),
+    ("vitd", "Tablet", "Vitamin D 1000 IU", [("XMVITD", "Vitamin D")]),
+    ("pct", "Cream", "Chloramphenicol 1%", [("XM2TE7", "Chloramphenicol")]),
+    ("iso", "Eye Drops", "Chloramphenicol 7 mg/ml", [("XM2TE7", "Chloramphenicol")]),
     ("dup", "Tablet", "Amoxicillin 500 mg + Amoxycillin 250 mg", [("XM7CM1", "Amoxicillin")]),
 ]
 
@@ -45,7 +52,7 @@ def conn():
                 for xm, nm in ings:
                     c.execute("INSERT INTO curated.brand_product_ingredient VALUES (%s, %s, %s)", (cid, xm, nm))
             c.commit()
-            build_substances(c, NoRxNav(), ["napa", "combo", "chlor", "noalign", "dup"])
+            build_substances(c, NoRxNav(), ["napa", "combo", "chlor", "noalign", "dup", "cov", "mono", "chlor2", "rev", "vitd", "pct", "iso"])
             c.commit()
             yield c
 
@@ -142,3 +149,92 @@ def test_isolation_and_operational_error(conn, monkeypatch):
     with pytest.raises(psycopg.OperationalError):
         build_clinical_drugs(conn, ["napa2"])
     conn.rollback()
+
+
+KEYS = {"raw", "parse_status", "parsed", "aligned", "bdc_id", "signature"}
+
+
+def test_full_substance_coverage_required(conn):
+    [r] = build_clinical_drugs(conn, ["cov"])
+    assert r.status == "warn" and r.note.startswith("substance BDS-") and r.note.endswith(" not in parsed content")
+    assert bdc_of(conn, "cov")[0] is None and bdc_of(conn, "cov")[1] == "parsed"
+    [m] = build_clinical_drugs(conn, ["mono"])
+    assert m.status == "ok" and m.evidence["bdc_id"] != bdc_of(conn, "cov")[0]
+    assert r.evidence["bdc_id"] is None and r.evidence["signature"] is None
+
+
+def test_coverage_clears_stale_bdc(conn):
+    conn.execute("UPDATE curated.brand_product SET bdc_id=(SELECT bdc_id FROM curated.clinical_drug LIMIT 1) WHERE concept_id='cov'")
+    build_clinical_drugs(conn, ["cov"])
+    assert bdc_of(conn, "cov")[0] is None
+
+
+def test_display_names_deterministic(conn):
+    [a] = build_clinical_drugs(conn, ["napa2"])
+    [rev] = build_clinical_drugs(conn, ["rev"])
+    [c] = build_clinical_drugs(conn, ["combo"])
+    name = lambda r: conn.execute("SELECT display_name FROM curated.clinical_drug WHERE bdc_id=%s", (r.evidence["bdc_id"],)).fetchone()[0]  # noqa: E731
+    assert name(a) == "Acetaminophen 500 mg tablet"
+    assert name(c) == name(rev) == "Amoxicillin 500 mg + Clavulanic acid 125 mg tablet"
+
+
+def test_reversed_order_same_signature_and_row_count_stable(conn):
+    [c] = build_clinical_drugs(conn, ["combo"])
+    [rev] = build_clinical_drugs(conn, ["rev"])
+    assert c.evidence["signature"] == rev.evidence["signature"] and c.evidence["bdc_id"] == rev.evidence["bdc_id"]
+    n = conn.execute("SELECT count(*) FROM curated.clinical_drug_ingredient").fetchone()[0]
+    build_clinical_drugs(conn, ["combo", "rev", "napa2"])
+    assert conn.execute("SELECT count(*) FROM curated.clinical_drug_ingredient").fetchone()[0] == n
+
+
+def test_dose_form_whitespace_normalised(conn):
+    [a] = build_clinical_drugs(conn, ["chlor"])
+    [b] = build_clinical_drugs(conn, ["chlor2"])
+    assert a.evidence["bdc_id"] == b.evidence["bdc_id"]
+    assert conn.execute("SELECT dose_form FROM curated.clinical_drug WHERE bdc_id=%s", (a.evidence["bdc_id"],)).fetchone()[0] == "Eye Drops"
+
+
+def test_unit_display_iu_and_percent(conn):
+    [v] = build_clinical_drugs(conn, ["vitd"])
+    [p] = build_clinical_drugs(conn, ["pct"])
+    q = "SELECT display_name, i.strength_unit FROM curated.clinical_drug d JOIN curated.clinical_drug_ingredient i USING (bdc_id) WHERE bdc_id=%s"
+    assert conn.execute(q, (v.evidence["bdc_id"],)).fetchone() == ("Vitamin D 1000 IU tablet", "iu")
+    assert conn.execute(q, (p.evidence["bdc_id"],)).fetchone() == ("Chloramphenicol 1% cream", "%")
+    assert "iu" in v.evidence["signature"]
+
+
+def test_uniform_evidence_shape(conn):
+    for cid in ["napa2", "part", "fail", "noalign", "dup", "cov"]:
+        [r] = build_clinical_drugs(conn, [cid])
+        assert set(r.evidence) == KEYS, (cid, r.evidence)
+    [r] = build_clinical_drugs(conn, ["chlor"])
+    assert r.evidence["parse_status"] == "parsed"
+    assert r.evidence["parsed"] == [{"name": "Chloramphenicol", "strength_value": "5", "strength_unit": "mg", "per_value": "1", "per_unit": "ml"}]
+    assert r.evidence["aligned"] == [{"name": "Chloramphenicol", "bds_id": r.evidence["aligned"][0]["bds_id"], "method": "name"}]
+    conn.execute("UPDATE curated.brand_product SET generic_content_raw='Chloramphen 1%' WHERE concept_id='pct'")
+    [sg] = build_clinical_drugs(conn, ["pct"])
+    assert [a["method"] for a in sg.evidence["aligned"]] == ["single"]
+    conn.execute("UPDATE curated.brand_product SET generic_content_raw='Chloramphenicol 1%' WHERE concept_id='pct'")
+    [c] = build_clinical_drugs(conn, ["combo"])
+    assert {a["method"] for a in c.evidence["aligned"]} == {"name"}  # noqa
+    [n] = build_clinical_drugs(conn, ["noalign"])
+    assert n.evidence["aligned"] == [{"name": "Mystery", "bds_id": None, "method": "unaligned"}]
+    [pt] = build_clinical_drugs(conn, ["part"])
+    assert pt.evidence["parse_status"] == "partial" and pt.evidence["parsed"][0]["strength_value"] is None
+    assert pt.evidence["aligned"] == [] and pt.evidence["bdc_id"] is None
+
+
+def test_db_error_isolation_rolls_back_partial_writes(conn, monkeypatch):
+    import bddrug_etl.stages.clinical as mod
+    orig = mod._set_status
+
+    def bad(c, cid, bdc_id, status, note):
+        if cid == "iso":
+            c.execute("UPDATE curated.brand_product SET parse_status='bogus' WHERE concept_id=%s", (cid,))
+        return orig(c, cid, bdc_id, status, note)
+
+    monkeypatch.setattr(mod, "_set_status", bad)
+    res = build_clinical_drugs(conn, ["iso", "napa2"])
+    assert [r.status for r in res] == ["fail", "ok"]
+    assert res[0].note.startswith("error: CheckViolation")
+    assert conn.execute("SELECT count(*) FROM curated.clinical_drug WHERE signature LIKE '%7mg/1ml'").fetchone()[0] == 0

@@ -25,14 +25,19 @@ def _signature(dose_form: str, route: str, rows: list[tuple[str, ParsedIngredien
     return dose_form.lower() + "|" + route + "|" + ";".join(parts)
 
 
+def _unit_label(unit: str | None) -> str:
+    return "IU" if unit == "iu" else (unit or "")
+
+
 def _display_name(dose_form: str, rows: list[tuple[str, ParsedIngredient]], preferred: dict[str, str]) -> str:
     bits = []
-    for bds, p in rows:
+    for bds, p in sorted(rows, key=lambda r: (preferred[r[0]].casefold(), r[0])):
         per = ""
         if p.per_unit:
             pv = "" if p.per_value == 1 else f"{_num(p.per_value)} "
             per = f"/{pv}{p.per_unit}"
-        bits.append(f"{preferred[bds]} {_num(p.strength_value)} {p.strength_unit}{per}")
+        sep = "" if p.strength_unit == "%" else " "
+        bits.append(f"{preferred[bds]} {_num(p.strength_value)}{sep}{_unit_label(p.strength_unit)}{per}")
     return " + ".join(bits) + " " + dose_form.lower()
 
 
@@ -53,15 +58,18 @@ def _substances(conn: psycopg.Connection, cid: str) -> list[dict]:
     return out
 
 
-def _align(parsed: tuple[ParsedIngredient, ...], subs: list[dict]) -> list[tuple[ParsedIngredient, str | None]]:
-    if len(parsed) == 1 and len(subs) == 1:
-        # Rule 2 applies only if rule 1 does not already pick (it would pick the same one).
-        return [(parsed[0], subs[0]["bds_id"])]
+def _align(parsed: tuple[ParsedIngredient, ...], subs: list[dict]) -> list[tuple[ParsedIngredient, str | None, str]]:
+    """Rule 1: name match. Rule 2: one ingredient and one substance. Never by position."""
     out = []
     for p in parsed:
         key = normalize_name(strip_salt(p.name))
         hit = next((s["bds_id"] for s in subs if key in s["keys"]), None)
-        out.append((p, hit))
+        if hit:
+            out.append((p, hit, "name"))
+        elif len(parsed) == 1 and len(subs) == 1:
+            out.append((p, subs[0]["bds_id"], "single"))
+        else:
+            out.append((p, None, "unaligned"))
     return out
 
 
@@ -85,42 +93,59 @@ def _set_status(conn, cid: str, bdc_id: str | None, status: str, note: str) -> N
     )
 
 
+def _str(v) -> str | None:
+    return None if v is None else _num(v) if isinstance(v, Decimal) else str(v)
+
+
+def _evidence(raw, status, pc_ings, pairs, bdc_id=None, signature=None) -> dict:
+    return {
+        "raw": raw,
+        "parse_status": status,
+        "parsed": [
+            {"name": p.name, "strength_value": _str(p.strength_value), "strength_unit": p.strength_unit,
+             "per_value": _str(p.per_value), "per_unit": p.per_unit}
+            for p in pc_ings
+        ],
+        "aligned": [{"name": p.name, "bds_id": b, "method": m} for p, b, m in pairs],
+        "bdc_id": bdc_id,
+        "signature": signature,
+    }
+
+
 def _build_one(conn: psycopg.Connection, cid: str) -> StageResult:
     prod = conn.execute(
         "SELECT dosage_form, generic_content_raw FROM curated.brand_product WHERE concept_id = %s", (cid,)
     ).fetchone()
     if prod is None:
         return StageResult(cid, "fail", "product not found", {})
-    dose_form, raw = prod
+    dose_form = " ".join(prod[0].split())
+    raw = prod[1]
     pc = parse_generic_content(raw)
-    names = [p.name for p in pc.ingredients]
-    if pc.status == "failed":
-        _set_status(conn, cid, None, "failed", pc.note)
-        return StageResult(cid, "fail", pc.note, {"raw": raw, "parsed": names})
-    if pc.status == "partial":
-        _set_status(conn, cid, None, "partial", pc.note)
-        return StageResult(cid, "warn", pc.note, {"raw": raw, "parsed": names})
+    if pc.status in ("failed", "partial"):
+        _set_status(conn, cid, None, pc.status, pc.note)
+        return StageResult(cid, "fail" if pc.status == "failed" else "warn", pc.note,
+                           _evidence(raw, pc.status, pc.ingredients, []))
 
     subs = _substances(conn, cid)
     pairs = _align(pc.ingredients, subs)
-    parsed_ev = [{"name": p.name, "raw_text": p.raw_text} for p in pc.ingredients]
-    aligned_ev = [{"name": p.name, "bds_id": b} for p, b in pairs if b]
-    evidence = {"raw": raw, "parsed": parsed_ev, "aligned": aligned_ev, "bdc_id": None, "signature": None}
 
-    unaligned = [p.name for p, b in pairs if b is None]
-    if unaligned:
-        note = "; ".join(f"could not align '{n}'" for n in unaligned)
+    def no_bdc(note: str) -> StageResult:
         _set_status(conn, cid, None, "parsed", note)
-        return StageResult(cid, "warn", note, evidence)
-    seen: set[str] = set()
-    for _, b in pairs:
-        if b in seen:
-            note = f"two ingredients resolve to {b}"
-            _set_status(conn, cid, None, "parsed", note)
-            return StageResult(cid, "warn", note, evidence)
-        seen.add(b)
+        return StageResult(cid, "warn", note, _evidence(raw, "parsed", pc.ingredients, pairs))
 
-    rows = [(b, p) for p, b in pairs]
+    unaligned = [p.name for p, b, _ in pairs if b is None]
+    if unaligned:
+        return no_bdc("; ".join(f"could not align '{n}'" for n in unaligned))
+    seen: set[str] = set()
+    for _, b, _ in pairs:
+        if b in seen:
+            return no_bdc(f"two ingredients resolve to {b}")
+        seen.add(b)
+    for s in subs:
+        if s["bds_id"] not in seen:
+            return no_bdc(f"substance {s['bds_id']} not in parsed content")
+
+    rows = [(b, p) for p, b, _ in pairs]
     route = route_for_dosage_form(dose_form)
     sig = _signature(dose_form, route, rows)
     preferred = {s["bds_id"]: s["preferred"] for s in subs}
@@ -129,7 +154,7 @@ def _build_one(conn: psycopg.Connection, cid: str) -> StageResult:
         bdc = conn.execute(
             """INSERT INTO curated.clinical_drug (signature, display_name, dose_form, route)
                VALUES (%s, %s, %s, %s) ON CONFLICT (signature) DO NOTHING RETURNING bdc_id""",
-            (sig, _display_name(dose_form, rows, preferred), dose_form.strip(), route),
+            (sig, _display_name(dose_form, rows, preferred), dose_form, route),
         ).fetchone()
         if bdc is None:  # lost a race
             bdc = conn.execute("SELECT bdc_id FROM curated.clinical_drug WHERE signature = %s", (sig,)).fetchone()
@@ -142,5 +167,4 @@ def _build_one(conn: psycopg.Connection, cid: str) -> StageResult:
             (bdc_id, b, p.strength_value, p.strength_unit, p.per_value, p.per_unit, p.raw_text),
         )
     _set_status(conn, cid, bdc_id, "parsed", "")
-    evidence.update(bdc_id=bdc_id, signature=sig)
-    return StageResult(cid, "ok", "", evidence)
+    return StageResult(cid, "ok", "", _evidence(raw, "parsed", pc.ingredients, pairs, bdc_id, sig))
