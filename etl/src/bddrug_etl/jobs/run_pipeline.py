@@ -1,6 +1,6 @@
-"""CLI: run the pipeline stages for one batch.
+"""CLI: run the pipeline stages for one batch, or for some of its items.
 
-    bddrug-etl --batch FILE [--stages dgda,substances,clinical,ddinter]
+    bddrug-etl --batch FILE [--stages dgda,substances,clinical,ddinter] [--concept ID ...] [--ddinter-chunk N]
 
 Stages always run in the order dgda → substances → clinical → ddinter (default: all four).
 Each stage runs in its own transaction together with its stage results, and is committed
@@ -8,8 +8,23 @@ before the next stage starts. Every stage that processes a record also stamps it
 ``ops.batch_item.extracted_at`` and resets its review to ``pending`` in that same transaction, so
 an approval never covers data written after it. A per-product ``fail`` never stops other products. An exception
 from a stage rolls that stage back, marks every product in it ``fail``, stops the later stages
-and makes the exit code non-zero. The final log line is
-``batch=<id> dgda=<ok/warn/fail> substances=… clinical=… ddinter=…``.
+and makes the exit code non-zero.
+
+The DDInter stage is planned once for the whole run, then commits every ``--ddinter-chunk`` products
+(default 5): each chunk's curated rows, stage results and review stamps go in one transaction. An
+exception that escapes the per-product isolation rolls back only the current chunk: the product being
+processed (or, when the chunk's own bookkeeping failed, every product of the chunk) gets
+``error: <Type>: <msg>``, every other product not yet committed gets ``not run: stage aborted at chunk N``,
+and the earlier chunks stay committed.
+
+``--concept ID`` (repeatable) re-runs only those items of an already loaded batch: their dgda load,
+stage results and review stamps are rewritten, the other items are left untouched. An ID that is not in
+the batch file is a usage error (exit code 2); one that is in the file but not yet an item of the loaded
+batch needs a full run first (exit code 1, nothing written).
+
+Every run that started a stage appends ``ops.batch_run(batch_id, stages, counts, concept_ids)``: ``stages`` as
+asked, ``counts`` = ``{stage: {ok, warn, fail}}`` for each stage that ran, ``concept_ids`` empty for a full run.
+The final log line is ``batch=<id> dgda=<ok/warn/fail> substances=… clinical=… ddinter=…``.
 """
 import argparse
 import contextlib
@@ -22,14 +37,15 @@ from typing import ContextManager
 
 import httpx
 import psycopg
+from psycopg.types.json import Jsonb
 
 from bddrug_etl.ddinter.client import DDInterClient
 from bddrug_etl.http.snapshot import SnapshotHttp
-from bddrug_etl.load.batches import read_batch_file, reopen_review, run_batch
+from bddrug_etl.load.batches import read_batch_file, reopen_review, run_batch, run_batch_items
 from bddrug_etl.ocl.client import OclClient
 from bddrug_etl.rxnav.client import RxNavClient
 from bddrug_etl.stages.clinical import build_clinical_drugs
-from bddrug_etl.stages.ddinter import map_and_load_ddinter
+from bddrug_etl.stages.ddinter import plan_ddinter
 from bddrug_etl.stages.results import StageResult, write_stage_results
 from bddrug_etl.stages.substances import build_substances
 
@@ -37,6 +53,8 @@ log = logging.getLogger("run_pipeline")
 
 STAGES = ("dgda", "substances", "clinical", "ddinter")
 SKIP_NOTE = "skipped: product not loaded from DGDA"
+NOT_RUN_NOTE = "not run: stage aborted at chunk {}"
+DDINTER_CHUNK = 5
 OCL_USER_AGENT = "bddrug-etl/0.1 (+niramoy)"
 HTTP_TIMEOUT_S = 60.0
 
@@ -73,12 +91,26 @@ def _stage_list(value: str) -> tuple[str, ...]:
     return tuple(s for s in STAGES if s in asked)  # canonical order, de-duplicated
 
 
-def _parse_args(argv: list[str] | None) -> argparse.Namespace:
+def _positive_int(value: str) -> int:
+    try:
+        n = int(value)
+    except ValueError:
+        n = 0
+    if n < 1:
+        raise argparse.ArgumentTypeError(f"must be a positive integer, got {value!r}")
+    return n
+
+
+def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="bddrug-etl", description="Run the BDDrug pipeline for one batch")
     parser.add_argument("--batch", type=pathlib.Path, required=True, help="batches/NNNN-name.txt")
     parser.add_argument("--stages", type=_stage_list, default=STAGES,
                         help=f"comma-separated subset of {','.join(STAGES)} (default: all, always run in that order)")
-    return parser.parse_args(argv)
+    parser.add_argument("--concept", action="append", default=[], metavar="ID",
+                        help="re-run only this item of the (already loaded) batch; repeatable")
+    parser.add_argument("--ddinter-chunk", type=_positive_int, default=DDINTER_CHUNK, metavar="N",
+                        help=f"commit the DDInter stage every N products (default {DDINTER_CHUNK})")
+    return parser
 
 
 def _error_note(e: Exception) -> str:
@@ -87,6 +119,12 @@ def _error_note(e: Exception) -> str:
 
 def _batch_exists(conn: psycopg.Connection, batch_id: str) -> bool:
     return conn.execute("SELECT 1 FROM ops.batch WHERE batch_id = %s", (batch_id,)).fetchone() is not None
+
+
+def _not_items(conn: psycopg.Connection, batch_id: str, ids: list[str]) -> list[str]:
+    known = {r[0] for r in conn.execute(
+        "SELECT concept_id FROM ops.batch_item WHERE batch_id = %s AND concept_id = ANY(%s)", (batch_id, ids))}
+    return [cid for cid in ids if cid not in known]
 
 
 def _eligible(conn: psycopg.Connection, batch_id: str, ids: list[str]) -> list[str]:
@@ -99,18 +137,28 @@ def _eligible(conn: psycopg.Connection, batch_id: str, ids: list[str]) -> list[s
     return [cid for cid in ids if cid in loaded and cid not in dgda_failed]
 
 
+class _StageAborted(Exception):
+    """A chunked stage stopped part-way; ``results`` holds every product's result (already written)."""
+
+    def __init__(self, results: list[StageResult]):
+        super().__init__("stage aborted")
+        self.results = results
+
+
 def _call_stage(stage: str, conn: psycopg.Connection, clients: Clients, ids: list[str]) -> list[StageResult]:
     if stage == "substances":
         return build_substances(conn, clients.rxnav, ids)
-    if stage == "clinical":
-        return build_clinical_drugs(conn, ids)
-    return map_and_load_ddinter(conn, clients.ddinter, ids)
+    return build_clinical_drugs(conn, ids)
 
 
-def _run_dgda(conn: psycopg.Connection, clients: Clients, batch_id: str, ids: list[str]) -> list[StageResult]:
-    run_batch(conn, clients.ocl, batch_id, ids)  # one transaction incl. the 'dgda' results; commits itself
+def _run_dgda(conn: psycopg.Connection, clients: Clients, batch_id: str, ids: list[str],
+              subset: bool) -> list[StageResult]:
+    # one transaction incl. the 'dgda' results; commits itself. A subset never goes through run_batch,
+    # which would treat every other item as removed from the batch file.
+    (run_batch_items if subset else run_batch)(conn, clients.ocl, batch_id, ids)
     rows = conn.execute(
-        "SELECT concept_id, status, note FROM ops.stage_result WHERE batch_id = %s AND stage = 'dgda'", (batch_id,)
+        """SELECT concept_id, status, note FROM ops.stage_result
+           WHERE batch_id = %s AND stage = 'dgda' AND concept_id = ANY(%s)""", (batch_id, ids)
     ).fetchall()
     conn.commit()
     return [StageResult(cid, status, note) for cid, status, note in rows]
@@ -125,10 +173,41 @@ def _run_product_stage(conn: psycopg.Connection, clients: Clients, stage: str, b
     return results + skipped
 
 
-def _record_failure(conn: psycopg.Connection, stage: str, batch_id: str, targets: list[str],
-                    skipped: list[StageResult], e: Exception) -> list[StageResult]:
-    """Roll the stage back and mark every product in it ``fail``; skipped products keep their skip note."""
-    results = skipped + [StageResult(cid, "fail", _error_note(e), {}) for cid in targets]
+def _run_ddinter(conn: psycopg.Connection, clients: Clients, batch_id: str, targets: list[str],
+                 skipped: list[StageResult], chunk_size: int) -> list[StageResult]:
+    """Plan the whole run once, then commit every ``chunk_size`` products (see the module docstring)."""
+    with conn.transaction():  # planning (and the drug-list snapshot) plus the skipped products' results
+        plan = plan_ddinter(conn, clients.ddinter, targets) if targets else None
+        write_stage_results(conn, batch_id, "ddinter", skipped)
+    chunks = [targets[i:i + chunk_size] for i in range(0, len(targets), chunk_size)]
+    results: list[StageResult] = []
+    for n, chunk in enumerate(chunks, start=1):
+        current: str | None = None
+        try:
+            with conn.transaction():  # the chunk's transaction; per-product savepoints nest inside
+                chunk_results = []
+                for cid in chunk:
+                    current = cid
+                    chunk_results.append(plan.process(conn, cid))
+                current = None
+                write_stage_results(conn, batch_id, "ddinter", chunk_results)
+                reopen_review(conn, batch_id, chunk)  # last: these records' approval stops counting
+        except Exception as e:
+            log.exception("stage ddinter aborted at chunk %d for batch %s", n, batch_id)
+            # the product that raised (or the whole chunk, when its bookkeeping raised) gets the error;
+            # every other product without committed work from this run was not run
+            raised = chunk if current is None else [current]
+            uncommitted = chunk + [cid for later in chunks[n:] for cid in later]
+            failed = [StageResult(cid, "fail", _error_note(e) if cid in raised else NOT_RUN_NOTE.format(n), {})
+                      for cid in uncommitted]
+            _write_failures(conn, "ddinter", batch_id, failed)
+            raise _StageAborted(results + failed + skipped) from e
+        results += chunk_results
+    return results + skipped
+
+
+def _write_failures(conn: psycopg.Connection, stage: str, batch_id: str, results: list[StageResult]) -> None:
+    """After a rollback, replace these products' results of ``stage`` (best effort: the connection may be gone)."""
     try:
         conn.rollback()
         if _batch_exists(conn, batch_id):
@@ -138,32 +217,52 @@ def _record_failure(conn: psycopg.Connection, stage: str, batch_id: str, targets
         conn.commit()
     except psycopg.Error:
         log.exception("could not record %s failures for batch %s", stage, batch_id)
+
+
+def _record_failure(conn: psycopg.Connection, stage: str, batch_id: str, targets: list[str],
+                    skipped: list[StageResult], e: Exception) -> list[StageResult]:
+    """Roll the stage back and mark every product in it ``fail``; skipped products keep their skip note."""
+    results = skipped + [StageResult(cid, "fail", _error_note(e), {}) for cid in targets]
+    _write_failures(conn, stage, batch_id, results)
     return results
 
 
 def run_pipeline(conn: psycopg.Connection, clients: Clients, batch_id: str, ids: list[str],
-                 stages: tuple[str, ...] = STAGES) -> tuple[dict[str, list[StageResult]], bool]:
-    """Run ``stages`` in canonical order, committing after each one.
+                 stages: tuple[str, ...] = STAGES, *, subset: bool = False,
+                 ddinter_chunk: int = DDINTER_CHUNK) -> tuple[dict[str, list[StageResult]], bool]:
+    """Run ``stages`` in canonical order, committing after each one (the DDInter stage after each chunk).
 
+    ``subset``: ``ids`` are some items of an already loaded batch (``--concept``); only they are touched.
     Returns (results of every stage that ran, True when no stage raised).
     """
     done: dict[str, list[StageResult]] = {}
-    if "dgda" not in stages and not _batch_exists(conn, batch_id):
+    if (subset or "dgda" not in stages) and not _batch_exists(conn, batch_id):
         conn.rollback()
-        log.error("batch %s has not been loaded; run the dgda stage first", batch_id)
+        log.error("batch %s has not been loaded; run %s first", batch_id,
+                  "the full batch" if subset else "the dgda stage")
+        return done, False
+    if subset and (new := _not_items(conn, batch_id, ids)):
+        conn.rollback()
+        log.error("batch %s has no item %s yet; run the full batch first", batch_id, ", ".join(new))
         return done, False
     conn.commit()  # start each stage from an idle connection
     for stage in stages:
         targets, skipped = ids, []
         try:
             if stage == "dgda":
-                done[stage] = _run_dgda(conn, clients, batch_id, ids)
+                done[stage] = _run_dgda(conn, clients, batch_id, ids, subset)
                 continue
             targets = _eligible(conn, batch_id, ids)
             keep = set(targets)
             skipped = [StageResult(cid, "fail", SKIP_NOTE, {}) for cid in ids if cid not in keep]
             conn.commit()  # end the read-only eligibility transaction
-            done[stage] = _run_product_stage(conn, clients, stage, batch_id, targets, skipped)
+            if stage == "ddinter":
+                done[stage] = _run_ddinter(conn, clients, batch_id, targets, skipped, ddinter_chunk)
+            else:
+                done[stage] = _run_product_stage(conn, clients, stage, batch_id, targets, skipped)
+        except _StageAborted as a:  # chunked stage: earlier chunks stay committed, results already written
+            done[stage] = a.results
+            return done, False
         except Exception as e:  # stage-level failure: roll back, fail every product, stop the later stages
             log.exception("stage %s failed for batch %s", stage, batch_id)
             done[stage] = _record_failure(conn, stage, batch_id, targets, skipped, e)
@@ -171,10 +270,14 @@ def run_pipeline(conn: psycopg.Connection, clients: Clients, batch_id: str, ids:
     return done, True
 
 
+def _tally(results: list[StageResult]) -> dict[str, int]:
+    return {s: sum(r.status == s for r in results) for s in ("ok", "warn", "fail")}
+
+
 def _counts(results: list[StageResult] | None) -> str:
     if results is None:
         return "-"
-    n = {s: sum(r.status == s for r in results) for s in ("ok", "warn", "fail")}
+    n = _tally(results)
     return f"{n['ok']}/{n['warn']}/{n['fail']}"
 
 
@@ -182,16 +285,44 @@ def summary_line(batch_id: str, done: dict[str, list[StageResult]]) -> str:
     return f"batch={batch_id} " + " ".join(f"{s}={_counts(done.get(s))}" for s in STAGES)
 
 
+def record_batch_run(conn: psycopg.Connection, batch_id: str, stages: tuple[str, ...],
+                     done: dict[str, list[StageResult]], concept_ids: list[str]) -> bool:
+    """Append this run to ``ops.batch_run``: counts per stage that ran, for the items it processed."""
+    counts = {s: _tally(done[s]) for s in stages if s in done}
+    try:
+        conn.rollback()  # every stage commits its own work; nothing pending is lost here
+        conn.execute(
+            "INSERT INTO ops.batch_run (batch_id, stages, counts, concept_ids) VALUES (%s, %s, %s, %s)",
+            (batch_id, list(stages), Jsonb(counts), concept_ids),
+        )
+        conn.commit()
+        return True
+    except psycopg.Error:
+        log.exception("could not record the run of batch %s in ops.batch_run", batch_id)
+        return False
+
+
 def main(argv: list[str] | None = None, *,
          connect: Callable[[], psycopg.Connection] | None = None,
          client_factory: ClientFactory = default_clients) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    args = _parse_args(argv)
+    parser = _parser()
+    args = parser.parse_args(argv)
     ids = read_batch_file(args.batch)
     batch_id = args.batch.stem
+    selected: list[str] = []
+    if args.concept:
+        unknown = [cid for cid in dict.fromkeys(args.concept) if cid not in ids]
+        if unknown:
+            parser.error(f"--concept {', '.join(unknown)}: not in the batch file {args.batch}")  # exits 2
+        wanted = set(args.concept)
+        selected = [cid for cid in ids if cid in wanted]  # batch-file order, de-duplicated
     connect = connect or (lambda: psycopg.connect(os.environ.get("DATABASE_URL", "")))
     with connect() as conn, client_factory(conn) as clients:
-        done, ok = run_pipeline(conn, clients, batch_id, ids, args.stages)
+        done, ok = run_pipeline(conn, clients, batch_id, selected or ids, args.stages,
+                                subset=bool(selected), ddinter_chunk=args.ddinter_chunk)
+        if done:  # a run refused before any stage started (batch or item not loaded) is not history
+            ok = record_batch_run(conn, batch_id, args.stages, done, selected) and ok
     log.info("%s", summary_line(batch_id, done))
     return 0 if ok else 1
 

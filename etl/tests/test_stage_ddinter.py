@@ -7,7 +7,7 @@ from testcontainers.postgres import PostgresContainer
 
 from bddrug_etl.ddinter.client import DDInterPairRow
 from bddrug_etl.ddinter.html import DDInterDrug, InteractionText
-from bddrug_etl.stages.ddinter import map_and_load_ddinter
+from bddrug_etl.stages.ddinter import map_and_load_ddinter, plan_ddinter
 from bddrug_etl.stages.results import write_stage_results
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -610,4 +610,37 @@ def test_results_round_trip_through_write_stage_results(conn):
     assert [(c, s) for c, s, _, _ in rows] == [("asa", "ok"), ("domp", "warn"), ("warf", "ok")]
     assert rows[2][3]["mappings"][0]["ddinter_id"] == "DDInter1951" and rows[2][3]["pair_count"] == 3
     assert rows[1][2] == NONE_NOTE
+    conn.rollback()
+
+
+# --- planned once, processed in separate transactions (Sprint 3 chunking) -------------------------
+
+
+def test_a_plan_processes_products_across_separate_commits_with_one_set_of_caches(conn):
+    client = FakeDDInter()
+    plan = plan_ddinter(conn, client, ["warf", "asa", "domp", "noing"])
+    conn.commit()
+    res = []
+    for chunk in (["warf"], ["asa", "domp"], ["noing"]):
+        with conn.transaction():
+            res += [plan.process(conn, cid) for cid in chunk]
+    assert [r.status for r in res] == ["ok", "ok", "warn", "fail"]
+    assert client.drug_list_calls == 1
+    assert client.detail_calls.count("DDInter1951") == 1
+    # warfarin (first commit) and aspirin (second commit) share one text, fetched once
+    assert client.text_calls.count("50001") == 1
+    assert conn.execute("SELECT interaction_id FROM curated.ddinter_pair WHERE ddinter_a = 'DDInter1951' "
+                        "AND ddinter_b = 'DDInter20'").fetchone() == ("50001",)
+    fresh = map_and_load_ddinter(conn, FakeDDInter(), ["warf", "asa", "domp", "noing"])
+    assert [(r.status, r.note) for r in res] == [(r.status, r.note) for r in fresh]
+
+
+def test_a_plan_isolates_products_and_propagates_connection_errors(conn):
+    client = FakeDDInter(fail={("drug_detail", "DDInter1675"): RuntimeError("boom"),
+                               ("drug_detail", "DDInter1951"): psycopg.OperationalError("connection lost")})
+    plan = plan_ddinter(conn, client, ["simva", "asa", "warf"])
+    assert plan.process(conn, "simva").note == "error: RuntimeError: boom"
+    assert plan.process(conn, "asa").status == "ok"
+    with pytest.raises(psycopg.OperationalError):
+        plan.process(conn, "warf")
     conn.rollback()

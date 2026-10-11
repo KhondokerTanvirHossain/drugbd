@@ -6,6 +6,13 @@ cached in memory. The cache holds only what the client returned, never DB state,
 savepoint rolls back cannot leave a stale "already stored" belief behind: "already stored" facts
 (``stored_ids`` / ``stored_texts``) are merged into the run only after the product's savepoint exits.
 
+The run is planned once (``plan_ddinter``: drug list, scope, per-product plans for every product of
+the run) and then processed product by product (``DDInterPlan.process``), so the caller may commit
+between products (the pipeline commits every ``--ddinter-chunk`` products) while the caches still
+cover the whole run. ``map_and_load_ddinter`` plans and processes everything without committing.
+A product's "already stored" facts are merged when its savepoint exits; if the caller then rolls the
+enclosing transaction back, it must stop using the plan (the pipeline aborts the stage).
+
 Interaction texts are fetched for every pair whose two sides are both "in scope": DDInter ids that are
 candidates of this batch's substances, plus every DDInter id already mapped in ``curated.substance_code``
 by earlier batches. A later batch normally holds only new products, so without the stored ids a pair
@@ -331,9 +338,33 @@ def _process(conn: psycopg.Connection, run: _Run, cid: str, subs: list[_Sub], pe
     return StageResult(cid, "warn" if notes else "ok", "; ".join(notes), evidence)
 
 
-def map_and_load_ddinter(conn: psycopg.Connection, client: DDInterClient, concept_ids: list[str]) -> list[StageResult]:
-    if not concept_ids:
-        return []
+class DDInterPlan:
+    """A planned DDInter run: the per-run client caches and one plan per product of the run."""
+
+    def __init__(self, run: _Run, plans: dict[str, list[_Sub] | StageResult]):
+        self._run = run
+        self._plans = plans
+
+    def process(self, conn: psycopg.Connection, cid: str) -> StageResult:
+        """Map and store one planned product inside its own savepoint (per-product isolation)."""
+        plan = self._plans[cid]
+        if isinstance(plan, StageResult):
+            return plan
+        pending = _Pending()
+        try:
+            with conn.transaction():  # one savepoint per product; all its DB work happens inside
+                res = _process(conn, self._run, cid, plan, pending)
+        except (psycopg.OperationalError, psycopg.InterfaceError):
+            raise
+        except Exception as e:
+            return _fail(cid, f"error: {type(e).__name__}: {str(e)[:200]}")
+        self._run.stored_ids |= pending.ids
+        self._run.stored_texts |= pending.texts
+        return res
+
+
+def plan_ddinter(conn: psycopg.Connection, client: DDInterClient, concept_ids: list[str]) -> DDInterPlan:
+    """Fetch the drug list once and plan every product of the run (read-only, apart from snapshots)."""
     run = _Run(client, client.drug_list())  # once per run; a failure here is run-level and propagates
     # DDInter ids mapped by earlier batches: pairs between them and this batch's drugs get texts too
     run.scope_ids.update(code for (code,) in conn.execute(
@@ -352,23 +383,12 @@ def map_and_load_ddinter(conn: psycopg.Connection, client: DDInterClient, concep
         if isinstance(plan, list):
             for sub in plan:
                 run.scope_ids.update(e.ddinter_id for e in run.candidates(sub.keys))
+    return DDInterPlan(run, plans)
 
-    results: list[StageResult] = []
-    for cid in concept_ids:
-        plan = plans[cid]
-        if isinstance(plan, StageResult):
-            results.append(plan)
-            continue
-        pending = _Pending()
-        try:
-            with conn.transaction():  # one savepoint per product; all its DB work happens inside
-                res = _process(conn, run, cid, plan, pending)
-        except (psycopg.OperationalError, psycopg.InterfaceError):
-            raise
-        except Exception as e:
-            res = _fail(cid, f"error: {type(e).__name__}: {str(e)[:200]}")
-        else:
-            run.stored_ids |= pending.ids
-            run.stored_texts |= pending.texts
-        results.append(res)
-    return results
+
+def map_and_load_ddinter(conn: psycopg.Connection, client: DDInterClient, concept_ids: list[str]) -> list[StageResult]:
+    """Plan and process every product in the caller's transaction (no commits)."""
+    if not concept_ids:
+        return []
+    plan = plan_ddinter(conn, client, concept_ids)
+    return [plan.process(conn, cid) for cid in concept_ids]

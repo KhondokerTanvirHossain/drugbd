@@ -36,6 +36,18 @@ def _dgda_results(concept_ids: list[str], found: list[dict], missing: list[str],
     return out
 
 
+def _upsert_items(cur: psycopg.Cursor, batch_id: str, concept_ids: list[str], issues: dict[str, str]) -> None:
+    """(Re)extract these items now: review ``pending`` (or ``issue`` + reason), ``extracted_at = clock_timestamp()``."""
+    cur.executemany(
+        """INSERT INTO ops.batch_item (batch_id, source, concept_id, review, note, extracted_at)
+           VALUES (%s, %s, %s, %s, %s, clock_timestamp())
+           ON CONFLICT (batch_id, concept_id) DO UPDATE
+           SET source = EXCLUDED.source, review = EXCLUDED.review, note = EXCLUDED.note,
+               extracted_at = clock_timestamp()""",
+        [(batch_id, SOURCE, cid, "issue" if cid in issues else "pending", issues.get(cid)) for cid in concept_ids],
+    )
+
+
 def _upsert_batch(cur: psycopg.Cursor, batch_id: str, concept_ids: list[str], issues: dict[str, str]) -> None:
     """Upsert the batch and its items without deleting review history (ops.review_decision).
 
@@ -51,14 +63,7 @@ def _upsert_batch(cur: psycopg.Cursor, batch_id: str, concept_ids: list[str], is
            SET item_count = EXCLUDED.item_count, run_at = now(), status = 'in_review'""",
         (batch_id, len(concept_ids)),
     )
-    cur.executemany(
-        """INSERT INTO ops.batch_item (batch_id, source, concept_id, review, note, extracted_at)
-           VALUES (%s, %s, %s, %s, %s, clock_timestamp())
-           ON CONFLICT (batch_id, concept_id) DO UPDATE
-           SET source = EXCLUDED.source, review = EXCLUDED.review, note = EXCLUDED.note,
-               extracted_at = clock_timestamp()""",
-        [(batch_id, SOURCE, cid, "issue" if cid in issues else "pending", issues.get(cid)) for cid in concept_ids],
-    )
+    _upsert_items(cur, batch_id, concept_ids, issues)
     cur.execute(
         """DELETE FROM ops.batch_item bi
            WHERE bi.batch_id = %s AND NOT (bi.concept_id = ANY(%s))
@@ -91,20 +96,45 @@ def reopen_review(conn: psycopg.Connection, batch_id: str, concept_ids: list[str
     conn.execute("UPDATE ops.batch SET status = 'in_review' WHERE batch_id = %s", (batch_id,))
 
 
+def _load(conn: psycopg.Connection, client, concept_ids: list[str]):
+    """Fetch and load the concepts (not committed); returns (stats, found, missing, not_products, issues)."""
+    found, missing = [], []
+    for concept_id in concept_ids:
+        concept = client.get_concept(OWNER, SOURCE, concept_id)
+        (found.append(concept) if concept else missing.append(concept_id))
+    stats = load_products(conn, found, source=SOURCE, commit=False)  # the caller's single commit keeps it atomic
+    not_products = [c["id"] for c in found if concept_to_product(c) is None]
+    issues = {**{cid: NOT_FOUND for cid in missing}, **{cid: NOT_A_DRUG for cid in not_products}}
+    return stats, found, missing, not_products, issues
+
+
 def run_batch(conn: psycopg.Connection, client, batch_id: str, concept_ids: list[str]) -> LoadStats:
     """Load the batch and record its items and 'dgda' stage results in one transaction (committed here).
 
     Re-running a batch keeps its review history: see ``_upsert_batch``.
     """
-    found, missing = [], []
-    for concept_id in concept_ids:
-        concept = client.get_concept(OWNER, SOURCE, concept_id)
-        (found.append(concept) if concept else missing.append(concept_id))
-    stats = load_products(conn, found, source=SOURCE, commit=False)  # single commit below keeps the run atomic
-    not_products = [c["id"] for c in found if concept_to_product(c) is None]
-    issues = {**{cid: NOT_FOUND for cid in missing}, **{cid: NOT_A_DRUG for cid in not_products}}
+    stats, found, missing, not_products, issues = _load(conn, client, concept_ids)
     with conn.cursor() as cur:
         _upsert_batch(cur, batch_id, concept_ids, issues)
+    write_stage_results(conn, batch_id, "dgda", _dgda_results(concept_ids, found, missing, not_products))
+    conn.commit()
+    return stats
+
+
+def run_batch_items(conn: psycopg.Connection, client, batch_id: str, concept_ids: list[str]) -> LoadStats:
+    """Re-load only ``concept_ids`` of an already loaded batch (single-record re-run), committed here.
+
+    Only these items are touched: they are re-extracted (``_upsert_items``), their stage results are
+    cleared and their 'dgda' results written, all in one transaction. The other items, the batch's
+    ``item_count`` and ``run_at`` stay as they are; the batch goes back to ``in_review``. Never call
+    ``run_batch`` with a subset: it would treat every other item as removed from the batch file.
+    """
+    stats, found, missing, not_products, issues = _load(conn, client, concept_ids)
+    with conn.cursor() as cur:
+        _upsert_items(cur, batch_id, concept_ids, issues)
+        cur.execute("UPDATE ops.batch SET status = 'in_review' WHERE batch_id = %s", (batch_id,))
+        cur.execute("DELETE FROM ops.stage_result WHERE batch_id = %s AND concept_id = ANY(%s)",
+                    (batch_id, concept_ids))
     write_stage_results(conn, batch_id, "dgda", _dgda_results(concept_ids, found, missing, not_products))
     conn.commit()
     return stats

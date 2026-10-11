@@ -154,7 +154,7 @@ def stage_spy(monkeypatch):
     """Wrap the four stage entry points so the call order is observable."""
     calls: list[str] = []
     for stage, attr in (("dgda", "run_batch"), ("substances", "build_substances"),
-                        ("clinical", "build_clinical_drugs"), ("ddinter", "map_and_load_ddinter")):
+                        ("clinical", "build_clinical_drugs"), ("ddinter", "plan_ddinter")):
         real = getattr(run_pipeline, attr)
 
         def spy(*a, _real=real, _stage=stage, **kw):
@@ -412,13 +412,19 @@ def test_each_product_stage_alone_reopens_the_review(url, tmp_path, stage):
 
 def test_an_ok_recorded_while_a_later_stage_runs_does_not_approve_its_output(url, tmp_path, monkeypatch):
     """A pharmacist reviews after dgda but before the (slow) DDInter stage commits: that 'ok' must not count."""
-    real = run_pipeline.map_and_load_ddinter
+    real = run_pipeline.plan_ddinter
     seen = {}
 
-    def review_mid_stage(conn, client, concept_ids):
-        seen["decided_at"] = approve(url, "0117-mid-run", WARF)  # committed inside the stage's open transaction
-        return real(conn, client, concept_ids)
-    monkeypatch.setattr(run_pipeline, "map_and_load_ddinter", review_mid_stage)
+    class ReviewMidChunk:
+        def __init__(self, plan):
+            self.plan = plan
+
+        def process(self, conn, cid):
+            if "decided_at" not in seen:  # committed inside the open chunk transaction, before its stamp
+                seen["decided_at"] = approve(url, "0117-mid-run", WARF)
+            return self.plan.process(conn, cid)
+
+    monkeypatch.setattr(run_pipeline, "plan_ddinter", lambda *a, **kw: ReviewMidChunk(real(*a, **kw)))
     assert Harness(url).main("--batch", batch_file(tmp_path, "0117-mid-run", [WARF, ASA])) == 0
     review, extracted_at = item(url, "0117-mid-run", WARF)
     assert review == "pending"
