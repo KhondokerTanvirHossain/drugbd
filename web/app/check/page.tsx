@@ -1,9 +1,11 @@
 import FlagForm from "@/components/FlagForm";
 import { Badge } from "@/components/badges";
 import { checkInteractions, listLoadedProducts, scopeFor, type AlertSide, type CheckOutcome, type CheckResult } from "@/lib/api";
+import { NO_INTERACTION_TEXT, NO_MANAGEMENT_TEXT } from "@/lib/copy";
+import { ddinterText } from "@/lib/ddinter-text";
 import { firstParam, listParam } from "@/lib/params";
 import { getSession } from "@/lib/session";
-import { groupBySeverity, severityLabel } from "@/lib/severity";
+import { groupBySeverity, severityLabel, severityText } from "@/lib/severity";
 export const dynamic = "force-dynamic";
 
 const MIN_SELECTED = 2, MAX_SELECTED = 20;   // the API accepts 2-20 unique product IDs
@@ -94,15 +96,19 @@ function Results({ r }: { r: CheckResult }) {
       {groupBySeverity(r.alerts).map(([sev, alerts]) => (
         <section key={sev}>
           <h3>{`${severityLabel(sev)} (${alerts.length})`}</h3>
-          {alerts.map((a, n) => (
-            <div key={n} style={box}>
-              <p><strong>{`${side(a.a)} + ${side(a.b)}`}</strong> <Badge>{a.severity}</Badge></p>
-              {a.actions.length > 0 && <p>{`Actions: ${a.actions.join(", ")}`}</p>}
-              <p>{a.interaction ?? "Interaction text not available from DDInter."}</p>
-              {a.management && <p>{`Management: ${a.management}`}</p>}
-              {a.routeAssumed && <p><small>Route assumed: the general DDInter entry was used for at least one of these products.</small></p>}
-              <p><small>{`Source: ${a.source}`}</small></p>
-            </div>))}
+          {alerts.map((a, n) => {
+            // A missing text (or DDInter's "None" placeholder) is never printed: it could read as "no interaction".
+            const management = ddinterText(a.management);
+            return (
+              <div key={n} style={box}>
+                <p><strong>{`${side(a.a)} + ${side(a.b)}`}</strong> <Badge>{severityText(a.severity)}</Badge></p>
+                {a.actions.length > 0 && <p>{`Actions: ${a.actions.join(", ")}`}</p>}
+                <p>{ddinterText(a.interaction) || NO_INTERACTION_TEXT}</p>
+                <p>{management ? `Management: ${management}` : NO_MANAGEMENT_TEXT}</p>
+                {a.routeAssumed && <p><small>Route assumed: the general DDInter entry was used for at least one of these products.</small></p>}
+                <p><small>{`Source: ${a.source}`}</small></p>
+              </div>);
+          })}
         </section>))}
 
       {r.duplicates.length > 0 && (<>

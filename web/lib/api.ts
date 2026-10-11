@@ -164,9 +164,9 @@ export type Substance = {
   products: { conceptId: string; tradeName: string; company: string; reviewStatus?: ReviewStatus | null }[];
   interactions: { partnerName: string; partnerBdsId: string | null; severity: string; actions: string[];
     interactionId: string | null; routeScope: string }[];
-  diseases: { diseaseName: string; severity: string; text: string; refs: string[]; interactionId: string;
+  diseases: { diseaseName: string; severity: string; text: string | null; refs: string[]; interactionId: string;
     routeScope: string }[];
-  foods: { food: string; severity: string; mechanism: string | null; description: string; management: string;
+  foods: { food: string; severity: string; mechanism: string | null; description: string | null; management: string | null;
     refs: string[]; interactionId: string; routeScope: string }[];
 };
 

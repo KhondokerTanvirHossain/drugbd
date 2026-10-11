@@ -2,10 +2,11 @@ import { notFound } from "next/navigation";
 import FlagForm from "@/components/FlagForm";
 import { Badge, UnreviewedBadge } from "@/components/badges";
 import { getSubstance, isHidden, scopeFor } from "@/lib/api";
-import { NO_DATA_SENTENCE, NOT_REVIEWED } from "@/lib/copy";
+import { NO_DATA_SENTENCE, NO_INTERACTION_TEXT, NO_MANAGEMENT_TEXT, NOT_REVIEWED } from "@/lib/copy";
+import { ddinterText } from "@/lib/ddinter-text";
 import { firstParam } from "@/lib/params";
 import { getSession } from "@/lib/session";
-import { groupBySeverity, severityLabel } from "@/lib/severity";
+import { groupBySeverity, severityLabel, severityText } from "@/lib/severity";
 export const dynamic = "force-dynamic";
 
 const table = { borderCollapse: "collapse", width: "100%" } as const;
@@ -76,7 +77,8 @@ export default async function SubstancePage({ params, searchParams }: {
         <table style={table}>
           <thead><tr><th>Disease</th><th>Severity</th><th>Text</th></tr></thead>
           <tbody>{s.diseases.map((d) => (
-            <tr key={`${d.interactionId}|${d.routeScope}`}><td>{d.diseaseName}</td><td>{d.severity}</td><td>{d.text}</td></tr>))}</tbody>
+            <tr key={`${d.interactionId}|${d.routeScope}`}><td>{d.diseaseName}</td><td>{severityText(d.severity)}</td>
+              <td>{ddinterText(d.text) || NO_INTERACTION_TEXT}</td></tr>))}</tbody>
         </table>)}
 
       <h2>Foods</h2>
@@ -84,8 +86,9 @@ export default async function SubstancePage({ params, searchParams }: {
         <table style={table}>
           <thead><tr><th>Food</th><th>Severity</th><th>Description</th><th>Management</th></tr></thead>
           <tbody>{s.foods.map((f) => (
-            <tr key={`${f.interactionId}|${f.routeScope}`}><td>{f.food}</td><td>{f.severity}</td><td>{f.description}</td>
-              <td>{f.management}</td></tr>))}</tbody>
+            <tr key={`${f.interactionId}|${f.routeScope}`}><td>{f.food}</td><td>{severityText(f.severity)}</td>
+              <td>{ddinterText(f.description) || NO_INTERACTION_TEXT}</td>
+              <td>{ddinterText(f.management) || NO_MANAGEMENT_TEXT}</td></tr>))}</tbody>
         </table>)}
 
       <h2>Products using it</h2>

@@ -126,6 +126,41 @@ describe("substance page", () => {
     expect(html).toContain('<a href="/products/W-1">Warin</a>');
   });
 
+  it("never prints a DDInter placeholder in disease or food texts", async () => {
+    getSubstance.mockResolvedValue({ ...warfarin,
+      diseases: [
+        { diseaseName: "Bleeding", severity: "major", text: "None", refs: [], interactionId: "D-1", routeScope: "systemic" },
+        { diseaseName: "Liver disease", severity: "moderate", text: null, refs: [], interactionId: "D-2", routeScope: "systemic" },
+      ],
+      foods: [
+        { food: "Alcohol", severity: "minor", mechanism: null, description: " - ", management: "N/A", refs: [],
+          interactionId: "F-1", routeScope: "systemic" },
+        { food: "Grapefruit", severity: "minor", mechanism: null, description: null, management: null, refs: [],
+          interactionId: "F-2", routeScope: "systemic" },
+      ] });
+    const html = await render("BDS-000001");
+    expect(html.match(/Interaction text not available from DDInter\./g)).toHaveLength(4);
+    expect(html.match(/Management advice not available from DDInter\./g)).toHaveLength(2);
+    expect(html).not.toMatch(/<td>\s*(None|-|N\/A|null)\s*<\/td>/);
+    // no empty disease / food text cell either (the interactions table's empty Actions cell is unrelated)
+    const tables = html.slice(html.indexOf("<h2>Diseases</h2>"), html.indexOf("<h2>Products using it</h2>"));
+    expect(tables).not.toMatch(/<td>\s*<\/td>/);
+  });
+
+  it("shows severity unknown as 'Severity not classified by DDInter' in interactions, diseases and foods", async () => {
+    getSubstance.mockResolvedValue({ ...warfarin,
+      interactions: [{ partnerName: "Alpha", partnerBdsId: null, severity: "unknown", actions: [], interactionId: null,
+        routeScope: "systemic" }],
+      diseases: [{ diseaseName: "Gout", severity: "unknown", text: "Text.", refs: [], interactionId: "D-9", routeScope: "systemic" }],
+      foods: [{ food: "Tea", severity: "unknown", mechanism: null, description: "Desc.", management: "Mgmt.", refs: [],
+        interactionId: "F-9", routeScope: "systemic" }] });
+    const html = await render("BDS-000001");
+    expect(html).toContain("<h3>Severity not classified by DDInter (1)</h3>");
+    expect(html).toContain("<td>Gout</td><td>Severity not classified by DDInter</td>");
+    expect(html).toContain("<td>Tea</td><td>Severity not classified by DDInter</td>");
+    expect(html.toLowerCase()).not.toContain("unknown");
+  });
+
   it("calls notFound for an unknown substance", async () => {
     getSubstance.mockResolvedValue(null);
     await expect(SubstancePage({ params: Promise.resolve({ id: "BDS-999999" }) })).rejects.toSatisfy(

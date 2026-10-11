@@ -170,6 +170,48 @@ describe("check page", () => {
     expect(html).not.toContain("<h2>No interaction data</h2>");
   });
 
+  it("never prints a DDInter placeholder: missing interaction or management text gets the fallback sentences", async () => {
+    const side = (conceptId: string, bdsId: string, name: string) => ({ conceptId, bdsId, name });
+    checkInteractions.mockResolvedValue({ result: emptyResult({
+      products: [
+        { conceptId: "W-1", tradeName: "Warin", substances: [] },
+        { conceptId: "A-1", tradeName: "Ecosprin", substances: [] },
+      ],
+      alerts: [
+        { severity: "major", a: side("W-1", "BDS-000001", "Warfarin"), b: side("A-1", "BDS-000002", "Aspirin"),
+          actions: [], interaction: "None", management: "-", routeAssumed: false, source: "DDInter 2.0" },
+        { severity: "moderate", a: side("W-1", "BDS-000001", "Warfarin"), b: side("A-1", "BDS-000003", "Herb"),
+          actions: [], interaction: "  ", management: "", routeAssumed: false, source: "DDInter 2.0" },
+        { severity: "minor", a: side("W-1", "BDS-000001", "Warfarin"), b: side("A-1", "BDS-000004", "Tea"),
+          actions: [], interaction: "Real effect.", management: "N/A", routeAssumed: false, source: "DDInter 2.0" },
+      ],
+    }), error: null });
+    const html = await render(["W-1", "A-1"]);
+    expect(html.match(/Interaction text not available from DDInter\./g)).toHaveLength(2);
+    expect(html.match(/Management advice not available from DDInter\./g)).toHaveLength(3);
+    expect(html).toContain("Real effect.");
+    expect(html).not.toMatch(/>\s*(None|-|N\/A)\s*</);
+    expect(html).not.toContain("Management: -");
+    expect(html).not.toContain("Management: N/A");
+    expect(html).not.toMatch(/\bNone\b/);
+  });
+
+  it("shows severity unknown as 'Severity not classified by DDInter', never the bare word", async () => {
+    const side = (conceptId: string, bdsId: string, name: string) => ({ conceptId, bdsId, name });
+    checkInteractions.mockResolvedValue({ result: emptyResult({
+      products: [
+        { conceptId: "W-1", tradeName: "Warin", substances: [] },
+        { conceptId: "A-1", tradeName: "Ecosprin", substances: [] },
+      ],
+      alerts: [{ severity: "unknown", a: side("W-1", "BDS-000001", "Warfarin"), b: side("A-1", "BDS-000002", "Aspirin"),
+        actions: [], interaction: "Some effect.", management: "Monitor.", routeAssumed: false, source: "DDInter 2.0" }],
+    }), error: null });
+    const html = await render(["W-1", "A-1"]);
+    expect(html).toContain("<h3>Severity not classified by DDInter (1)</h3>");
+    expect(html).toMatch(/<span class="badge"[^>]*>Severity not classified by DDInter<\/span>/);
+    expect(html.toLowerCase()).not.toContain("unknown");
+  });
+
   it("renders the same-substance section", async () => {
     checkInteractions.mockResolvedValue({ result: emptyResult({
       products: [

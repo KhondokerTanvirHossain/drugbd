@@ -126,6 +126,18 @@ describe("product page", () => {
     expect(html).toContain("DDInter9 Clavulanic acid (route assumed: general entry)");
   });
 
+  it("never prints a DDInter placeholder as an entry name", async () => {
+    getProduct.mockResolvedValue({ ...base, parseStatus: "parsed",
+      clinicalDrug: { bdcId: "BDC-000001", displayName: "Warfarin 5 mg Tablet", doseForm: "Tablet", route: "oral",
+        ingredients: [{ bdsId: "BDS-000001", name: "Warfarin", strengthValue: 5, strengthUnit: "mg", perValue: null,
+          perUnit: null, ddinter: [
+            { ddinterId: "DDInter1951", name: "None", routeScope: "systemic", routeAssumed: false },
+            { ddinterId: "DDInter1952", name: " - ", routeScope: "systemic", routeAssumed: false }] }] } });
+    const html = await render();
+    expect(html).toContain("DDInter: DDInter1951; DDInter1952</small>");
+    expect(html).not.toMatch(/\bNone\b/);
+  });
+
   it("shows parse status and note when there is no clinical drug", async () => {
     getProduct.mockResolvedValue({ ...base, parseStatus: "partial", parseNote: "strength not found for Caffeine" });
     const html = await render();

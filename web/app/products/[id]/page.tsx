@@ -4,12 +4,13 @@ import { Badge, UnreviewedBadge } from "@/components/badges";
 import { getProduct, isHidden, scopeFor, type DdinterRef } from "@/lib/api";
 import { formatStrength } from "@/lib/format";
 import { NOT_REVIEWED } from "@/lib/copy";
+import { ddinterText } from "@/lib/ddinter-text";
 import { firstParam } from "@/lib/params";
 import { getSession } from "@/lib/session";
 export const dynamic = "force-dynamic";
 
 const ddinterLabel = (d: DdinterRef) =>
-  `${d.ddinterId} ${d.name ?? ""}`.trim() + (d.routeAssumed ? " (route assumed: general entry)" : "");
+  `${d.ddinterId} ${ddinterText(d.name) || ""}`.trim() + (d.routeAssumed ? " (route assumed: general entry)" : "");
 
 export default async function ProductPage({ params, searchParams }: {
   params: Promise<{ id: string }>; searchParams?: Promise<{ flag?: string | string[] }> }) {
