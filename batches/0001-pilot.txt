@@ -1,0 +1,11 @@
+# 0001-pilot: PROPOSED — pending pharmacist confirmation
+186-0030-006--napa  # paracetamol: Napa 500 mg tablet (Beximco), the best-known Bangladeshi paracetamol brand; OCL maps it to Acetaminophen (name differs from content text "Paracetamol")
+071-0098-022--amlodipine-5  # amlodipine: Amlodipine-5 tablet; no besilate/besylate tablet is registered in DGDA-Drugs search, so closest registered 5 mg tablet whose content string omits the salt
+185-0138-012--g-warfarin  # warfarin: G Warfarin 5 mg tablet (only warfarin brand found); narrow therapeutic index edge case, sodium salt in content
+076-0028-006--aspirin  # aspirin: Aspirin 300 mg tablet (Apollo); OCL ingredient is Acetylsalicylic acid, so brand content and ingredient names differ
+239-0407-023--clarith  # clarithromycin: Clarith 500 mg tablet; Claricin 250 mg is the alternative
+096-0265-061--simvastatin  # simvastatin: Simvastatin 10 mg tablet (only simvastatin product found)
+420-0026-023--amoxycillin-clavulanic-acid  # amoxicillin + clavulanic acid: two-ingredient combination tablet 500 mg + 125 mg (multi-ingredient mapping, spelling amoxycillin)
+127-0163-052--chloramphenicol  # chloramphenicol eye drop: Chloramphenicol 5 mg/ml Eye Drops (EDCL), true eye-drop dosage form (not ointment)
+127-0263-018--domperidone  # domperidone: Domperidone 10 mg tablet (EDCL), generic-named product
+185-0241-015--g-metformin  # metformin hydrochloride: G-Metformin 500 mg tablet, content string carries the salt name while OCL ingredient is plain Metformin
