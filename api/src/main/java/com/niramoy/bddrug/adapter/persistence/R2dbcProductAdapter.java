@@ -1,6 +1,7 @@
 package com.niramoy.bddrug.adapter.persistence;
 import com.niramoy.bddrug.application.port.ProductQueryPort;
 import com.niramoy.bddrug.domain.Ingredient;
+import com.niramoy.bddrug.domain.LoadedProduct;
 import com.niramoy.bddrug.domain.Product;
 import io.r2dbc.spi.Readable;
 import org.springframework.r2dbc.core.DatabaseClient;
@@ -13,6 +14,9 @@ import java.util.List;
 public class R2dbcProductAdapter implements ProductQueryPort {
     private static final String COLS = "concept_id, dar_number, trade_name, company, dosage_form, generic_content_raw, " +
                                        "quality_flag, parse_status, parse_note, bdc_id";
+    /** Products with their review status as review_status; filter on it in an outer query. */
+    private static final String WITH_STATUS = "SELECT " + COLS + ", " + ReviewSql.statusOf("bp.concept_id") +
+                                              " AS review_status FROM curated.brand_product bp";
     private final DatabaseClient db;
     private final ClinicalDrugReader clinicalDrugs;
     public R2dbcProductAdapter(DatabaseClient db, ClinicalDrugReader clinicalDrugs) {
@@ -27,9 +31,10 @@ public class R2dbcProductAdapter implements ProductQueryPort {
         return "%" + term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
     }
 
-    @Override public Flux<Product> search(String term, int limit, int offset) {
-        return db.sql("SELECT " + COLS + " FROM curated.brand_product " +
-                      "WHERE lower(trade_name) LIKE :p ESCAPE '\\' OR lower(generic_content_raw) LIKE :p ESCAPE '\\' " +
+    @Override public Flux<Product> search(String term, int limit, int offset, boolean approvedOnly) {
+        return db.sql("SELECT * FROM (" + WITH_STATUS + " " +
+                      "WHERE lower(bp.trade_name) LIKE :p ESCAPE '\\' OR lower(bp.generic_content_raw) LIKE :p ESCAPE '\\') p " +
+                      (approvedOnly ? "WHERE p.review_status = 'ok' " : "") +
                       "ORDER BY (lower(trade_name) LIKE :p ESCAPE '\\') DESC, trade_name, concept_id LIMIT :limit OFFSET :offset")
             .bind("p", likePattern(term)).bind("limit", limit).bind("offset", offset)
             .map(R2dbcProductAdapter::toRow).all().collectList()
@@ -39,7 +44,7 @@ public class R2dbcProductAdapter implements ProductQueryPort {
     }
 
     @Override public Mono<Product> findByConceptId(String conceptId) {
-        Mono<Product> product = db.sql("SELECT " + COLS + " FROM curated.brand_product WHERE concept_id = :id")
+        Mono<Product> product = db.sql(WITH_STATUS + " WHERE bp.concept_id = :id")
             .bind("id", conceptId).map(R2dbcProductAdapter::toRow).one()
             .flatMap(r -> r.bdcId() == null ? Mono.just(r.product())
                 : clinicalDrugs.byIds(List.of(r.bdcId())).map(cds -> r.product().withClinicalDrug(cds.get(r.bdcId()))));
@@ -50,11 +55,23 @@ public class R2dbcProductAdapter implements ProductQueryPort {
         return product.zipWith(ingredients, Product::withIngredients);
     }
 
-    static Row toRow(Readable r) {
+    @Override public Flux<LoadedProduct> loaded(boolean approvedOnly) {
+        return db.sql("SELECT concept_id, trade_name, dosage_form FROM (" + WITH_STATUS + ") p " +
+                      (approvedOnly ? "WHERE p.review_status = 'ok' " : "") +
+                      "ORDER BY lower(trade_name), trade_name, concept_id")
+            .map(r -> new LoadedProduct(r.get("concept_id", String.class), r.get("trade_name", String.class),
+                r.get("dosage_form", String.class)))
+            .all();
+    }
+
+    /** A product row from a query that selects review_status. */
+    static Row toRow(Readable r) { return rowWithReview(r, r.get("review_status", String.class)); }
+
+    static Row rowWithReview(Readable r, String reviewStatus) {
         return new Row(new Product(r.get("concept_id", String.class), r.get("dar_number", String.class),
             r.get("trade_name", String.class), r.get("company", String.class), r.get("dosage_form", String.class),
             r.get("generic_content_raw", String.class), r.get("quality_flag", String.class), List.of(),
-            r.get("parse_status", String.class), r.get("parse_note", String.class), null),
+            r.get("parse_status", String.class), r.get("parse_note", String.class), null, reviewStatus),
             r.get("bdc_id", String.class));
     }
 }

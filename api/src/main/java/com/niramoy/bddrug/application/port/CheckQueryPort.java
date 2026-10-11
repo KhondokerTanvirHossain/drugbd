@@ -8,8 +8,11 @@ import java.util.Map;
 public interface CheckQueryPort {
     Mono<CheckData> load(List<String> conceptIds);
 
-    /** route is the clinical drug's route, or null when the product has no clinical drug. */
-    record ProductRow(String conceptId, String tradeName, String genericContentRaw, String route) {}
+    /**
+     * route is the clinical drug's route, or null when the product has no clinical drug.
+     * reviewStatus is the product's current review: ok, pending or issue.
+     */
+    record ProductRow(String conceptId, String tradeName, String genericContentRaw, String route, String reviewStatus) {}
     /** bdsId/preferredName are null when the XM code has no substance; coverage is null without a coverage row. */
     record IngredientRow(String conceptId, String xmCode, String ingredientName, String bdsId, String preferredName,
                          String coverage) {}

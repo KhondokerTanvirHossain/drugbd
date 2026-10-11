@@ -20,11 +20,7 @@ import java.sql.DriverManager;
 class ProductApiIntegrationTest {
     @Container static PostgreSQLContainer<?> pg = new PostgreSQLContainer<>("postgres:16");
 
-    @DynamicPropertySource static void props(DynamicPropertyRegistry r) {
-        r.add("spring.r2dbc.url", () -> "r2dbc:postgresql://" + pg.getHost() + ":" + pg.getFirstMappedPort() + "/" + pg.getDatabaseName());
-        r.add("spring.r2dbc.username", pg::getUsername);
-        r.add("spring.r2dbc.password", pg::getPassword);
-    }
+    @DynamicPropertySource static void props(DynamicPropertyRegistry r) { TestSupport.props(r, pg); }
 
     @BeforeAll static void seed() throws Exception {
         Flyway.configure().dataSource(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword())
@@ -93,37 +89,40 @@ class ProductApiIntegrationTest {
 
     @Autowired WebTestClient web;
 
+    /** These tests check data shape, so they read with scope=all; visibility has its own tests. */
+    private WebTestClient all() { return TestSupport.internal(web); }
+
     @Test void searchesByIngredientTextCaseInsensitive() {
-        web.get().uri("/v1/products?q=AMPHOTERICIN").exchange().expectStatus().isOk()
+        all().get().uri("/v1/products?scope=all&q=AMPHOTERICIN").exchange().expectStatus().isOk()
             .expectBody().jsonPath("$.success").isEqualTo(true)
             .jsonPath("$.data[0].tradeName").isEqualTo("Tericin")
             .jsonPath("$.metadata.requestId").exists();
     }
     @Test void wildcardCharactersAreLiteral() {
-        web.get().uri("/v1/products?q={q}", "%%").exchange().expectStatus().isOk()
+        all().get().uri("/v1/products?scope=all&q={q}", "%%").exchange().expectStatus().isOk()
             .expectBody().jsonPath("$.data.length()").isEqualTo(0);
-        web.get().uri("/v1/products?q={q}", "100%").exchange().expectStatus().isOk()
+        all().get().uri("/v1/products?scope=all&q={q}", "100%").exchange().expectStatus().isOk()
             .expectBody().jsonPath("$.data[0].tradeName").isEqualTo("PCT 100% Max");
     }
     @Test void bengaliQueryReturnsEmptyNotError() {
-        web.get().uri("/v1/products?q={q}", "নাপা").exchange().expectStatus().isOk()
+        all().get().uri("/v1/products?scope=all&q={q}", "নাপা").exchange().expectStatus().isOk()
             .expectBody().jsonPath("$.data.length()").isEqualTo(0);
     }
     @Test void shortQueryIs400WithEnvelope() {
-        web.get().uri("/v1/products?q=a").exchange().expectStatus().isBadRequest()
+        all().get().uri("/v1/products?scope=all&q=a").exchange().expectStatus().isBadRequest()
             .expectBody().jsonPath("$.success").isEqualTo(false)
             .jsonPath("$.errors[0].code").isEqualTo("INVALID_QUERY");
     }
     @Test void detailIncludesIngredients() {
-        web.get().uri("/v1/products/341-0160-020--tericin").exchange().expectStatus().isOk()
+        all().get().uri("/v1/products/341-0160-020--tericin?scope=all").exchange().expectStatus().isOk()
             .expectBody().jsonPath("$.data.ingredients[0].xmCode").isEqualTo("XM5TR4");
     }
     @Test void detailWithoutMappingHasEmptyIngredients() {
-        web.get().uri("/v1/products/000-0000-002--no-map").exchange().expectStatus().isOk()
+        all().get().uri("/v1/products/000-0000-002--no-map?scope=all").exchange().expectStatus().isOk()
             .expectBody().jsonPath("$.data.ingredients.length()").isEqualTo(0);
     }
     @Test void unknownProductIs404() {
-        web.get().uri("/v1/products/does-not-exist").exchange().expectStatus().isNotFound()
+        all().get().uri("/v1/products/does-not-exist?scope=all").exchange().expectStatus().isNotFound()
             .expectBody().jsonPath("$.errors[0].code").isEqualTo("NOT_FOUND");
     }
     @Test void batchShowsSourceBesideExtractedData() {
@@ -145,7 +144,7 @@ class ProductApiIntegrationTest {
     }
 
     @Test void detailIncludesParseStatusAndClinicalDrug() {
-        web.get().uri("/v1/products/341-0160-020--tericin").exchange().expectStatus().isOk()
+        all().get().uri("/v1/products/341-0160-020--tericin?scope=all").exchange().expectStatus().isOk()
             .expectBody()
             .jsonPath("$.data.parseStatus").isEqualTo("parsed")
             .jsonPath("$.data.parseNote").doesNotExist()
@@ -164,7 +163,7 @@ class ProductApiIntegrationTest {
             .jsonPath("$.data.clinicalDrug.ingredients[0].ddinter[0].routeAssumed").isEqualTo(false);
     }
     @Test void detailWithoutClinicalDrugShowsParseNoteAndNull() {
-        web.get().uri("/v1/products/000-0000-002--no-map").exchange().expectStatus().isOk()
+        all().get().uri("/v1/products/000-0000-002--no-map?scope=all").exchange().expectStatus().isOk()
             .expectBody()
             .jsonPath("$.data.parseStatus").isEqualTo("failed")
             .jsonPath("$.data.parseNote").isEqualTo("no strength found")
@@ -172,7 +171,7 @@ class ProductApiIntegrationTest {
     }
     @Test void eyeDropsShowTheOphthalmicDdinterEntry() {
         // Review Focus 3: the chloramphenicol eye drop maps to DDInter352, not DDInter351, on the product page.
-        web.get().uri("/v1/products/000-0000-003--eye").exchange().expectStatus().isOk()
+        all().get().uri("/v1/products/000-0000-003--eye?scope=all").exchange().expectStatus().isOk()
             .expectBody()
             .jsonPath("$.data.clinicalDrug.route").isEqualTo("ophthalmic")
             .jsonPath("$.data.clinicalDrug.ingredients[0].strengthValue").isEqualTo(0.5)
@@ -186,7 +185,7 @@ class ProductApiIntegrationTest {
     }
     @Test void combinationProductHasTwoIngredientsWithTheirOwnStrengths() {
         // Review Focus 2
-        web.get().uri("/v1/products/000-0000-004--amc").exchange().expectStatus().isOk()
+        all().get().uri("/v1/products/000-0000-004--amc?scope=all").exchange().expectStatus().isOk()
             .expectBody()
             .jsonPath("$.data.clinicalDrug.bdcId").isEqualTo("BDC-000003")
             .jsonPath("$.data.clinicalDrug.ingredients.length()").isEqualTo(2)
@@ -199,7 +198,7 @@ class ProductApiIntegrationTest {
             .jsonPath("$.data.clinicalDrug.ingredients[1].ddinter.length()").isEqualTo(0);
     }
     @Test void searchResultsCarryTheClinicalDrugToo() {
-        web.get().uri("/v1/products?q=tericin").exchange().expectStatus().isOk()
+        all().get().uri("/v1/products?scope=all&q=tericin").exchange().expectStatus().isOk()
             .expectBody()
             .jsonPath("$.data[0].parseStatus").isEqualTo("parsed")
             .jsonPath("$.data[0].clinicalDrug.bdcId").isEqualTo("BDC-000001");
