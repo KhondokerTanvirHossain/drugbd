@@ -1,4 +1,11 @@
-"""Substance stage: mint BDS- IDs per ICD-11 XM code, record names, add RxNav codes."""
+"""Substance stage: mint BDS- IDs per ICD-11 XM code, record names, add RxNav codes.
+
+Substances, their names and codes are shared by every product with that substance. A product's run
+reports each substance whose rows it really added (``SharedChanges.bds_ids``; the inserts are
+``ON CONFLICT DO NOTHING``, so an unchanged re-run reports nothing), merged into the caller's
+``changes`` only when the product's savepoint commits. The pipeline then re-opens the review of the
+other products that show them (``reopen_review(..., changes)``).
+"""
 from __future__ import annotations
 
 import psycopg
@@ -6,7 +13,7 @@ import psycopg
 from bddrug_etl.parse.content import ParsedIngredient, parse_generic_content
 from bddrug_etl.parse.names import normalize_name, strip_salt
 from bddrug_etl.rxnav.client import RxNavClient
-from bddrug_etl.stages.results import StageResult
+from bddrug_etl.stages.results import SharedChanges, StageResult
 
 SOURCE = "dgda-ocl"
 
@@ -22,7 +29,8 @@ def _find_by_xm(conn: psycopg.Connection, xm_code: str) -> str | None:
     return row[0] if row else None
 
 
-def _get_or_create_substance(conn: psycopg.Connection, xm_code: str, name: str) -> str:
+def _get_or_create_substance(conn: psycopg.Connection, xm_code: str, name: str, changed: set[str]) -> str:
+    """The substance of ``xm_code``; a newly minted one is added to ``changed``."""
     for _ in range(3):
         found = _find_by_xm(conn, xm_code)
         if found:
@@ -40,25 +48,29 @@ def _get_or_create_substance(conn: psycopg.Connection, xm_code: str, name: str) 
                 ).fetchone()
                 if won is None:
                     raise _LostRace
-                return bds_id
+            changed.add(bds_id)  # after the savepoint: a lost race adds nothing
+            return bds_id
         except _LostRace:
             continue
     raise RuntimeError(f"could not resolve substance for {xm_code}")
 
 
-def _add_name(conn, bds_id: str, name: str, name_type: str, source: str) -> None:
-    conn.execute(
-        "INSERT INTO curated.substance_name (bds_id, name, name_type, source) VALUES (%s, %s, %s, %s) ON CONFLICT DO NOTHING",
+def _add_name(conn, bds_id: str, name: str, name_type: str, source: str) -> bool:
+    """True when the name was new."""
+    return conn.execute(
+        """INSERT INTO curated.substance_name (bds_id, name, name_type, source) VALUES (%s, %s, %s, %s)
+           ON CONFLICT DO NOTHING RETURNING 1""",
         (bds_id, name, name_type, source),
-    )
+    ).fetchone() is not None
 
 
-def _add_code(conn, bds_id: str, system: str, code: str, method: str, confidence: float) -> None:
-    conn.execute(
+def _add_code(conn, bds_id: str, system: str, code: str, method: str, confidence: float) -> bool:
+    """True when the code was new."""
+    return conn.execute(
         """INSERT INTO curated.substance_code (bds_id, system, code, source, method, confidence)
-           VALUES (%s, %s, %s, 'rxnav', %s, %s) ON CONFLICT DO NOTHING""",
+           VALUES (%s, %s, %s, 'rxnav', %s, %s) ON CONFLICT DO NOTHING RETURNING 1""",
         (bds_id, system, code, method, confidence),
-    )
+    ).fetchone() is not None
 
 
 def _rxcui_of(conn, bds_id: str) -> str | None:
@@ -68,7 +80,7 @@ def _rxcui_of(conn, bds_id: str) -> str | None:
     return row[0] if row else None
 
 
-def _ensure_rxnav(conn, rxnav: RxNavClient, bds_id: str, name: str, fallback: str | None) -> None:
+def _ensure_rxnav(conn, rxnav: RxNavClient, bds_id: str, name: str, fallback: str | None, changed: set[str]) -> None:
     if _rxcui_of(conn, bds_id):
         return
     hit = rxnav.rxcui_for_name(name)
@@ -77,13 +89,15 @@ def _ensure_rxnav(conn, rxnav: RxNavClient, bds_id: str, name: str, fallback: st
     if hit is None:
         return
     rxcui, method = hit
-    _add_code(conn, bds_id, "RXCUI", rxcui, method, 1.0 if method == "rxnav-exact" else 0.8)
+    added = _add_code(conn, bds_id, "RXCUI", rxcui, method, 1.0 if method == "rxnav-exact" else 0.8)
     codes = rxnav.codes_for_rxcui(rxcui)
     for system, values in (("ATC", codes.atc), ("DRUGBANK", codes.drugbank), ("SNOMEDCT", codes.snomedct)):
         for v in values:
-            _add_code(conn, bds_id, system, v, method, 1.0 if method == "rxnav-exact" else 0.8)
+            added |= _add_code(conn, bds_id, system, v, method, 1.0 if method == "rxnav-exact" else 0.8)
     if codes.name:
-        _add_name(conn, bds_id, codes.name, "rxnorm", "rxnav")
+        added |= _add_name(conn, bds_id, codes.name, "rxnorm", "rxnav")
+    if added:
+        changed.add(bds_id)
 
 
 def _align(parsed: list[ParsedIngredient], subs: list[dict], rxnav: RxNavClient, use_rxcui: bool, early: dict | None = None) -> dict[int, ParsedIngredient]:
@@ -162,12 +176,17 @@ class _CachedRxNav:
         return self._inner.codes_for_rxcui(rxcui)
 
 
-def build_substances(conn: psycopg.Connection, rxnav: RxNavClient, concept_ids: list[str]) -> list[StageResult]:
+def build_substances(conn: psycopg.Connection, rxnav: RxNavClient, concept_ids: list[str],
+                     changes: SharedChanges | None = None) -> list[StageResult]:
+    """One result per product; ``changes`` (if given) collects the substances whose shared rows were added."""
     rxnav = _CachedRxNav(rxnav)
     results: list[StageResult] = []
     for cid in concept_ids:
         try:
-            results.append(_build_one(conn, rxnav, cid))
+            changed: set[str] = set()
+            results.append(_build_one(conn, rxnav, cid, changed))
+            if changes is not None:
+                changes.bds_ids |= changed  # only once the product's savepoint has committed
         except (psycopg.OperationalError, psycopg.InterfaceError):
             raise  # connection-level failure: abort the whole run
         except Exception as e:  # per-product isolation; the product's savepoint is already rolled back
@@ -175,12 +194,12 @@ def build_substances(conn: psycopg.Connection, rxnav: RxNavClient, concept_ids: 
     return results
 
 
-def _build_one(conn: psycopg.Connection, rxnav, cid: str) -> StageResult:
+def _build_one(conn: psycopg.Connection, rxnav, cid: str, changed: set[str]) -> StageResult:
     with conn.transaction():
-        return _build_one_in_savepoint(conn, rxnav, cid)
+        return _build_one_in_savepoint(conn, rxnav, cid, changed)
 
 
-def _build_one_in_savepoint(conn: psycopg.Connection, rxnav, cid: str) -> StageResult:
+def _build_one_in_savepoint(conn: psycopg.Connection, rxnav, cid: str, changed: set[str]) -> StageResult:
     prod = conn.execute(
         "SELECT generic_content_raw FROM curated.brand_product WHERE concept_id = %s", (cid,)
     ).fetchone()
@@ -193,17 +212,18 @@ def _build_one_in_savepoint(conn: psycopg.Connection, rxnav, cid: str) -> StageR
     parsed = list(parse_generic_content(prod[0]).ingredients) if prod else []
 
     subs = [
-        {"bds_id": _get_or_create_substance(conn, xm, name), "xm": xm, "xm_name": name}
+        {"bds_id": _get_or_create_substance(conn, xm, name, changed), "xm": xm, "xm_name": name}
         for xm, name in ings
     ]
     for s in subs:
-        _add_name(conn, s["bds_id"], s["xm_name"], "icd11", SOURCE)
+        if _add_name(conn, s["bds_id"], s["xm_name"], "icd11", SOURCE):
+            changed.add(s["bds_id"])
         fb = None
         if parsed:
             # Early alignment (rules 1-2 on the XM name only); RxNorm name is not known yet.
             m = _align(parsed, subs, rxnav, False, early=s)
             fb = strip_salt(m[0].name) if m else None
-        _ensure_rxnav(conn, rxnav, s["bds_id"], s["xm_name"], fb)
+        _ensure_rxnav(conn, rxnav, s["bds_id"], s["xm_name"], fb, changed)
         s["rxcui"] = _rxcui_of(conn, s["bds_id"])
         s["rxnorm_name"] = _rxnorm_name(conn, s["bds_id"])
 
@@ -215,7 +235,8 @@ def _build_one_in_savepoint(conn: psycopg.Connection, rxnav, cid: str) -> StageR
             if p is None:
                 notes.append(f"no dgda_content name aligned for {s['xm_name']}")
             else:
-                _add_name(conn, s["bds_id"], strip_salt(p.name), "dgda_content", SOURCE)
+                if _add_name(conn, s["bds_id"], strip_salt(p.name), "dgda_content", SOURCE):
+                    changed.add(s["bds_id"])
     else:
         notes.append("no parsed content to align names")
     missing = [f"no RxCUI for {s['xm_name']}" for s in subs if not s["rxcui"]]

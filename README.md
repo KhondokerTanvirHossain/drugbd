@@ -93,6 +93,7 @@ Where each value lives:
    ```
    - Emails match case-insensitively. Malformed entries are ignored. Anyone signed in but not listed gets role `user` (can flag, cannot review).
    - Only a pharmacist's OK approves a record; an engineer's OK is recorded but does not approve on its own.
+   - Re-running a record puts it back to pending. So does a run of **another** product that really changes data the record shows through a shared substance: a new name or code, a new or changed DDInter mapping, a coverage change, or a changed interaction pair or text. Such a record goes back to pending in its latest batch, and the ETL log lists it ("re-opened the review of N other record(s)"). A run that rewrites identical data re-opens nothing else.
    - Reviewer emails are personal data: keep them only in the host `.env`. Never commit them or paste them into issues, PRs or logs. Public pages show the role, never the email.
 
 **Add, remove or change a reviewer** on the host:

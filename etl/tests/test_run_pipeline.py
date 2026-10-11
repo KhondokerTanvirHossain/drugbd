@@ -268,8 +268,8 @@ def test_stage_exception_fails_every_product_stops_later_stages_and_keeps_earlie
 def test_a_stage_is_one_transaction_so_its_per_product_work_is_rolled_back_on_exception(url, tmp_path, monkeypatch):
     real = run_pipeline.build_substances
 
-    def late_boom(conn, rxnav, concept_ids):
-        results = real(conn, rxnav, concept_ids)  # real per-product savepoints and writes
+    def late_boom(conn, rxnav, concept_ids, *rest):
+        results = real(conn, rxnav, concept_ids, *rest)  # real per-product savepoints and writes
         assert [r.concept_id for r in results] == [TESTIUM]
         raise RuntimeError("after the products")
     monkeypatch.setattr(run_pipeline, "build_substances", late_boom)
@@ -419,10 +419,10 @@ def test_an_ok_recorded_while_a_later_stage_runs_does_not_approve_its_output(url
         def __init__(self, plan):
             self.plan = plan
 
-        def process(self, conn, cid):
+        def process(self, conn, cid, *rest):
             if "decided_at" not in seen:  # committed inside the open chunk transaction, before its stamp
                 seen["decided_at"] = approve(url, "0117-mid-run", WARF)
-            return self.plan.process(conn, cid)
+            return self.plan.process(conn, cid, *rest)
 
     monkeypatch.setattr(run_pipeline, "plan_ddinter", lambda *a, **kw: ReviewMidChunk(real(*a, **kw)))
     assert Harness(url).main("--batch", batch_file(tmp_path, "0117-mid-run", [WARF, ASA])) == 0

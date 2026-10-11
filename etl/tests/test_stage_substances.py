@@ -5,7 +5,7 @@ import pytest
 from testcontainers.postgres import PostgresContainer
 
 from bddrug_etl.rxnav.client import RxCodes
-from bddrug_etl.stages.results import StageResult, write_stage_results
+from bddrug_etl.stages.results import SharedChanges, StageResult, write_stage_results
 from bddrug_etl.stages.substances import build_substances
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -194,10 +194,12 @@ def test_lost_race_leaves_no_orphan(conn):
         return real(c, xm)
     mod._find_by_xm = racing
     try:
-        got = mod._get_or_create_substance(conn, "XMRACE", "Mine")
+        changed = set()
+        got = mod._get_or_create_substance(conn, "XMRACE", "Mine", changed)
     finally:
         mod._find_by_xm = real
     assert got == "BDS-900001"
+    assert changed == set()  # the lost race minted nothing (the winner's own run reports its substance)
     assert conn.execute("SELECT count(*) FROM curated.substance WHERE preferred_name='Mine'").fetchone()[0] == 0
     assert conn.execute("SELECT count(*) FROM curated.substance s LEFT JOIN curated.substance_code c USING (bds_id) WHERE c.bds_id IS NULL").fetchone()[0] == 0
 
@@ -302,3 +304,60 @@ def test_operational_error_propagates(conn):
     with pytest.raises(pg.OperationalError):
         build_substances(conn, DownRxNav(), ["dn"])
     conn.rollback()
+
+
+# --- shared-row changes (they re-open other products' approvals in the pipeline) ----------------
+
+
+def _product(conn, cid, xm, ingredient, content):
+    conn.execute("""INSERT INTO curated.brand_product (concept_id, dar_number, trade_name, company, dosage_form, generic_content_raw)
+                    VALUES (%s, 'D', %s, 'Co', 'Tablet', %s)""", (cid, cid, content))
+    conn.execute("INSERT INTO curated.brand_product_ingredient VALUES (%s, %s, %s)", (cid, xm, ingredient))
+    conn.commit()
+
+
+def _bds(conn, xm):
+    return conn.execute("SELECT bds_id FROM curated.substance_code WHERE system = 'ICD11_XM' AND code = %s", (xm,)).fetchone()[0]
+
+
+def test_shared_changes_new_rows_are_reported_and_an_identical_rerun_reports_none(conn):
+    _product(conn, "sh-1", "XMSHR1", "Sharedium", "Sharedium 5 mg")
+    rx = FakeRxNav(RXCUI | {"sharedium": "90001"})
+    changes = SharedChanges()
+    [res] = build_substances(conn, rx, ["sh-1"], changes)
+    assert res.status == "ok", res
+    assert changes == SharedChanges(bds_ids={_bds(conn, "XMSHR1")})  # minted, named, coded
+
+    again = SharedChanges()
+    build_substances(conn, rx, ["sh-1"], again)
+    assert again == SharedChanges()
+
+    # another product with the same substance brings a new dgda_content name
+    _product(conn, "sh-2", "XMSHR1", "Sharedium", "Shared-alias 5 mg")
+    alias = SharedChanges()
+    build_substances(conn, rx, ["sh-2"], alias)
+    assert alias == SharedChanges(bds_ids={_bds(conn, "XMSHR1")})
+    assert ("Shared-alias", "dgda_content") in names(conn, _bds(conn, "XMSHR1"))
+
+
+def test_shared_changes_new_rxnav_codes_are_reported(conn):
+    _product(conn, "sh-3", "XMSHR3", "Codeium", "Codeium 5 mg")
+    build_substances(conn, FakeRxNav({}), ["sh-3"], SharedChanges())  # no RxCUI yet
+    changes = SharedChanges()
+    build_substances(conn, FakeRxNav({"codeium": "90003"}), ["sh-3"], changes)  # RxNav now knows it
+    assert changes == SharedChanges(bds_ids={_bds(conn, "XMSHR3")})
+
+
+def test_shared_changes_of_a_rolled_back_product_are_not_reported(conn):
+    _product(conn, "sh-4", "XMSHR4", "Rollium", "Rollium 5 mg")
+    build_substances(conn, FakeRxNav({}), ["sh-4"], SharedChanges())
+    _product(conn, "sh-5", "XMSHR4", "Rollium alt", "Rollium 5 mg")  # a new icd11 name, then RxNav fails
+
+    class Down(FakeRxNav):
+        def rxcui_for_name(self, name):
+            raise RuntimeError("rxnav down")
+
+    changes = SharedChanges()
+    [res] = build_substances(conn, Down({}), ["sh-5"], changes)
+    assert res.status == "fail"
+    assert changes == SharedChanges()

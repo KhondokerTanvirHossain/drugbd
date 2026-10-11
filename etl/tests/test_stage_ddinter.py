@@ -8,7 +8,7 @@ from testcontainers.postgres import PostgresContainer
 from bddrug_etl.ddinter.client import DDInterPairRow
 from bddrug_etl.ddinter.html import DDInterDrug, InteractionText
 from bddrug_etl.stages.ddinter import map_and_load_ddinter, plan_ddinter
-from bddrug_etl.stages.results import write_stage_results
+from bddrug_etl.stages.results import SharedChanges, write_stage_results
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 NONE_NOTE = "No interaction data in DDInter for this substance"
@@ -644,3 +644,91 @@ def test_a_plan_isolates_products_and_propagates_connection_errors(conn):
     with pytest.raises(psycopg.OperationalError):
         plan.process(conn, "warf")
     conn.rollback()
+
+
+# --- shared-row changes (they re-open other products' approvals in the pipeline) ----------------
+
+
+ALL_PRODUCTS = [p[0] for p in PRODUCTS]
+
+
+def test_first_run_reports_every_shared_row_it_wrote(conn):
+    changes = SharedChanges()
+    map_and_load_ddinter(conn, FakeDDInter(), ["warf", "asa", "domp"], changes)
+    assert changes.bds_ids == {WARF, ASA, DOMP}  # mapping + coverage for warfarin/aspirin, 'none' for domperidone
+    # mapped drugs and every partner of a stored pair (warfarin's graph: aspirin, clarithromycin, acetaminophen)
+    assert changes.ddinter_ids == {"DDInter1951", "DDInter20", "DDInter393", "DDInter14"}
+
+
+def test_an_identical_rerun_reports_no_shared_change(conn):
+    map_and_load_ddinter(conn, FakeDDInter(), ALL_PRODUCTS, SharedChanges())
+    changes = SharedChanges()
+    map_and_load_ddinter(conn, FakeDDInter(), ALL_PRODUCTS, changes)  # codes, names, coverage, pairs, texts,
+    assert changes == SharedChanges()                                # diseases and foods all unchanged
+
+
+class _ChangedUpstream(FakeDDInter):
+    def __init__(self, graph=None, diseases=None, foods=None, text=None, **kw):
+        super().__init__(**kw)
+        self._g, self._d, self._f, self._t = graph or {}, diseases or {}, foods or {}, text or {}
+
+    def graph(self, ddinter_id):
+        rows = super().graph(ddinter_id)
+        return [DDInterPairRow(*self._g[(ddinter_id, r.partner_id)]) if (ddinter_id, r.partner_id) in self._g else r
+                for r in rows]
+
+    def diseases(self, ddinter_id):
+        return self._d.get(ddinter_id, super().diseases(ddinter_id))
+
+    def foods(self, ddinter_id):
+        return self._f.get(ddinter_id, super().foods(ddinter_id))
+
+    def interaction(self, interaction_id):
+        return self._t.get(interaction_id) or super().interaction(interaction_id)
+
+
+@pytest.mark.parametrize("upstream, expected", [
+    (dict(graph={("DDInter1951", "DDInter14"): ("DDInter14", "Acetaminophen", "major", (N,))}),
+     {"DDInter1951", "DDInter14"}),
+    (dict(diseases={"DDInter1951": [dict(DISEASES["DDInter1951"][0], severity="minor")]}), {"DDInter1951"}),
+    (dict(foods={"DDInter1951": [dict(FOODS["DDInter1951"][0], management="Avoid.")]}), {"DDInter1951"}),
+], ids=["pair-severity", "disease", "food"])
+def test_changed_upstream_ddinter_data_is_reported(conn, upstream, expected):
+    map_and_load_ddinter(conn, FakeDDInter(), ["warf"], SharedChanges())
+    changes = SharedChanges()
+    map_and_load_ddinter(conn, _ChangedUpstream(**upstream), ["warf"], changes)
+    assert changes == SharedChanges(ddinter_ids=expected)
+
+
+def test_a_changed_interaction_text_is_reported_for_both_sides(conn):
+    map_and_load_ddinter(conn, FakeDDInter(), ["warf", "asa"], SharedChanges())
+    conn.execute("UPDATE curated.ddinter_interaction_text SET management = 'old' WHERE interaction_id = '50001'")
+    conn.execute("UPDATE curated.ddinter_pair SET interaction_id = NULL WHERE ddinter_a = 'DDInter1951' AND ddinter_b = 'DDInter20'")
+    changes = SharedChanges()
+    map_and_load_ddinter(conn, FakeDDInter(), ["warf", "asa"], changes)  # the text is fetched and stored again
+    assert changes == SharedChanges(ddinter_ids={"DDInter1951", "DDInter20"})
+
+
+def test_a_new_mapping_and_a_coverage_flip_are_reported(conn):
+    map_and_load_ddinter(conn, FakeDDInter(), ["domp"], SharedChanges())
+    assert coverage(conn, DOMP)[0] == "none"
+    changes = SharedChanges()
+    map_and_load_ddinter(conn, FakeDDInter(extra_drugs={"DDInter999": ("Domperidone", None)}), ["domp"], changes)
+    assert changes == SharedChanges(bds_ids={DOMP}, ddinter_ids={"DDInter999"})
+
+
+def test_a_changed_mapping_method_is_reported(conn):
+    map_and_load_ddinter(conn, FakeDDInter(), ["amlo"], SharedChanges())
+    conn.execute("UPDATE curated.substance_code SET method = 'drugbank', confidence = 1.0 WHERE system = 'DDINTER' AND bds_id = %s",
+                 (AMLO,))
+    changes = SharedChanges()
+    map_and_load_ddinter(conn, FakeDDInter(), ["amlo"], changes)
+    assert AMLO in changes.bds_ids
+    assert ddinter_codes(conn, AMLO) == [("DDInter79", "systemic", "name", Decimal("0.70"))]
+
+
+def test_a_failed_product_reports_nothing(conn):
+    changes = SharedChanges()
+    res = map_and_load_ddinter(conn, FakeDDInter(fail={("graph", "DDInter1951"): RuntimeError("down")}), ["warf"], changes)
+    assert res[0].status == "fail"
+    assert changes == SharedChanges()

@@ -5,7 +5,7 @@ import psycopg
 
 from bddrug_etl.load.products import LoadStats, load_products
 from bddrug_etl.ocl.transform import concept_to_product
-from bddrug_etl.stages.results import StageResult, write_stage_results
+from bddrug_etl.stages.results import SharedChanges, StageResult, write_stage_results
 
 OWNER, SOURCE = "MoHFW", "DGDA-Drugs"
 NOT_FOUND, NOT_A_DRUG = "not found at source", "not a registered Drug product"
@@ -78,22 +78,70 @@ def _upsert_batch(cur: psycopg.Cursor, batch_id: str, concept_ids: list[str], is
     cur.execute("DELETE FROM ops.stage_result WHERE batch_id = %s", (batch_id,))
 
 
-def reopen_review(conn: psycopg.Connection, batch_id: str, concept_ids: list[str]) -> None:
+def reopen_review(conn: psycopg.Connection, batch_id: str, concept_ids: list[str],
+                  changes: SharedChanges | None = None) -> list[tuple[str, str]]:
     """Stamp ``extracted_at`` and put the items' review back to ``pending`` (Review Focus 3).
 
     Call it last, inside the same transaction as the curated writes for ``concept_ids``, so the stamp
     commits (or rolls back) with them. ``clock_timestamp()`` is used rather than ``now()``: a decision
     recorded while that transaction was open saw the old data, so it must be older than the stamp.
-    The decision history (``ops.review_decision``) is untouched; the batch goes back to ``in_review``.
+    The decision history (``ops.review_decision``) is untouched; the batches go back to ``in_review``.
+
+    ``changes``: the shared rows this transaction changed (``SharedChanges``). Every other product that
+    shows them is re-opened too (``_reopen_dependents``) and returned as (batch_id, concept_id) pairs.
+    All item rows are locked before any ``ops.batch`` row, the same order as the API's decision
+    transaction, so the two cannot deadlock.
     """
-    if not concept_ids:
-        return
-    conn.execute(
-        """UPDATE ops.batch_item SET review = 'pending', extracted_at = clock_timestamp()
-           WHERE batch_id = %s AND concept_id = ANY(%s)""",
-        (batch_id, concept_ids),
-    )
-    conn.execute("UPDATE ops.batch SET status = 'in_review' WHERE batch_id = %s", (batch_id,))
+    if concept_ids:
+        conn.execute(
+            """UPDATE ops.batch_item SET review = 'pending', extracted_at = clock_timestamp()
+               WHERE batch_id = %s AND concept_id = ANY(%s)""",
+            (batch_id, concept_ids),
+        )
+    others = _reopen_dependents(conn, changes, batch_id, concept_ids) if changes else []
+    batches = sorted(({batch_id} if concept_ids else set()) | {b for b, _ in others})
+    if batches:
+        conn.execute("UPDATE ops.batch SET status = 'in_review' WHERE batch_id = ANY(%s)", (batches,))
+    return others
+
+
+def _reopen_dependents(conn: psycopg.Connection, changes: SharedChanges, batch_id: str,
+                       targets: list[str]) -> list[tuple[str, str]]:
+    """Re-open the batch item of every OTHER product that shows a shared row in ``changes`` (items only).
+
+    Substance-level rows (names, codes, DDInter mappings, coverage, pairs, texts) are shared by every product
+    with that substance, but approval is per batch record: without this, re-running product Y would change
+    what anonymous visitors see for an approved product X with the same substance, unseen by a pharmacist.
+
+    A product depends on a changed ``bds_id`` through its ICD-11 ingredients, and on a changed DDInter id through
+    its substances' DDINTER mappings. For each dependent product only the item the approval gate reads is
+    re-opened: the latest by ``extracted_at``, then ``batch_id`` (the API's ``ReviewSql.statusOf``). The
+    targets in ``batch_id`` were just stamped by the caller (so that item is their latest) and are skipped.
+    """
+    rows = conn.execute(
+        """WITH subs AS (
+             SELECT unnest(%(bds)s::text[]) AS bds_id
+             UNION
+             SELECT bds_id FROM curated.substance_code WHERE system = 'DDINTER' AND code = ANY(%(dd)s::text[])
+           ), products AS (
+             SELECT DISTINCT bpi.concept_id
+               FROM curated.brand_product_ingredient bpi
+               JOIN curated.substance_code xm ON xm.system = 'ICD11_XM' AND xm.code = bpi.xm_code
+               JOIN subs ON subs.bds_id = xm.bds_id
+           ), latest AS (
+             SELECT DISTINCT ON (bi.concept_id) bi.batch_id, bi.concept_id
+               FROM ops.batch_item bi JOIN products p ON p.concept_id = bi.concept_id
+              ORDER BY bi.concept_id, bi.extracted_at DESC NULLS LAST, bi.batch_id DESC
+           )
+           UPDATE ops.batch_item bi SET review = 'pending', extracted_at = clock_timestamp()
+             FROM latest l
+            WHERE bi.batch_id = l.batch_id AND bi.concept_id = l.concept_id
+              AND NOT (bi.batch_id = %(batch)s AND bi.concept_id = ANY(%(targets)s::text[]))
+           RETURNING bi.batch_id, bi.concept_id""",
+        {"bds": sorted(changes.bds_ids), "dd": sorted(changes.ddinter_ids), "batch": batch_id,
+         "targets": list(targets)},
+    ).fetchall()
+    return sorted((b, c) for b, c in rows)
 
 
 def _load(conn: psycopg.Connection, client, concept_ids: list[str]):

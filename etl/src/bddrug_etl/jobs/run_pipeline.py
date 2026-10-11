@@ -6,7 +6,11 @@ Stages always run in the order dgda → substances → clinical → ddinter (def
 Each stage runs in its own transaction together with its stage results, and is committed
 before the next stage starts. Every stage that processes a record also stamps its
 ``ops.batch_item.extracted_at`` and resets its review to ``pending`` in that same transaction, so
-an approval never covers data written after it. A per-product ``fail`` never stops other products. An exception
+an approval never covers data written after it. The substances and DDInter stages also write rows
+shared by every product with that substance (names, codes, DDInter mappings, coverage, pairs, texts);
+when they really change one, the review of every other product that shows it is re-opened in that same
+transaction (its latest batch item, the one the approval gate reads), and the re-opened records are
+logged. A per-product ``fail`` never stops other products. An exception
 from a stage rolls that stage back, marks every product in it ``fail``, stops the later stages
 and makes the exit code non-zero.
 
@@ -46,7 +50,7 @@ from bddrug_etl.ocl.client import OclClient
 from bddrug_etl.rxnav.client import RxNavClient
 from bddrug_etl.stages.clinical import build_clinical_drugs
 from bddrug_etl.stages.ddinter import plan_ddinter
-from bddrug_etl.stages.results import StageResult, write_stage_results
+from bddrug_etl.stages.results import SharedChanges, StageResult, write_stage_results
 from bddrug_etl.stages.substances import build_substances
 
 log = logging.getLogger("run_pipeline")
@@ -145,10 +149,19 @@ class _StageAborted(Exception):
         self.results = results
 
 
-def _call_stage(stage: str, conn: psycopg.Connection, clients: Clients, ids: list[str]) -> list[StageResult]:
+def _call_stage(stage: str, conn: psycopg.Connection, clients: Clients, ids: list[str],
+                changes: SharedChanges) -> list[StageResult]:
     if stage == "substances":
-        return build_substances(conn, clients.rxnav, ids)
-    return build_clinical_drugs(conn, ids)
+        return build_substances(conn, clients.rxnav, ids, changes)
+    return build_clinical_drugs(conn, ids)  # product rows and new clinical drugs; never changes an existing one
+
+
+def _reopen(conn: psycopg.Connection, stage: str, batch_id: str, ids: list[str], changes: SharedChanges) -> None:
+    """Re-open ``ids`` and every other product showing a shared row in ``changes`` (last, in the caller's transaction)."""
+    others = reopen_review(conn, batch_id, ids, changes)
+    if others:
+        log.info("stage %s for batch %s changed shared substance data; re-opened the review of %d other record(s): %s",
+                 stage, batch_id, len(others), ", ".join(f"{b}/{c}" for b, c in others))
 
 
 def _run_dgda(conn: psycopg.Connection, clients: Clients, batch_id: str, ids: list[str],
@@ -167,9 +180,10 @@ def _run_dgda(conn: psycopg.Connection, clients: Clients, batch_id: str, ids: li
 def _run_product_stage(conn: psycopg.Connection, clients: Clients, stage: str, batch_id: str,
                        targets: list[str], skipped: list[StageResult]) -> list[StageResult]:
     with conn.transaction():  # the stage's own transaction; its per-product savepoints nest inside
-        results = _call_stage(stage, conn, clients, targets)
+        changes = SharedChanges()
+        results = _call_stage(stage, conn, clients, targets, changes)
         write_stage_results(conn, batch_id, stage, results + skipped)
-        reopen_review(conn, batch_id, targets)  # last: the processed records' approval stops counting
+        _reopen(conn, stage, batch_id, targets, changes)  # last: the approvals covering this data stop counting
     return results + skipped
 
 
@@ -185,13 +199,13 @@ def _run_ddinter(conn: psycopg.Connection, clients: Clients, batch_id: str, targ
         current: str | None = None
         try:
             with conn.transaction():  # the chunk's transaction; per-product savepoints nest inside
-                chunk_results = []
+                chunk_results, changes = [], SharedChanges()
                 for cid in chunk:
                     current = cid
-                    chunk_results.append(plan.process(conn, cid))
+                    chunk_results.append(plan.process(conn, cid, changes))
                 current = None
                 write_stage_results(conn, batch_id, "ddinter", chunk_results)
-                reopen_review(conn, batch_id, chunk)  # last: these records' approval stops counting
+                _reopen(conn, "ddinter", batch_id, chunk, changes)  # last: the approvals covering this data stop counting
         except Exception as e:
             log.exception("stage ddinter aborted at chunk %d for batch %s", n, batch_id)
             # the product that raised (or the whole chunk, when its bookkeeping raised) gets the error;

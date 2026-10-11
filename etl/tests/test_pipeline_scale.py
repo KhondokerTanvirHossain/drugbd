@@ -311,11 +311,11 @@ def test_an_exception_while_committing_a_chunk_fails_it_and_marks_later_chunks_n
     f = loaded(h, tmp_path, batch_id, ALL)
     real, calls = run_pipeline.reopen_review, []
 
-    def boom_on_third_chunk(conn, b, ids):
+    def boom_on_third_chunk(conn, b, ids, *rest):
         calls.append(list(ids))
         if len(calls) == 3:
             raise RuntimeError("chunk bookkeeping exploded")
-        return real(conn, b, ids)
+        return real(conn, b, ids, *rest)
     monkeypatch.setattr(run_pipeline, "reopen_review", boom_on_third_chunk)
     assert h.main("--batch", f, "--stages", "ddinter", "--ddinter-chunk", "3") != 0
     assert calls == [ALL[0:3], ALL[3:6], ALL[6:9]]
