@@ -36,6 +36,11 @@ class ProductApiIntegrationTest {
                  ('000-0000-001--pct-100','000-0000-001','PCT 100% Max','Test Pharma','Tablet','Paracetamol 500 mg',NULL,now()),
                  ('000-0000-002--no-map','000-0000-002','Nomap','Test Pharma','Cream','Unknown herb',NULL,now());
                 INSERT INTO curated.brand_product_ingredient VALUES ('341-0160-020--tericin','XM5TR4','Amphotericin B');
+                INSERT INTO raw.ocl_concept (source, concept_id, payload) VALUES ('DGDA-Drugs','341-0160-020--tericin',
+                  '{"id":"341-0160-020--tericin","extras":{"trade_name":"Tericin","generic_content_raw":"Amphotericin B  50 mg/vial"},"mappings":[{"map_type":"Has-active-ingredient","to_concept_code":"XM5TR4","to_concept_name":"Amphotericin B"}]}');
+                INSERT INTO ops.batch (batch_id, item_count) VALUES ('0001-pilot', 2);
+                INSERT INTO ops.batch_item (batch_id, source, concept_id) VALUES ('0001-pilot','DGDA-Drugs','341-0160-020--tericin');
+                INSERT INTO ops.batch_item (batch_id, source, concept_id, review, note) VALUES ('0001-pilot','DGDA-Drugs','typo-id','issue','not found at source');
                 """);
         }
     }
@@ -74,5 +79,22 @@ class ProductApiIntegrationTest {
     @Test void unknownProductIs404() {
         web.get().uri("/v1/products/does-not-exist").exchange().expectStatus().isNotFound()
             .expectBody().jsonPath("$.errors[0].code").isEqualTo("NOT_FOUND");
+    }
+    @Test void batchShowsSourceBesideExtractedData() {
+        web.get().uri("/v1/batches/0001-pilot").exchange().expectStatus().isOk()
+            .expectBody()
+            .jsonPath("$.data.itemCount").isEqualTo(2)
+            .jsonPath("$.data.items[0].conceptId").isEqualTo("341-0160-020--tericin")
+            .jsonPath("$.data.items[0].extracted.genericContentRaw").isEqualTo("Amphotericin B 50 mg/vial")
+            .jsonPath("$.data.items[0].extracted.ingredients[0].xmCode").isEqualTo("XM5TR4")
+            .jsonPath("$.data.items[0].sourceJson").value(s -> org.assertj.core.api.Assertions.assertThat((String) s).contains("Amphotericin B  50 mg/vial"))
+            .jsonPath("$.data.items[1].conceptId").isEqualTo("typo-id")
+            .jsonPath("$.data.items[1].review").isEqualTo("issue")
+            .jsonPath("$.data.items[1].extracted").doesNotExist();
+    }
+    @Test void batchListAndUnknownBatch() {
+        web.get().uri("/v1/batches").exchange().expectStatus().isOk()
+            .expectBody().jsonPath("$.data[0].batchId").isEqualTo("0001-pilot");
+        web.get().uri("/v1/batches/nope").exchange().expectStatus().isNotFound();
     }
 }
