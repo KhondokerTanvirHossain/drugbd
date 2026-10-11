@@ -1,0 +1,7 @@
+{
+  "id": "341-0160-020--tericin", "concept_class": "Drug", "retired": false, "display_name": "Tericin",
+  "extras": {"company": "Beacon Pharmaceuticals PLC", "dar_number": "341-0160-020", "trade_name": "Tericin",
+             "dosage_form": "Injection", "dar_quality_flag": "", "generic_content_raw": "Amphotericin B  50 mg/vial"},
+  "mappings": [{"map_type": "Has-active-ingredient", "retired": false,
+                "to_concept_code": "XM5TR4", "to_concept_name": "Amphotericin B"}]
+}
