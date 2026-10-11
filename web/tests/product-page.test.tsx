@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Product } from "@/lib/api";
 
 const base: Product = {
@@ -8,12 +8,78 @@ const base: Product = {
   parseStatus: null, parseNote: null, clinicalDrug: null,
 };
 const getProduct = vi.fn();
-vi.mock("@/lib/api", () => ({ getProduct: (id: string) => getProduct(id) }));
+vi.mock("@/lib/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api")>()),
+  getProduct: (id: string, scope?: string) => getProduct(id, scope),
+}));
+const getSession = vi.fn();
+vi.mock("@/lib/session", () => ({ getSession: () => getSession() }));
 import ProductPage from "@/app/products/[id]/page";
 
-const render = async (id = "x") => renderToStaticMarkup(await ProductPage({ params: Promise.resolve({ id }) }));
+const render = async (id = "x", flag?: string) => renderToStaticMarkup(await ProductPage({
+  params: Promise.resolve({ id }), searchParams: Promise.resolve(flag ? { flag } : {}) }));
 
-beforeEach(() => { getProduct.mockReset(); getProduct.mockImplementation(async (id: string) => ({ ...base, conceptId: id })); });
+beforeEach(() => {
+  getProduct.mockReset(); getProduct.mockImplementation(async (id: string) => ({ ...base, conceptId: id }));
+  getSession.mockReset(); getSession.mockResolvedValue(null);
+  vi.stubEnv("NEXT_PUBLIC_TURNSTILE_SITE_KEY", "1x00000000000000000000AA");
+});
+afterEach(() => vi.unstubAllEnvs());
+
+describe("product page visibility", () => {
+  const hidden = { conceptId: "H-1", tradeName: "Secretname", reviewStatus: "pending", hidden: true };
+
+  it("asks the API with scope=public for an anonymous visitor", async () => {
+    await render("x");
+    expect(getProduct).toHaveBeenCalledWith("x", "public");
+  });
+
+  it("anonymous: a hidden product shows only 'Not yet reviewed by a pharmacist', no data", async () => {
+    getProduct.mockResolvedValue(hidden);
+    const html = await render("H-1");
+    expect(html).toContain("Not yet reviewed by a pharmacist");
+    for (const absent of ["Secretname", "DAR number", "Company", "Active ingredients", "Clinical drug", "Flag a problem"])
+      expect(html).not.toContain(absent);
+  });
+
+  it("a signed-in user (role user) still gets scope=public and can flag the hidden product", async () => {
+    getSession.mockResolvedValue({ email: "someone@gmail.com", role: "user" });
+    getProduct.mockResolvedValue(hidden);
+    const html = await render("H-1");
+    expect(getProduct).toHaveBeenCalledWith("H-1", "public");
+    expect(html).toContain("Not yet reviewed by a pharmacist");
+    expect(html).toContain("Flag a problem");
+    expect(html).not.toContain("someone@gmail.com");
+  });
+
+  it("a reviewer gets scope=all and an unreviewed badge on an unapproved product", async () => {
+    getSession.mockResolvedValue({ email: "pharm@example.org", role: "pharmacist" });
+    getProduct.mockResolvedValue({ ...base, reviewStatus: "pending" });
+    const html = await render("x");
+    expect(getProduct).toHaveBeenCalledWith("x", "all");
+    expect(html).toMatch(/<span class="badge"[^>]*>unreviewed<\/span>/);
+    expect(html).toContain("Beximco");
+    expect(html).not.toContain("pharm@example.org");
+  });
+
+  it("no unreviewed badge for an approved product or for anonymous visitors", async () => {
+    getSession.mockResolvedValue({ email: "pharm@example.org", role: "pharmacist" });
+    getProduct.mockResolvedValue({ ...base, reviewStatus: "ok" });
+    expect(await render("x")).not.toContain("unreviewed");
+    getSession.mockResolvedValue(null);
+    getProduct.mockResolvedValue({ ...base, reviewStatus: "ok" });
+    expect(await render("x")).not.toContain("unreviewed");
+  });
+
+  it("shows the flag form to signed-in visitors only, and the outcome after a flag", async () => {
+    expect(await render("x")).not.toContain("Flag a problem");
+    getSession.mockResolvedValue({ email: "someone@gmail.com", role: "user" });
+    const html = await render("x", "sent");
+    expect(html).toContain("Flag a problem");
+    expect(html).toContain('name="targetType" value="product"');
+    expect(html).toContain("Thank you. Your flag was sent to the reviewers.");
+  });
+});
 
 describe("product page", () => {
   it("says there is no ingredient mapping when ingredients are empty", async () => {

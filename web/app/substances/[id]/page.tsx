@@ -1,7 +1,10 @@
 import { notFound } from "next/navigation";
-import { Badge } from "@/components/badges";
-import { getSubstance } from "@/lib/api";
-import { NO_DATA_SENTENCE } from "@/lib/copy";
+import FlagForm from "@/components/FlagForm";
+import { Badge, UnreviewedBadge } from "@/components/badges";
+import { getSubstance, isHidden, scopeFor } from "@/lib/api";
+import { NO_DATA_SENTENCE, NOT_REVIEWED } from "@/lib/copy";
+import { firstParam } from "@/lib/params";
+import { getSession } from "@/lib/session";
 import { groupBySeverity, severityLabel } from "@/lib/severity";
 export const dynamic = "force-dynamic";
 
@@ -9,12 +12,19 @@ const table = { borderCollapse: "collapse", width: "100%" } as const;
 const banner = (bad: boolean) => ({ padding: 12, borderRadius: 4, border: `1px solid ${bad ? "#b35900" : "#2e7d32"}`,
   background: bad ? "#fff4e5" : "#edf7ee" }) as const;
 
-export default async function SubstancePage({ params }: { params: Promise<{ id: string }> }) {
+export default async function SubstancePage({ params, searchParams }: {
+  params: Promise<{ id: string }>; searchParams?: Promise<{ flag?: string | string[] }> }) {
   const { id } = await params;
+  const flag = firstParam((await searchParams)?.flag);
   let decoded: string;
   try { decoded = decodeURIComponent(id); } catch { notFound(); }
-  const s = await getSubstance(decoded);
+  const session = await getSession();
+  const scope = scopeFor(session);
+  const s = await getSubstance(decoded, scope);
   if (!s) notFound();
+  const flagForm = <FlagForm session={session} targetType="substance" targetId={decoded} outcome={flag} />;
+  // None of its products is approved (public scope): the API sent no data, and the page shows nothing but this.
+  if (isHidden(s)) return <article><h1>{NOT_REVIEWED}</h1>{flagForm}</article>;
   const none = s.coverage.coverage !== "full";
   // For "none" the lists are empty because there is no data, not because nothing interacts.
   const empty = none ? "No data from DDInter for this substance." : "None listed in DDInter 2.0.";
@@ -81,9 +91,11 @@ export default async function SubstancePage({ params }: { params: Promise<{ id: 
       <h2>Products using it</h2>
       {s.products.length === 0 ? <p>No loaded product uses this substance.</p> : (
         <ul>{s.products.map((p) => (
-          <li key={p.conceptId}><a href={`/products/${encodeURIComponent(p.conceptId)}`}>{p.tradeName}</a>{` (${p.company})`}</li>))}</ul>)}
+          <li key={p.conceptId}><a href={`/products/${encodeURIComponent(p.conceptId)}`}>{p.tradeName}</a>{` (${p.company})`}
+            <UnreviewedBadge scope={scope} reviewStatus={p.reviewStatus} /></li>))}</ul>)}
 
       <p><small>Sources: DGDA register via OCL, RxNav, DDInter 2.0.</small></p>
+      {flagForm}
     </article>
   );
 }

@@ -1,23 +1,34 @@
 import { notFound } from "next/navigation";
-import { Badge } from "@/components/badges";
-import { getProduct, type DdinterRef } from "@/lib/api";
+import FlagForm from "@/components/FlagForm";
+import { Badge, UnreviewedBadge } from "@/components/badges";
+import { getProduct, isHidden, scopeFor, type DdinterRef } from "@/lib/api";
 import { formatStrength } from "@/lib/format";
+import { NOT_REVIEWED } from "@/lib/copy";
+import { firstParam } from "@/lib/params";
+import { getSession } from "@/lib/session";
 export const dynamic = "force-dynamic";
 
 const ddinterLabel = (d: DdinterRef) =>
   `${d.ddinterId} ${d.name ?? ""}`.trim() + (d.routeAssumed ? " (route assumed: general entry)" : "");
 
-export default async function ProductPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ProductPage({ params, searchParams }: {
+  params: Promise<{ id: string }>; searchParams?: Promise<{ flag?: string | string[] }> }) {
   const { id } = await params;
+  const flag = firstParam((await searchParams)?.flag);
   let decoded: string;
   try { decoded = decodeURIComponent(id); } catch { notFound(); }
-  const p = await getProduct(decoded);
+  const session = await getSession();
+  const scope = scopeFor(session);
+  const p = await getProduct(decoded, scope);
   if (!p) notFound();
+  const flagForm = <FlagForm session={session} targetType="product" targetId={decoded} outcome={flag} />;
+  // Unapproved under public scope: the API sent no data, and the page shows nothing but this.
+  if (isHidden(p)) return <article><h1>{NOT_REVIEWED}</h1>{flagForm}</article>;
   const cd = p.clinicalDrug;
   const parse = p.parseStatus ? (p.parseNote ? `${p.parseStatus}: ${p.parseNote}` : p.parseStatus) : "not parsed yet";
   return (
     <article>
-      <h1>{p.tradeName}</h1>
+      <h1>{p.tradeName}<UnreviewedBadge scope={scope} reviewStatus={p.reviewStatus} /></h1>
       <dl>
         <dt>DAR number</dt><dd>{p.darNumber}</dd>
         <dt>Company</dt><dd>{p.company}</dd>
@@ -43,6 +54,7 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
           </li>))}</ul>
       </>) : <p>No clinical drug yet.</p>}
       <p><small>Source: DGDA register via national OCL terminology server. DDInter entries: DDInter 2.0.</small></p>
+      {flagForm}
     </article>
   );
 }
