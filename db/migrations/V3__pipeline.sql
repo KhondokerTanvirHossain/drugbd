@@ -1,4 +1,5 @@
-CREATE SEQUENCE curated.bds_seq;  CREATE SEQUENCE curated.bdc_seq;
+CREATE SEQUENCE curated.bds_seq MAXVALUE 999999 NO CYCLE;
+CREATE SEQUENCE curated.bdc_seq MAXVALUE 999999 NO CYCLE;
 
 CREATE TABLE raw.http_snapshot (
   source TEXT NOT NULL, request_key TEXT NOT NULL,          -- e.g. 'rxnav', 'GET /REST/rxcui.json?name=Paracetamol&search=2'
@@ -14,7 +15,7 @@ CREATE TABLE curated.substance_code (
   bds_id TEXT NOT NULL REFERENCES curated.substance ON DELETE CASCADE,
   system TEXT NOT NULL CHECK (system IN ('ICD11_XM','RXCUI','ATC','DRUGBANK','SNOMEDCT','DDINTER')),
   code TEXT NOT NULL, route_scope TEXT NOT NULL DEFAULT 'any',   -- 'any' | 'systemic' | 'ophthalmic' | 'otic' | 'nasal' | 'topical'
-  source TEXT NOT NULL, method TEXT NOT NULL, confidence NUMERIC(3,2) NOT NULL,
+  source TEXT NOT NULL, method TEXT NOT NULL, confidence NUMERIC(3,2) NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
   PRIMARY KEY (bds_id, system, code));
 CREATE UNIQUE INDEX substance_code_xm_unique ON curated.substance_code (code) WHERE system = 'ICD11_XM';
 
@@ -47,7 +48,7 @@ CREATE TABLE curated.ddinter_pair (
   ddinter_a TEXT NOT NULL, ddinter_b TEXT NOT NULL,            -- ddinter_a < ddinter_b (text order)
   severity TEXT NOT NULL CHECK (severity IN ('major','moderate','minor','unknown')),
   actions TEXT[] NOT NULL DEFAULT '{}', partner_name_a TEXT NOT NULL, partner_name_b TEXT NOT NULL,
-  interaction_id TEXT, PRIMARY KEY (ddinter_a, ddinter_b));
+  interaction_id TEXT, PRIMARY KEY (ddinter_a, ddinter_b), CHECK (ddinter_a < ddinter_b));
 
 CREATE TABLE curated.ddinter_interaction_text (
   interaction_id TEXT PRIMARY KEY, interaction TEXT NOT NULL, management TEXT NOT NULL, refs TEXT[] NOT NULL DEFAULT '{}');
