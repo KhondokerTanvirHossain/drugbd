@@ -378,6 +378,46 @@ def test_pairs_outside_the_batch_keep_severity_and_actions_but_no_text(conn):
     assert conn.execute("SELECT interaction_id FROM curated.ddinter_pair WHERE ddinter_b = 'DDInter393' AND ddinter_a = 'DDInter1951'").fetchone() == ("50002",)
 
 
+@pytest.mark.parametrize("first, second", [("warf", "clar"), ("clar", "warf")])
+def test_later_batch_holding_only_the_partner_fetches_the_cross_batch_text(conn, first, second):
+    # batch 0001 holds only one side; batch 0002 holds only the partner (the normal case: later batches
+    # hold new products). The pair text must be fetched when the second side is mapped.
+    c1 = FakeDDInter()
+    [r1] = map_and_load_ddinter(conn, c1, [first])
+    assert r1.status == "ok" and c1.pair_calls == [] and c1.text_calls == []
+    conn.commit()
+    c2 = FakeDDInter()
+    [r2] = map_and_load_ddinter(conn, c2, [second])
+    assert (r2.status, r2.note) == ("ok", ""), r2
+    # only the pair whose both sides we have mapped; warfarin's other partners (aspirin, acetaminophen) and
+    # clarithromycin's simvastatin are not mapped, so they are not asked for
+    assert c2.pair_calls == [("DDInter1951", "DDInter393")] and c2.text_calls == ["50002"]
+    assert r2.evidence["text_fetch_count"] == 1 and r2.evidence["text_missing"] == []
+    assert conn.execute(
+        "SELECT severity, interaction_id FROM curated.ddinter_pair WHERE ddinter_a = 'DDInter1951' AND ddinter_b = 'DDInter393'"
+    ).fetchone() == ("major", "50002")
+    assert conn.execute("SELECT interaction, management FROM curated.ddinter_interaction_text").fetchall() == [
+        ("Clarithromycin may increase the INR.", "Reduce the warfarin dose.")]
+    conn.commit()
+    # a third run of either batch fetches nothing more
+    c3 = FakeDDInter()
+    map_and_load_ddinter(conn, c3, [first])
+    assert c3.pair_calls == [] and c3.text_calls == []
+
+
+def test_cross_batch_pair_without_text_warns_in_the_later_batch(conn):
+    map_and_load_ddinter(conn, FakeDDInter(), ["warf"])
+    conn.commit()
+    client = FakeDDInter(one_sided={("DDInter1951", "DDInter20"), ("DDInter20", "DDInter1951")})
+    [r] = map_and_load_ddinter(conn, client, ["asa"])
+    assert (r.status, r.note) == ("warn", "DDInter text not found for DDInter1951/DDInter20"), r
+    assert r.evidence["text_missing"] == [["DDInter1951", "DDInter20"]]
+    assert sorted(client.pair_calls) == [("DDInter1951", "DDInter20"), ("DDInter20", "DDInter1951")]
+    assert conn.execute(
+        "SELECT severity, interaction_id FROM curated.ddinter_pair WHERE ddinter_a = 'DDInter1951' AND ddinter_b = 'DDInter20'"
+    ).fetchone() == ("major", None)
+
+
 def test_pair_order_is_text_order_and_asked_from_lower_side(conn):
     client = FakeDDInter()
     map_and_load_ddinter(conn, client, ["clar", "simva"])
@@ -412,7 +452,7 @@ def test_text_missing_on_both_sides_warns_and_keeps_severity(conn, batch):
     # BOTH products of the pair say so, not only the one that made the lookup
     for r in res.values():
         assert (r.status, r.note) == ("warn", note), r
-        assert r.evidence["text_missing"] == [["DDInter1951", "DDInter20"]]  # out-of-batch pairs are not listed
+        assert r.evidence["text_missing"] == [["DDInter1951", "DDInter20"]]  # pairs with an unmapped partner are not listed
         assert r.evidence["text_fetch_count"] == 0
     # each side asked once per run (negative result cached), no text fetched
     assert sorted(client.pair_calls) == [("DDInter1951", "DDInter20"), ("DDInter20", "DDInter1951")]

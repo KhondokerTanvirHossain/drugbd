@@ -5,6 +5,12 @@ Client data (drug list, detail, graph, diseases, foods, texts) is fetched at mos
 cached in memory. The cache holds only what the client returned, never DB state, so a product whose
 savepoint rolls back cannot leave a stale "already stored" belief behind: "already stored" facts
 (``stored_ids`` / ``stored_texts``) are merged into the run only after the product's savepoint exits.
+
+Interaction texts are fetched for every pair whose two sides are both "in scope": DDInter ids that are
+candidates of this batch's substances, plus every DDInter id already mapped in ``curated.substance_code``
+by earlier batches. A later batch normally holds only new products, so without the stored ids a pair
+split across batches (warfarin in 0001, an NSAID in 0002) would never get its text. Fetches stay bounded
+to pairs between drugs we have mapped.
 """
 from __future__ import annotations
 
@@ -72,7 +78,7 @@ class _Run:
             key = normalize_name(base)
             if key:
                 self.by_key.setdefault(key, {})[ddinter_id] = _Entry(ddinter_id, name, route)
-        self.batch_ids: set[str] = set()
+        self.scope_ids: set[str] = set()  # DDInter ids whose pairs get texts: batch candidates + already mapped
         self.stored_ids: set[str] = set()
         self.stored_texts: set[Pair] = set()
         self.fetched: set[Pair] = set()
@@ -294,7 +300,7 @@ def _process(conn: psycopg.Connection, run: _Run, cid: str, subs: list[_Sub], pe
         coverage.append({"bds_id": sub.bds_id, "coverage": "full"})
 
     pairs: set[Pair] = set()
-    in_batch: set[Pair] = set()
+    in_scope: set[Pair] = set()
     disease_count = food_count = 0
     for ddinter_id in sorted(ids, key=_idkey):
         if ddinter_id not in run.stored_ids:
@@ -306,15 +312,17 @@ def _process(conn: psycopg.Connection, run: _Run, cid: str, subs: list[_Sub], pe
         food_count += len(run.foods(ddinter_id))
         for pair in sorted(mine):
             other = pair[1] if pair[0] == ddinter_id else pair[0]
-            # Texts only where both sides belong to substances of this batch; others keep severity/actions.
-            if other in run.batch_ids:
-                in_batch.add(pair)
+            # Texts only where both sides are in scope (this batch or mapped by an earlier one); pairs with
+            # an unmapped drug keep severity/actions and get their text once that drug is mapped.
+            if other in run.scope_ids:
+                in_scope.add(pair)
                 if pair not in run.stored_texts and pair not in pending.texts:
                     _ensure_text(conn, run, pair, pending)
 
-    # In-batch pairs whose text neither side's list holds this run: the pair keeps severity/actions with
-    # interaction_id NULL. Flag it on every product of the pair so the review queue sees the missing text.
-    text_missing = sorted(p for p in in_batch if p in run.texts and run.texts[p] is None)
+    # In-scope pairs whose text neither side's list holds this run: the pair keeps severity/actions with
+    # interaction_id NULL. Flag it on every product of the pair in this run so the review queue sees the
+    # missing text (for a cross-batch pair, that is the later batch's product).
+    text_missing = sorted(p for p in in_scope if p in run.texts and run.texts[p] is None)
     notes.extend(f"DDInter text not found for {a}/{b}" for a, b in text_missing)
 
     evidence = {"mappings": mappings, "coverage": coverage, "pair_count": len(pairs),
@@ -327,6 +335,9 @@ def map_and_load_ddinter(conn: psycopg.Connection, client: DDInterClient, concep
     if not concept_ids:
         return []
     run = _Run(client, client.drug_list())  # once per run; a failure here is run-level and propagates
+    # DDInter ids mapped by earlier batches: pairs between them and this batch's drugs get texts too
+    run.scope_ids.update(code for (code,) in conn.execute(
+        "SELECT DISTINCT code FROM curated.substance_code WHERE system = 'DDINTER'").fetchall())
 
     plans: dict[str, list[_Sub] | StageResult] = {}
     for cid in dict.fromkeys(concept_ids):
@@ -340,7 +351,7 @@ def map_and_load_ddinter(conn: psycopg.Connection, client: DDInterClient, concep
     for plan in plans.values():
         if isinstance(plan, list):
             for sub in plan:
-                run.batch_ids.update(e.ddinter_id for e in run.candidates(sub.keys))
+                run.scope_ids.update(e.ddinter_id for e in run.candidates(sub.keys))
 
     results: list[StageResult] = []
     for cid in concept_ids:
