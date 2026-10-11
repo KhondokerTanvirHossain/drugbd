@@ -288,3 +288,17 @@ def test_per_product_isolation(conn):
     assert conn.execute("SELECT count(*) FROM curated.substance").fetchone()[0] == before
     conn.commit()
     assert conn.execute("SELECT count(*) FROM curated.substance_code WHERE code='XM86W0'").fetchone()[0] == 1
+
+
+def test_operational_error_propagates(conn):
+    import psycopg as pg
+
+    class DownRxNav(FakeRxNav):
+        def rxcui_for_name(self, name):
+            raise pg.OperationalError("connection lost")
+
+    conn.execute("INSERT INTO curated.brand_product VALUES ('dn','D','Dn','Co','Tablet','Downdrug 5 mg')")
+    conn.execute("INSERT INTO curated.brand_product_ingredient VALUES ('dn','XMDOWN','Downdrug')")
+    with pytest.raises(pg.OperationalError):
+        build_substances(conn, DownRxNav(), ["dn"])
+    conn.rollback()

@@ -168,12 +168,19 @@ def build_substances(conn: psycopg.Connection, rxnav: RxNavClient, concept_ids: 
     for cid in concept_ids:
         try:
             results.append(_build_one(conn, rxnav, cid))
+        except (psycopg.OperationalError, psycopg.InterfaceError):
+            raise  # connection-level failure: abort the whole run
         except Exception as e:  # per-product isolation; the product's savepoint is already rolled back
             results.append(StageResult(cid, "fail", f"error: {type(e).__name__}: {str(e)[:200]}", {}))
     return results
 
 
 def _build_one(conn: psycopg.Connection, rxnav, cid: str) -> StageResult:
+    with conn.transaction():
+        return _build_one_in_savepoint(conn, rxnav, cid)
+
+
+def _build_one_in_savepoint(conn: psycopg.Connection, rxnav, cid: str) -> StageResult:
     prod = conn.execute(
         "SELECT generic_content_raw FROM curated.brand_product WHERE concept_id = %s", (cid,)
     ).fetchone()
@@ -185,35 +192,34 @@ def _build_one(conn: psycopg.Connection, rxnav, cid: str) -> StageResult:
         return StageResult(cid, "fail", "no ICD-11 ingredient mapping from DGDA", {"substances": []})
     parsed = list(parse_generic_content(prod[0]).ingredients) if prod else []
 
-    with conn.transaction():
-        subs = [
-            {"bds_id": _get_or_create_substance(conn, xm, name), "xm": xm, "xm_name": name}
-            for xm, name in ings
-        ]
-        for s in subs:
-            _add_name(conn, s["bds_id"], s["xm_name"], "icd11", SOURCE)
-            fb = None
-            if parsed:
-                # Early alignment (rules 1-2 on the XM name only); RxNorm name is not known yet.
-                m = _align(parsed, subs, rxnav, False, early=s)
-                fb = strip_salt(m[0].name) if m else None
-            _ensure_rxnav(conn, rxnav, s["bds_id"], s["xm_name"], fb)
-            s["rxcui"] = _rxcui_of(conn, s["bds_id"])
-            s["rxnorm_name"] = _rxnorm_name(conn, s["bds_id"])
-
-        notes: list[str] = []
+    subs = [
+        {"bds_id": _get_or_create_substance(conn, xm, name), "xm": xm, "xm_name": name}
+        for xm, name in ings
+    ]
+    for s in subs:
+        _add_name(conn, s["bds_id"], s["xm_name"], "icd11", SOURCE)
+        fb = None
         if parsed:
-            aligned = _align(parsed, subs, rxnav, True)
-            for i, s in enumerate(subs):
-                p = aligned.get(i)
-                if p is None:
-                    notes.append(f"no dgda_content name aligned for {s['xm_name']}")
-                else:
-                    _add_name(conn, s["bds_id"], strip_salt(p.name), "dgda_content", SOURCE)
-        else:
-            notes.append("no parsed content to align names")
-        missing = [f"no RxCUI for {s['xm_name']}" for s in subs if not s["rxcui"]]
-        evidence = {"substances": [_evidence_for(conn, s["bds_id"], s["xm"], s["xm_name"]) for s in subs]}
+            # Early alignment (rules 1-2 on the XM name only); RxNorm name is not known yet.
+            m = _align(parsed, subs, rxnav, False, early=s)
+            fb = strip_salt(m[0].name) if m else None
+        _ensure_rxnav(conn, rxnav, s["bds_id"], s["xm_name"], fb)
+        s["rxcui"] = _rxcui_of(conn, s["bds_id"])
+        s["rxnorm_name"] = _rxnorm_name(conn, s["bds_id"])
+
+    notes: list[str] = []
+    if parsed:
+        aligned = _align(parsed, subs, rxnav, True)
+        for i, s in enumerate(subs):
+            p = aligned.get(i)
+            if p is None:
+                notes.append(f"no dgda_content name aligned for {s['xm_name']}")
+            else:
+                _add_name(conn, s["bds_id"], strip_salt(p.name), "dgda_content", SOURCE)
+    else:
+        notes.append("no parsed content to align names")
+    missing = [f"no RxCUI for {s['xm_name']}" for s in subs if not s["rxcui"]]
+    evidence = {"substances": [_evidence_for(conn, s["bds_id"], s["xm"], s["xm_name"]) for s in subs]}
     if missing or notes:
         return StageResult(cid, "warn", "; ".join(missing + notes), evidence)
     return StageResult(cid, "ok", "", evidence)
