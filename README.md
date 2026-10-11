@@ -36,3 +36,9 @@ echo <ghcr-read-token> | docker login ghcr.io -u <user> --password-stdin
 ```
 
 Run order: push `main`, wait for `ci` to go green, then `deploy` runs by itself. After that, run `load-dgda` manually (Actions tab) with `batch=0001-pilot.txt`.
+
+Notes:
+- `deploy/.env` must contain an `IMAGE_TAG=` line (deploy fails fast if it is missing).
+- `GHCR_OWNER` must be lowercase.
+- The GHCR token on the VM needs the `read:packages` scope.
+- Deploys check out the exact tested commit in detached HEAD, so do not edit files in `/opt/bddrug` by hand.

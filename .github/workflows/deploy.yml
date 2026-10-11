@@ -2,9 +2,10 @@ name: deploy
 on:
   workflow_run: {workflows: [ci], types: [completed], branches: [main]}
 permissions: {contents: read, packages: write}
+concurrency: {group: deploy, cancel-in-progress: false}
 jobs:
   deploy:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.repository }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -32,9 +33,10 @@ jobs:
           script: |
             set -e
             cd /opt/bddrug/deploy
-            git -C /opt/bddrug pull --ff-only
+            git -C /opt/bddrug fetch --quiet origin && git -C /opt/bddrug checkout --quiet --detach "$TAG"
+            grep -q '^IMAGE_TAG=' .env || { echo "deploy/.env has no IMAGE_TAG line" >&2; exit 1; }
             sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=${TAG}/" .env
             docker compose pull && docker compose up -d --remove-orphans
       - env:
           PREVIEW_DOMAIN: ${{ secrets.PREVIEW_DOMAIN }}
-        run: curl -fsS "https://${PREVIEW_DOMAIN}/" -o /dev/null
+        run: curl -fsS --retry 10 --retry-delay 6 --retry-connrefused "https://$PREVIEW_DOMAIN/" -o /dev/null
