@@ -1,4 +1,6 @@
 import type { NextConfig } from "next";
+import { buildCsp } from "./lib/csp";
+
 const config: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
@@ -8,7 +10,7 @@ const config: NextConfig = {
       { key: "X-Frame-Options", value: "DENY" },
       { key: "X-Content-Type-Options", value: "nosniff" },
       { key: "Referrer-Policy", value: "same-origin" },
-      { key: "Content-Security-Policy", value: "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'" },
+      { key: "Content-Security-Policy", value: buildCsp(process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN) },
     ] }];
   },
 };

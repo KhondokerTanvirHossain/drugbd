@@ -8,15 +8,18 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "firebase": "11.1.0",
+    "firebase-admin": "13.0.2",
+    "jose": "5.9.6",
     "next": "15.5.27",
     "react": "19.0.8",
     "react-dom": "19.0.8",
     "server-only": "0.0.1"
   },
   "devDependencies": {
-    "typescript": "5.7.3",
-    "@types/react": "19.0.14",
     "@types/node": "22.10.7",
+    "@types/react": "19.0.14",
+    "typescript": "5.7.3",
     "vitest": "2.1.8"
   },
   "overrides": {
