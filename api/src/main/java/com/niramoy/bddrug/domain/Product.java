@@ -1,8 +1,14 @@
 package com.niramoy.bddrug.domain;
 import java.util.List;
 public record Product(String conceptId, String darNumber, String tradeName, String company, String dosageForm,
-                      String genericContentRaw, String qualityFlag, List<Ingredient> ingredients) {
+                      String genericContentRaw, String qualityFlag, List<Ingredient> ingredients,
+                      String parseStatus, String parseNote, ClinicalDrug clinicalDrug) {
     public Product withIngredients(List<Ingredient> list) {
-        return new Product(conceptId, darNumber, tradeName, company, dosageForm, genericContentRaw, qualityFlag, list);
+        return new Product(conceptId, darNumber, tradeName, company, dosageForm, genericContentRaw, qualityFlag, list,
+            parseStatus, parseNote, clinicalDrug);
+    }
+    public Product withClinicalDrug(ClinicalDrug drug) {
+        return new Product(conceptId, darNumber, tradeName, company, dosageForm, genericContentRaw, qualityFlag, ingredients,
+            parseStatus, parseNote, drug);
     }
 }
