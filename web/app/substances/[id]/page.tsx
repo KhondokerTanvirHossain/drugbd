@@ -1,20 +1,31 @@
 import { notFound } from "next/navigation";
-import { Badge } from "@/components/badges";
-import { getSubstance } from "@/lib/api";
-import { NO_DATA_SENTENCE } from "@/lib/copy";
-import { groupBySeverity, severityLabel } from "@/lib/severity";
+import FlagForm from "@/components/FlagForm";
+import { Badge, UnreviewedBadge } from "@/components/badges";
+import { getSubstance, isHidden, scopeFor } from "@/lib/api";
+import { NO_DATA_SENTENCE, NO_INTERACTION_TEXT, NO_MANAGEMENT_TEXT, NOT_REVIEWED } from "@/lib/copy";
+import { ddinterText } from "@/lib/ddinter-text";
+import { firstParam } from "@/lib/params";
+import { getSession } from "@/lib/session";
+import { groupBySeverity, severityLabel, severityText } from "@/lib/severity";
 export const dynamic = "force-dynamic";
 
 const table = { borderCollapse: "collapse", width: "100%" } as const;
 const banner = (bad: boolean) => ({ padding: 12, borderRadius: 4, border: `1px solid ${bad ? "#b35900" : "#2e7d32"}`,
   background: bad ? "#fff4e5" : "#edf7ee" }) as const;
 
-export default async function SubstancePage({ params }: { params: Promise<{ id: string }> }) {
+export default async function SubstancePage({ params, searchParams }: {
+  params: Promise<{ id: string }>; searchParams?: Promise<{ flag?: string | string[] }> }) {
   const { id } = await params;
+  const flag = firstParam((await searchParams)?.flag);
   let decoded: string;
   try { decoded = decodeURIComponent(id); } catch { notFound(); }
-  const s = await getSubstance(decoded);
+  const session = await getSession();
+  const scope = scopeFor(session);
+  const s = await getSubstance(decoded, scope);
   if (!s) notFound();
+  const flagForm = <FlagForm session={session} targetType="substance" targetId={decoded} outcome={flag} />;
+  // None of its products is approved (public scope): the API sent no data, and the page shows nothing but this.
+  if (isHidden(s)) return <article><h1>{NOT_REVIEWED}</h1>{flagForm}</article>;
   const none = s.coverage.coverage !== "full";
   // For "none" the lists are empty because there is no data, not because nothing interacts.
   const empty = none ? "No data from DDInter for this substance." : "None listed in DDInter 2.0.";
@@ -66,7 +77,8 @@ export default async function SubstancePage({ params }: { params: Promise<{ id: 
         <table style={table}>
           <thead><tr><th>Disease</th><th>Severity</th><th>Text</th></tr></thead>
           <tbody>{s.diseases.map((d) => (
-            <tr key={`${d.interactionId}|${d.routeScope}`}><td>{d.diseaseName}</td><td>{d.severity}</td><td>{d.text}</td></tr>))}</tbody>
+            <tr key={`${d.interactionId}|${d.routeScope}`}><td>{d.diseaseName}</td><td>{severityText(d.severity)}</td>
+              <td>{ddinterText(d.text) || NO_INTERACTION_TEXT}</td></tr>))}</tbody>
         </table>)}
 
       <h2>Foods</h2>
@@ -74,16 +86,19 @@ export default async function SubstancePage({ params }: { params: Promise<{ id: 
         <table style={table}>
           <thead><tr><th>Food</th><th>Severity</th><th>Description</th><th>Management</th></tr></thead>
           <tbody>{s.foods.map((f) => (
-            <tr key={`${f.interactionId}|${f.routeScope}`}><td>{f.food}</td><td>{f.severity}</td><td>{f.description}</td>
-              <td>{f.management}</td></tr>))}</tbody>
+            <tr key={`${f.interactionId}|${f.routeScope}`}><td>{f.food}</td><td>{severityText(f.severity)}</td>
+              <td>{ddinterText(f.description) || NO_INTERACTION_TEXT}</td>
+              <td>{ddinterText(f.management) || NO_MANAGEMENT_TEXT}</td></tr>))}</tbody>
         </table>)}
 
       <h2>Products using it</h2>
       {s.products.length === 0 ? <p>No loaded product uses this substance.</p> : (
         <ul>{s.products.map((p) => (
-          <li key={p.conceptId}><a href={`/products/${encodeURIComponent(p.conceptId)}`}>{p.tradeName}</a>{` (${p.company})`}</li>))}</ul>)}
+          <li key={p.conceptId}><a href={`/products/${encodeURIComponent(p.conceptId)}`}>{p.tradeName}</a>{` (${p.company})`}
+            <UnreviewedBadge scope={scope} reviewStatus={p.reviewStatus} /></li>))}</ul>)}
 
       <p><small>Sources: DGDA register via OCL, RxNav, DDInter 2.0.</small></p>
+      {flagForm}
     </article>
   );
 }

@@ -3,6 +3,12 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 COPY . .
+# Public values only (never secrets): `next build` inlines NEXT_PUBLIC_* and the CSP auth domain.
+ARG NEXT_PUBLIC_FIREBASE_API_KEY
+ARG NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+ARG NEXT_PUBLIC_FIREBASE_APP_ID
+ARG NEXT_PUBLIC_TURNSTILE_SITE_KEY
+ARG FIREBASE_PROJECT_ID
 RUN npm run build
 FROM node:22-alpine
 WORKDIR /app

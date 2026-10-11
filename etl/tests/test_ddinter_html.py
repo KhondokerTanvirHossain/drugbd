@@ -2,7 +2,7 @@ import pathlib
 
 import pytest
 
-from bddrug_etl.ddinter.html import DDInterDrug, parse_drug_detail, parse_interaction
+from bddrug_etl.ddinter.html import DDInterDrug, clean_text, parse_drug_detail, parse_interaction
 
 FX = pathlib.Path(__file__).parent / "fixtures" / "ddinter"
 
@@ -43,7 +43,7 @@ def test_interaction_without_management_does_not_swallow_references():
     t = parse_interaction(_page("Basic Information", "Interaction", "Some effect.", "References", "[1] Ref one.",
                                 "Alternative for", "Warfarin"))
     assert t.interaction == "Some effect."
-    assert t.management == ""
+    assert t.management is None  # missing, never an empty string
     assert t.refs == ("Ref one.",)
 
 
@@ -55,7 +55,7 @@ def test_management_without_references():
 
 def test_interaction_without_management_or_references_stops_at_alternative():
     t = parse_interaction(_page("Basic Information", "Interaction", "Effect.", "Alternative for", "X"))
-    assert (t.interaction, t.management, t.refs) == ("Effect.", "", ())
+    assert (t.interaction, t.management, t.refs) == ("Effect.", None, ())
 
 
 def test_real_fixture_clamps_alternative_section():
@@ -91,3 +91,39 @@ def test_drugbank_requires_single_distinct_id():
 def test_drug_name_missing_raises():
     with pytest.raises(ValueError, match="drug name not found"):
         parse_drug_detail("<p>Drugs Information:</p>", "DDInter1")
+
+
+# --- placeholders: DDInter prints "None" (or "-", or nothing) where it has no text ---------------------
+
+PLACEHOLDERS = ["None", "none", " NONE ", "null", "NULL", "N/A", "n/a", "NA", "na", "-", "--", "", "   ", "\tNone\n"]
+
+
+@pytest.mark.parametrize("value", PLACEHOLDERS + [None])
+def test_clean_text_treats_placeholders_as_missing(value):
+    assert clean_text(value) is None
+
+
+@pytest.mark.parametrize("value, expected", [
+    ("Monitor INR.", "Monitor INR."), ("  Monitor INR.  ", "Monitor INR."), ("None of the above", "None of the above"),
+    ("No interaction expected.", "No interaction expected."), ("-1 dose", "-1 dose"), ("Nan", "Nan"),
+])
+def test_clean_text_keeps_real_text_stripped(value, expected):
+    assert clean_text(value) == expected
+
+
+@pytest.mark.parametrize("interaction, management", [("None", "None"), ("None", "-"), ("N/A", "null"), ("--", "NA")])
+def test_placeholder_interaction_and_management_are_missing(interaction, management):
+    t = parse_interaction(_page("Basic Information", "Interaction", interaction, "Management", management,
+                                "References", "Alternative for", "X"))
+    assert (t.interaction, t.management, t.refs) == (None, None, ())
+
+
+def test_placeholder_interaction_with_real_management_keeps_only_the_management():
+    t = parse_interaction(_page("Basic Information", "Interaction", "None", "Management", "Monitor INR.",
+                                "References", "[1] Ref one.", "Alternative for", "X"))
+    assert (t.interaction, t.management, t.refs) == (None, "Monitor INR.", ("Ref one.",))
+
+
+def test_empty_interaction_section_is_missing():
+    t = parse_interaction(_page("Basic Information", "Interaction", "Management", "Monitor.", "Alternative for", "X"))
+    assert (t.interaction, t.management) == (None, "Monitor.")

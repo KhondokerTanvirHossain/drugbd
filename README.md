@@ -32,6 +32,8 @@ Repo secrets (Settings > Secrets and variables > Actions). They have the same na
 | `EC2_USER` | `ec2-user` |
 | `EC2_SSH_KEY` | private key for that user |
 
+Repo variables (same page, Variables tab) hold the public reviewer sign-in config that is built into the web image; see [Reviewer sign-in setup](#reviewer-sign-in-setup).
+
 One-time setup:
 
 1. **DNS (Hostinger):** add an A record `drugdb` → `13.205.14.249` (the same IP as medioo.eliooo.org).
@@ -39,6 +41,7 @@ One-time setup:
    ```bash
    mkdir -p ~/drugdb/deploy && cd ~/drugdb/deploy
    # paste deploy/.env.example as .env, then set a real DB_PASSWORD (alphanumeric only: no $, quotes or spaces)
+   # also set the reviewer sign-in values (see Reviewer sign-in setup); deploy refuses to run without SESSION_SECRET and INTERNAL_API_TOKEN
    chmod 600 .env
    ```
 3. **Caddy:** append `deploy/caddy/drugdb.caddy` to `~/n8n/Caddyfile`, then validate and reload without downtime:
@@ -55,3 +58,50 @@ Notes:
 - `deploy/.env` must contain an `IMAGE_TAG=` line; deploy rewrites it with the deployed SHA. `GHCR_OWNER` must be lowercase.
 - Memory limits (db 256m, api 448m, web 256m) are sized for the 3.7 GB host shared with medscribe (1.2 GB) and n8n.
 - Disk is tight (about 3.5 GB free on 20 GB). Old medscribe image tags are the main reclaimable space (`docker system df`).
+
+## Reviewer sign-in setup
+
+Pharmacists and engineers sign in with Google (Firebase Auth) to review batch records; any other Google account can sign in to flag problems. Write actions also need a Cloudflare Turnstile check. Until this is set up, `/signin` says "Reviewer sign-in is not configured." and anonymous visitors see only pharmacist-approved records, so the pilot stays hidden until a pharmacist approves it.
+
+Where each value lives:
+
+| Value | Kind | Where |
+|-------|------|-------|
+| Firebase `apiKey`, `authDomain`, `projectId`, `appId`; Turnstile site key | public | GitHub repo **variables** (built into the web image) and host `deploy/.env` |
+| `SESSION_SECRET`, `INTERNAL_API_TOKEN`, `TURNSTILE_SECRET_KEY` | secret | host `deploy/.env` only |
+| `REVIEWERS` (reviewer emails) | personal data | host `deploy/.env` only |
+
+1. **Firebase console** (https://console.firebase.google.com):
+   - Create a project (or pick an existing one). Google Analytics is not needed.
+   - Build > Authentication > Get started > Sign-in method > **Google** > Enable, choose a support email, Save.
+   - Authentication > Settings > **Authorized domains** > Add domain `drugdb.eliooo.org` (`localhost` is listed by default for local runs).
+   - Project settings > General > Your apps > Add app > Web (`</>`). Register it without Hosting and copy `apiKey`, `authDomain` (`<project>.firebaseapp.com`), `projectId` and `appId` from the config snippet.
+   - No service account is needed: the server verifies Google ID tokens with the project ID alone.
+2. **Cloudflare Turnstile** (Cloudflare dashboard > Turnstile > Add widget): hostname `drugdb.eliooo.org`, mode Managed. Copy the site key and the secret key. For local runs use Cloudflare's always-pass test keys (site `1x00000000000000000000AA`, secret `1x0000000000000000000000000000000AA`); the app rejects them in production.
+3. **GitHub repo variables** (Settings > Secrets and variables > Actions > **Variables** tab, not Secrets): `FIREBASE_API_KEY`, `FIREBASE_AUTH_DOMAIN`, `FIREBASE_PROJECT_ID`, `FIREBASE_APP_ID`, `TURNSTILE_SITE_KEY`. `next build` inlines them into the web image, so a change takes effect only with the next deploy (push to `main` or re-run `deploy`). An unset variable builds an image with sign-in disabled.
+4. **Host `.env`** (`~/drugdb/deploy/.env`, `chmod 600`). Add the lines from `deploy/.env.example`:
+   ```bash
+   openssl rand -hex 32   # SESSION_SECRET (signs the session cookie)
+   openssl rand -hex 32   # INTERNAL_API_TOKEN (web -> api; never leaves the Docker network)
+   ```
+   - Paste the two generated values (hex only, so compose needs no quoting), plus `TURNSTILE_SECRET_KEY`.
+   - Set `FIREBASE_PROJECT_ID`, `NEXT_PUBLIC_FIREBASE_API_KEY`, `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`, `NEXT_PUBLIC_FIREBASE_APP_ID` and `NEXT_PUBLIC_TURNSTILE_SITE_KEY` to the same values as the repo variables.
+   - Do this **before** the merge that deploys Sprint 3: web and api refuse to start without a `SESSION_SECRET` / `INTERNAL_API_TOKEN` of at least 32 characters, so `deploy` stops with an error (and leaves the running containers alone) while either is missing.
+5. **`REVIEWERS` format:** comma-separated `email:role` pairs with no spaces, role `pharmacist` or `engineer`:
+   ```bash
+   REVIEWERS=alice@example.com:pharmacist,bob@example.com:engineer
+   ```
+   - Emails match case-insensitively. Malformed entries are ignored. Anyone signed in but not listed gets role `user` (can flag, cannot review).
+   - Only a pharmacist's OK approves a record; an engineer's OK is recorded but does not approve on its own.
+   - Re-running a record puts it back to pending. So does a run of **another** product that really changes data the record shows through a shared substance: a new name or code, a new or changed DDInter mapping, a coverage change, or a changed interaction pair or text. Such a record goes back to pending in its latest batch, and the ETL log lists it ("re-opened the review of N other record(s)"). A run that rewrites identical data re-opens nothing else.
+   - Reviewer emails are personal data: keep them only in the host `.env`. Never commit them or paste them into issues, PRs or logs. Public pages show the role, never the email.
+
+**Add, remove or change a reviewer** on the host:
+
+```bash
+cd ~/drugdb/deploy
+vi .env                      # edit the REVIEWERS line
+docker-compose up -d web     # recreates web with the new list; api and db keep running
+```
+
+A removed reviewer loses review rights on their next request. A reviewer whose role changed signs out and in again. Rotating `SESSION_SECRET` signs everyone out (`docker-compose up -d web`). Rotating `INTERNAL_API_TOKEN` needs both services: `docker-compose up -d api web`.

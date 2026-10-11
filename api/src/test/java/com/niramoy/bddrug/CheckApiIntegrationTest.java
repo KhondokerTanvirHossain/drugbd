@@ -22,18 +22,17 @@ import java.util.stream.IntStream;
 class CheckApiIntegrationTest {
     @Container static PostgreSQLContainer<?> pg = new PostgreSQLContainer<>("postgres:16");
 
-    @DynamicPropertySource static void props(DynamicPropertyRegistry r) {
-        r.add("spring.r2dbc.url", () -> "r2dbc:postgresql://" + pg.getHost() + ":" + pg.getFirstMappedPort() + "/" + pg.getDatabaseName());
-        r.add("spring.r2dbc.username", pg::getUsername);
-        r.add("spring.r2dbc.password", pg::getPassword);
-    }
+    @DynamicPropertySource static void props(DynamicPropertyRegistry r) { TestSupport.props(r, pg); }
 
     @BeforeAll static void seed() throws Exception { PilotSeed.migrateAndSeed(pg); }
 
     @Autowired WebTestClient web;
 
+    /** These tests check data shape, so they read with scope=all; visibility has its own tests. */
+    private WebTestClient all() { return TestSupport.internal(web); }
+
     private WebTestClient.ResponseSpec check(String... ids) {
-        return web.post().uri("/v1/interactions/check").contentType(MediaType.APPLICATION_JSON)
+        return all().post().uri("/v1/interactions/check?scope=all").contentType(MediaType.APPLICATION_JSON)
             .bodyValue(Map.of("conceptIds", List.of(ids))).exchange();
     }
 

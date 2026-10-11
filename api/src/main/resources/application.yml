@@ -6,3 +6,5 @@ spring:
     password: ${DB_PASSWORD:change-me}
 server.port: 8080
 management.endpoints.web.exposure.include: health
+# Shared with the web server; writes and scope=all reads need it. Unset or shorter than 32 characters: the API won't start.
+bddrug.internal-api-token: ${INTERNAL_API_TOKEN:}

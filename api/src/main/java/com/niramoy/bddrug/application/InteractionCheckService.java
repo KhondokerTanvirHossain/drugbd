@@ -8,10 +8,12 @@ import com.niramoy.bddrug.domain.CheckResult;
 import com.niramoy.bddrug.domain.CheckResult.CheckedProduct;
 import com.niramoy.bddrug.domain.CheckResult.Duplicate;
 import com.niramoy.bddrug.domain.CheckResult.NoData;
+import com.niramoy.bddrug.domain.CheckResult.NotReviewed;
 import com.niramoy.bddrug.domain.CheckResult.SubstanceCoverage;
 import com.niramoy.bddrug.domain.DdinterCode;
 import com.niramoy.bddrug.domain.InteractionAlert;
 import com.niramoy.bddrug.domain.RouteRule;
+import com.niramoy.bddrug.domain.Scope;
 import com.niramoy.bddrug.domain.Severity;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
@@ -20,6 +22,8 @@ import java.util.*;
 /**
  * The interaction checker. Every product substance ends up either usable for alerts or listed in
  * {@code noData}; nothing is silently dropped, so "no data" is never shown as "no interactions".
+ * Under public scope a product no pharmacist has approved is listed in {@code notReviewed} (ID only)
+ * and takes no part in the products, alerts, duplicates or noData lists.
  */
 @Service
 public class InteractionCheckService {
@@ -33,11 +37,11 @@ public class InteractionCheckService {
     private final CheckQueryPort port;
     public InteractionCheckService(CheckQueryPort port) { this.port = port; }
 
-    public Mono<CheckResult> check(List<String> conceptIds) {
+    public Mono<CheckResult> check(List<String> conceptIds, Scope scope) {
         if (!valid(conceptIds))
             return Mono.error(new InvalidQueryException(FIELD, "conceptIds must hold 2-20 unique product IDs"));
         List<String> ids = List.copyOf(conceptIds);
-        return port.load(ids).map(data -> compute(ids, data));
+        return port.load(ids).map(data -> compute(ids, data, scope));
     }
 
     static boolean valid(List<String> ids) {
@@ -50,7 +54,7 @@ public class InteractionCheckService {
 
     private record Usable(String conceptId, String bdsId, String name, RouteRule.Choice choice) {}
 
-    static CheckResult compute(List<String> ids, CheckData data) {
+    static CheckResult compute(List<String> ids, CheckData data, Scope scope) {
         Map<String, ProductRow> products = new HashMap<>();
         for (ProductRow p : data.products()) products.put(p.conceptId(), p);
         for (String id : ids)
@@ -63,12 +67,17 @@ public class InteractionCheckService {
 
         List<CheckedProduct> checked = new ArrayList<>();
         List<NoData> noData = new ArrayList<>();
+        List<NotReviewed> notReviewed = new ArrayList<>();
         List<List<Usable>> usable = new ArrayList<>();
         Map<String, String> dupNames = new LinkedHashMap<>();
         Map<String, List<String>> dupConcepts = new LinkedHashMap<>();
 
         for (String id : ids) {
             ProductRow p = products.get(id);
+            if (scope == Scope.PUBLIC && !"ok".equals(p.reviewStatus())) {
+                notReviewed.add(new NotReviewed(id));
+                continue;
+            }
             List<SubstanceCoverage> subs = substances(ingredients.getOrDefault(id, List.of()));
             checked.add(new CheckedProduct(id, p.tradeName(), subs));
             List<Usable> mine = new ArrayList<>();
@@ -101,7 +110,7 @@ public class InteractionCheckService {
         dupConcepts.forEach((bds, concepts) -> {
             if (concepts.size() > 1) duplicates.add(new Duplicate(bds, dupNames.get(bds), List.copyOf(concepts)));
         });
-        return new CheckResult(checked, alerts, duplicates, noData);
+        return new CheckResult(checked, alerts, duplicates, noData, notReviewed);
     }
 
     /** One entry per substance: rows without a substance stay separate (by XM code); missing coverage counts as none. */

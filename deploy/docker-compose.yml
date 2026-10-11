@@ -30,6 +30,8 @@ services:
       DB_R2DBC_URL: r2dbc:postgresql://db:5432/bddrug
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
+      # Required (>= 32 chars): the API refuses to start without it. Only the web server sends it.
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
       JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=70
     depends_on: {flyway: {condition: service_completed_successfully}}
     mem_limit: 448m
@@ -37,7 +39,22 @@ services:
     restart: unless-stopped
   web:
     image: ghcr.io/${GHCR_OWNER}/bddrug-web:${IMAGE_TAG}
-    environment: {API_URL: "http://api:8080"}
+    environment:
+      API_URL: http://api:8080
+      # Required (>= 32 chars each): the web server refuses to start without SESSION_SECRET.
+      SESSION_SECRET: ${SESSION_SECRET}
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
+      # Reviewer sign-in (README "Reviewer sign-in setup"). Empty values leave sign-in disabled.
+      # The NEXT_PUBLIC_* values are also baked into the image at build time from the GitHub repo
+      # variables; keep both copies identical.
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
+      NEXT_PUBLIC_FIREBASE_API_KEY: ${NEXT_PUBLIC_FIREBASE_API_KEY:-}
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN:-}
+      NEXT_PUBLIC_FIREBASE_APP_ID: ${NEXT_PUBLIC_FIREBASE_APP_ID:-}
+      NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${NEXT_PUBLIC_TURNSTILE_SITE_KEY:-}
+      TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
+      # email:role pairs, comma-separated; role is pharmacist or engineer. Personal data: host .env only.
+      REVIEWERS: ${REVIEWERS:-}
     depends_on: [api]
     mem_limit: 256m
     networks:

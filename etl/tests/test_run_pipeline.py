@@ -154,7 +154,7 @@ def stage_spy(monkeypatch):
     """Wrap the four stage entry points so the call order is observable."""
     calls: list[str] = []
     for stage, attr in (("dgda", "run_batch"), ("substances", "build_substances"),
-                        ("clinical", "build_clinical_drugs"), ("ddinter", "map_and_load_ddinter")):
+                        ("clinical", "build_clinical_drugs"), ("ddinter", "plan_ddinter")):
         real = getattr(run_pipeline, attr)
 
         def spy(*a, _real=real, _stage=stage, **kw):
@@ -265,11 +265,19 @@ def test_stage_exception_fails_every_product_stops_later_stages_and_keeps_earlie
     assert q(url, "SELECT trade_name FROM curated.brand_product WHERE concept_id = %s", (WARF,)) != [("MUST-ROLL-BACK",)]
 
 
+def test_a_stage_exception_note_is_one_line(url, tmp_path, monkeypatch):
+    def boom(conn, concept_ids):
+        raise RuntimeError("clinical exploded\nCONTEXT:  while updating tuple (0,84) in relation \"batch_item\"")
+    monkeypatch.setattr(run_pipeline, "build_clinical_drugs", boom)
+    assert Harness(url).main("--batch", batch_file(tmp_path, "0115-multiline", [WARF])) != 0
+    assert stage_rows(url, "0115-multiline")[(WARF, "clinical")] == ("fail", "error: RuntimeError: clinical exploded")
+
+
 def test_a_stage_is_one_transaction_so_its_per_product_work_is_rolled_back_on_exception(url, tmp_path, monkeypatch):
     real = run_pipeline.build_substances
 
-    def late_boom(conn, rxnav, concept_ids):
-        results = real(conn, rxnav, concept_ids)  # real per-product savepoints and writes
+    def late_boom(conn, rxnav, concept_ids, *rest):
+        results = real(conn, rxnav, concept_ids, *rest)  # real per-product savepoints and writes
         assert [r.concept_id for r in results] == [TESTIUM]
         raise RuntimeError("after the products")
     monkeypatch.setattr(run_pipeline, "build_substances", late_boom)
@@ -357,6 +365,109 @@ def test_full_pipeline_twice_mints_no_new_ids_and_replaces_stage_results(url, tm
     assert Harness(url).main("--batch", f) == 0
     assert snap() == first
     assert first[4] == [(12,)]
+
+
+# --- approval gate (Review Focus 3): every stage that rewrites a record re-opens its review -----
+
+REVIEWER = "pharm@example.test"
+
+
+def approve(url, batch_id, cid):
+    """A pharmacist 'ok' (as Task 3's API records it) on a fresh connection; returns its decided_at."""
+    with psycopg.connect(url) as c:
+        decided_at = c.execute(
+            """INSERT INTO ops.review_decision (batch_id, concept_id, decision, reviewer_email, reviewer_role)
+               VALUES (%s, %s, 'ok', %s, 'pharmacist') RETURNING decided_at""", (batch_id, cid, REVIEWER)).fetchone()[0]
+        c.execute("UPDATE ops.batch_item SET review = 'ok' WHERE batch_id = %s AND concept_id = %s", (batch_id, cid))
+        c.execute("UPDATE ops.batch SET status = 'approved' WHERE batch_id = %s", (batch_id,))
+    return decided_at
+
+
+def item(url, batch_id, cid):
+    return q(url, "SELECT review, extracted_at FROM ops.batch_item WHERE batch_id = %s AND concept_id = %s",
+             (batch_id, cid))[0]
+
+
+def decisions(url, batch_id):
+    return q(url, "SELECT count(*) FROM ops.review_decision WHERE batch_id = %s", (batch_id,))[0][0]
+
+
+def test_stage_only_rerun_after_an_ok_reopens_the_review_and_keeps_history(url, tmp_path):
+    f = batch_file(tmp_path, "0115-stage-rerun", [WARF, ASA, MISSING])
+    assert Harness(url).main("--batch", f) == 0
+    decided_at = approve(url, "0115-stage-rerun", WARF)
+    missing_before = item(url, "0115-stage-rerun", MISSING)
+    assert Harness(url).main("--batch", f, "--stages", "substances,clinical,ddinter") == 0
+    review, extracted_at = item(url, "0115-stage-rerun", WARF)
+    assert review == "pending"
+    assert extracted_at > decided_at  # the old 'ok' no longer counts under the approval rule
+    assert item(url, "0115-stage-rerun", ASA)[0] == "pending"
+    assert item(url, "0115-stage-rerun", MISSING) == missing_before  # skipped (dgda failed): nothing rewritten
+    assert q(url, "SELECT status FROM ops.batch WHERE batch_id = '0115-stage-rerun'") == [("in_review",)]
+    assert decisions(url, "0115-stage-rerun") == 1  # history kept
+
+
+@pytest.mark.parametrize("stage", ["substances", "clinical", "ddinter"])
+def test_each_product_stage_alone_reopens_the_review(url, tmp_path, stage):
+    batch_id = f"0116-only-{stage}"
+    f = batch_file(tmp_path, batch_id, [WARF])
+    assert Harness(url).main("--batch", f) == 0
+    decided_at = approve(url, batch_id, WARF)
+    assert Harness(url).main("--batch", f, "--stages", stage) == 0
+    review, extracted_at = item(url, batch_id, WARF)
+    assert (review, extracted_at > decided_at) == ("pending", True)
+
+
+def test_an_ok_recorded_while_a_later_stage_runs_does_not_approve_its_output(url, tmp_path, monkeypatch):
+    """A pharmacist reviews after dgda but before the (slow) DDInter stage commits: that 'ok' must not count."""
+    real = run_pipeline.plan_ddinter
+    seen = {}
+
+    class ReviewMidChunk:
+        def __init__(self, plan):
+            self.plan = plan
+
+        def process(self, conn, cid, *rest):
+            if "decided_at" not in seen:  # committed inside the open chunk transaction, before its stamp
+                seen["decided_at"] = approve(url, "0117-mid-run", WARF)
+            return self.plan.process(conn, cid, *rest)
+
+    monkeypatch.setattr(run_pipeline, "plan_ddinter", lambda *a, **kw: ReviewMidChunk(real(*a, **kw)))
+    assert Harness(url).main("--batch", batch_file(tmp_path, "0117-mid-run", [WARF, ASA])) == 0
+    review, extracted_at = item(url, "0117-mid-run", WARF)
+    assert review == "pending"
+    assert extracted_at > seen["decided_at"]
+    assert decisions(url, "0117-mid-run") == 1
+
+
+def test_an_ok_recorded_while_dgda_loads_does_not_approve_its_output(url, tmp_path, monkeypatch):
+    from bddrug_etl.load import batches
+    f = batch_file(tmp_path, "0118-mid-dgda", [WARF])
+    assert Harness(url).main("--batch", f, "--stages", "dgda") == 0
+    real, seen = batches.load_products, {}
+
+    def review_mid_load(conn, concepts, **kw):
+        stats = real(conn, concepts, **kw)  # the dgda transaction is open now
+        seen["decided_at"] = approve(url, "0118-mid-dgda", WARF)
+        return stats
+    monkeypatch.setattr(batches, "load_products", review_mid_load)
+    assert Harness(url).main("--batch", f, "--stages", "dgda") == 0
+    review, extracted_at = item(url, "0118-mid-dgda", WARF)
+    assert (review, extracted_at > seen["decided_at"]) == ("pending", True)
+
+
+def test_a_stage_that_rolls_back_leaves_the_review_alone(url, tmp_path, monkeypatch):
+    """The stamp is part of the stage's transaction: no curated change, no re-opened review."""
+    f = batch_file(tmp_path, "0119-rolled-back", [WARF])
+    assert Harness(url).main("--batch", f) == 0
+    approve(url, "0119-rolled-back", WARF)
+    before = item(url, "0119-rolled-back", WARF)
+
+    def boom(conn, concept_ids):
+        raise RuntimeError("clinical exploded")
+    monkeypatch.setattr(run_pipeline, "build_clinical_drugs", boom)
+    assert Harness(url).main("--batch", f, "--stages", "clinical") != 0
+    assert item(url, "0119-rolled-back", WARF) == before
 
 
 # --- wiring ---------------------------------------------------------------------------------------

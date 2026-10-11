@@ -25,13 +25,13 @@ public class R2dbcSubstanceAdapter implements SubstanceQueryPort {
     private final DatabaseClient db;
     public R2dbcSubstanceAdapter(DatabaseClient db) { this.db = db; }
 
-    @Override public Mono<Substance> find(String bdsId) {
+    @Override public Mono<Substance> find(String bdsId, boolean approvedOnly) {
         return db.sql("SELECT bds_id, preferred_name FROM curated.substance WHERE bds_id = :id")
             .bind("id", bdsId)
             .map(r -> new Substance(r.get("bds_id", String.class), r.get("preferred_name", String.class),
                 List.of(), List.of(), null, List.of(), List.of(), List.of(), List.of()))
             .one()
-            .flatMap(s -> Mono.zip(names(bdsId), codes(bdsId), coverage(bdsId), products(bdsId),
+            .flatMap(s -> Mono.zip(names(bdsId), codes(bdsId), coverage(bdsId), products(bdsId, approvedOnly),
                     interactions(bdsId), diseases(bdsId), foods(bdsId))
                 .map(t -> new Substance(s.bdsId(), s.preferredName(), t.getT1(), t.getT2(), t.getT3(), t.getT4(),
                     t.getT5(), t.getT6(), t.getT7())));
@@ -62,18 +62,21 @@ public class R2dbcSubstanceAdapter implements SubstanceQueryPort {
             .defaultIfEmpty(new Substance.Coverage("none", Substance.NOT_LOADED_NOTE));
     }
 
-    private Mono<List<Substance.ProductRef>> products(String id) {
+    private Mono<List<Substance.ProductRef>> products(String id, boolean approvedOnly) {
         return db.sql("""
-                SELECT DISTINCT bp.concept_id, bp.trade_name, bp.company
-                FROM curated.substance_code c
-                JOIN curated.brand_product_ingredient bpi ON bpi.xm_code = c.code
-                JOIN curated.brand_product bp ON bp.concept_id = bpi.concept_id
-                WHERE c.bds_id = :id AND c.system = 'ICD11_XM'
-                ORDER BY bp.trade_name, bp.concept_id""")
+                SELECT p.concept_id, p.trade_name, p.company, %s AS review_status
+                FROM (SELECT DISTINCT bp.concept_id, bp.trade_name, bp.company
+                      FROM curated.substance_code c
+                      JOIN curated.brand_product_ingredient bpi ON bpi.xm_code = c.code
+                      JOIN curated.brand_product bp ON bp.concept_id = bpi.concept_id
+                      WHERE c.bds_id = :id AND c.system = 'ICD11_XM') p
+                ORDER BY p.trade_name, p.concept_id""".formatted(ReviewSql.statusOf("p.concept_id")))
             .bind("id", id)
             .map(r -> new Substance.ProductRef(r.get("concept_id", String.class), r.get("trade_name", String.class),
-                r.get("company", String.class)))
-            .all().collectList();
+                r.get("company", String.class), r.get("review_status", String.class)))
+            .all()
+            .filter(p -> !approvedOnly || "ok".equals(p.reviewStatus()))
+            .collectList();
     }
 
     /** Pairs are stored once (ddinter_a < ddinter_b); the partner is whichever side is not this substance's entry. */

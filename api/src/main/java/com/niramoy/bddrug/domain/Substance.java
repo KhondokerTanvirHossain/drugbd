@@ -9,12 +9,21 @@ public record Substance(String bdsId, String preferredName, List<SubstanceName> 
     public static final String NOT_LOADED_NOTE = "DDInter mapping has not run for this substance";
 
     public record Coverage(String coverage, String note) {}
-    public record ProductRef(String conceptId, String tradeName, String company) {}
+    public record ProductRef(String conceptId, String tradeName, String company, String reviewStatus) {}
     /** routeScope is the route of this substance's DDInter entry the pair belongs to. */
     public record Interaction(String partnerName, String partnerBdsId, String severity, List<String> actions,
                               String interactionId, String routeScope) {}
+    /** text is null when DDInter has none (a placeholder such as "None" included). */
     public record Disease(String diseaseName, String severity, String text, List<String> refs,
-                          String interactionId, String routeScope) {}
+                          String interactionId, String routeScope) {
+        public Disease { text = DdinterText.clean(text); }
+    }
+    /** description / management are null when DDInter has none (a placeholder such as "None" included). */
     public record Food(String food, String severity, String mechanism, String description, String management,
-                       List<String> refs, String interactionId, String routeScope) {}
+                       List<String> refs, String interactionId, String routeScope) {
+        public Food {
+            description = DdinterText.clean(description);
+            management = DdinterText.clean(management);
+        }
+    }
 }

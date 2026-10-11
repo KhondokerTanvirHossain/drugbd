@@ -14,7 +14,7 @@ describe("api client", () => {
   it("encodes the query and page", async () => {
     const f = vi.fn().mockResolvedValue(ok([])); vi.stubGlobal("fetch", f);
     await searchProducts("100% max", 2);
-    expect(f.mock.calls[0][0]).toBe("http://api:8080/v1/products?q=100%25+max&page=2");
+    expect(f.mock.calls[0][0]).toBe("http://api:8080/v1/products?q=100%25+max&page=2&scope=public");
     expect(f.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
   });
   it("returns a readable error on API 400", async () => {
@@ -41,7 +41,7 @@ describe("api client", () => {
   it("getProduct encodes the id and uses a timeout signal", async () => {
     const f = vi.fn().mockResolvedValue(new Response("{}", { status: 404 })); vi.stubGlobal("fetch", f);
     await getProduct("a/b");
-    expect(f.mock.calls[0][0]).toBe("http://api:8080/v1/products/a%2Fb");
+    expect(f.mock.calls[0][0]).toBe("http://api:8080/v1/products/a%2Fb?scope=public");
     expect(f.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
   });
   it("getProduct throws on 500", async () => {
@@ -67,7 +67,7 @@ describe("api client", () => {
   it("getSubstance encodes the id and passes timeout and no-store", async () => {
     const f = vi.fn().mockResolvedValue(ok({ bdsId: "BDS-000001" })); vi.stubGlobal("fetch", f);
     expect(await getSubstance("BDS-000001/x")).toEqual({ bdsId: "BDS-000001" });
-    expect(f.mock.calls[0][0]).toBe("http://api:8080/v1/substances/BDS-000001%2Fx");
+    expect(f.mock.calls[0][0]).toBe("http://api:8080/v1/substances/BDS-000001%2Fx?scope=public");
     expect(f.mock.calls[0][1].cache).toBe("no-store");
     expect(f.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
   });
@@ -78,13 +78,14 @@ describe("api client", () => {
     await expect(getSubstance("BDS-000001")).rejects.toThrow("API error 500");
   });
   it("checkInteractions posts the ids as JSON with timeout and no-store", async () => {
-    const data = { products: [], alerts: [], duplicates: [], noData: [] };
+    const data = { products: [], alerts: [], duplicates: [], noData: [], notReviewed: [] };
     const f = vi.fn().mockResolvedValue(ok(data)); vi.stubGlobal("fetch", f);
     expect(await checkInteractions(["a/b", "c d&e"])).toEqual({ result: data, error: null });
     const [url, init] = f.mock.calls[0];
-    expect(url).toBe("http://api:8080/v1/interactions/check");
+    expect(url).toBe("http://api:8080/v1/interactions/check?scope=public");
     expect(init.method).toBe("POST");
-    expect(init.headers).toEqual({ "Content-Type": "application/json" });
+    expect(new Headers(init.headers).get("Content-Type")).toBe("application/json");
+    expect(new Headers(init.headers).has("X-Internal-Token")).toBe(false);
     expect(JSON.parse(init.body)).toEqual({ conceptIds: ["a/b", "c d&e"] });
     expect(init.cache).toBe("no-store");
     expect(init.signal).toBeInstanceOf(AbortSignal);

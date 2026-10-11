@@ -2,7 +2,7 @@
 import re
 from dataclasses import dataclass
 
-from bddrug_etl.ddinter.html import DDInterDrug, InteractionText, parse_drug_detail, parse_interaction
+from bddrug_etl.ddinter.html import DDInterDrug, InteractionText, clean_text, parse_drug_detail, parse_interaction
 
 PAGE = 500
 _TOKEN_IN_PAGE = re.compile(r"csrfmiddlewaretoken\s*:\s*['\"]([^'\"]+)['\"]")
@@ -128,7 +128,7 @@ class DDInterClient:
             for r in rows:
                 out.append({"interaction_id": str(r["interaction_id"]), "severity": severity(r.get("level")),
                             "disease_name": r.get("diseaseName"), "references": _refs(r.get("references")),
-                            "text": r.get("text")})
+                            "text": clean_text(r.get("text"))})
         return out
 
     def foods(self, ddinter_id: str) -> list[dict]:
@@ -138,8 +138,8 @@ class DDInterClient:
                 mech = (r.get("magnesium") or "").strip().lower()
                 out.append({"interaction_id": str(r["interaction_id"]), "severity": severity(r.get("level")),
                             "food_name": r.get("foodName"), "references": _refs(r.get("references")),
-                            "mechanism": mech or None, "management": r.get("newManagement"),
-                            "interaction": r.get("newInteraction")})
+                            "mechanism": mech or None, "management": clean_text(r.get("newManagement")),
+                            "interaction": clean_text(r.get("newInteraction"))})
         return out
 
     def interaction(self, interaction_id: str) -> InteractionText:

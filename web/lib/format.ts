@@ -9,3 +9,9 @@ export function formatStrength(i: Pick<ClinicalIngredient, "strengthValue" | "st
   if (!s || !i.perUnit) return s;
   return `${s} per ${amount(i.perValue, i.perUnit)}`;
 }
+
+/** "2026-10-12 10:05 UTC" from an ISO instant; the raw value when it does not parse. */
+export function formatUtc(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? iso : `${d.toISOString().slice(0, 16).replace("T", " ")} UTC`;
+}

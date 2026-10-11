@@ -1,4 +1,5 @@
 package com.niramoy.bddrug.presentation;
+import com.niramoy.bddrug.application.ConflictException;
 import com.niramoy.bddrug.application.InvalidQueryException;
 import com.niramoy.bddrug.application.NotFoundException;
 import org.slf4j.Logger;
@@ -21,6 +22,14 @@ public class ApiExceptionHandler {
     @ExceptionHandler(NotFoundException.class)
     ResponseEntity<ApiResponse<Void>> notFound(NotFoundException e) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error("NOT_FOUND", e.field(), e.getMessage()));
+    }
+    @ExceptionHandler(UnauthorizedException.class)
+    ResponseEntity<ApiResponse<Void>> unauthorized(UnauthorizedException e) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.error("UNAUTHORIZED", null, e.getMessage()));
+    }
+    @ExceptionHandler(ConflictException.class)
+    ResponseEntity<ApiResponse<Void>> conflict(ConflictException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.error("CONFLICT", e.field(), e.getMessage()));
     }
     @ExceptionHandler(ServerWebInputException.class)
     ResponseEntity<ApiResponse<Void>> badInput(ServerWebInputException e) {

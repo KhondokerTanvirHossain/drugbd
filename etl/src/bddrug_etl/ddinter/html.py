@@ -16,9 +16,22 @@ class DDInterDrug:
 
 @dataclass(frozen=True)
 class InteractionText:
-    interaction: str
-    management: str
+    interaction: str | None  # None: DDInter has no text (never a placeholder such as "None")
+    management: str | None
     refs: tuple[str, ...]
+
+
+# What DDInter prints where it has no text. Stored, these read as content ("None" next to an interaction can be
+# taken for "no interaction"), so they are treated as missing wherever DDInter free text enters the pipeline.
+PLACEHOLDERS = frozenset({"none", "null", "n/a", "na", "-", "--", ""})
+
+
+def clean_text(value: str | None) -> str | None:
+    """DDInter free text, stripped; None when it is missing or a placeholder (case-insensitive, after strip())."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    return None if text.lower() in PLACEHOLDERS else text
 
 
 class _TextCollector(HTMLParser):
@@ -101,8 +114,8 @@ def parse_interaction(html: str) -> InteractionText:
     start = _after(chunks, "Basic Information") or 0
     if _after(chunks, "Interaction", start) is None:
         raise ValueError("no 'Interaction' section")
-    interaction = " ".join(_section(chunks, "Interaction", start))
-    management = " ".join(_section(chunks, "Management", start))
+    interaction = clean_text(" ".join(_section(chunks, "Interaction", start)))
+    management = clean_text(" ".join(_section(chunks, "Management", start)))
     refs: list[str] = []
     for c in _section(chunks, "References", start):
         if _REF_START.match(c):

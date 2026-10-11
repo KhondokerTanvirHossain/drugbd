@@ -18,18 +18,17 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 class SubstanceApiIntegrationTest {
     @Container static PostgreSQLContainer<?> pg = new PostgreSQLContainer<>("postgres:16");
 
-    @DynamicPropertySource static void props(DynamicPropertyRegistry r) {
-        r.add("spring.r2dbc.url", () -> "r2dbc:postgresql://" + pg.getHost() + ":" + pg.getFirstMappedPort() + "/" + pg.getDatabaseName());
-        r.add("spring.r2dbc.username", pg::getUsername);
-        r.add("spring.r2dbc.password", pg::getPassword);
-    }
+    @DynamicPropertySource static void props(DynamicPropertyRegistry r) { TestSupport.props(r, pg); }
 
     @BeforeAll static void seed() throws Exception { PilotSeed.migrateAndSeed(pg); }
 
     @Autowired WebTestClient web;
 
+    /** These tests check data shape, so they read with scope=all; visibility has its own tests. */
+    private WebTestClient all() { return TestSupport.internal(web); }
+
     @Test void acetaminophenListsNamesAndCodesIncludingAtc() {
-        web.get().uri("/v1/substances/BDS-000005").exchange().expectStatus().isOk()
+        all().get().uri("/v1/substances/BDS-000005?scope=all").exchange().expectStatus().isOk()
             .expectBody()
             .jsonPath("$.success").isEqualTo(true)
             .jsonPath("$.data.bdsId").isEqualTo("BDS-000005")
@@ -54,7 +53,7 @@ class SubstanceApiIntegrationTest {
     }
 
     @Test void interactionsAreSortedBySeverityThenPartnerName() {
-        web.get().uri("/v1/substances/BDS-000001").exchange().expectStatus().isOk()
+        all().get().uri("/v1/substances/BDS-000001?scope=all").exchange().expectStatus().isOk()
             .expectBody()
             .jsonPath("$.data.interactions.length()").isEqualTo(5)
             .jsonPath("$.data.interactions[0].severity").isEqualTo("major")
@@ -80,7 +79,7 @@ class SubstanceApiIntegrationTest {
 
     @Test void partnerSideIsChosenFromEitherPairColumn() {
         // Chloramphenicol is ddinter_b of its only pair; its partner is warfarin (ddinter_a), via the ophthalmic entry.
-        web.get().uri("/v1/substances/BDS-000003").exchange().expectStatus().isOk()
+        all().get().uri("/v1/substances/BDS-000003?scope=all").exchange().expectStatus().isOk()
             .expectBody()
             .jsonPath("$.data.interactions.length()").isEqualTo(1)
             .jsonPath("$.data.interactions[0].partnerName").isEqualTo("Warfarin")
@@ -94,7 +93,7 @@ class SubstanceApiIntegrationTest {
     }
 
     @Test void diseasesAndFoodsAreListed() {
-        web.get().uri("/v1/substances/BDS-000001").exchange().expectStatus().isOk()
+        all().get().uri("/v1/substances/BDS-000001?scope=all").exchange().expectStatus().isOk()
             .expectBody()
             .jsonPath("$.data.diseases.length()").isEqualTo(2)
             .jsonPath("$.data.diseases[0].diseaseName").isEqualTo("Bleeding")
@@ -112,7 +111,7 @@ class SubstanceApiIntegrationTest {
     }
 
     @Test void domperidoneHasCoverageNoneAndNoInteractions() {
-        web.get().uri("/v1/substances/BDS-000004").exchange().expectStatus().isOk()
+        all().get().uri("/v1/substances/BDS-000004?scope=all").exchange().expectStatus().isOk()
             .expectBody()
             .jsonPath("$.data.coverage.coverage").isEqualTo("none")
             .jsonPath("$.data.coverage.note").isEqualTo("No interaction data in DDInter for this substance")
@@ -123,7 +122,7 @@ class SubstanceApiIntegrationTest {
     }
 
     @Test void unknownSubstanceIs404WithEnvelope() {
-        web.get().uri("/v1/substances/BDS-999999").exchange().expectStatus().isNotFound()
+        all().get().uri("/v1/substances/BDS-999999?scope=all").exchange().expectStatus().isNotFound()
             .expectBody()
             .jsonPath("$.success").isEqualTo(false)
             .jsonPath("$.errors[0].code").isEqualTo("NOT_FOUND")

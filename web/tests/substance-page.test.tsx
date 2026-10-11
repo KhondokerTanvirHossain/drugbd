@@ -3,7 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Substance } from "@/lib/api";
 
 const getSubstance = vi.fn();
-vi.mock("@/lib/api", () => ({ getSubstance: (id: string) => getSubstance(id) }));
+vi.mock("@/lib/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api")>()),
+  getSubstance: (id: string, scope?: string) => getSubstance(id, scope),
+}));
+const getSession = vi.fn();
+vi.mock("@/lib/session", () => ({ getSession: () => getSession() }));
 import SubstancePage from "@/app/substances/[id]/page";
 
 const NONE_SENTENCE = "No interaction data in DDInter for this substance. This does not mean it is safe to combine.";
@@ -45,13 +50,44 @@ const warfarin: Substance = {
 
 const render = async (id: string) => renderToStaticMarkup(await SubstancePage({ params: Promise.resolve({ id }) }));
 
-beforeEach(() => getSubstance.mockReset());
+beforeEach(() => { getSubstance.mockReset(); getSession.mockReset(); getSession.mockResolvedValue(null); });
+
+describe("substance page visibility", () => {
+  it("asks with scope=public for anonymous visitors and shows only the not-reviewed text for a hidden substance", async () => {
+    getSubstance.mockResolvedValue({ bdsId: "BDS-000009", preferredName: "Secretine", reviewStatus: "pending", hidden: true });
+    const html = await render("BDS-000009");
+    expect(getSubstance).toHaveBeenCalledWith("BDS-000009", "public");
+    expect(html).toContain("Not yet reviewed by a pharmacist");
+    for (const absent of ["Secretine", "Names", "Codes", "Drug interactions", "Products using it", NONE_SENTENCE])
+      expect(html).not.toContain(absent);
+  });
+
+  it("a reviewer gets scope=all and an unreviewed badge on unapproved products only", async () => {
+    getSession.mockResolvedValue({ email: "eng@example.org", role: "engineer" });
+    getSubstance.mockResolvedValue({ ...warfarin, products: [
+      { conceptId: "W-1", tradeName: "Warin", company: "Acme", reviewStatus: "ok" },
+      { conceptId: "W-2", tradeName: "Warcef", company: "Acme", reviewStatus: "issue" }] });
+    const html = await render("BDS-000001");
+    expect(getSubstance).toHaveBeenCalledWith("BDS-000001", "all");
+    expect(html.match(/>unreviewed</g)).toHaveLength(1);
+    expect(html).toMatch(/Warcef<\/a> \(Acme\) <span class="badge"[^>]*>unreviewed<\/span>/);
+    expect(html).toContain("Flag a problem");
+    expect(html).not.toContain("eng@example.org");
+  });
+
+  it("anonymous visitors see no badge and no flag form", async () => {
+    getSubstance.mockResolvedValue(warfarin);
+    const html = await render("BDS-000001");
+    expect(html).not.toContain("unreviewed");
+    expect(html).not.toContain("Flag a problem");
+  });
+});
 
 describe("substance page", () => {
   it("shows the exact no-data sentence for coverage none and never says 'no interactions'", async () => {
     getSubstance.mockResolvedValue(domperidone);
     const html = await render("BDS-000004");
-    expect(getSubstance).toHaveBeenCalledWith("BDS-000004");
+    expect(getSubstance).toHaveBeenCalledWith("BDS-000004", "public");
     expect(html).toContain(NONE_SENTENCE);
     expect(html.toLowerCase()).not.toContain("no interactions");
     expect(html).toContain('href="/products/D-1"');
@@ -88,6 +124,41 @@ describe("substance page", () => {
     expect(html).toContain("Vitamin K rich foods");
     expect(html).toContain("Keep vitamin K intake steady.");
     expect(html).toContain('<a href="/products/W-1">Warin</a>');
+  });
+
+  it("never prints a DDInter placeholder in disease or food texts", async () => {
+    getSubstance.mockResolvedValue({ ...warfarin,
+      diseases: [
+        { diseaseName: "Bleeding", severity: "major", text: "None", refs: [], interactionId: "D-1", routeScope: "systemic" },
+        { diseaseName: "Liver disease", severity: "moderate", text: null, refs: [], interactionId: "D-2", routeScope: "systemic" },
+      ],
+      foods: [
+        { food: "Alcohol", severity: "minor", mechanism: null, description: " - ", management: "N/A", refs: [],
+          interactionId: "F-1", routeScope: "systemic" },
+        { food: "Grapefruit", severity: "minor", mechanism: null, description: null, management: null, refs: [],
+          interactionId: "F-2", routeScope: "systemic" },
+      ] });
+    const html = await render("BDS-000001");
+    expect(html.match(/Interaction text not available from DDInter\./g)).toHaveLength(4);
+    expect(html.match(/Management advice not available from DDInter\./g)).toHaveLength(2);
+    expect(html).not.toMatch(/<td>\s*(None|-|N\/A|null)\s*<\/td>/);
+    // no empty disease / food text cell either (the interactions table's empty Actions cell is unrelated)
+    const tables = html.slice(html.indexOf("<h2>Diseases</h2>"), html.indexOf("<h2>Products using it</h2>"));
+    expect(tables).not.toMatch(/<td>\s*<\/td>/);
+  });
+
+  it("shows severity unknown as 'Severity not classified by DDInter' in interactions, diseases and foods", async () => {
+    getSubstance.mockResolvedValue({ ...warfarin,
+      interactions: [{ partnerName: "Alpha", partnerBdsId: null, severity: "unknown", actions: [], interactionId: null,
+        routeScope: "systemic" }],
+      diseases: [{ diseaseName: "Gout", severity: "unknown", text: "Text.", refs: [], interactionId: "D-9", routeScope: "systemic" }],
+      foods: [{ food: "Tea", severity: "unknown", mechanism: null, description: "Desc.", management: "Mgmt.", refs: [],
+        interactionId: "F-9", routeScope: "systemic" }] });
+    const html = await render("BDS-000001");
+    expect(html).toContain("<h3>Severity not classified by DDInter (1)</h3>");
+    expect(html).toContain("<td>Gout</td><td>Severity not classified by DDInter</td>");
+    expect(html).toContain("<td>Tea</td><td>Severity not classified by DDInter</td>");
+    expect(html.toLowerCase()).not.toContain("unknown");
   });
 
   it("calls notFound for an unknown substance", async () => {
