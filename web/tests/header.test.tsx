@@ -29,6 +29,13 @@ describe("Header", () => {
     expect(user).not.toContain("someone@gmail.com");
   });
 
+  it("links /flags for reviewers only", () => {
+    expect(renderToStaticMarkup(<Header session={{ email: "p@x.org", role: "pharmacist" }} />)).toContain('<a href="/flags">Flags</a>');
+    expect(renderToStaticMarkup(<Header session={{ email: "e@x.org", role: "engineer" }} />)).toContain('<a href="/flags">Flags</a>');
+    expect(renderToStaticMarkup(<Header session={{ email: "u@x.org", role: "user" }} />)).not.toContain("/flags");
+    expect(renderToStaticMarkup(<Header session={null} />)).not.toContain("/flags");
+  });
+
   it("shows a Reviewer sign-in link when signed out", () => {
     const html = renderToStaticMarkup(<Header session={null} />);
     expect(html).toContain('<a href="/signin">Reviewer sign-in</a>');

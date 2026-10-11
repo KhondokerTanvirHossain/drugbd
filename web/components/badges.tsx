@@ -24,3 +24,8 @@ export function StatusPill({ status }: { status: string | null }) {
     </span>
   );
 }
+
+/** Shown to reviewers (scope=all) on a record no pharmacist has approved yet. Anonymous visitors never get such records. */
+export function UnreviewedBadge({ scope, reviewStatus }: { scope: string; reviewStatus: string | null | undefined }) {
+  return scope === "all" && reviewStatus !== "ok" ? <> <Badge>unreviewed</Badge></> : null;
+}

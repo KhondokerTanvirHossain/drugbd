@@ -1,62 +1,98 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Batch, CheckResult, Product } from "@/lib/api";
+import type { CheckResult, LoadedProduct } from "@/lib/api";
 
+const listLoadedProducts = vi.fn();
+const checkInteractions = vi.fn();
 const listBatches = vi.fn();
 const getBatch = vi.fn();
-const checkInteractions = vi.fn();
-vi.mock("@/lib/api", () => ({
+vi.mock("@/lib/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api")>()),
+  listLoadedProducts: (scope?: string) => listLoadedProducts(scope),
+  checkInteractions: (ids: string[], scope?: string) => checkInteractions(ids, scope),
   listBatches: () => listBatches(),
   getBatch: (id: string) => getBatch(id),
-  checkInteractions: (ids: string[]) => checkInteractions(ids),
 }));
+const getSession = vi.fn();
+vi.mock("@/lib/session", () => ({ getSession: () => getSession() }));
 import CheckPage from "@/app/check/page";
 
-const product = (conceptId: string, tradeName: string, content: string): Product => ({
-  conceptId, darNumber: "D", tradeName, company: "Co", dosageForm: "Tablet", genericContentRaw: content,
-  qualityFlag: null, ingredients: [], parseStatus: "parsed", parseNote: null, clinicalDrug: null,
-});
-const batch = (batchId: string, products: (Product | null)[]): Batch => ({
-  batchId, status: "in_review", runAt: "2026-10-11T00:00:00Z", itemCount: products.length,
-  items: products.map((p, n) => ({ conceptId: p?.conceptId ?? `missing-${n}`, review: "pending", note: null,
-    extracted: p, sourceJson: null, stages: [] })),
-});
+const loaded = (conceptId: string, tradeName: string, dosageForm = "Tablet"): LoadedProduct => ({ conceptId, tradeName, dosageForm });
+const WARIN = loaded("W-1", "Warin");
+const ECOSPRIN = loaded("A-1", "Ecosprin");
+const MOTIGUT = loaded("D-1", "Motigut", "Suspension");
 
-const WARIN = product("W-1", "Warin", "Warfarin Sodium 5 mg");
-const ECOSPRIN = product("A-1", "Ecosprin", "Aspirin 75 mg");
-const MOTIGUT = product("D-1", "Motigut", "Domperidone 10 mg");
-
-const render = async (ids?: string | string[]) =>
-  renderToStaticMarkup(await CheckPage({ searchParams: Promise.resolve(ids === undefined ? {} : { ids }) }));
+const render = async (ids?: string | string[], extra: Record<string, string> = {}) =>
+  renderToStaticMarkup(await CheckPage({ searchParams: Promise.resolve({ ...(ids === undefined ? {} : { ids }), ...extra }) }));
 
 /** The checkbox tag for one product, whatever React's attribute order. */
 const checkbox = (html: string, id: string) =>
   html.match(new RegExp(`<input[^>]*name="ids"[^>]*value="${id}"[^>]*/>`))?.[0] ?? "";
 
 const emptyResult = (over: Partial<CheckResult>): CheckResult => ({
-  products: [], alerts: [], duplicates: [], noData: [], ...over });
+  products: [], alerts: [], duplicates: [], noData: [], notReviewed: [], ...over });
 
 beforeEach(() => {
-  listBatches.mockReset(); getBatch.mockReset(); checkInteractions.mockReset();
-  listBatches.mockResolvedValue([{ ...batch("0001-pilot", []), items: [] }, { ...batch("0002", []), items: [] }]);
-  getBatch.mockImplementation(async (id: string) => id === "0001-pilot"
-    ? batch(id, [WARIN, MOTIGUT, null])
-    : batch(id, [ECOSPRIN, WARIN]));
+  listLoadedProducts.mockReset(); checkInteractions.mockReset(); listBatches.mockReset(); getBatch.mockReset();
+  getSession.mockReset(); getSession.mockResolvedValue(null);
+  listLoadedProducts.mockResolvedValue([ECOSPRIN, MOTIGUT, WARIN]);
+});
+
+describe("check page visibility", () => {
+  it("lists products from /v1/products/loaded with scope=public for anonymous visitors, not from batches", async () => {
+    const html = await render();
+    expect(listLoadedProducts).toHaveBeenCalledWith("public");
+    expect(listBatches).not.toHaveBeenCalled();
+    expect(getBatch).not.toHaveBeenCalled();
+    expect(html).toContain(" Motigut (Suspension)");
+  });
+
+  it("uses scope=all for reviewers, for the list and the check", async () => {
+    getSession.mockResolvedValue({ email: "pharm@example.org", role: "pharmacist" });
+    checkInteractions.mockResolvedValue({ result: emptyResult({}), error: null });
+    const html = await render(["W-1", "A-1"]);
+    expect(listLoadedProducts).toHaveBeenCalledWith("all");
+    expect(checkInteractions).toHaveBeenCalledWith(["W-1", "A-1"], "all");
+    expect(html).not.toContain("pharm@example.org");
+  });
+
+  it("renders notReviewed as a Not yet reviewed section and never as no interactions", async () => {
+    checkInteractions.mockResolvedValue({ result: emptyResult({
+      products: [{ conceptId: "W-1", tradeName: "Warin", substances: [{ bdsId: "BDS-000001", name: "Warfarin", coverage: "full" }] }],
+      notReviewed: [{ conceptId: "H-9" }],
+    }), error: null });
+    const html = await render(["W-1", "H-9"]);
+    expect(checkInteractions).toHaveBeenCalledWith(["W-1", "H-9"], "public");
+    expect(html).toContain("<h2>Not yet reviewed</h2>");
+    expect(html).toMatch(/<li>H-9<\/li>/);
+    expect(html).toContain("not yet reviewed by a pharmacist, so they were not checked");
+    expect(html.toLowerCase()).not.toContain("no interactions");
+    expect(html).not.toContain("DDInter 2.0 lists no interactions between the selected products.");
+  });
+
+  it("shows the flag form to signed-in visitors with the selected ids as the target", async () => {
+    getSession.mockResolvedValue({ email: "someone@gmail.com", role: "user" });
+    checkInteractions.mockResolvedValue({ result: emptyResult({}), error: null });
+    const html = await render(["W-1", "A-1"], { flag: "sent" });
+    expect(html).toContain("Flag a problem");
+    expect(html).toContain('name="targetType" value="check"');
+    expect(html).toContain('name="targetId" value="W-1,A-1"');
+    expect(html).toContain("Thank you. Your flag was sent to the reviewers.");
+    expect(html).not.toContain("someone@gmail.com");
+  });
 });
 
 describe("check page", () => {
-  it("renders a GET form with one checkbox per loaded product across batches", async () => {
+  it("renders a GET form with one checkbox per loaded product", async () => {
     const html = await render();
-    expect(getBatch).toHaveBeenCalledWith("0001-pilot");
-    expect(getBatch).toHaveBeenCalledWith("0002");
     expect(html).toContain('method="get"');
     expect(html).toContain('action="/check"');
     for (const id of ["W-1", "A-1", "D-1"]) {
       expect(checkbox(html, id)).toContain('type="checkbox"');
       expect(checkbox(html, id)).not.toContain("checked");
     }
-    expect(html.match(/value="W-1"/g)).toHaveLength(1);          // same product in two batches: one checkbox
-    expect(html).not.toContain("missing-2");                       // not loaded: no checkbox
+    expect(html.match(/value="W-1"/g)).toHaveLength(1);
+    expect(html.indexOf("Ecosprin")).toBeLessThan(html.indexOf("Warin"));   // API order (sorted by trade name)
     expect(html).not.toContain("<script");
   });
 
@@ -72,7 +108,7 @@ describe("check page", () => {
     expect(checkInteractions).not.toHaveBeenCalled();
     checkInteractions.mockResolvedValue({ result: emptyResult({}), error: null });
     await render(["W-1", "A-1", "W-1"]);
-    expect(checkInteractions).toHaveBeenCalledWith(["W-1", "A-1"]);
+    expect(checkInteractions).toHaveBeenCalledWith(["W-1", "A-1"], "public");
   });
 
   it("renders the No interaction data section for a domperidone product", async () => {
@@ -84,7 +120,7 @@ describe("check page", () => {
       noData: [{ conceptId: "D-1", bdsId: "BDS-000004", name: "Domperidone" }],
     }), error: null });
     const html = await render(["D-1", "W-1"]);
-    expect(checkInteractions).toHaveBeenCalledWith(["D-1", "W-1"]);
+    expect(checkInteractions).toHaveBeenCalledWith(["D-1", "W-1"], "public");
     expect(html).toContain("<h2>No interaction data</h2>");
     expect(html).toContain('<a href="/substances/BDS-000004">Domperidone</a>');
     expect(html).toContain("Motigut");
@@ -156,10 +192,10 @@ describe("check page", () => {
   });
 
   it("still checks when the product list cannot be loaded", async () => {
-    listBatches.mockRejectedValue(new Error("API error 500"));
+    listLoadedProducts.mockRejectedValue(new Error("API error 500"));
     checkInteractions.mockResolvedValue({ result: emptyResult({}), error: null });
     const html = await render(["W-1", "A-1"]);
-    expect(checkInteractions).toHaveBeenCalledWith(["W-1", "A-1"]);
+    expect(checkInteractions).toHaveBeenCalledWith(["W-1", "A-1"], "public");
     expect(html).toContain("The product list is temporarily unavailable.");
     expect(checkbox(html, "W-1")).toContain('checked=""');                // selected ids stay in the form
   });

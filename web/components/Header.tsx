@@ -10,6 +10,7 @@ export default function Header({ session }: { session: Session | null }) {
       <small>preview: data may be incomplete</small>{" "}
       {session ? (
         <span>
+          {session.role !== "user" && <><a href="/flags">Flags</a>{" "}</>}
           <small>Signed in as {ROLE_LABEL[session.role]}</small>{" "}
           <form action={signOutAction} style={{ display: "inline" }}><button type="submit">Sign out</button></form>
         </span>

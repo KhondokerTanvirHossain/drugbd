@@ -3,7 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Substance } from "@/lib/api";
 
 const getSubstance = vi.fn();
-vi.mock("@/lib/api", () => ({ getSubstance: (id: string) => getSubstance(id) }));
+vi.mock("@/lib/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api")>()),
+  getSubstance: (id: string, scope?: string) => getSubstance(id, scope),
+}));
+const getSession = vi.fn();
+vi.mock("@/lib/session", () => ({ getSession: () => getSession() }));
 import SubstancePage from "@/app/substances/[id]/page";
 
 const NONE_SENTENCE = "No interaction data in DDInter for this substance. This does not mean it is safe to combine.";
@@ -45,13 +50,44 @@ const warfarin: Substance = {
 
 const render = async (id: string) => renderToStaticMarkup(await SubstancePage({ params: Promise.resolve({ id }) }));
 
-beforeEach(() => getSubstance.mockReset());
+beforeEach(() => { getSubstance.mockReset(); getSession.mockReset(); getSession.mockResolvedValue(null); });
+
+describe("substance page visibility", () => {
+  it("asks with scope=public for anonymous visitors and shows only the not-reviewed text for a hidden substance", async () => {
+    getSubstance.mockResolvedValue({ bdsId: "BDS-000009", preferredName: "Secretine", reviewStatus: "pending", hidden: true });
+    const html = await render("BDS-000009");
+    expect(getSubstance).toHaveBeenCalledWith("BDS-000009", "public");
+    expect(html).toContain("Not yet reviewed by a pharmacist");
+    for (const absent of ["Secretine", "Names", "Codes", "Drug interactions", "Products using it", NONE_SENTENCE])
+      expect(html).not.toContain(absent);
+  });
+
+  it("a reviewer gets scope=all and an unreviewed badge on unapproved products only", async () => {
+    getSession.mockResolvedValue({ email: "eng@example.org", role: "engineer" });
+    getSubstance.mockResolvedValue({ ...warfarin, products: [
+      { conceptId: "W-1", tradeName: "Warin", company: "Acme", reviewStatus: "ok" },
+      { conceptId: "W-2", tradeName: "Warcef", company: "Acme", reviewStatus: "issue" }] });
+    const html = await render("BDS-000001");
+    expect(getSubstance).toHaveBeenCalledWith("BDS-000001", "all");
+    expect(html.match(/>unreviewed</g)).toHaveLength(1);
+    expect(html).toMatch(/Warcef<\/a> \(Acme\) <span class="badge"[^>]*>unreviewed<\/span>/);
+    expect(html).toContain("Flag a problem");
+    expect(html).not.toContain("eng@example.org");
+  });
+
+  it("anonymous visitors see no badge and no flag form", async () => {
+    getSubstance.mockResolvedValue(warfarin);
+    const html = await render("BDS-000001");
+    expect(html).not.toContain("unreviewed");
+    expect(html).not.toContain("Flag a problem");
+  });
+});
 
 describe("substance page", () => {
   it("shows the exact no-data sentence for coverage none and never says 'no interactions'", async () => {
     getSubstance.mockResolvedValue(domperidone);
     const html = await render("BDS-000004");
-    expect(getSubstance).toHaveBeenCalledWith("BDS-000004");
+    expect(getSubstance).toHaveBeenCalledWith("BDS-000004", "public");
     expect(html).toContain(NONE_SENTENCE);
     expect(html.toLowerCase()).not.toContain("no interactions");
     expect(html).toContain('href="/products/D-1"');
