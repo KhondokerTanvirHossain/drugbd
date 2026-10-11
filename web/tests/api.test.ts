@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getProduct, searchProducts } from "../lib/api";
+import { getBatch, getProduct, searchProducts } from "../lib/api";
 
 const ok = (data: unknown) => new Response(JSON.stringify({ success: true, data }), { status: 200 });
 beforeEach(() => vi.stubEnv("API_URL", "http://api:8080"));
@@ -47,5 +47,20 @@ describe("api client", () => {
   it("getProduct throws on 500", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("x", { status: 500 })));
     await expect(getProduct("x")).rejects.toThrow("API error 500");
+  });
+  it("getBatch returns null on 404", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("{}", { status: 404 })));
+    expect(await getBatch("nope")).toBeNull();
+  });
+  it("getBatch throws on 500", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("boom", { status: 500 })));
+    await expect(getBatch("x")).rejects.toThrow("API error 500");
+  });
+  it("getBatch URL-encodes the id and passes timeout and no-store", async () => {
+    const f = vi.fn().mockResolvedValue(ok({ batchId: "a/b c", items: [] })); vi.stubGlobal("fetch", f);
+    await getBatch("a/b c");
+    expect(f.mock.calls[0][0]).toBe("http://api:8080/v1/batches/a%2Fb%20c");
+    expect(f.mock.calls[0][1].cache).toBe("no-store");
+    expect(f.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
   });
 });

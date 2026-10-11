@@ -31,3 +31,20 @@ export async function getProduct(id: string): Promise<Product | null> {
   if (!res.ok) throw new Error(`API error ${res.status}`);
   return (await res.json()).data as Product;
 }
+
+export type BatchItem = { conceptId: string; review: "pending" | "ok" | "issue"; note: string | null;
+  extracted: Product | null; sourceJson: string | null };
+export type Batch = { batchId: string; status: string; runAt: string; itemCount: number; items: BatchItem[] };
+
+export async function listBatches(): Promise<Batch[]> {
+  const res = await fetch(`${base()}/v1/batches`, { cache: "no-store", signal: AbortSignal.timeout(5000) });
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  return (await res.json()).data as Batch[];
+}
+
+export async function getBatch(id: string): Promise<Batch | null> {
+  const res = await fetch(`${base()}/v1/batches/${encodeURIComponent(id)}`, { cache: "no-store", signal: AbortSignal.timeout(5000) });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  return (await res.json()).data as Batch;
+}
