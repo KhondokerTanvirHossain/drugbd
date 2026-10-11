@@ -108,9 +108,12 @@ FOODS = {"DDInter1951": [{"interaction_id": "9001", "severity": "moderate", "foo
 class FakeDDInter:
     """Fake DDInterClient. Records every call; ``fail`` maps (method, key) to an exception to raise."""
 
-    def __init__(self, extra_drugs=None, fail=None):
+    def __init__(self, extra_drugs=None, fail=None, one_sided=None):
         self.extra = extra_drugs or {}  # id -> (name, drugbank)
         self.fail = fail or {}
+        # directed (ddinter_id, partner_id) lookups that find nothing: DDInter's per-drug interact-with
+        # lists are not provably symmetric (warfarin: graph 934 rows, interact-with recordsTotal 936)
+        self.one_sided = set(one_sided or ())
         self.drug_list_calls = 0
         self.detail_calls, self.graph_calls, self.disease_calls, self.food_calls = [], [], [], []
         self.pair_calls, self.text_calls = [], []
@@ -150,6 +153,8 @@ class FakeDDInter:
     def pair_interaction_id(self, ddinter_id, partner_id):
         self.pair_calls.append((ddinter_id, partner_id))
         self._boom("pair_interaction_id", (ddinter_id, partner_id))
+        if (ddinter_id, partner_id) in self.one_sided:
+            return None
         return INTERACTION_ID.get(frozenset((ddinter_id, partner_id)))
 
     def interaction(self, interaction_id):
@@ -214,7 +219,8 @@ def counts(conn):
     return {t: conn.execute(f"SELECT count(*) FROM {t}").fetchone()[0] for t in tables}
 
 
-EMPTY = {"mappings": [], "coverage": [], "pair_count": 0, "disease_count": 0, "food_count": 0, "text_fetch_count": 0}
+EMPTY = {"mappings": [], "coverage": [], "pair_count": 0, "disease_count": 0, "food_count": 0, "text_fetch_count": 0,
+         "text_missing": []}
 
 
 # --- Review Focus 3: route-scoped entries ---------------------------------------------------------
@@ -380,6 +386,59 @@ def test_pair_order_is_text_order_and_asked_from_lower_side(conn):
     assert conn.execute(
         "SELECT ddinter_a, ddinter_b, partner_name_a, partner_name_b, interaction_id FROM curated.ddinter_pair WHERE interaction_id IS NOT NULL"
     ).fetchall() == [("DDInter1675", "DDInter393", "Simvastatin", "Clarithromycin", "50004")]
+
+
+@pytest.mark.parametrize("batch", [["warf", "asa"], ["asa", "warf"]])
+def test_text_missing_from_lower_side_is_found_from_the_other_side(conn, batch):
+    client = FakeDDInter(one_sided={("DDInter1951", "DDInter20")})
+    res = dict(zip(batch, map_and_load_ddinter(conn, client, batch)))
+    assert all(r.status == "ok" and r.note == "" for r in res.values()), res
+    assert client.pair_calls == [("DDInter1951", "DDInter20"), ("DDInter20", "DDInter1951")]
+    assert client.text_calls == ["50001"]
+    assert conn.execute(
+        "SELECT severity, actions, interaction_id FROM curated.ddinter_pair WHERE ddinter_a = 'DDInter1951' AND ddinter_b = 'DDInter20'"
+    ).fetchone() == ("major", ["synergy"], "50001")
+    assert conn.execute("SELECT interaction_id, management FROM curated.ddinter_interaction_text").fetchall() == [
+        ("50001", "Monitor INR closely.")]
+    for r in res.values():
+        assert r.evidence["text_missing"] == [] and r.evidence["text_fetch_count"] == 1
+
+
+@pytest.mark.parametrize("batch", [["warf", "asa"], ["asa", "warf"]])
+def test_text_missing_on_both_sides_warns_and_keeps_severity(conn, batch):
+    client = FakeDDInter(one_sided={("DDInter1951", "DDInter20"), ("DDInter20", "DDInter1951")})
+    res = dict(zip(batch, map_and_load_ddinter(conn, client, batch)))
+    note = "DDInter text not found for DDInter1951/DDInter20"
+    # BOTH products of the pair say so, not only the one that made the lookup
+    for r in res.values():
+        assert (r.status, r.note) == ("warn", note), r
+        assert r.evidence["text_missing"] == [["DDInter1951", "DDInter20"]]  # out-of-batch pairs are not listed
+        assert r.evidence["text_fetch_count"] == 0
+    # each side asked once per run (negative result cached), no text fetched
+    assert sorted(client.pair_calls) == [("DDInter1951", "DDInter20"), ("DDInter20", "DDInter1951")]
+    assert client.text_calls == []
+    # the Major severity and actions survive: a missing text is never shown as "no interaction"
+    assert conn.execute(
+        "SELECT severity, actions, interaction_id FROM curated.ddinter_pair WHERE ddinter_a = 'DDInter1951' AND ddinter_b = 'DDInter20'"
+    ).fetchone() == ("major", ["synergy"], None)
+    assert conn.execute("SELECT count(*) FROM curated.ddinter_interaction_text").fetchone()[0] == 0
+    conn.commit()
+    # a later run that finds the text fills it in and the warn clears
+    c2 = FakeDDInter()
+    r2 = map_and_load_ddinter(conn, c2, batch)
+    assert all(r.status == "ok" and r.evidence["text_missing"] == [] for r in r2), r2
+    assert c2.pair_calls == [("DDInter1951", "DDInter20")] and c2.text_calls == ["50001"]
+    assert conn.execute(
+        "SELECT interaction_id FROM curated.ddinter_pair WHERE ddinter_a = 'DDInter1951' AND ddinter_b = 'DDInter20'"
+    ).fetchone() == ("50001",)
+
+
+def test_text_missing_note_follows_mapping_notes(conn):
+    client = FakeDDInter(one_sided={("DDInter1675", "DDInter79"), ("DDInter79", "DDInter1675")})
+    r_simva, r_amlo = map_and_load_ddinter(conn, client, ["simva", "amlo"])
+    assert (r_simva.status, r_simva.note) == ("warn", "DDInter text not found for DDInter1675/DDInter79")
+    assert r_amlo.note == "DDInter DDInter79 matched by name only; DDInter text not found for DDInter1675/DDInter79"
+    assert r_amlo.evidence["text_missing"] == [["DDInter1675", "DDInter79"]]
 
 
 def test_diseases_and_foods_stored(conn):

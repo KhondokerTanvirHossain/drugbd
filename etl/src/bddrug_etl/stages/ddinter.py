@@ -55,7 +55,7 @@ def _idkey(ddinter_id: str) -> tuple[int, str]:
 
 def _empty_evidence() -> dict:
     return {"mappings": [], "coverage": [], "pair_count": 0, "disease_count": 0, "food_count": 0,
-            "text_fetch_count": 0}
+            "text_fetch_count": 0, "text_missing": []}
 
 
 def _fail(cid: str, note: str) -> StageResult:
@@ -80,7 +80,7 @@ class _Run:
         self._graph: dict[str, dict[Pair, tuple[str, str, str, list[str]]]] = {}
         self._diseases: dict[str, dict[str, dict]] = {}
         self._foods: dict[str, dict[str, dict]] = {}
-        self.texts: dict[Pair, tuple[str, InteractionText] | None] = {}
+        self.texts: dict[Pair, tuple[str, InteractionText] | None] = {}  # None: neither side lists the pair
 
     def candidates(self, keys: frozenset[str]) -> list[_Entry]:
         found: dict[str, _Entry] = {}
@@ -242,6 +242,9 @@ def _ensure_text(conn, run: _Run, pair: Pair, pending: _Pending) -> None:
         if iid is None:
             iid = run.client.pair_interaction_id(a, b)  # from the lower id side, once per pair
         if iid is None:
+            # DDInter's per-drug interact-with lists are not provably symmetric: ask the other side too
+            iid = run.client.pair_interaction_id(b, a)
+        if iid is None:
             run.texts[pair] = None
         else:
             run.texts[pair] = (iid, run.client.interaction(iid))
@@ -291,6 +294,7 @@ def _process(conn: psycopg.Connection, run: _Run, cid: str, subs: list[_Sub], pe
         coverage.append({"bds_id": sub.bds_id, "coverage": "full"})
 
     pairs: set[Pair] = set()
+    in_batch: set[Pair] = set()
     disease_count = food_count = 0
     for ddinter_id in sorted(ids, key=_idkey):
         if ddinter_id not in run.stored_ids:
@@ -303,12 +307,19 @@ def _process(conn: psycopg.Connection, run: _Run, cid: str, subs: list[_Sub], pe
         for pair in sorted(mine):
             other = pair[1] if pair[0] == ddinter_id else pair[0]
             # Texts only where both sides belong to substances of this batch; others keep severity/actions.
-            if other in run.batch_ids and pair not in run.stored_texts and pair not in pending.texts:
-                _ensure_text(conn, run, pair, pending)
+            if other in run.batch_ids:
+                in_batch.add(pair)
+                if pair not in run.stored_texts and pair not in pending.texts:
+                    _ensure_text(conn, run, pair, pending)
+
+    # In-batch pairs whose text neither side's list holds this run: the pair keeps severity/actions with
+    # interaction_id NULL. Flag it on every product of the pair so the review queue sees the missing text.
+    text_missing = sorted(p for p in in_batch if p in run.texts and run.texts[p] is None)
+    notes.extend(f"DDInter text not found for {a}/{b}" for a, b in text_missing)
 
     evidence = {"mappings": mappings, "coverage": coverage, "pair_count": len(pairs),
                 "disease_count": disease_count, "food_count": food_count,
-                "text_fetch_count": len(pairs & run.fetched)}
+                "text_fetch_count": len(pairs & run.fetched), "text_missing": [list(p) for p in text_missing]}
     return StageResult(cid, "warn" if notes else "ok", "; ".join(notes), evidence)
 
 
