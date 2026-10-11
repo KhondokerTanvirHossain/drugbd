@@ -37,3 +37,29 @@ def test_rerun_resets_review_to_pending(conn):
     conn.execute("UPDATE ops.batch_item SET review='ok' WHERE concept_id=%s", (FIX["id"],))
     run_batch(conn, FakeClient(), "0001-pilot", [FIX["id"]])
     assert conn.execute("SELECT review FROM ops.batch_item WHERE batch_id='0001-pilot'").fetchall() == [("pending",)]
+
+
+class MultiClient:
+    def __init__(self, payloads):
+        self.payloads = payloads
+
+    def get_concept(self, owner, source, concept_id):
+        return self.payloads.get(concept_id)
+
+
+def test_non_drug_concept_is_recorded_as_issue(conn):
+    ingredient = {**FIX, "id": "ingredient-1", "concept_class": "Ingredient"}
+    run_batch(conn, MultiClient({FIX["id"]: FIX, "ingredient-1": ingredient}), "0002-mixed", [FIX["id"], "ingredient-1"])
+    rows = dict(conn.execute("SELECT concept_id, review FROM ops.batch_item WHERE batch_id='0002-mixed'").fetchall())
+    assert rows == {FIX["id"]: "pending", "ingredient-1": "issue"}
+    note = conn.execute("SELECT note FROM ops.batch_item WHERE concept_id='ingredient-1'").fetchone()[0]
+    assert note == "not a registered Drug product"
+
+
+def test_batch_run_is_atomic(conn):
+    atomic = {**FIX, "id": "atomic-only-1"}
+    with pytest.raises(psycopg.Error):
+        run_batch(conn, MultiClient({"atomic-only-1": atomic}), None, ["atomic-only-1"])  # NULL batch_id fails after load_products
+    conn.rollback()
+    assert conn.execute("SELECT count(*) FROM curated.brand_product WHERE concept_id='atomic-only-1'").fetchone()[0] == 0
+    assert conn.execute("SELECT count(*) FROM raw.ocl_concept WHERE concept_id='atomic-only-1'").fetchone()[0] == 0

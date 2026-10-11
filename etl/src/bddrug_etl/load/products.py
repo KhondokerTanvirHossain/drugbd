@@ -15,7 +15,7 @@ class LoadStats:
     skipped: int
 
 
-def load_products(conn: psycopg.Connection, concepts: Iterable[dict], source: str = "DGDA-Drugs") -> LoadStats:
+def load_products(conn: psycopg.Connection, concepts: Iterable[dict], source: str = "DGDA-Drugs", commit: bool = True) -> LoadStats:
     seen = loaded = 0
     with conn.cursor() as cur:
         for concept in concepts:
@@ -45,7 +45,8 @@ def load_products(conn: psycopg.Connection, concepts: Iterable[dict], source: st
                 [(product.concept_id, i.xm_code, i.name) for i in product.ingredients],
             )
             loaded += 1
-            if loaded % 500 == 0:
+            if commit and loaded % 500 == 0:
                 conn.commit()
-    conn.commit()
+    if commit:
+        conn.commit()
     return LoadStats(seen=seen, loaded=loaded, skipped=seen - loaded)
