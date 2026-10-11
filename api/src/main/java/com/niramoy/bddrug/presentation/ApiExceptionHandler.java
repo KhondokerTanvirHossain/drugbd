@@ -1,5 +1,7 @@
 package com.niramoy.bddrug.presentation;
 import com.niramoy.bddrug.application.InvalidQueryException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -9,6 +11,8 @@ import org.springframework.web.server.ServerWebInputException;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
+    private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
+
     @ExceptionHandler(InvalidQueryException.class)
     ResponseEntity<ApiResponse<Void>> invalid(InvalidQueryException e) {
         return ResponseEntity.badRequest().body(ApiResponse.error("INVALID_QUERY", "q", e.getMessage()));
@@ -20,6 +24,14 @@ public class ApiExceptionHandler {
     @ExceptionHandler(ResponseStatusException.class)
     ResponseEntity<ApiResponse<Void>> status(ResponseStatusException e) {
         String code = e.getStatusCode().value() == 404 ? "NOT_FOUND" : "ERROR";
-        return ResponseEntity.status(e.getStatusCode()).body(ApiResponse.error(code, null, e.getReason()));
+        String reason = e.getReason() != null ? e.getReason()
+            : (e.getStatusCode() instanceof HttpStatus hs ? hs.getReasonPhrase() : "Error");
+        return ResponseEntity.status(e.getStatusCode()).body(ApiResponse.error(code, null, reason));
+    }
+    @ExceptionHandler(Exception.class)
+    ResponseEntity<ApiResponse<Void>> unexpected(Exception e) {
+        log.error("Unhandled exception: {}: {}", e.getClass().getName(), e.getMessage());
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+            .body(ApiResponse.error("INTERNAL_ERROR", null, "Unexpected error"));
     }
 }
