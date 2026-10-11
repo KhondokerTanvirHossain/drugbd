@@ -30,25 +30,46 @@ class RxNavClient:
     def _properties(self, rxcui: str) -> dict:
         return self._json(f"/rxcui/{rxcui}/properties.json").get("properties") or {}
 
-    def _prefer_in(self, rxcui: str) -> str:
-        """A PIN (precise ingredient, e.g. a salt) maps to its base IN when one exists."""
-        if self._properties(rxcui).get("tty") != "PIN":
+    def _final_in(self, rxcui: str) -> str | None:
+        """Resolve to an IN rxcui, following a PIN to its base IN. None if unknown or ambiguous."""
+        props = self._properties(rxcui)
+        tty = props.get("tty")
+        if tty == "IN":
             return rxcui
+        if tty != "PIN":
+            return None
         groups = self._json(f"/rxcui/{rxcui}/related.json", {"tty": "IN"}).get("relatedGroup", {}).get("conceptGroup") or []
+        ins: dict[str, str] = {}
         for g in groups:
             for p in g.get("conceptProperties") or []:
                 if p.get("tty") == "IN":
-                    return p["rxcui"]
-        return rxcui
+                    ins[p["rxcui"]] = p.get("name", "")
+        if len(ins) == 1:
+            return next(iter(ins))
+        words = props.get("name", "").split()
+        first = words[0].lower() if words else ""
+        hits = [r for r, n in ins.items() if n and first.startswith(n.lower())]
+        return hits[0] if len(hits) == 1 else None
 
     def rxcui_for_name(self, name: str) -> tuple[str, str] | None:
         ids = self._json("/rxcui.json", {"name": name, "search": 2}).get("idGroup", {}).get("rxnormId") or []
+        if len(ids) == 1:
+            final = self._final_in(ids[0])
+            return (final, "rxnav-exact") if final else None
         if ids:
-            return self._prefer_in(ids[0]), "rxnav-exact"
+            ins = [i for i in ids if self._properties(i).get("tty") == "IN"]
+            return (ins[0], "rxnav-exact") if len(ins) == 1 else None
         cands = self._json("/approximateTerm.json", {"term": name, "maxEntries": 1}).get("approximateGroup", {}).get("candidate") or []
-        if cands and float(cands[0].get("score", 0)) >= MIN_APPROX_SCORE:
-            return self._prefer_in(cands[0]["rxcui"]), "rxnav-approx"
-        return None
+        if not cands:
+            return None
+        top = max(float(c.get("score", 0)) for c in cands)
+        if top < MIN_APPROX_SCORE:
+            return None
+        rxcuis = {c["rxcui"] for c in cands if float(c.get("score", 0)) == top}
+        if len(rxcuis) != 1:
+            return None
+        final = self._final_in(next(iter(rxcuis)))
+        return (final, "rxnav-approx") if final else None
 
     def codes_for_rxcui(self, rxcui: str) -> RxCodes:
         props = self._properties(rxcui)

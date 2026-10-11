@@ -3,13 +3,24 @@
 The caller owns the transaction: snapshot rows are written on the given
 connection and committed (or rolled back) with it.
 """
+import re
 import time
+from urllib.parse import urlencode
 from collections.abc import Callable
 
 import httpx
 
 USER_AGENT = "bddrug-etl/0.2 (+niramoy)"
 CSRF_FIELD = "csrfmiddlewaretoken"
+
+_CSRF_INPUT = re.compile(r"<input\b[^>]*\bname\s*=\s*[\"']?csrfmiddlewaretoken[\"']?[^>]*>", re.I)
+_VALUE_ATTR = re.compile(r"(\bvalue\s*=\s*)(\"[^\"]*\"|'[^']*'|[^\s>]+)", re.I)
+_CSRF_JSON = re.compile(r'("csrfmiddlewaretoken"\s*:\s*)"[^"]*"')
+
+
+def redact(body: str) -> str:
+    body = _CSRF_INPUT.sub(lambda m: _VALUE_ATTR.sub(lambda v: f'{v.group(1)}"[redacted]"', m.group(0)), body)
+    return _CSRF_JSON.sub(r'\1"[redacted]"', body)
 
 
 class SnapshotHttp:
@@ -24,7 +35,7 @@ class SnapshotHttp:
         self._clock = clock
         self._sleep = sleep
         self._last: float | None = None
-        self.http.headers["User-Agent"] = user_agent
+        self._headers = {"User-Agent": user_agent}
 
     def _pace(self) -> None:
         if self._last is not None:
@@ -38,19 +49,22 @@ class SnapshotHttp:
             """INSERT INTO raw.http_snapshot (source, request_key, status, body)
                VALUES (%s, %s, %s, %s)
                ON CONFLICT (source, request_key)
-               DO UPDATE SET status = EXCLUDED.status, body = EXCLUDED.body, fetched_at = now()""",
-            (self.source, key, resp.status_code, resp.text),
+               DO UPDATE SET status = EXCLUDED.status, body = EXCLUDED.body, fetched_at = now()
+               WHERE NOT (raw.http_snapshot.status BETWEEN 200 AND 299) OR EXCLUDED.status BETWEEN 200 AND 299""",
+            (self.source, key, resp.status_code, redact(resp.text)),
         )
 
     def get(self, url: str, params: dict | None = None) -> httpx.Response:
         self._pace()
-        resp = self.http.get(url, params=params)
+        resp = self.http.get(url, params=params, headers=self._headers)
         self._store("GET " + resp.request.url.raw_path.decode(), resp)
         return resp
 
     def post(self, url: str, data: dict, headers: dict | None = None) -> httpx.Response:
         self._pace()
-        resp = self.http.post(url, data=data, headers=headers)
-        fields = "&".join(f"{k}={v}" for k, v in sorted(data.items()) if k != CSRF_FIELD)
-        self._store(f"POST {resp.request.url.path}#{fields}", resp)
+        resp = self.http.post(url, data=data, headers={**self._headers, **(headers or {})})
+        fields = urlencode(sorted((k, v) for k, v in data.items() if k != CSRF_FIELD))
+        query = resp.request.url.query.decode()
+        path = resp.request.url.path + (f"?{query}" if query else "")
+        self._store(f"POST {path}#{fields}", resp)
         return resp

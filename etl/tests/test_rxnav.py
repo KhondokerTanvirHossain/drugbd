@@ -81,3 +81,82 @@ def test_approximate_match_below_threshold_rejected(client):
     m.get(f"{B}/rxcui.json", params={"name": "Parasetamol", "search": "2"}).respond(json=fx("parasetamol_rxcui.json"))
     m.get(f"{B}/approximateTerm.json", params={"term": "Parasetamol", "maxEntries": "1"}).respond(json=fx("parasetamol_approx.json"))
     assert c.rxcui_for_name("Parasetamol") is None
+
+
+def _props(rxcui, name, tty):
+    return {"properties": {"rxcui": rxcui, "name": name, "tty": tty}}
+
+
+def _related(*ins):
+    return {"relatedGroup": {"conceptGroup": [{"tty": "IN", "conceptProperties": [
+        {"rxcui": r, "name": n, "tty": "IN"} for r, n in ins]}]}}
+
+
+def _approx(*cands):
+    return {"approximateGroup": {"candidate": [
+        {"rxcui": r, "score": str(sc), "rank": "1"} for r, sc in cands]}}
+
+
+def _approx_only(m, term, approx):
+    m.get(f"{B}/rxcui.json", params={"name": term, "search": "2"}).respond(json={"idGroup": {}})
+    m.get(f"{B}/approximateTerm.json", params={"term": term, "maxEntries": "1"}).respond(json=approx)
+
+
+def test_approx_tie_between_different_rxcuis_is_rejected(client):
+    c, m = client
+    _approx_only(m, "tie", _approx(("111", 9.0), ("222", 9.0)))
+    m.get(f"{B}/rxcui/111/properties.json").respond(json=_props("111", "a", "IN"))
+    m.get(f"{B}/rxcui/222/properties.json").respond(json=_props("222", "b", "IN"))
+    assert c.rxcui_for_name("tie") is None
+
+
+@pytest.mark.parametrize("tty", ["BN", "SCD"])
+def test_approx_non_ingredient_is_rejected(client, tty):
+    c, m = client
+    _approx_only(m, "brandy", _approx(("333", 9.0)))
+    m.get(f"{B}/rxcui/333/properties.json").respond(json=_props("333", "x", tty))
+    assert c.rxcui_for_name("brandy") is None
+
+
+def test_pin_with_several_ins_picks_name_prefix_of_first_word(client):
+    c, m = client
+    m.get(f"{B}/rxcui.json", params={"name": "foo hydrochloride", "search": "2"}).respond(json={"idGroup": {"rxnormId": ["50"]}})
+    m.get(f"{B}/rxcui/50/properties.json").respond(json=_props("50", "foo hydrochloride", "PIN"))
+    m.get(f"{B}/rxcui/50/related.json", params={"tty": "IN"}).respond(json=_related(("60", "bar"), ("61", "Foo")))
+    assert c.rxcui_for_name("foo hydrochloride") == ("61", "rxnav-exact")
+
+
+def test_pin_with_ambiguous_or_no_in_returns_none(client):
+    c, m = client
+    m.get(f"{B}/rxcui.json", params={"name": "foo salt", "search": "2"}).respond(json={"idGroup": {"rxnormId": ["50"]}})
+    m.get(f"{B}/rxcui/50/properties.json").respond(json=_props("50", "foo salt", "PIN"))
+    related = m.get(f"{B}/rxcui/50/related.json", params={"tty": "IN"})
+    related.respond(json=_related(("60", "bar"), ("61", "baz")))
+    assert c.rxcui_for_name("foo salt") is None
+    related.respond(json=_related(("60", "foo"), ("61", "fo")))  # both prefixes of "foo"
+    assert c.rxcui_for_name("foo salt") is None
+    related.respond(json={"relatedGroup": {"conceptGroup": []}})
+    assert c.rxcui_for_name("foo salt") is None
+
+
+def test_properties_404_returns_none(client):
+    c, m = client
+    m.get(f"{B}/rxcui.json", params={"name": "ghost", "search": "2"}).respond(json={"idGroup": {"rxnormId": ["9"]}})
+    m.get(f"{B}/rxcui/9/properties.json").respond(404)
+    assert c.rxcui_for_name("ghost") is None
+
+
+def test_exact_multiple_ids_prefers_the_single_in(client):
+    c, m = client
+    m.get(f"{B}/rxcui.json", params={"name": "multi", "search": "2"}).respond(json={"idGroup": {"rxnormId": ["1", "2"]}})
+    m.get(f"{B}/rxcui/1/properties.json").respond(json=_props("1", "multi brand", "BN"))
+    m.get(f"{B}/rxcui/2/properties.json").respond(json=_props("2", "multi", "IN"))
+    assert c.rxcui_for_name("multi") == ("2", "rxnav-exact")
+
+
+def test_exact_multiple_ids_ambiguous_returns_none(client):
+    c, m = client
+    m.get(f"{B}/rxcui.json", params={"name": "multi", "search": "2"}).respond(json={"idGroup": {"rxnormId": ["1", "2"]}})
+    m.get(f"{B}/rxcui/1/properties.json").respond(json=_props("1", "a", "IN"))
+    m.get(f"{B}/rxcui/2/properties.json").respond(json=_props("2", "b", "IN"))
+    assert c.rxcui_for_name("multi") is None
