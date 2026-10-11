@@ -4,7 +4,9 @@
 
 Stages always run in the order dgda → substances → clinical → ddinter (default: all four).
 Each stage runs in its own transaction together with its stage results, and is committed
-before the next stage starts. A per-product ``fail`` never stops other products. An exception
+before the next stage starts. Every stage that processes a record also stamps its
+``ops.batch_item.extracted_at`` and resets its review to ``pending`` in that same transaction, so
+an approval never covers data written after it. A per-product ``fail`` never stops other products. An exception
 from a stage rolls that stage back, marks every product in it ``fail``, stops the later stages
 and makes the exit code non-zero. The final log line is
 ``batch=<id> dgda=<ok/warn/fail> substances=… clinical=… ddinter=…``.
@@ -23,7 +25,7 @@ import psycopg
 
 from bddrug_etl.ddinter.client import DDInterClient
 from bddrug_etl.http.snapshot import SnapshotHttp
-from bddrug_etl.load.batches import read_batch_file, run_batch
+from bddrug_etl.load.batches import read_batch_file, reopen_review, run_batch
 from bddrug_etl.ocl.client import OclClient
 from bddrug_etl.rxnav.client import RxNavClient
 from bddrug_etl.stages.clinical import build_clinical_drugs
@@ -119,6 +121,7 @@ def _run_product_stage(conn: psycopg.Connection, clients: Clients, stage: str, b
     with conn.transaction():  # the stage's own transaction; its per-product savepoints nest inside
         results = _call_stage(stage, conn, clients, targets)
         write_stage_results(conn, batch_id, stage, results + skipped)
+        reopen_review(conn, batch_id, targets)  # last: the processed records' approval stops counting
     return results + skipped
 
 

@@ -359,6 +359,103 @@ def test_full_pipeline_twice_mints_no_new_ids_and_replaces_stage_results(url, tm
     assert first[4] == [(12,)]
 
 
+# --- approval gate (Review Focus 3): every stage that rewrites a record re-opens its review -----
+
+REVIEWER = "pharm@example.test"
+
+
+def approve(url, batch_id, cid):
+    """A pharmacist 'ok' (as Task 3's API records it) on a fresh connection; returns its decided_at."""
+    with psycopg.connect(url) as c:
+        decided_at = c.execute(
+            """INSERT INTO ops.review_decision (batch_id, concept_id, decision, reviewer_email, reviewer_role)
+               VALUES (%s, %s, 'ok', %s, 'pharmacist') RETURNING decided_at""", (batch_id, cid, REVIEWER)).fetchone()[0]
+        c.execute("UPDATE ops.batch_item SET review = 'ok' WHERE batch_id = %s AND concept_id = %s", (batch_id, cid))
+        c.execute("UPDATE ops.batch SET status = 'approved' WHERE batch_id = %s", (batch_id,))
+    return decided_at
+
+
+def item(url, batch_id, cid):
+    return q(url, "SELECT review, extracted_at FROM ops.batch_item WHERE batch_id = %s AND concept_id = %s",
+             (batch_id, cid))[0]
+
+
+def decisions(url, batch_id):
+    return q(url, "SELECT count(*) FROM ops.review_decision WHERE batch_id = %s", (batch_id,))[0][0]
+
+
+def test_stage_only_rerun_after_an_ok_reopens_the_review_and_keeps_history(url, tmp_path):
+    f = batch_file(tmp_path, "0115-stage-rerun", [WARF, ASA, MISSING])
+    assert Harness(url).main("--batch", f) == 0
+    decided_at = approve(url, "0115-stage-rerun", WARF)
+    missing_before = item(url, "0115-stage-rerun", MISSING)
+    assert Harness(url).main("--batch", f, "--stages", "substances,clinical,ddinter") == 0
+    review, extracted_at = item(url, "0115-stage-rerun", WARF)
+    assert review == "pending"
+    assert extracted_at > decided_at  # the old 'ok' no longer counts under the approval rule
+    assert item(url, "0115-stage-rerun", ASA)[0] == "pending"
+    assert item(url, "0115-stage-rerun", MISSING) == missing_before  # skipped (dgda failed): nothing rewritten
+    assert q(url, "SELECT status FROM ops.batch WHERE batch_id = '0115-stage-rerun'") == [("in_review",)]
+    assert decisions(url, "0115-stage-rerun") == 1  # history kept
+
+
+@pytest.mark.parametrize("stage", ["substances", "clinical", "ddinter"])
+def test_each_product_stage_alone_reopens_the_review(url, tmp_path, stage):
+    batch_id = f"0116-only-{stage}"
+    f = batch_file(tmp_path, batch_id, [WARF])
+    assert Harness(url).main("--batch", f) == 0
+    decided_at = approve(url, batch_id, WARF)
+    assert Harness(url).main("--batch", f, "--stages", stage) == 0
+    review, extracted_at = item(url, batch_id, WARF)
+    assert (review, extracted_at > decided_at) == ("pending", True)
+
+
+def test_an_ok_recorded_while_a_later_stage_runs_does_not_approve_its_output(url, tmp_path, monkeypatch):
+    """A pharmacist reviews after dgda but before the (slow) DDInter stage commits: that 'ok' must not count."""
+    real = run_pipeline.map_and_load_ddinter
+    seen = {}
+
+    def review_mid_stage(conn, client, concept_ids):
+        seen["decided_at"] = approve(url, "0117-mid-run", WARF)  # committed inside the stage's open transaction
+        return real(conn, client, concept_ids)
+    monkeypatch.setattr(run_pipeline, "map_and_load_ddinter", review_mid_stage)
+    assert Harness(url).main("--batch", batch_file(tmp_path, "0117-mid-run", [WARF, ASA])) == 0
+    review, extracted_at = item(url, "0117-mid-run", WARF)
+    assert review == "pending"
+    assert extracted_at > seen["decided_at"]
+    assert decisions(url, "0117-mid-run") == 1
+
+
+def test_an_ok_recorded_while_dgda_loads_does_not_approve_its_output(url, tmp_path, monkeypatch):
+    from bddrug_etl.load import batches
+    f = batch_file(tmp_path, "0118-mid-dgda", [WARF])
+    assert Harness(url).main("--batch", f, "--stages", "dgda") == 0
+    real, seen = batches.load_products, {}
+
+    def review_mid_load(conn, concepts, **kw):
+        stats = real(conn, concepts, **kw)  # the dgda transaction is open now
+        seen["decided_at"] = approve(url, "0118-mid-dgda", WARF)
+        return stats
+    monkeypatch.setattr(batches, "load_products", review_mid_load)
+    assert Harness(url).main("--batch", f, "--stages", "dgda") == 0
+    review, extracted_at = item(url, "0118-mid-dgda", WARF)
+    assert (review, extracted_at > seen["decided_at"]) == ("pending", True)
+
+
+def test_a_stage_that_rolls_back_leaves_the_review_alone(url, tmp_path, monkeypatch):
+    """The stamp is part of the stage's transaction: no curated change, no re-opened review."""
+    f = batch_file(tmp_path, "0119-rolled-back", [WARF])
+    assert Harness(url).main("--batch", f) == 0
+    approve(url, "0119-rolled-back", WARF)
+    before = item(url, "0119-rolled-back", WARF)
+
+    def boom(conn, concept_ids):
+        raise RuntimeError("clinical exploded")
+    monkeypatch.setattr(run_pipeline, "build_clinical_drugs", boom)
+    assert Harness(url).main("--batch", f, "--stages", "clinical") != 0
+    assert item(url, "0119-rolled-back", WARF) == before
+
+
 # --- wiring ---------------------------------------------------------------------------------------
 
 def test_console_script_points_at_run_pipeline_and_load_dgda_stays_importable():
