@@ -29,3 +29,15 @@ def test_ignores_retired_and_other_mappings_and_dedupes():
 
 def test_product_without_mappings_has_no_ingredients():
     assert concept_to_product({**FIX, "mappings": []}).ingredients == ()
+
+def test_same_code_with_different_names_yields_one_ingredient_with_nonempty_name():
+    m = FIX["mappings"][0]
+    c = {**FIX, "mappings": [{**m, "to_concept_name": ""}, {**m, "to_concept_name": "Amphotericin B"}]}
+    assert concept_to_product(c).ingredients == (Ingredient("XM5TR4", "Amphotericin B"),)
+
+def test_code_with_surrounding_whitespace_dedupes_with_clean_code():
+    m = FIX["mappings"][0]
+    c = {**FIX, "mappings": [{**m, "to_concept_code": "XM5TR4 "}, m]}
+    ingredients = concept_to_product(c).ingredients
+    assert len(ingredients) == 1
+    assert ingredients[0].xm_code == "XM5TR4"

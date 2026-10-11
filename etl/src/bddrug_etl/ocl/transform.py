@@ -28,11 +28,17 @@ def concept_to_product(concept: dict) -> ProductRow | None:
     if concept.get("concept_class") != "Drug" or concept.get("retired"):
         return None
     extras = concept.get("extras") or {}
-    ingredients = {
-        Ingredient(m["to_concept_code"], _clean(m.get("to_concept_name")))
-        for m in concept.get("mappings") or []
-        if m.get("map_type") == "Has-active-ingredient" and not m.get("retired") and m.get("to_concept_code")
-    }
+    names: dict[str, str] = {}
+    for m in concept.get("mappings") or []:
+        if m.get("map_type") != "Has-active-ingredient" or m.get("retired"):
+            continue
+        code = _clean(m.get("to_concept_code"))
+        if not code:
+            continue
+        name = _clean(m.get("to_concept_name"))
+        if not names.get(code):
+            names[code] = name
+    ingredients = tuple(Ingredient(code, name) for code, name in sorted(names.items()))
     return ProductRow(
         concept_id=concept["id"],
         dar_number=_clean(extras.get("dar_number")),
@@ -41,5 +47,5 @@ def concept_to_product(concept: dict) -> ProductRow | None:
         dosage_form=_clean(extras.get("dosage_form")),
         generic_content_raw=_clean(extras.get("generic_content_raw")),
         quality_flag=_clean(extras.get("dar_quality_flag")) or None,
-        ingredients=tuple(sorted(ingredients, key=lambda i: i.xm_code)),
+        ingredients=ingredients,
     )
