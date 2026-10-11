@@ -22,4 +22,5 @@ jobs:
             case "$BATCH" in *[!A-Za-z0-9._-]*|"") echo "bad batch name"; exit 1;; esac
             test -f "$APP_DIR/batches/$BATCH" || { echo "batch $BATCH is not on the host; merge it to main and let deploy run first" >&2; exit 1; }
             cd "$APP_DIR/deploy"
+            # Runs every pipeline stage (dgda, substances, clinical, ddinter); a non-zero exit fails the job.
             docker-compose --profile jobs run --rm etl --batch "/app/batches/$BATCH"

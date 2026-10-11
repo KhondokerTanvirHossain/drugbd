@@ -63,3 +63,27 @@ def test_batch_run_is_atomic(conn):
     conn.rollback()
     assert conn.execute("SELECT count(*) FROM curated.brand_product WHERE concept_id='atomic-only-1'").fetchone()[0] == 0
     assert conn.execute("SELECT count(*) FROM raw.ocl_concept WHERE concept_id='atomic-only-1'").fetchone()[0] == 0
+
+
+def stage_rows(conn, batch_id):
+    return {c: (st, note) for c, st, note in conn.execute(
+        "SELECT concept_id, status, note FROM ops.stage_result WHERE batch_id = %s AND stage = 'dgda'", (batch_id,)).fetchall()}
+
+
+def test_run_batch_writes_dgda_stage_results(conn):
+    ingredient = {**FIX, "id": "ingredient-2", "concept_class": "Ingredient"}
+    run_batch(conn, MultiClient({FIX["id"]: FIX, "ingredient-2": ingredient}), "0003-stages",
+              [FIX["id"], "ingredient-2", "gone-1"])
+    assert stage_rows(conn, "0003-stages") == {
+        FIX["id"]: ("ok", ""),
+        "ingredient-2": ("fail", "not a registered Drug product"),
+        "gone-1": ("fail", "not found at source"),
+    }
+
+
+def test_run_batch_rerun_replaces_dgda_stage_results(conn):
+    run_batch(conn, MultiClient({}), "0004-rerun", [FIX["id"]])
+    assert stage_rows(conn, "0004-rerun") == {FIX["id"]: ("fail", "not found at source")}
+    run_batch(conn, MultiClient({FIX["id"]: FIX}), "0004-rerun", [FIX["id"]])
+    assert stage_rows(conn, "0004-rerun") == {FIX["id"]: ("ok", "")}
+    assert conn.execute("SELECT count(*) FROM ops.stage_result WHERE batch_id = '0004-rerun'").fetchone()[0] == 1
