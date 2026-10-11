@@ -13,14 +13,20 @@ export async function searchProducts(q: string, page: number): Promise<SearchRes
   const term = q.trim();
   if (term.length < 2) return { items: [], error: null };
   const params = new URLSearchParams({ q: term, page: String(page) });
-  const res = await fetch(`${base()}/v1/products?${params}`, { cache: "no-store" });
+  let res: Response;
+  try {
+    res = await fetch(`${base()}/v1/products?${params}`, { cache: "no-store", signal: AbortSignal.timeout(5000) });
+  } catch {
+    return { items: [], error: "Search is temporarily unavailable. Please try again." };
+  }
   const body = await res.json().catch(() => ({}));
   if (!res.ok) return { items: [], error: body?.errors?.[0]?.message ?? "Search failed" };
-  return { items: body.data ?? [], error: null };
+  if (!Array.isArray(body?.data)) return { items: [], error: "Search failed" };
+  return { items: body.data, error: null };
 }
 
 export async function getProduct(id: string): Promise<Product | null> {
-  const res = await fetch(`${base()}/v1/products/${encodeURIComponent(id)}`, { cache: "no-store" });
+  const res = await fetch(`${base()}/v1/products/${encodeURIComponent(id)}`, { cache: "no-store", signal: AbortSignal.timeout(5000) });
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`API error ${res.status}`);
   return (await res.json()).data as Product;

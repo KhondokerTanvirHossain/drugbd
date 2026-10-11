@@ -4,7 +4,9 @@ export const dynamic = "force-dynamic";
 
 export default async function ProductPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const p = await getProduct(decodeURIComponent(id));
+  let decoded: string;
+  try { decoded = decodeURIComponent(id); } catch { notFound(); }
+  const p = await getProduct(decoded);
   if (!p) notFound();
   return (
     <article>
@@ -17,7 +19,7 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
         {p.qualityFlag && (<><dt>DGDA quality flag</dt><dd>{p.qualityFlag}</dd></>)}
       </dl>
       <h2>Active ingredients</h2>
-      {p.ingredients.length === 0
+      {(p.ingredients ?? []).length === 0
         ? <p>No ingredient mapping from DGDA.</p>
         : <ul>{p.ingredients.map((i) => <li key={i.xmCode}>{i.name} <code>ICD-11 {i.xmCode}</code></li>)}</ul>}
       <p><small>Source: DGDA register via national OCL terminology server.</small></p>

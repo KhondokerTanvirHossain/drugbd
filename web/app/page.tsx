@@ -1,8 +1,11 @@
 import { searchProducts } from "@/lib/api";
+import { firstParam } from "@/lib/params";
 export const dynamic = "force-dynamic";
 
-export default async function Home({ searchParams }: { searchParams: Promise<{ q?: string; page?: string }> }) {
-  const { q = "", page = "0" } = await searchParams;
+export default async function Home({ searchParams }: { searchParams: Promise<{ q?: string | string[]; page?: string | string[] }> }) {
+  const sp = await searchParams;
+  const q = firstParam(sp.q);
+  const page = firstParam(sp.page) || "0";
   const pageNum = Math.max(0, Number.parseInt(page, 10) || 0);
   const { items, error } = await searchProducts(q, pageNum);
   return (
