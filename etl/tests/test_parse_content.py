@@ -98,3 +98,53 @@ def test_pilot_strings(raw, expected):
     p = parse_generic_content(raw)
     assert p.status == "parsed"
     assert _flat(p) == expected
+
+
+def test_partial_carries_no_strengths():
+    p = parse_generic_content("X + Y 10 mg")
+    assert p.status == "partial"
+    assert p.note == "2 names vs 1 strengths"
+    assert [i.name for i in p.ingredients] == ["X", "Y"]
+    for i in p.ingredients:
+        assert (i.strength_value, i.strength_unit, i.per_value, i.per_unit) == (None,) * 4
+
+
+@pytest.mark.parametrize(
+    "raw",
+    ["Paracetamol 500 mg + Caffeine 65 mg", "Paracetamol 500mg+Caffeine 65mg"],
+)
+def test_per_segment(raw):
+    p = parse_generic_content(raw)
+    assert p.status == "parsed"
+    assert _flat(p) == [
+        ("Paracetamol", D(500), "mg", None, None),
+        ("Caffeine", D(65), "mg", None, None),
+    ]
+
+
+def test_per_segment_no_space_plus():
+    p = parse_generic_content("Amoxicillin 500mg+Clavulanic Acid 125mg")
+    assert p.status == "parsed"
+    assert _flat(p) == [
+        ("Amoxicillin", D(500), "mg", None, None),
+        ("Clavulanic Acid", D(125), "mg", None, None),
+    ]
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("Heparin 1,000 IU", ("Heparin", D(1000), "iu")),
+        ("Lidocaine 1,000 mg", ("Lidocaine", D(1000), "mg")),
+        ("Paracetamol 500mg", ("Paracetamol", D(500), "mg")),
+        ("Paracetamol 500 MG", ("Paracetamol", D(500), "mg")),
+        ("Cabergoline 250 mcg", ("Cabergoline", D(250), "mcg")),
+        ("Cabergoline 250 µg", ("Cabergoline", D(250), "µg")),
+        ("Vaccine 5 units", ("Vaccine", D(5), "units")),
+    ],
+)
+def test_number_and_unit_variants(raw, expected):
+    p = parse_generic_content(raw)
+    assert p.status == "parsed"
+    i = p.ingredients[0]
+    assert (i.name, i.strength_value, i.strength_unit) == expected

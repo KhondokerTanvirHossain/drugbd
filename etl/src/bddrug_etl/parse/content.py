@@ -15,6 +15,8 @@ _STRENGTH_RE = re.compile(
     re.IGNORECASE,
 )
 
+_THOUSANDS_RE = re.compile(r"(?<=\d),(?=\d{3}(?!\d))")
+
 
 @dataclass(frozen=True)
 class ParsedIngredient:
@@ -37,10 +39,45 @@ def _split_names(text: str) -> list[str]:
     return [n for n in (p.strip() for p in text.split("+")) if n]
 
 
+def _make(name: str, m: re.Match[str]) -> ParsedIngredient:
+    per_unit = m.group("per_unit")
+    per_value = Decimal(m.group("per_value") or 1) if per_unit else None
+    return ParsedIngredient(
+        name=name,
+        strength_value=Decimal(m.group("value")),
+        strength_unit=m.group("unit").lower(),
+        per_value=per_value,
+        per_unit=per_unit.lower() if per_unit else None,
+        raw_text=f"{name} {m.group(0)}",
+    )
+
+
+def _parse_segments(text: str) -> ParsedContent | None:
+    """Per-segment format: every '+' segment is '<name> <strength>'."""
+    segments = [s.strip() for s in text.split("+")]
+    if len(segments) < 2:
+        return None
+    out = []
+    for seg in segments:
+        m = _STRENGTH_RE.search(seg)
+        if not m or seg[m.end():].strip():
+            return None
+        name = seg[: m.start()].strip()
+        if not name:
+            return None
+        out.append(_make(name, m))
+    return ParsedContent("parsed", tuple(out), "")
+
+
 def parse_generic_content(raw: str) -> ParsedContent:
     text = " ".join((raw or "").split())
+    text = _THOUSANDS_RE.sub("", text)
     if not text:
         return ParsedContent("failed", (), "empty content")
+
+    segmented = _parse_segments(text)
+    if segmented:
+        return segmented
 
     first = _STRENGTH_RE.search(text)
     names = _split_names(text[: first.start()] if first else text)
@@ -49,31 +86,15 @@ def parse_generic_content(raw: str) -> ParsedContent:
 
     matches = list(_STRENGTH_RE.finditer(text[first.start():])) if first else []
 
-    ingredients = []
-    for idx, name in enumerate(names):
-        if idx < len(matches):
-            m = matches[idx]
-            per_unit = m.group("per_unit")
-            per_value = None
-            if per_unit:
-                per_value = Decimal(m.group("per_value") or 1)
-            ingredients.append(
-                ParsedIngredient(
-                    name=name,
-                    strength_value=Decimal(m.group("value")),
-                    strength_unit=m.group("unit").lower(),
-                    per_value=per_value,
-                    per_unit=per_unit.lower() if per_unit else None,
-                    raw_text=f"{name} {m.group(0)}",
-                )
-            )
-        else:
-            ingredients.append(ParsedIngredient(name, None, None, None, None, name))
-
-    if not matches:
-        return ParsedContent("partial", tuple(ingredients), "no strength in source")
-    if len(names) != len(matches):
+    if matches and len(names) == len(matches):
         return ParsedContent(
-            "partial", tuple(ingredients), f"{len(names)} names vs {len(matches)} strengths"
+            "parsed", tuple(_make(n, m) for n, m in zip(names, matches)), ""
         )
-    return ParsedContent("parsed", tuple(ingredients), "")
+
+    # Partial parses never carry strengths: they cannot be trusted.
+    bare = tuple(ParsedIngredient(n, None, None, None, None, n) for n in names)
+    if not matches:
+        return ParsedContent("partial", bare, "no strength in source")
+    return ParsedContent(
+        "partial", bare, f"{len(names)} names vs {len(matches)} strengths"
+    )

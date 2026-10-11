@@ -12,6 +12,11 @@ _SALT_WORDS = frozenset(
     "bromide dihydrate trihydrate monohydrate".split()
 )
 
+_BARE_CATIONS = frozenset(
+    "sodium potassium calcium magnesium ferrous ferric iron zinc lithium "
+    "aluminium aluminum copper manganese".split()
+)
+
 _PUNCT_EDGE = re.compile(r"^[^\w]+|[^\w]+$")
 
 
@@ -25,6 +30,8 @@ def strip_salt(name: str) -> str:
     words = name.split()
     while len(words) > 1 and words[-1].casefold() in _SALT_WORDS:
         words.pop()
+    if len(words) == 1 and words[0].casefold() in _BARE_CATIONS:
+        return name
     return " ".join(words)
 
 

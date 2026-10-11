@@ -48,3 +48,14 @@ def test_normalize_name():
 )
 def test_route(form, route):
     assert route_for_dosage_form(form) == route
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "Magnesium Sulfate", "Sodium Citrate", "Calcium Acetate", "Potassium Phosphate",
+        "Ferrous Sulfate", "Sodium Valproate", "Potassium Chloride", "Calcium Carbonate",
+    ],
+)
+def test_strip_salt_keeps_cation_names(name):
+    assert strip_salt(name) == name
