@@ -33,8 +33,10 @@ class DDInterClient:
     BASE = "https://ddinter2.scbdd.com"
 
     def __init__(self, http):
+        assert http.min_interval_s >= 1.0, "DDInter requires min_interval_s >= 1.0"
         self.http = http
         self._token: str | None = None
+        self._interact_maps: dict[str, dict[str, str]] = {}
 
     def _csrf(self) -> str:
         if self._token is None:
@@ -72,7 +74,11 @@ class DDInterClient:
                 return
             yield rows
             start += PAGE
-            if start >= int(body.get("recordsTotal", 0)):
+            try:
+                total = int(body["recordsTotal"])
+            except (KeyError, TypeError, ValueError):
+                raise ValueError(f"DDInter POST {path}: missing or non-integer recordsTotal") from None
+            if start >= total:
                 return
 
     def _get(self, path: str):
@@ -99,14 +105,22 @@ class DDInterClient:
                                       tuple(str(a).lower() for a in it.get("actions") or [])))
         return out
 
+    def interact_with_map(self, ddinter_id: str) -> dict[str, str]:
+        """partner drug id -> interaction id. Pages the full list once per drug (memoised).
+
+        The server ignores search[value] (verified 2026-10-11), so the whole list is read.
+        """
+        if ddinter_id not in self._interact_maps:
+            m: dict[str, str] = {}
+            for rows in self._pages(f"/server/interact-with/{ddinter_id}/", f"/server/drug-detail/{ddinter_id}/",
+                                    {"severity": "", "mechanism": ""}):
+                for r in rows:
+                    m.setdefault(r["drug_id"], str(r["interaction_id"]))
+            self._interact_maps[ddinter_id] = m
+        return self._interact_maps[ddinter_id]
+
     def pair_interaction_id(self, ddinter_id: str, partner_id: str) -> str | None:
-        """The server ignores search[value] (verified 2026-10-11), so page through and match on drug_id."""
-        for rows in self._pages(f"/server/interact-with/{ddinter_id}/", f"/server/drug-detail/{ddinter_id}/",
-                                {"severity": "", "mechanism": ""}):
-            for r in rows:
-                if r.get("drug_id") == partner_id:
-                    return str(r["interaction_id"])
-        return None
+        return self.interact_with_map(ddinter_id).get(partner_id)
 
     def diseases(self, ddinter_id: str) -> list[dict]:
         out = []

@@ -129,3 +129,10 @@ def test_csrf_token_is_redacted_from_stored_body(conn):
     body = rows(conn, "src-redact")[0][2]
     assert "SECRET" not in body and body.count("[redacted]") == 3
     assert 'value="keep"' in body
+
+
+def test_js_literal_csrf_token_is_redacted():
+    from bddrug_etl.http.snapshot import redact
+    out = redact("$.ajaxSetup({data: {csrfmiddlewaretoken: 'SECRETTOK',}}); x({csrfmiddlewaretoken : \"T2\"})")
+    assert "SECRETTOK" not in out and "T2" not in out
+    assert "csrfmiddlewaretoken: '[redacted]'" in out

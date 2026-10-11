@@ -16,11 +16,13 @@ CSRF_FIELD = "csrfmiddlewaretoken"
 _CSRF_INPUT = re.compile(r"<input\b[^>]*\bname\s*=\s*[\"']?csrfmiddlewaretoken[\"']?[^>]*>", re.I)
 _VALUE_ATTR = re.compile(r"(\bvalue\s*=\s*)(\"[^\"]*\"|'[^']*'|[^\s>]+)", re.I)
 _CSRF_JSON = re.compile(r'("csrfmiddlewaretoken"\s*:\s*)"[^"]*"')
+_CSRF_JS = re.compile(r"""(\bcsrfmiddlewaretoken\s*:\s*)(['"])[^'"]*\2""")
 
 
 def redact(body: str) -> str:
     body = _CSRF_INPUT.sub(lambda m: _VALUE_ATTR.sub(lambda v: f'{v.group(1)}"[redacted]"', m.group(0)), body)
-    return _CSRF_JSON.sub(r'\1"[redacted]"', body)
+    body = _CSRF_JSON.sub(r'\1"[redacted]"', body)
+    return _CSRF_JS.sub(r"\1'[redacted]'", body)
 
 
 class SnapshotHttp:

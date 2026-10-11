@@ -7,6 +7,7 @@ import pytest
 import respx
 from testcontainers.postgres import PostgresContainer
 
+import bddrug_etl.ddinter.client as mod
 from bddrug_etl.ddinter.client import DDInterClient, DDInterPairRow, severity
 from bddrug_etl.http.snapshot import SnapshotHttp
 
@@ -57,7 +58,7 @@ def test_severity_map():
 
 
 @respx.mock
-def test_drug_list_pages_until_records_total_and_sends_csrf(client, conn):
+def test_drug_list_pages_until_records_total_and_sends_csrf(client, conn, monkeypatch):
     mock_session()
     rows = fxj("drug_list_p1.json")["data"]
     seen = []
@@ -69,14 +70,9 @@ def test_drug_list_pages_until_records_total_and_sends_csrf(client, conn):
         page = rows[:5] if start == 0 else rows[:2]
         return httpx.Response(200, json={"recordsTotal": 7, "data": page})
 
-    # real page size is 500, so shrink recordsTotal logic by patching PAGE
-    import bddrug_etl.ddinter.client as mod
-    mod.PAGE = 5
-    try:
-        respx.post(f"{B}/server/drug-source/").mock(side_effect=handler)
-        out = client.drug_list()
-    finally:
-        mod.PAGE = 500
+    monkeypatch.setattr(mod, "PAGE", 5)
+    respx.post(f"{B}/server/drug-source/").mock(side_effect=handler)
+    out = client.drug_list()
     assert len(out) == 7
     assert out[0] == (rows[0]["internalID"], rows[0]["name"])
     assert [f["start"] for _, f in seen] == ["0", "5"]
@@ -91,6 +87,9 @@ def test_drug_list_pages_until_records_total_and_sends_csrf(client, conn):
     keys = snap_keys(conn)
     assert "GET /server/drug/" in keys
     assert sum(k.startswith("POST /server/drug-source/") for k in keys) == 2
+    stored = conn.execute("SELECT body FROM raw.http_snapshot WHERE source='ddinter' "
+                          "AND request_key='GET /server/drug/'").fetchone()[0]
+    assert TOKEN not in stored and "[redacted]" in stored
 
 
 @respx.mock
@@ -164,11 +163,8 @@ def test_pair_interaction_id_pages_and_matches_drug_id(client, conn):
 
     respx.post(f"{B}/server/interact-with/DDInter1951/").mock(side_effect=handler)
     assert client.pair_interaction_id("DDInter1951", "DDInter9") == "3039"
-    assert starts == ["0"]  # found on page 1, stops early
-    assert client.pair_interaction_id("DDInter1951", "DDInter20") == "34056"
-    assert starts == ["0", "0"]
     assert client.pair_interaction_id("DDInter1951", "DDInter999999") is None
-    assert starts == ["0", "0", "0", "500"]
+    assert starts == ["0", "500"]
     assert any(k.startswith("POST /server/interact-with/DDInter1951/#") for k in snap_keys(conn))
 
 
@@ -214,3 +210,34 @@ def test_http_error_raises(client):
     respx.get(f"{B}/server/interact/1/").mock(return_value=httpx.Response(500, text="boom"))
     with pytest.raises(httpx.HTTPStatusError):
         client.interaction("1")
+
+
+@respx.mock
+def test_interact_with_map_is_memoised_per_drug(client):
+    mock_session()
+    p1, p2 = fxj("interact_with_p1.json"), fxj("interact_with_p2.json")
+    route = respx.post(f"{B}/server/interact-with/DDInter1951/").mock(
+        side_effect=lambda r: httpx.Response(
+            200, json=p1 if dict(httpx.QueryParams(r.content.decode()))["start"] == "0" else p2))
+    m = client.interact_with_map("DDInter1951")
+    assert m["DDInter9"] == "3039" and m["DDInter1388"] == "122526"
+    assert client.pair_interaction_id("DDInter1951", "DDInter20") == "34056"
+    assert client.pair_interaction_id("DDInter1951", "DDInter9") == "3039"
+    assert client.pair_interaction_id("DDInter1951", "DDInter404") is None
+    assert route.call_count == 2  # one set of pages (start=0, start=500) for all lookups
+
+
+@respx.mock
+def test_drug_list_bad_records_total_raises(client):
+    mock_session()
+    for body in ({"data": [{"name": "A", "internalID": "DDInter1"}]},
+                 {"recordsTotal": "abc", "data": [{"name": "A", "internalID": "DDInter1"}]}):
+        respx.post(f"{B}/server/drug-source/").mock(return_value=httpx.Response(200, json=body))
+        with pytest.raises(ValueError):
+            client.drug_list()
+
+
+def test_client_requires_one_second_interval(conn):
+    http = SnapshotHttp(conn, "ddinter", httpx.Client(), 0.5, sleep=lambda s: None)
+    with pytest.raises(AssertionError):
+        DDInterClient(http)

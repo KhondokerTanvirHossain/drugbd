@@ -4,8 +4,6 @@ from dataclasses import dataclass
 from html.parser import HTMLParser
 
 _ATC = re.compile(r"^[A-Z]\d{2}[A-Z]{2}\d{2}$")
-_DRUGBANK = re.compile(r"go\.drugbank\.com/drugs/(DB\d+)")
-_REF_PREFIX = re.compile(r"^\[\d+\]\s*")
 
 
 @dataclass(frozen=True)
@@ -58,11 +56,20 @@ def _after(chunks: list[str], heading: str, start: int = 0) -> int | None:
     return None
 
 
+_NOT_A_NAME = {"Basic Information", "ID", "Drug Type", "2D", "3D", "Description", "ATC Classification",
+               "Molecular Formula", "Molecular Weight", "CAS Number"}
+_DRUGBANK_LINK = re.compile(r"""href\s*=\s*["']?https?://go\.drugbank\.com/drugs/(DB\d{5})(?=[/?#"'\s>])""", re.I)
+_SECTION_ENDS = {"Interaction": ("Management", "References", "Alternative for"),
+                 "Management": ("References", "Alternative for"),
+                 "References": ("Alternative for",)}
+_REF_START = re.compile(r"^\[\d+\]\s*")
+
+
 def parse_drug_detail(html: str, ddinter_id: str) -> DDInterDrug:
     chunks = visible_text(html)
     i = _after(chunks, "Drugs Information:")
-    if i is None or i >= len(chunks):
-        raise ValueError(f"no 'Drugs Information' title for {ddinter_id}")
+    if i is None or i >= len(chunks) or chunks[i] in _NOT_A_NAME:
+        raise ValueError("drug name not found")
     name = chunks[i]
     atc: list[str] = []
     j = _after(chunks, "ATC Classification", i)
@@ -73,25 +80,34 @@ def parse_drug_detail(html: str, ddinter_id: str) -> DDInterDrug:
                 break
             atc.extend(t for t in tokens if t not in atc)
             j += 1
-    m = _DRUGBANK.search(html)
-    return DDInterDrug(ddinter_id, name, tuple(atc), m.group(1) if m else None)
+    ids = set(_DRUGBANK_LINK.findall(html))
+    return DDInterDrug(ddinter_id, name, tuple(atc), ids.pop() if len(ids) == 1 else None)
+
+
+def _section(chunks: list[str], label: str, start: int) -> list[str]:
+    """Chunks after the first `label` at/after `start`, up to the next known label."""
+    i = _after(chunks, label, start)
+    if i is None:
+        return []
+    ends = _SECTION_ENDS[label]
+    for k in range(i, len(chunks)):
+        if chunks[k] in ends:
+            return chunks[i:k]
+    return chunks[i:]
 
 
 def parse_interaction(html: str) -> InteractionText:
     chunks = visible_text(html)
-    start = _after(chunks, "Interaction", _after(chunks, "Basic Information") or 0)
-    if start is None:
+    start = _after(chunks, "Basic Information") or 0
+    if _after(chunks, "Interaction", start) is None:
         raise ValueError("no 'Interaction' section")
-    m = _after(chunks, "Management", start)
-    r = _after(chunks, "References", m or start)
-    interaction = " ".join(chunks[start:(m - 1) if m else len(chunks)])
-    management = ""
-    if m:
-        management = " ".join(chunks[m:(r - 1) if r else len(chunks)])
+    interaction = " ".join(_section(chunks, "Interaction", start))
+    management = " ".join(_section(chunks, "Management", start))
     refs: list[str] = []
-    if r:
-        for c in chunks[r:]:
-            if c == "Alternative for":
-                break
-            refs.append(_REF_PREFIX.sub("", c))
+    for c in _section(chunks, "References", start):
+        if _REF_START.match(c):
+            refs.append(_REF_START.sub("", c))
+        elif refs:
+            refs[-1] += " " + c
+    refs = [re.sub(r"\s+([,.;:)])", r"\1", r).strip() for r in refs]
     return InteractionText(interaction, management, tuple(refs))
