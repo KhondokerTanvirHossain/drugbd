@@ -17,12 +17,13 @@ public class R2dbcCheckAdapter implements CheckQueryPort {
     @Override public Mono<CheckData> load(List<String> conceptIds) {
         String[] ids = conceptIds.toArray(String[]::new);
         Mono<List<ProductRow>> products = db.sql("""
-                SELECT bp.concept_id, bp.trade_name, bp.generic_content_raw, cd.route
+                SELECT bp.concept_id, bp.trade_name, bp.generic_content_raw, cd.route, %s AS review_status
                 FROM curated.brand_product bp LEFT JOIN curated.clinical_drug cd ON cd.bdc_id = bp.bdc_id
-                WHERE bp.concept_id = ANY(:ids)""")
+                WHERE bp.concept_id = ANY(:ids)""".formatted(ReviewSql.statusOf("bp.concept_id")))
             .bind("ids", ids)
             .map(r -> new ProductRow(r.get("concept_id", String.class), r.get("trade_name", String.class),
-                r.get("generic_content_raw", String.class), r.get("route", String.class)))
+                r.get("generic_content_raw", String.class), r.get("route", String.class),
+                r.get("review_status", String.class)))
             .all().collectList();
         Mono<List<IngredientRow>> ingredients = db.sql("""
                 SELECT bpi.concept_id, bpi.xm_code, bpi.ingredient_name, s.bds_id, s.preferred_name, ic.coverage
