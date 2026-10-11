@@ -1,0 +1,23 @@
+name: load-dgda
+on:
+  workflow_dispatch:
+    inputs: {batch: {description: "Batch file name in batches/, e.g. 0001-pilot.txt", required: true}}
+jobs:
+  load:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: appleboy/ssh-action@v1.2.0
+        env:
+          BATCH: ${{ inputs.batch }}
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          envs: BATCH
+          command_timeout: 60m
+          script: |
+            set -e
+            case "$BATCH" in *[!A-Za-z0-9._-]*|"") echo "bad batch name"; exit 1;; esac
+            git -C /opt/bddrug pull --ff-only
+            cd /opt/bddrug/deploy
+            docker compose --profile jobs run --rm etl --batch "/app/batches/$BATCH"
