@@ -15,7 +15,9 @@ _STRENGTH_RE = re.compile(
     re.IGNORECASE,
 )
 
-_THOUSANDS_RE = re.compile(r"(?<=\d),(?=\d{3}(?!\d))")
+_THOUSANDS_RE = re.compile(r"\b[1-9]\d{0,2}(?:,\d{3})+(?!\d)")
+_AMBIGUOUS_RE = re.compile(r"\d+(?:,\d+)+")
+_LETTERS_RE = re.compile(r"[^\W\d_]")
 
 
 @dataclass(frozen=True)
@@ -71,9 +73,12 @@ def _parse_segments(text: str) -> ParsedContent | None:
 
 def parse_generic_content(raw: str) -> ParsedContent:
     text = " ".join((raw or "").split())
-    text = _THOUSANDS_RE.sub("", text)
     if not text:
         return ParsedContent("failed", (), "empty content")
+    text = _THOUSANDS_RE.sub(lambda m: m.group(0).replace(",", ""), text)
+    amb = _AMBIGUOUS_RE.search(text)
+    if amb:
+        return ParsedContent("failed", (), f"ambiguous number '{amb.group(0)}'")
 
     segmented = _parse_segments(text)
     if segmented:
@@ -81,20 +86,34 @@ def parse_generic_content(raw: str) -> ParsedContent:
 
     first = _STRENGTH_RE.search(text)
     names = _split_names(text[: first.start()] if first else text)
-    if not names:
-        return ParsedContent("failed", (), "no ingredient name")
-
     matches = list(_STRENGTH_RE.finditer(text[first.start():])) if first else []
+    trailing = ""
+    if matches:
+        trailing = text[first.start():][matches[-1].end():].strip(" +")
+        if not _LETTERS_RE.search(trailing):
+            trailing = ""
 
-    if matches and len(names) == len(matches):
+    if names and matches and len(names) == len(matches) and not trailing:
         return ParsedContent(
             "parsed", tuple(_make(n, m) for n, m in zip(names, matches)), ""
         )
 
-    # Partial parses never carry strengths: they cannot be trusted.
-    bare = tuple(ParsedIngredient(n, None, None, None, None, n) for n in names)
+    # Partial parses never carry strengths: they cannot be trusted. Keep every
+    # identifiable name: each '+' segment minus its strength tokens.
+    all_names = [
+        n
+        for n in (_STRENGTH_RE.sub("", seg).strip(" ,") for seg in text.split("+"))
+        if _LETTERS_RE.search(n)
+    ]
+    if not all_names:
+        return ParsedContent("failed", (), "no ingredient name")
+    bare = tuple(ParsedIngredient(n, None, None, None, None, n) for n in all_names)
+    if trailing:
+        return ParsedContent(
+            "partial", bare, f"unparsed text after strengths: '{trailing}'"
+        )
     if not matches:
         return ParsedContent("partial", bare, "no strength in source")
     return ParsedContent(
-        "partial", bare, f"{len(names)} names vs {len(matches)} strengths"
+        "partial", bare, f"{len(all_names)} names vs {len(matches)} strengths"
     )

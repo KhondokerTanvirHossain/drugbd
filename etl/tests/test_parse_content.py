@@ -148,3 +148,30 @@ def test_number_and_unit_variants(raw, expected):
     assert p.status == "parsed"
     i = p.ingredients[0]
     assert (i.name, i.strength_value, i.strength_unit) == expected
+
+
+@pytest.mark.parametrize("raw,token", [("Estradiol 0,500 mg", "0,500"), ("Drug 12,5 mg", "12,5"), ("Drug 0,5 mg", "0,5")])
+def test_ambiguous_decimal_comma_fails(raw, token):
+    p = parse_generic_content(raw)
+    assert p.status == "failed"
+    assert p.note == f"ambiguous number '{token}'"
+    assert p.ingredients == ()
+
+
+def test_thousands_values():
+    assert parse_generic_content("Heparin 1,000 IU").ingredients[0].strength_value == D(1000)
+    assert parse_generic_content("Drug 1,000,000 IU").ingredients[0].strength_value == D(1000000)
+
+
+def test_trailing_ingredient_not_dropped():
+    p = parse_generic_content("Paracetamol 500 mg + Caffeine")
+    assert p.status == "partial"
+    assert [i.name for i in p.ingredients] == ["Paracetamol", "Caffeine"]
+    assert all(i.strength_value is None for i in p.ingredients)
+
+
+def test_trailing_third_ingredient_not_dropped():
+    p = parse_generic_content("Paracetamol 500 mg + Caffeine 65 mg + Codeine")
+    assert p.status == "partial"
+    assert [i.name for i in p.ingredients] == ["Paracetamol", "Caffeine", "Codeine"]
+    assert all(i.strength_value is None for i in p.ingredients)
