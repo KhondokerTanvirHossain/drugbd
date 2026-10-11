@@ -105,7 +105,7 @@ def test_combination_two_substances_aligned_by_name(conn):
     ev = {s["xm"]: s for s in res.evidence["substances"]}
     assert set(ev) == {"XM2K88", "XM7CM1"} and ev["XM2K88"]["bds_id"] != ev["XM7CM1"]["bds_id"]
     assert ev["XM2K88"]["rxcui"] == "48203" and ev["XM7CM1"]["rxcui"] == "723"
-    # Amoxycillin spelling normalises; names land on the right substance, not by list position.
+    # Names land on the right substance by name alignment, not by list position (XM order is reversed vs content).
     assert ("Clavulanic Acid", "dgda_content") in names(conn, ev["XM2K88"]["bds_id"])
     assert ("Amoxicillin", "dgda_content") in names(conn, ev["XM7CM1"]["bds_id"])
 
@@ -138,9 +138,11 @@ def test_rerun_mints_nothing_and_duplicates_nothing(conn):
 
 def test_preferred_name_not_changed_on_rerun(conn):
     conn.execute("UPDATE curated.substance SET preferred_name='Custom' WHERE bds_id=(SELECT bds_id FROM curated.substance_code WHERE code='XM5DJ7')")
-    build_substances(conn, FakeRxNav(), [NAPA])
-    assert conn.execute("SELECT preferred_name FROM curated.substance s JOIN curated.substance_code c USING (bds_id) WHERE c.code='XM5DJ7'").fetchone()[0] == "Custom"
-    conn.execute("UPDATE curated.substance SET preferred_name='Acetaminophen' WHERE preferred_name='Custom'")
+    try:
+        build_substances(conn, FakeRxNav(), [NAPA])
+        assert conn.execute("SELECT preferred_name FROM curated.substance s JOIN curated.substance_code c USING (bds_id) WHERE c.code='XM5DJ7'").fetchone()[0] == "Custom"
+    finally:
+        conn.execute("UPDATE curated.substance SET preferred_name='Acetaminophen' WHERE preferred_name='Custom'")
 
 
 def test_no_ingredients_fails(conn):
@@ -208,3 +210,81 @@ def test_write_stage_results_replaces_not_appends(conn):
     assert rows == [("a", "fail", "again", {"k": "a"}), ("b", "warn", "x", {"k": "b"})]
     write_stage_results(conn, "b1", "clinical", [r("a", "ok", "")])
     assert conn.execute("SELECT count(*) FROM ops.stage_result WHERE batch_id='b1'").fetchone()[0] == 3
+
+
+class ApproxRxNav(FakeRxNav):
+    def rxcui_for_name(self, name):
+        self.name_calls.append(name)
+        r = self.table.get(name.casefold())
+        return (r, "rxnav-approx") if r else None
+
+
+def rows(conn, bds, system):
+    return conn.execute(
+        "SELECT code, source, method, confidence::float FROM curated.substance_code WHERE bds_id=%s AND system=%s ORDER BY code",
+        (bds, system)).fetchall()
+
+
+def test_exact_and_xm_provenance(conn):
+    [res] = build_substances(conn, FakeRxNav(), [NAPA])
+    bds = res.evidence["substances"][0]["bds_id"]
+    assert rows(conn, bds, "ICD11_XM") == [("XM5DJ7", "dgda-ocl", "xm", 1.0)]
+    for system, code in (("RXCUI", "161"), ("ATC", "N02BE01"), ("DRUGBANK", "DB00316")):
+        assert rows(conn, bds, system) == [(code, "rxnav", "rxnav-exact", 1.0)]
+
+
+def test_approx_path_method_and_confidence(conn):
+    conn.execute("INSERT INTO curated.brand_product VALUES ('ap','D','Ap','Co','Tablet','Paracetamol 500 mg')")
+    conn.execute("INSERT INTO curated.brand_product_ingredient VALUES ('ap','XMAPPR','Acetaminophen approx')")
+    [res] = build_substances(conn, ApproxRxNav({"acetaminophen approx": "161"}), ["ap"])
+    assert res.status == "ok", res
+    bds = res.evidence["substances"][0]["bds_id"]
+    assert res.evidence["substances"][0]["method"] == "rxnav-approx"
+    for system, code in (("RXCUI", "161"), ("ATC", "N02BE01"), ("DRUGBANK", "DB00316")):
+        assert rows(conn, bds, system) == [(code, "rxnav", "rxnav-approx", 0.8)]
+    assert rows(conn, bds, "ICD11_XM") == [("XMAPPR", "dgda-ocl", "xm", 1.0)]
+
+
+def test_rule3_aligns_by_same_rxcui(conn):
+    conn.execute("INSERT INTO curated.brand_product VALUES ('pc','D','Pc','Co','Tablet','Paracetamol + Caffeine 500 mg + 65 mg')")
+    conn.execute("INSERT INTO curated.brand_product_ingredient VALUES ('pc','XM5DJ7','Acetaminophen'),('pc','XMCAFF','Caffeine')")
+    table = {**RXCUI, "caffeine": "1819"}
+    [res] = build_substances(conn, FakeRxNav(table), ["pc"])
+    assert res.status == "ok", res
+    ev = {s["xm"]: s for s in res.evidence["substances"]}
+    assert ("Paracetamol", "dgda_content") in names(conn, ev["XM5DJ7"]["bds_id"])
+    assert ("Caffeine", "dgda_content") in names(conn, ev["XMCAFF"]["bds_id"])
+    assert ev["XM5DJ7"]["rxcui"] == "161"
+
+
+def test_lookup_cache_one_call_per_name_per_run(conn):
+    rx = FakeRxNav()
+    # Fresh substances so lookups actually happen; same name appears in two products.
+    for cid, xm in (("c1", "XMCA01"), ("c2", "XMCA02")):
+        conn.execute("INSERT INTO curated.brand_product VALUES (%s,'D',%s,'Co','Tablet','Zork 5 mg')", (cid, cid))
+        conn.execute("INSERT INTO curated.brand_product_ingredient VALUES (%s,%s,'Metformin')", (cid, xm))
+    build_substances(conn, rx, ["c1", "c2"])
+    assert len(rx.name_calls) == len({n for n in rx.name_calls}), rx.name_calls
+    assert rx.name_calls.count("Metformin") == 1
+
+
+class BoomRxNav(FakeRxNav):
+    def rxcui_for_name(self, name):
+        if name == "Boomdrug":
+            raise RuntimeError("rxnav HTTP 500 " + "x" * 400)
+        return super().rxcui_for_name(name)
+
+
+def test_per_product_isolation(conn):
+    conn.execute("INSERT INTO curated.brand_product VALUES ('bm','D','Bm','Co','Tablet','Boomdrug 5 mg')")
+    conn.execute("INSERT INTO curated.brand_product_ingredient VALUES ('bm','XMBOOM','Boomdrug')")
+    before = conn.execute("SELECT count(*) FROM curated.substance").fetchone()[0]
+    res = build_substances(conn, BoomRxNav(), [NAPA, "bm", "185-0138-012--g-warfarin"])
+    assert [r.status for r in res] == ["ok", "fail", "ok"]
+    assert res[1].note.startswith("error: RuntimeError: rxnav HTTP 500") and len(res[1].note) <= len("error: RuntimeError: ") + 200
+    assert res[1].evidence == {}
+    # failed product's savepoint rolled back: no substance for XMBOOM; connection still usable
+    assert conn.execute("SELECT count(*) FROM curated.substance_code WHERE code='XMBOOM'").fetchone()[0] == 0
+    assert conn.execute("SELECT count(*) FROM curated.substance").fetchone()[0] == before
+    conn.commit()
+    assert conn.execute("SELECT count(*) FROM curated.substance_code WHERE code='XM86W0'").fetchone()[0] == 1
