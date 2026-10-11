@@ -27,3 +27,7 @@ CREATE TABLE ops.batch_run (
   stages TEXT[] NOT NULL, counts JSONB NOT NULL, concept_ids TEXT[] NOT NULL DEFAULT '{}');
 
 ALTER TABLE ops.batch_item ADD COLUMN extracted_at TIMESTAMPTZ;   -- set by the pipeline per item; reviews before it don't count
+-- The approval gate (API ReviewSql.statusOf) reads a product's latest batch item once per product on every
+-- public read; the PK (batch_id, concept_id) can't serve it. Same order as its ORDER BY, so no sort.
+CREATE INDEX IF NOT EXISTS batch_item_concept_latest_idx
+  ON ops.batch_item (concept_id, extracted_at DESC NULLS LAST, batch_id DESC);

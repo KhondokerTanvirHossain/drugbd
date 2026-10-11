@@ -49,12 +49,38 @@ def item(conn):
     ("curated", "substance_code", "substance_code_system_code_idx"),
     ("curated", "brand_product", "brand_product_bdc_idx"),
     ("ops", "review_decision", "review_decision_item_idx"),
+    ("ops", "batch_item", "batch_item_concept_latest_idx"),
 ])
 def test_index_exists(conn, schema, table, index):
     row = conn.execute(
         "SELECT tablename FROM pg_indexes WHERE schemaname = %s AND indexname = %s", (schema, index)
     ).fetchone()
     assert row == (table,)
+
+
+def test_batch_item_concept_latest_idx_columns(conn):
+    """Leads with concept_id and matches the approval gate's ORDER BY, so the lookup needs no sort."""
+    (definition,) = conn.execute(
+        "SELECT indexdef FROM pg_indexes WHERE schemaname = 'ops' AND indexname = 'batch_item_concept_latest_idx'"
+    ).fetchone()
+    assert definition.endswith("(concept_id, extracted_at DESC NULLS LAST, batch_id DESC)")
+
+
+def test_review_status_lookup_uses_the_concept_index(conn):
+    """The API's ReviewSql.statusOf subquery, run once per product on every public read."""
+    conn.execute("INSERT INTO ops.batch (batch_id, item_count) VALUES ('0103-idx', 20000)")
+    conn.execute(
+        "INSERT INTO ops.batch_item (batch_id, source, concept_id, extracted_at) "
+        "SELECT '0103-idx', 'DGDA-Drugs', 'idx-' || g, now() FROM generate_series(1, 20000) g"
+    )
+    conn.execute("ANALYZE ops.batch_item")
+    plan = "\n".join(r[0] for r in conn.execute(
+        "EXPLAIN SELECT lbi.review FROM ops.batch_item lbi WHERE lbi.concept_id = 'idx-7' "
+        "ORDER BY lbi.extracted_at DESC NULLS LAST, lbi.batch_id DESC LIMIT 1"
+    ).fetchall())
+    conn.rollback()
+    assert "batch_item_concept_latest_idx" in plan, plan
+    assert "Sort" not in plan, plan
 
 
 def test_batch_item_has_nullable_extracted_at(conn):
