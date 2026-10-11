@@ -1,0 +1,59 @@
+name: deploy
+on:
+  workflow_run: {workflows: [ci], types: [completed], branches: [main]}
+permissions: {contents: read, packages: write}
+concurrency: {group: deploy, cancel-in-progress: false}
+env:
+  APP_DIR: /home/ec2-user/drugdb
+  PUBLIC_URL: https://drugdb.eliooo.org
+jobs:
+  deploy:
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.repository }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - uses: docker/login-action@v3
+        with: {registry: ghcr.io, username: "${{ github.actor }}", password: "${{ secrets.GITHUB_TOKEN }}"}
+      - env:
+          OWNER: ${{ github.repository_owner }}
+          TAG: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          owner="${OWNER,,}"
+          for s in etl api web; do
+            docker build -t "ghcr.io/${owner}/bddrug-$s:${TAG}" "$s"
+            docker push "ghcr.io/${owner}/bddrug-$s:${TAG}"
+          done
+      # Copy the runtime files (compose, migrations, batch lists) to the host. No git checkout on the host.
+      - uses: appleboy/scp-action@ff85246acaad7bdce478db94a363cd2bf7c90345 # v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "deploy/docker-compose.yml,db/migrations,batches"
+          target: ${{ env.APP_DIR }}
+          overwrite: true
+      - uses: appleboy/ssh-action@7eaf76671a0d7eec5d98ee897acda4f968735a17 # v1.2.0
+        env:
+          TAG: ${{ github.event.workflow_run.head_sha }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APP_DIR: ${{ env.APP_DIR }}
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          envs: TAG,GHCR_USER,GHCR_TOKEN,APP_DIR
+          script: |
+            set -e
+            cd "$APP_DIR/deploy"
+            test -f .env || { echo "$APP_DIR/deploy/.env is missing; see README Deploy" >&2; exit 1; }
+            grep -q '^IMAGE_TAG=' .env || { echo "deploy/.env has no IMAGE_TAG line" >&2; exit 1; }
+            sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=${TAG}/" .env
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+            trap 'docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
+            docker-compose --profile jobs pull
+            docker-compose up -d --remove-orphans
+            docker image prune -f >/dev/null || true
+      - run: curl -fsS --retry 12 --retry-delay 10 --retry-all-errors "$PUBLIC_URL/batches" -o /dev/null

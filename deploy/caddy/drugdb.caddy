@@ -1,0 +1,12 @@
+# Append this block to ~/n8n/Caddyfile on the EC2 host (one-time; see README "Deploy").
+# The Caddy container is on n8n_edge; bddrug's web service joins it under the alias bddrug-web.
+drugdb.eliooo.org {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+
+	reverse_proxy bddrug-web:3000
+}

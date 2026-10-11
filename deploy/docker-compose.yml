@@ -1,0 +1,60 @@
+name: bddrug
+# Runs on the shared EC2 host behind the existing Caddy (~/n8n). Caddy owns ports 80/443 and proxies
+# drugdb.eliooo.org to the alias `bddrug-web` on the shared edge network (see deploy/caddy/drugdb.caddy).
+# This file publishes no host ports. The API and DB are reachable only on the internal network.
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: bddrug
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes: [dbdata:/var/lib/postgresql/data]
+    healthcheck: {test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d bddrug"], interval: 5s, retries: 20}
+    mem_limit: 256m
+    networks: [internal]
+    restart: unless-stopped
+  flyway:
+    image: flyway/flyway:10
+    command: -url=jdbc:postgresql://db:5432/bddrug migrate
+    environment:
+      FLYWAY_USER: ${DB_USER}
+      FLYWAY_PASSWORD: ${DB_PASSWORD}
+    volumes: [../db/migrations:/flyway/sql:ro]
+    depends_on: {db: {condition: service_healthy}}
+    mem_limit: 256m
+    networks: [internal]
+  api:
+    image: ghcr.io/${GHCR_OWNER}/bddrug-api:${IMAGE_TAG}
+    environment:
+      DB_R2DBC_URL: r2dbc:postgresql://db:5432/bddrug
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=70
+    depends_on: {flyway: {condition: service_completed_successfully}}
+    mem_limit: 448m
+    networks: [internal]
+    restart: unless-stopped
+  web:
+    image: ghcr.io/${GHCR_OWNER}/bddrug-web:${IMAGE_TAG}
+    environment: {API_URL: "http://api:8080"}
+    depends_on: [api]
+    mem_limit: 256m
+    networks:
+      internal: {}
+      edge: {aliases: [bddrug-web]}
+    restart: unless-stopped
+  etl:
+    image: ghcr.io/${GHCR_OWNER}/bddrug-etl:${IMAGE_TAG}
+    environment: {PGHOST: db, PGPORT: "5432", PGDATABASE: bddrug, PGUSER: "${DB_USER}", PGPASSWORD: "${DB_PASSWORD}"}
+    volumes: [../batches:/app/batches:ro]
+    profiles: [jobs]
+    mem_limit: 256m
+    networks: [internal, egress]
+volumes: {dbdata: {}}
+networks:
+  internal: {internal: true}
+  # Outbound internet for the ETL only (OCL API); nothing else joins it.
+  egress: {}
+  # The shared proxy network owned by the Caddy stack in ~/n8n.
+  edge: {external: true, name: "${EDGE_NETWORK:-n8n_edge}"}
