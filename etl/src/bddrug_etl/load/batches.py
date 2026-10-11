@@ -9,6 +9,7 @@ from bddrug_etl.stages.results import StageResult, write_stage_results
 
 OWNER, SOURCE = "MoHFW", "DGDA-Drugs"
 NOT_FOUND, NOT_A_DRUG = "not found at source", "not a registered Drug product"
+REMOVED = "removed from batch file"
 
 
 def read_batch_file(path: pathlib.Path) -> list[str]:
@@ -35,29 +36,55 @@ def _dgda_results(concept_ids: list[str], found: list[dict], missing: list[str],
     return out
 
 
+def _upsert_batch(cur: psycopg.Cursor, batch_id: str, concept_ids: list[str], issues: dict[str, str]) -> None:
+    """Upsert the batch and its items without deleting review history (ops.review_decision).
+
+    Every item in the file is (re)extracted now: its review goes back to ``pending`` (or ``issue``
+    with the reason when it could not be loaded). Items no longer in the file are deleted only when
+    nobody has reviewed them; the others stay, marked ``removed from batch file``. The batch's stage
+    results are cleared, as the old delete-and-recreate did; this run's stages write them again.
+    """
+    cur.execute(
+        """INSERT INTO ops.batch (batch_id, item_count) VALUES (%s, %s)
+           ON CONFLICT (batch_id) DO UPDATE
+           SET item_count = EXCLUDED.item_count, run_at = now(), status = 'in_review'""",
+        (batch_id, len(concept_ids)),
+    )
+    cur.executemany(
+        """INSERT INTO ops.batch_item (batch_id, source, concept_id, review, note, extracted_at)
+           VALUES (%s, %s, %s, %s, %s, now())
+           ON CONFLICT (batch_id, concept_id) DO UPDATE
+           SET source = EXCLUDED.source, review = EXCLUDED.review, note = EXCLUDED.note, extracted_at = now()""",
+        [(batch_id, SOURCE, cid, "issue" if cid in issues else "pending", issues.get(cid)) for cid in concept_ids],
+    )
+    cur.execute(
+        """DELETE FROM ops.batch_item bi
+           WHERE bi.batch_id = %s AND NOT (bi.concept_id = ANY(%s))
+             AND NOT EXISTS (SELECT 1 FROM ops.review_decision rd
+                             WHERE rd.batch_id = bi.batch_id AND rd.concept_id = bi.concept_id)""",
+        (batch_id, concept_ids),
+    )
+    cur.execute(
+        "UPDATE ops.batch_item SET note = %s WHERE batch_id = %s AND NOT (concept_id = ANY(%s))",
+        (REMOVED, batch_id, concept_ids),
+    )
+    cur.execute("DELETE FROM ops.stage_result WHERE batch_id = %s", (batch_id,))
+
+
 def run_batch(conn: psycopg.Connection, client, batch_id: str, concept_ids: list[str]) -> LoadStats:
-    """Load the batch and record its items and 'dgda' stage results in one transaction (committed here)."""
+    """Load the batch and record its items and 'dgda' stage results in one transaction (committed here).
+
+    Re-running a batch keeps its review history: see ``_upsert_batch``.
+    """
     found, missing = [], []
     for concept_id in concept_ids:
         concept = client.get_concept(OWNER, SOURCE, concept_id)
         (found.append(concept) if concept else missing.append(concept_id))
     stats = load_products(conn, found, source=SOURCE, commit=False)  # single commit below keeps the run atomic
     not_products = [c["id"] for c in found if concept_to_product(c) is None]
+    issues = {**{cid: NOT_FOUND for cid in missing}, **{cid: NOT_A_DRUG for cid in not_products}}
     with conn.cursor() as cur:
-        cur.execute("DELETE FROM ops.batch WHERE batch_id = %s", (batch_id,))
-        cur.execute("INSERT INTO ops.batch (batch_id, item_count) VALUES (%s, %s)", (batch_id, len(concept_ids)))
-        cur.executemany(
-            "INSERT INTO ops.batch_item (batch_id, source, concept_id) VALUES (%s, %s, %s)",
-            [(batch_id, SOURCE, c["id"]) for c in found if c["id"] not in not_products],
-        )
-        cur.executemany(
-            "INSERT INTO ops.batch_item (batch_id, source, concept_id, review, note) VALUES (%s, %s, %s, 'issue', %s)",
-            [(batch_id, SOURCE, concept_id, NOT_FOUND) for concept_id in missing],
-        )
-        cur.executemany(
-            "INSERT INTO ops.batch_item (batch_id, source, concept_id, review, note) VALUES (%s, %s, %s, 'issue', %s)",
-            [(batch_id, SOURCE, concept_id, NOT_A_DRUG) for concept_id in not_products],
-        )
+        _upsert_batch(cur, batch_id, concept_ids, issues)
     write_stage_results(conn, batch_id, "dgda", _dgda_results(concept_ids, found, missing, not_products))
     conn.commit()
     return stats

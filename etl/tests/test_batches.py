@@ -87,3 +87,76 @@ def test_run_batch_rerun_replaces_dgda_stage_results(conn):
     run_batch(conn, MultiClient({FIX["id"]: FIX}), "0004-rerun", [FIX["id"]])
     assert stage_rows(conn, "0004-rerun") == {FIX["id"]: ("ok", "")}
     assert conn.execute("SELECT count(*) FROM ops.stage_result WHERE batch_id = '0004-rerun'").fetchone()[0] == 1
+
+
+# --- V4: run_batch upserts instead of delete+recreate, so review history survives re-runs ---
+
+DECIDE = ("INSERT INTO ops.review_decision (batch_id, concept_id, decision, reviewer_email, reviewer_role) "
+          "VALUES (%s, %s, 'ok', 'r@example.test', 'pharmacist')")
+
+
+def items(conn, batch_id):
+    return {c: (review, note) for c, review, note in conn.execute(
+        "SELECT concept_id, review, note FROM ops.batch_item WHERE batch_id = %s", (batch_id,)).fetchall()}
+
+
+def test_new_items_get_extracted_at(conn):
+    run_batch(conn, MultiClient({FIX["id"]: FIX}), "0005-extracted", [FIX["id"], "gone-2"])
+    assert conn.execute(
+        "SELECT count(*) FROM ops.batch_item WHERE batch_id = '0005-extracted' AND extracted_at IS NULL"
+    ).fetchone()[0] == 0
+
+
+def test_rerun_updates_batch_row_and_reopens_review(conn):
+    run_batch(conn, MultiClient({FIX["id"]: FIX}), "0006-batchrow", [FIX["id"], "gone-3"])
+    first_run = conn.execute("SELECT run_at FROM ops.batch WHERE batch_id = '0006-batchrow'").fetchone()[0]
+    conn.execute("UPDATE ops.batch SET status = 'approved' WHERE batch_id = '0006-batchrow'")
+    conn.commit()
+    run_batch(conn, MultiClient({FIX["id"]: FIX}), "0006-batchrow", [FIX["id"]])
+    item_count, status, run_at = conn.execute(
+        "SELECT item_count, status, run_at FROM ops.batch WHERE batch_id = '0006-batchrow'").fetchone()
+    assert (item_count, status) == (1, "in_review")
+    assert run_at > first_run
+
+
+def test_rerun_keeps_issue_reason_for_items_still_failing(conn):
+    run_batch(conn, MultiClient({}), "0007-issue", ["gone-4"])
+    conn.execute(DECIDE, ("0007-issue", "gone-4"))
+    conn.commit()
+    before = conn.execute("SELECT extracted_at FROM ops.batch_item WHERE concept_id = 'gone-4'").fetchone()[0]
+    run_batch(conn, MultiClient({}), "0007-issue", ["gone-4"])
+    assert items(conn, "0007-issue") == {"gone-4": ("issue", "not found at source")}
+    assert conn.execute("SELECT extracted_at FROM ops.batch_item WHERE concept_id = 'gone-4'").fetchone()[0] > before
+
+
+def test_item_found_on_rerun_turns_pending(conn):
+    run_batch(conn, MultiClient({}), "0008-recovered", [FIX["id"]])
+    assert items(conn, "0008-recovered") == {FIX["id"]: ("issue", "not found at source")}
+    run_batch(conn, MultiClient({FIX["id"]: FIX}), "0008-recovered", [FIX["id"]])
+    assert items(conn, "0008-recovered") == {FIX["id"]: ("pending", None)}
+
+
+def test_removed_item_without_decisions_is_deleted_with_its_stage_results(conn):
+    run_batch(conn, MultiClient({FIX["id"]: FIX}), "0009-removed", [FIX["id"], "gone-5"])
+    run_batch(conn, MultiClient({FIX["id"]: FIX}), "0009-removed", [FIX["id"]])
+    assert items(conn, "0009-removed") == {FIX["id"]: ("pending", None)}
+    assert stage_rows(conn, "0009-removed") == {FIX["id"]: ("ok", "")}
+
+
+def test_removed_item_with_decisions_is_kept_and_marked(conn):
+    run_batch(conn, MultiClient({FIX["id"]: FIX}), "0010-kept", [FIX["id"], "gone-6"])
+    conn.execute(DECIDE, ("0010-kept", "gone-6"))
+    conn.commit()
+    run_batch(conn, MultiClient({FIX["id"]: FIX}), "0010-kept", [FIX["id"]])
+    assert items(conn, "0010-kept") == {FIX["id"]: ("pending", None), "gone-6": ("issue", "removed from batch file")}
+    assert conn.execute("SELECT count(*) FROM ops.review_decision WHERE batch_id = '0010-kept'").fetchone()[0] == 1
+    assert stage_rows(conn, "0010-kept") == {FIX["id"]: ("ok", "")}  # dgda results describe the current file only
+
+
+def test_rerun_clears_the_batch_stage_results_as_before(conn):
+    run_batch(conn, MultiClient({FIX["id"]: FIX}), "0011-stale", [FIX["id"]])
+    conn.execute("INSERT INTO ops.stage_result (batch_id, concept_id, stage, status, note) "
+                 "VALUES ('0011-stale', %s, 'substances', 'ok', '')", (FIX["id"],))
+    conn.commit()
+    run_batch(conn, MultiClient({FIX["id"]: FIX}), "0011-stale", [FIX["id"]])
+    assert conn.execute("SELECT stage FROM ops.stage_result WHERE batch_id = '0011-stale'").fetchall() == [("dgda",)]
