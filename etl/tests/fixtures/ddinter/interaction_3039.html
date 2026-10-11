@@ -1,0 +1,385 @@
+
+<!DOCTYPE html>
+<html lang="">
+<head>
+    <link rel="shortcut icon" href="/static/favicon.ico"/>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+    <title>DDInter 2.0</title>
+    <link rel="stylesheet" href="/static/common/layui/css/layui.css">
+    <script></script>
+    
+    <link rel="stylesheet" href="/static/common/bootstrap-5.3.2-dist/css/bootstrap.min.css">
+
+    <link href="/static/common/boxicons/css/boxicons.min.css" rel="stylesheet">
+
+    <link rel="stylesheet" type="text/css" href="/static/home/css/style.css"/>
+    <script></script>
+    
+    <script></script>
+    
+    
+        <link rel="stylesheet" type="text/css" href="/static/common/nav/css/style.css"/>
+        <script></script>
+    
+
+    
+    <link rel="stylesheet" href="/static/common/footer/css/style.css"/>
+
+    
+    <link rel="stylesheet" href="/static/common/banner/css/style.css"/>
+
+    <link rel="stylesheet" href="/static/services/css/jquery.dataTables.min.css">
+    <script></script>
+
+    
+    <link href="/static/common/fontawesome/css/all.min.css" rel="stylesheet" type="text/css"/>
+</head>
+<body>
+<div class="antin-container">
+    
+        
+<style></style>
+<header class="header-area overlay box-with-border box-with-shadow" style="">
+    <nav class="navbar navbar-expand-md navbar-dark" data-bs-theme="dark">
+        <div class="offset-1 col-10 d-flex align-items-center justify-content-between">
+            <a href="/" class="navbar-brand d-flex justify-content-center align-items-center">
+                <img src="/static/favicon.ico" width="45" height="45"
+                     class="d-inline-block justify-content-center align-items-center me-2" alt=""/>
+                <h1 class="" style="font-family: 'Lobster', sans-serif">DDInter 2.0</h1>
+            </a>
+
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#main-nav"
+                    aria-controls="main-nav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <div id="main-nav" class="collapse navbar-collapse">
+                <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/"><i class="fas fa-home"></i> Home</a>
+                    </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button"
+                           data-bs-toggle="dropdown"
+                           aria-expanded="false">
+                            <i class="fas fa-atom"></i> Services
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="/server/drug/">Drug</a></li>
+                            <li><a class="dropdown-item" href="/server/dis_food/">Disease</a></li>
+                            <li><a class="dropdown-item" href="/server/interaction/">Drug-Drug
+                                Interaction</a></li>
+                            <li><a class="dropdown-item" href="/server/other_interaction/">Drug-Others
+                                Interaction</a></li>
+                        </ul>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/inter-checker/">
+                            <i class="fab fa-staylinked nav-icon"></i>
+                            Interaction Checker
+                        </a>
+                    </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button"
+                           data-bs-toggle="dropdown"
+                           aria-expanded="false"
+                        >
+                            <i class="far fa-file-alt"></i> About
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li>
+                                <a class="dropdown-item" href="/explanation/">Explanation</a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="/statistics/">Statistics</a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="/tutorials/">Tutorials</a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="/terms/">Terms and conditions</a>
+                            </li>
+                        </ul>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/contact/"><i class="fas fa-id-card"></i> Contact</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+</header>
+    
+
+    
+
+
+    <div class="antin-contain">
+        
+    
+
+
+<link rel="stylesheet" href="/static/home/css/header.css">
+<link rel="stylesheet" href="/static/services/interaction/detail/style.css">
+<link rel="stylesheet" href="/static/services/interaction/style.css">
+<script></script>
+<script></script>
+<style></style>
+<script></script>
+<main class="">
+    <div class="offset-1 col-10 mt-5 mb-5">
+        <div class="p-3" role="alert" style="word-break:break-all;border: 2px solid rgb(38,97,158)">
+            <div class="py-1 d-flex align-items-center justify-content-between">
+                <div class="" style="font-size: 1.1rem">
+                    <span class="d-flex align-items-center">Interaction between <strong class="mx-2">
+                        Warfarin</strong>
+                        and
+                        <strong class="mx-2">Acalabrutinib</strong></span>
+                    
+                        <span class="badge rounded-pill" style="background-color:#a8456b">Major</span>
+                    
+
+                    
+                        
+                            <span class="badge rounded-pill" style="background-color:#cf7543">Synergy</span>
+                        
+                    
+                </div>
+            </div>
+        </div>
+
+        <div class="sub-title mt-3"><i class="fas fa-arrow-right"></i> Basic Information</div>
+
+        <table class="table table-hover table-bordered align-middle">
+            <colgroup>
+                <col width="20%">
+                <col width="">
+            </colgroup>
+            <tbody>
+            <tr></tr>
+            <tr>
+                <td class="key">ID</td>
+                <td style="font-weight: 700" class="value"><a
+                        href="/server/drug-detail/DDInter1951/">
+                    DDInter1951</a>
+                    and
+                    <a href="/server/drug-detail/DDInter9/">
+                        DDInter9</a>
+                </td>
+            </tr>
+            <tr>
+                <td class="key">Interaction</td>
+                <td style="text-align: justify" class="value">
+                    Coadministration of acalabrutinib and drugs that interfere with platelet function or coagulation may potentiate the risk of bleeding complications.
+                </td>
+            </tr>
+            <tr>
+                <td class="key">Management</td>
+                <td style="text-align: justify" class="value">
+                    
+                        Concomitant use of acalabrutinib in patients receiving other medications that interfere with platelet function or coagulation should be approached with caution. Close clinical and laboratory monitoring for bleeding complications is recommended during therapy. Patients should be advised to promptly report any signs and symptoms of bleeding to their physician.
+                    
+                </td>
+            </tr>
+            <tr>
+                <td class="key">References</td>
+                <td id="reference-text" style="text-align: justify;font-style: italic" class="value">
+                    
+                        
+                            <span class="d-block my-2">[1] &quot;Product Information. Calquence (acalabrutinib).&quot; Astra-Zeneca Pharmaceuticals, Wilmington, DE.</span>
+                        
+                            <span class="d-block my-2">[2] &quot;Product Information. Calquence (acalabrutinib).&quot; Astra-Zeneca Pharmaceuticals, Wilmington, DE.</span>
+                        
+                            <span class="d-block my-2">[3] &quot;Product Information. Brukinsa (zanubrutinib).&quot; BeiGene USA, Inc, San Mateo, CA.</span>
+                        
+                    
+                </td>
+            </tr>
+            <tr>
+                <td class="key">Alternative for <span style="color: #a94442"
+                >Warfarin</span>
+                    <i class="fas fa-info-circle"
+                       data-tippy-content="The alternatives are based on the third level (pharmacological subgroup) of ATC codes."></i>
+                </td>
+                <td class="value">
+                    
+                        
+                            
+                                
+                                <i class="fas fa-yin-yang" style="color: #2F4056"></i>
+                                <span class="badge text-bg-dark" style="background-color: #2F4056">B01A</span>
+                                <div class="row">
+                                    
+                                        
+                                            </div>
+                                            <div class="row">
+                                        
+                                        <a href="/server/drug-detail/DDInter1542/" class="col-md-2">
+                                            Protein C
+                                        </a>
+                                    
+                                        
+                                        <a href="/server/drug-detail/DDInter13/" class="col-md-2">
+                                            Acenocoumarol
+                                        </a>
+                                    
+                                        
+                                        <a href="/server/drug-detail/DDInter1656/" class="col-md-2">
+                                            Selexipag
+                                        </a>
+                                    
+                                    </div>
+                            
+                        
+                    
+                </td>
+            </tr>
+            <tr>
+                <td class="key">Alternative for <span
+                        style="color: #a94442">Acalabrutinib</span>
+                    <i class="fas fa-info-circle"
+                       data-tippy-content="The alternatives are based on the third level (pharmacological subgroup) of ATC codes."></i>
+                </td>
+                <td class="value">
+                    
+                        
+                            
+                                
+                                <i class="fas fa-yin-yang" style="color: #2F4056"></i>
+                                <span class="badge text-bg-dark" style="background-color: #2F4056">L01E</span>
+                                <div class="row">
+                                    
+                                        
+                                            </div>
+                                            <div class="row">
+                                        
+                                        <a href="/server/drug-detail/DDInter648/" class="col-md-2">
+                                            Entrectinib
+                                        </a>
+                                    
+                                        
+                                        <a href="/server/drug-detail/DDInter465/" class="col-md-2">
+                                            Dacomitinib
+                                        </a>
+                                    
+                                        
+                                        <a href="/server/drug-detail/DDInter1435/" class="col-md-2">
+                                            Pexidartinib
+                                        </a>
+                                    
+                                        
+                                        <a href="/server/drug-detail/DDInter2037/" class="col-md-2">
+                                            Pacritinib
+                                        </a>
+                                    
+                                        
+                                        <a href="/server/drug-detail/DDInter2050/" class="col-md-2">
+                                            Tepotinib
+                                        </a>
+                                    
+                                        
+                                        <a href="/server/drug-detail/DDInter714/" class="col-md-2">
+                                            Fedratinib
+                                        </a>
+                                    
+                                        
+                                            </div>
+                                            <div class="row">
+                                        
+                                        <a href="/server/drug-detail/DDInter224/" class="col-md-2">
+                                            Bosutinib
+                                        </a>
+                                    
+                                        
+                                        <a href="/server/drug-detail/DDInter1024/" class="col-md-2">
+                                            Lapatinib
+                                        </a>
+                                    
+                                        
+                                        <a href="/server/drug-detail/DDInter1588/" class="col-md-2">
+                                            Ribociclib
+                                        </a>
+                                    
+                                        
+                                        <a href="/server/drug-detail/DDInter425/" class="col-md-2">
+                                            Cobimetinib
+                                        </a>
+                                    
+                                        
+                                        <a href="/server/drug-detail/DDInter32/" class="col-md-2">
+                                            Afatinib
+                                        </a>
+                                    
+                                    </div>
+                            
+                            <a href="javascript:void(0);" onclick="changeCandidatebContext($(this))" isDetail="true"
+                               class="col-md-2 more-hide" style="color: #a94442">
+                                More
+                            </a>
+                        
+                    
+                </td>
+            </tr>
+            </tbody>
+        </table>
+
+        
+
+        <div class="sub-title mt-3"><i class="fas fa-arrow-right"></i> Potential Metabolism Interactions</div>
+        <div class="row mt-5">
+            <div class="contain" style="position: relative; width: 100%; height: 400px;">
+                <div id="lineMarker" style="width: 100%; height: 100%;"></div>
+            </div>
+        </div>
+
+        <blockquote class="blockquote-info" style="text-align: justify;">
+            <strong><i class="fas fa-star"></i> Substrate-Substrate Interaction</strong>：If more than one drug is
+            metabolized by the same CYP, it is
+            possible that its metabolism is inhibited because of the competition between the drugs. That means, it
+            can
+            be useful to lower the dosage of the drugs in the drug-cocktail because they remain longer in the
+            organism
+            than in monotherapy. <br>
+            <strong><i class="fas fa-star"></i> Inhibitor-Inhibitor Interaction</strong>：Combining two or more
+            inhibitors of one CYP, should be
+            compensated by lowering the dosage of these drugs because the metabolism is reduced and the drugs remain
+            longer in the organism than in monotherapy. Not adapting the dosage bears the risk of even more side
+            effects. <br>
+            <strong><i class="fas fa-star"></i> Inhibitor-Substrate Interaction</strong>：Combining drugs that have
+            inhibitory effect and are
+            substrates of one particular CYP, should be compensated by lowering the dosage. They rest longer in the
+            organism than in monotherapy. Not adapting the dosage bears the risk of even more side effects.
+        </blockquote>
+        
+    </div>
+</main>
+<script></script>
+<script></script>
+<script></script>
+<script></script>
+
+    </div>
+    
+        
+
+<footer class="site-footer" id="footer">
+  <div class="container d-flex justify-content-center align-items-center">
+    <div class="copyright">
+      &copy; Copyright &nbsp; <a href="http://www.scbdd.com/" target="_blank">Computational Biology & Drug DesignGroup</a>. All Rights Reserved<div class="heart d-inline-block mx-2"></div>
+      
+    </div>
+    <div style="width: 200px;">
+      <script></script>
+    </div>
+  </div>
+</footer>
+
+<style></style>
+
+    
+</div>
+</body>
+
+
+
+</html>

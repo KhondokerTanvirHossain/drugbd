@@ -1,0 +1,47 @@
+{
+ "draw": 1,
+ "recordsTotal": 2290,
+ "recordsFiltered": 2290,
+ "data": [
+  {
+   "name": "Amprenavir",
+   "display": "Amprenavir",
+   "internalID": "DDInter90",
+   "smiles": "DDInter90",
+   "drugbank_id": "DB00701",
+   "exist": false
+  },
+  {
+   "name": "Abacavir",
+   "display": "Abacavir",
+   "internalID": "DDInter1",
+   "smiles": "DDInter1",
+   "drugbank_id": "DB01048",
+   "exist": false
+  },
+  {
+   "name": "Asparaginase Escherichia coli",
+   "display": "Asparaginase...",
+   "internalID": "DDInter127",
+   "smiles": "unknown",
+   "drugbank_id": "DB00023",
+   "exist": true
+  },
+  {
+   "name": "Chlorpromazine",
+   "display": "Chlorpromazine",
+   "internalID": "DDInter363",
+   "smiles": "DDInter363",
+   "drugbank_id": "DB00477",
+   "exist": false
+  },
+  {
+   "name": "Chlorzoxazone",
+   "display": "Chlorzoxazone",
+   "internalID": "DDInter366",
+   "smiles": "DDInter366",
+   "drugbank_id": "DB00356",
+   "exist": false
+  }
+ ]
+}

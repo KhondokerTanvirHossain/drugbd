@@ -1,0 +1,496 @@
+
+<!DOCTYPE html>
+<html lang="">
+<head>
+    <link rel="shortcut icon" href="/static/favicon.ico"/>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+    <title>DDInter 2.0</title>
+    <link rel="stylesheet" href="/static/common/layui/css/layui.css">
+    <script></script>
+    
+    <link rel="stylesheet" href="/static/common/bootstrap-5.3.2-dist/css/bootstrap.min.css">
+
+    <link href="/static/common/boxicons/css/boxicons.min.css" rel="stylesheet">
+
+    <link rel="stylesheet" type="text/css" href="/static/home/css/style.css"/>
+    <script></script>
+    
+    <script></script>
+    
+    
+        <link rel="stylesheet" type="text/css" href="/static/common/nav/css/style.css"/>
+        <script></script>
+    
+
+    
+    <link rel="stylesheet" href="/static/common/footer/css/style.css"/>
+
+    
+    <link rel="stylesheet" href="/static/common/banner/css/style.css"/>
+
+    <link rel="stylesheet" href="/static/services/css/jquery.dataTables.min.css">
+    <script></script>
+
+    
+    <link href="/static/common/fontawesome/css/all.min.css" rel="stylesheet" type="text/css"/>
+</head>
+<body>
+<div class="antin-container">
+    
+        
+<style></style>
+<header class="header-area overlay box-with-border box-with-shadow" style="">
+    <nav class="navbar navbar-expand-md navbar-dark" data-bs-theme="dark">
+        <div class="offset-1 col-10 d-flex align-items-center justify-content-between">
+            <a href="/" class="navbar-brand d-flex justify-content-center align-items-center">
+                <img src="/static/favicon.ico" width="45" height="45"
+                     class="d-inline-block justify-content-center align-items-center me-2" alt=""/>
+                <h1 class="" style="font-family: 'Lobster', sans-serif">DDInter 2.0</h1>
+            </a>
+
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#main-nav"
+                    aria-controls="main-nav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <div id="main-nav" class="collapse navbar-collapse">
+                <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/"><i class="fas fa-home"></i> Home</a>
+                    </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button"
+                           data-bs-toggle="dropdown"
+                           aria-expanded="false">
+                            <i class="fas fa-atom"></i> Services
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="/server/drug/">Drug</a></li>
+                            <li><a class="dropdown-item" href="/server/dis_food/">Disease</a></li>
+                            <li><a class="dropdown-item" href="/server/interaction/">Drug-Drug
+                                Interaction</a></li>
+                            <li><a class="dropdown-item" href="/server/other_interaction/">Drug-Others
+                                Interaction</a></li>
+                        </ul>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/inter-checker/">
+                            <i class="fab fa-staylinked nav-icon"></i>
+                            Interaction Checker
+                        </a>
+                    </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button"
+                           data-bs-toggle="dropdown"
+                           aria-expanded="false"
+                        >
+                            <i class="far fa-file-alt"></i> About
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li>
+                                <a class="dropdown-item" href="/explanation/">Explanation</a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="/statistics/">Statistics</a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="/tutorials/">Tutorials</a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="/terms/">Terms and conditions</a>
+                            </li>
+                        </ul>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/contact/"><i class="fas fa-id-card"></i> Contact</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+</header>
+    
+
+    
+
+
+    <div class="antin-contain">
+        
+    
+
+
+<link rel="stylesheet" href="/static/home/css/header.css">
+
+<link rel="stylesheet" href="/static/services/drug/css/style.css">
+<link rel="stylesheet" href="/static/services/database/css/grapher.css">
+<link href="/static/common/select2/css/select2.min.css" rel="stylesheet"/>
+<script></script>
+<style></style>
+<script></script>
+<script></script>
+<main class="">
+    <div class="offset-1 col-10 mt-5 mb-5">
+        <div class="p-3" role="alert" style="word-break:break-all;border: 2px solid rgb(38,97,158)">
+            <div class="py-1 d-flex align-items-center justify-content-between">
+                <div class="" style="font-size: 1.1rem">
+                    <span class="d-flex align-items-center"><strong class="me-2">Drugs Information:</strong>
+                        Warfarin</span>
+                </div>
+            </div>
+        </div>
+        <div class="sub-title mt-3"><i class="fas fa-arrow-right"></i> Basic Information</div>
+        <table class="table table-bordered table-hover mt-0 align-middle">
+            <colgroup>
+                <col width="20%">
+                <col width="20%">
+                <col width="">
+            </colgroup>
+            <tbody>
+            <tr>
+                <td rowspan="8" class="text-center">
+                    
+                        <?xml version='1.0' encoding='iso-8859-1'?>
+<svg></svg>
+                    
+                    
+                        <div class="row gx-5 mb-3 px-5">
+                            <div class="col-md-6 text-center">
+                                <button type="button" class="btn btn-outline-secondary btn-sm" style="width: 100%"
+                                        data-bs-toggle="modal" data-bs-target="#structure2">2D
+                                </button>
+                                <div class="modal fade" id="structure2" tabindex="-1"
+                                     aria-labelledby="structure2-label"
+                                     aria-hidden="true">
+                                    <div class="modal-dialog modal-dialog-centered">
+                                        <div class="modal-content">
+                                            <?xml version='1.0' encoding='iso-8859-1'?>
+<svg></svg>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6 text-center">
+                                <button type="button"
+                                        class="btn btn-outline-secondary btn-sm" style="width: 100%"
+                                        data-bs-toggle="modal" data-bs-target="#structure3">3D
+                                </button>
+                                <div class="modal fade" id="structure3" tabindex="-1"
+                                     aria-labelledby="structure3-label"
+                                     aria-hidden="true">
+                                    <div class="modal-dialog modal-dialog-centered modal-lg">
+                                        <div class="modal-content">
+                                            <div id="3d_structure_container" class="mol-container"
+                                                 data-num="DDInter1951"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    
+                </td>
+            </tr>
+            <tr>
+                <td class="key">ID</td>
+                <td class="value">DDInter1951</td>
+            </tr>
+            <tr>
+                <td class="key">Drug Type</td>
+                <td class="value">small molecule</td>
+            </tr>
+            <tr>
+                <td class="key">
+                    
+                        Molecular Formula
+                    
+                </td>
+                <td class="value">C19H16O4</td>
+            </tr>
+            <tr>
+                <td class="key">
+                    
+                        Molecular Weight
+                    
+                </td>
+                <td class="value">
+                    
+                        308.328
+                    
+                </td>
+            </tr>
+            <tr>
+                <td class="key">CAS Number</td>
+                <td class="value">
+                    
+                        81-81-2
+                    
+                </td>
+            </tr>
+            <tr>
+                <td class="key">Description</td>
+                <td class="value" style="text-align: justify"
+                    id="description">
+                    
+                        Warfarin is an anticoagulant drug normally used to prevent blood clot formation as well as migration. Although originally marketed as a pesticide (d-Con, Rodex, among others), Warfarin has since become the most frequently prescribed oral anticoagulant in North America. Warfarin has several properties that should be noted when used medicinally, including its ability to cross the placental barrier during pregnancy which can result in fetal bleeding, spontaneous abortion, preterm birth, stillbirth, and neonatal death. Additional adverse effects such as necrosis, purple toe syndrome, osteoporosis, valve and artery calcification, and drug interactions have also been documented with warfarin use. Warfarin does not actually affect blood viscosity, rather, it inhibits vitamin-k dependent synthesis of biologically active forms of various clotting factors in addition to several regulatory factors.
+                    
+                </td>
+            </tr>
+            <tr>
+                <td class="key">ATC Classification</td>
+                
+                    <td class="value">
+                        
+                            <span class="badge rounded-pill bg-danger"
+                                  data-tippy-content="B01AA03: Warfarin&lt;br&gt;B01AA: Vitamin k antagonists&lt;br&gt;B01A: Antithrombotic agents&lt;br&gt;B01: Antithrombotic agents&lt;br&gt;B: Blood and blood forming organs&lt;br&gt;"
+                            >B01AA03</span>
+                        
+                    </td>
+                
+            </tr>
+            
+                <tr>
+                    <td class="key">IUPAC Name</td>
+                    <td class="value" colspan="2">4-hydroxy-3-(3-oxo-1-phenylbutyl)-2H-chromen-2-one</td>
+                </tr>
+                <tr>
+                    <td class="key">InChI</td>
+                    <td id="inchi" class="value" colspan="2">PJVWKTKQMONHTI-UHFFFAOYSA-N</td>
+                </tr>
+                <tr>
+                    <td class="key">Canonical SMILES</td>
+                    <td class="value" colspan="2">CC(=O)CC(C1=CC=CC=C1)C1=C(O)C2=C(OC1=O)C=CC=C2</td>
+                </tr>
+            
+            <tr>
+                <td class="key">Useful Links</td>
+                <td class="value" colspan="2">
+                    <a href="https://go.drugbank.com/drugs/DB00682" target="_blank">
+                        <span class="badge rounded-pill bg-success" style="font-size: .8rem;">DrugBank</span>
+                    </a>
+                    
+                        <a href="http://www.ebi.ac.uk/chebi/searchId.do?chebiId=87732" target="_blank">
+                            <span class="badge rounded-pill bg-success" style="font-size: .8rem;">ChEBI</span>
+                        </a>
+                    
+                        <a href="http://pubchem.ncbi.nlm.nih.gov/summary/summary.cgi?sid=46504711" target="_blank">
+                            <span class="badge rounded-pill bg-success" style="font-size: .8rem;">PubChem Substance</span>
+                        </a>
+                    
+                        <a href="http://www.genome.jp/dbget-bin/www_bget?cpd:C01541" target="_blank">
+                            <span class="badge rounded-pill bg-success" style="font-size: .8rem;">KEGG Compound</span>
+                        </a>
+                    
+                        <a href="http://www.chemspider.com/Chemical-Structure.10442445.html" target="_blank">
+                            <span class="badge rounded-pill bg-success" style="font-size: .8rem;">ChemSpider</span>
+                        </a>
+                    
+                        <a href="http://www.bindingdb.org/bind/chemsearch/marvin/MolStructure.jsp?monomerid=50343352" target="_blank">
+                            <span class="badge rounded-pill bg-success" style="font-size: .8rem;">BindingDB</span>
+                        </a>
+                    
+                        <a href="http://www.pharmgkb.org/drug/PA451906" target="_blank">
+                            <span class="badge rounded-pill bg-success" style="font-size: .8rem;">PharmGKB</span>
+                        </a>
+                    
+                        <a href="http://bidd.nus.edu.sg/group/cjttd/ZFTTDDRUG.asp?ID=DAP000770" target="_blank">
+                            <span class="badge rounded-pill bg-success" style="font-size: .8rem;">Therapeutic Targets Database</span>
+                        </a>
+                    
+                        <a href="https://en.wikipedia.org/wiki/Warfarin" target="_blank">
+                            <span class="badge rounded-pill bg-success" style="font-size: .8rem;">Wikipedia</span>
+                        </a>
+                    
+                        <a href="https://www.ebi.ac.uk/chembl/compound_report_card/CHEMBL1464/" target="_blank">
+                            <span class="badge rounded-pill bg-success" style="font-size: .8rem;">ChEMBL</span>
+                        </a>
+                    
+                </td>
+            </tr>
+            </tbody>
+        </table>
+
+        
+            <div class="sub-title mt-5"
+                 data-tippy-content="The interaction network is based on the current knowledge and some DDI associations that do exist may have not been identified.">
+                <i class="fas fa-arrow-right"></i> Interactions with
+                Warfarin</div>
+
+
+            <div class="contain mb-3 mt-3" style="position: relative; width: 100%; height: 800px;">
+                <div id="main" style="width: 100%; height: 800px;"></div>
+                <div class="switch-button">
+                    <input class="switch-button-checkbox" type="checkbox" value="actions" id="select-type">
+                    <label class="switch-button-label" for="select-type"><span
+                            class="switch-button-label-span">Actions</span></label>
+                </div>
+            </div>
+
+            <div class="mt-4">
+                <div class="mb-4">
+                    <span class="" style="font-weight: 600; font-size: 1.2rem">Filter: </span>
+                    <select id="Severity" style="width: 200px;">
+                        <option value="">Select Severity</option>
+                        <option value="1">Major</option>
+                        <option value="2">Moderate</option>
+                        <option value="3">Minor</option>
+                    </select>
+                    <select id="Mechanism" style="width: 200px;">
+                        <option value="">Select Mechanism</option>
+                        <option value="5">Antagonism</option>
+                        <option value="6">Synergy</option>
+                        <option value="7">Absorption</option>
+                        <option value="8">Distribution</option>
+                        <option value="9">Metabolism</option>
+                        <option value="10">Excretion</option>
+                        <option value="11">Others</option>
+                    </select>
+                </div>
+
+                <table id="interaction-table" class="table table-hover mt-0 align-middle">
+                    <thead>
+                    <tr>
+                        <th class="text-center">Severity level</th>
+                        <th class="text-left">ID</th>
+                        <th class="text-left">Name</th>
+                        <th class="text-center">Mechanism</th>
+                        <th class="text-center">Detail</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    </tbody>
+                </table>
+            </div>
+        
+
+        <div class="sub-title mt-5"
+             data-tippy-content="The interaction network is based on the current knowledge and some DDI associations that do exist may have not been identified.">
+            <i class="fas fa-arrow-right"></i> Interactions with diseases
+        </div>
+
+        <div class="mt-4">
+            <div class="mb-4">
+                <span class="" style="font-weight: 600; font-size: 1.2rem">Filter: </span>
+                <select id="disSeverity" style="width: 200px;">
+                    <option value="">Select Severity</option>
+                    <option value="1">Major</option>
+                    <option value="2">Moderate</option>
+                    <option value="3">Minor</option>
+                </select>
+            </div>
+
+            <table id="ddsi-table" class="table table-hover mt-0 align-middle">
+                <thead>
+                <tr>
+                    <th class="text-center">Severity level</th>
+                    <th class="text-left">Disease name</th>
+                    <th class="text-left">Text</th>
+                    <th class="text-left">References</th>
+                </tr>
+                </thead>
+                <tbody>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="sub-title mt-5"
+             data-tippy-content="The interaction network is based on the current knowledge and some DDI associations that do exist may have not been identified.">
+            <i class="fas fa-arrow-right"></i> Interactions with foods
+        </div>
+
+        <div class="mt-4">
+            <div class="mb-4">
+                <span class="" style="font-weight: 600; font-size: 1.2rem">Filter: </span>
+                <select id="foodSeverity" style="width: 200px;">
+                    <option value="">Select Severity</option>
+                    <option value="1">Major</option>
+                    <option value="2">Moderate</option>
+                    <option value="3">Minor</option>
+                </select>
+                <select id="foodMechanism" style="width: 200px;">
+                    <option value="">Select Mechanism</option>
+                    <option value="5">Antagonism</option>
+                    <option value="6">Synergy</option>
+                    <option value="7">Absorption</option>
+                    <option value="8">Distribution</option>
+                    <option value="9">Metabolism</option>
+                    <option value="10">Excretion</option>
+                    <option value="11">Others</option>
+                </select>
+            </div>
+
+            <table id="dfi-table" class="table table-hover mt-0 align-middle">
+                <thead>
+                <tr>
+                    <th class="text-center">Severity level</th>
+                    <th class="">Food name</th>
+                    <th class="text-left">Description</th>
+                    <th class="text-left">Management</th>
+                    <th class="text-left">Mechanism</th>
+                    <th class="text-center">References</th>
+                </tr>
+                </thead>
+                <tbody>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="sub-title mt-5"
+             data-tippy-content="The interaction network is based on the current knowledge and some DDI associations that do exist may have not been identified.">
+            <i class="fas fa-arrow-right"></i> Interactions with compound preparation
+        </div>
+
+        <div class="mt-4">
+            <table id="multi-table" class="table table-hover mt-0 align-middle">
+                <thead>
+                <tr>
+                    <th class="text-left">Multi-DRUG trade</th>
+                    <th class="text-left">Multi-DRUG</th>
+                    <th class="text-left">Drug type</th>
+                    <th class="text-left">Warning</th>
+                    <th class="text-left">Note</th>
+                </tr>
+                </thead>
+                <tbody>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</main>
+<script></script>
+<script></script>
+<script></script>
+
+<script></script>
+
+
+
+
+<script></script>
+
+<script></script>
+
+
+    </div>
+    
+        
+
+<footer class="site-footer" id="footer">
+  <div class="container d-flex justify-content-center align-items-center">
+    <div class="copyright">
+      &copy; Copyright &nbsp; <a href="http://www.scbdd.com/" target="_blank">Computational Biology & Drug DesignGroup</a>. All Rights Reserved<div class="heart d-inline-block mx-2"></div>
+      
+    </div>
+    <div style="width: 200px;">
+      <script></script>
+    </div>
+  </div>
+</footer>
+
+<style></style>
+
+    
+</div>
+</body>
+
+
+
+</html>
