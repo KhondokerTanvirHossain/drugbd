@@ -1,0 +1,19 @@
+name: bddrug
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: bddrug
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes: [dbdata:/var/lib/postgresql/data]
+    healthcheck: {test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d bddrug"], interval: 5s, retries: 20}
+    networks: [internal]
+  flyway:
+    image: flyway/flyway:10
+    command: -url=jdbc:postgresql://db:5432/bddrug -user=${DB_USER} -password=${DB_PASSWORD} migrate
+    volumes: [../db/migrations:/flyway/sql:ro]
+    depends_on: {db: {condition: service_healthy}}
+    networks: [internal]
+volumes: {dbdata: {}}
+networks: {internal: {}}
