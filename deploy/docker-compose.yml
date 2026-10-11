@@ -11,7 +11,10 @@ services:
     networks: [internal]
   flyway:
     image: flyway/flyway:10
-    command: -url=jdbc:postgresql://db:5432/bddrug -user=${DB_USER} -password=${DB_PASSWORD} migrate
+    command: -url=jdbc:postgresql://db:5432/bddrug migrate
+    environment:
+      FLYWAY_USER: ${DB_USER}
+      FLYWAY_PASSWORD: ${DB_PASSWORD}
     volumes: [../db/migrations:/flyway/sql:ro]
     depends_on: {db: {condition: service_healthy}}
     networks: [internal]
@@ -44,12 +47,12 @@ services:
       - traefik.http.services.web.loadbalancer.server.port=3000
   etl:
     image: ghcr.io/${GHCR_OWNER}/bddrug-etl:${IMAGE_TAG}
-    environment: {DATABASE_URL: "postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/bddrug"}
+    environment: {PGHOST: db, PGPORT: "5432", PGDATABASE: bddrug, PGUSER: "${DB_USER}", PGPASSWORD: "${DB_PASSWORD}"}
     volumes: [../batches:/app/batches:ro]
     profiles: [jobs]
     networks: [internal, edge]
   traefik:
-    image: traefik:v3.2
+    image: traefik:v3.6.25
     command:
       - --providers.docker=true
       - --providers.docker.exposedbydefault=false

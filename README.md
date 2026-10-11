@@ -6,7 +6,7 @@ BDDrug KB is a Bangladesh drug knowledge base. A Python ETL pipeline loads drug 
 
 ```bash
 cd deploy
-cp .env.example .env                 # set DB_USER / DB_PASSWORD
+cp .env.example .env                 # set DB_USER / DB_PASSWORD (alphanumeric only: no $, quotes or spaces)
 docker compose up -d db
 docker compose run --rm flyway       # applies db/migrations
 docker compose exec db psql -U bddrug -d bddrug -c '\dt curated.*'
@@ -31,11 +31,11 @@ One-time VM setup (Docker and the compose plugin installed, ports 80/443 open):
 ```bash
 sudo mkdir -p /opt/bddrug && sudo chown $USER /opt/bddrug
 git clone git@github.com:<org>/bddrug.git /opt/bddrug
-cp /opt/bddrug/deploy/.env.example /opt/bddrug/deploy/.env   # then set real DB_PASSWORD, PREVIEW_DOMAIN, ACME_EMAIL, GHCR_OWNER
+cp /opt/bddrug/deploy/.env.example /opt/bddrug/deploy/.env   # then set real DB_PASSWORD (alphanumeric only: no $, quotes or spaces, because compose interpolates .env), PREVIEW_DOMAIN, ACME_EMAIL, GHCR_OWNER
 echo <ghcr-read-token> | docker login ghcr.io -u <user> --password-stdin
 ```
 
-Run order: push `main`, wait for `ci` to go green, then `deploy` runs by itself. After that, run `load-dgda` manually (Actions tab) with `batch=0001-pilot.txt`.
+Run order: push `main`, wait for `ci` to go green, then `deploy` runs by itself. A new batch file is merged to `main`, `deploy` runs and puts it on the VM, and only then do you run `load-dgda` manually (Actions tab), e.g. with `batch=0001-pilot.txt`. `load-dgda` never moves the VM's checkout; it fails if the batch file is not in the deployed commit.
 
 Notes:
 - `deploy/.env` must contain an `IMAGE_TAG=` line (deploy fails fast if it is missing).

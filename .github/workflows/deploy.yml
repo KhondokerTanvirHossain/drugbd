@@ -22,7 +22,7 @@ jobs:
             docker build -t "ghcr.io/${owner}/bddrug-$s:${TAG}" "$s"
             docker push "ghcr.io/${owner}/bddrug-$s:${TAG}"
           done
-      - uses: appleboy/ssh-action@v1.2.0
+      - uses: appleboy/ssh-action@7eaf76671a0d7eec5d98ee897acda4f968735a17 # v1.2.0
         env:
           TAG: ${{ github.event.workflow_run.head_sha }}
         with:
@@ -39,4 +39,4 @@ jobs:
             docker compose pull && docker compose up -d --remove-orphans
       - env:
           PREVIEW_DOMAIN: ${{ secrets.PREVIEW_DOMAIN }}
-        run: curl -fsS --retry 10 --retry-delay 6 --retry-connrefused "https://$PREVIEW_DOMAIN/" -o /dev/null
+        run: curl -fsS --retry 12 --retry-delay 10 --retry-all-errors "https://$PREVIEW_DOMAIN/batches" -o /dev/null

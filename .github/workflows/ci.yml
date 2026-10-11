@@ -22,3 +22,11 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: "22"}
       - run: cd web && npm ci && API_URL=http://api:8080 npm test && npm run build
+  images:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          for s in etl api web; do
+            docker build -t "bddrug-$s:ci" "$s"
+          done
