@@ -28,7 +28,7 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
                 <strong>Source (DGDA via OCL)</strong>
                 {src ? (<>
                   <pre style={{ whiteSpace: "pre-wrap" }}>{JSON.stringify(src.extras, null, 2)}</pre>
-                  <ul>{src.ingredients.map((i) => <li key={i.code}>{i.name} <code>{i.code}</code>{i.retired ? " (retired)" : ""}</li>)}</ul>
+                  <ul>{src.ingredients.map((i, n) => <li key={`${i.code}-${n}`}>{i.name} <code>{i.code}</code>{i.retired ? " (retired)" : ""}</li>)}</ul>
                   <a href={src.oclUrl} rel="noopener noreferrer" target="_blank">Open original record</a>
                   <details><summary>Full raw JSON</summary><pre style={{ whiteSpace: "pre-wrap" }}>{item.sourceJson}</pre></details>
                 </>) : <p>No source snapshot (not found at source).</p>}
