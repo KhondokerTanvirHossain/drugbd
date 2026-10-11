@@ -241,3 +241,27 @@ def test_client_requires_one_second_interval(conn):
     http = SnapshotHttp(conn, "ddinter", httpx.Client(), 0.5, sleep=lambda s: None)
     with pytest.raises(AssertionError):
         DDInterClient(http)
+
+
+@respx.mock
+def test_disease_and_food_placeholder_texts_are_missing(client, conn):
+    """DDInter prints "None" / "-" / nothing where it has no text: never passed on as text."""
+    mock_session()
+    dis = fxj("disease_1951.json")
+    dis["data"][0]["text"], dis["data"][1]["text"] = "None", "  -  "
+    food = fxj("food_1951.json")
+    food["data"][0]["newInteraction"], food["data"][0]["newManagement"] = "N/A", ""
+    food["data"][1]["newInteraction"], food["data"][1]["newManagement"] = None, "null"
+    respx.post(f"{B}/server/interact-with-dis/DDInter1951/").mock(return_value=httpx.Response(200, json=dis))
+    respx.post(f"{B}/server/interact-with-food/DDInter1951/").mock(return_value=httpx.Response(200, json=food))
+    assert [r["text"] for r in client.diseases("DDInter1951")] == [None, None]
+    assert [(r["interaction"], r["management"]) for r in client.foods("DDInter1951")] == [(None, None), (None, None)]
+
+
+@respx.mock
+def test_disease_and_food_real_texts_are_kept_stripped(client, conn):
+    mock_session()
+    dis = fxj("disease_1951.json")
+    dis["data"][0]["text"] = "  Warfarin may worsen bleeding.  "
+    respx.post(f"{B}/server/interact-with-dis/DDInter1951/").mock(return_value=httpx.Response(200, json=dis))
+    assert client.diseases("DDInter1951")[0]["text"] == "Warfarin may worsen bleeding."

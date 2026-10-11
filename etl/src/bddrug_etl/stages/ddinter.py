@@ -19,6 +19,12 @@ by earlier batches. A later batch normally holds only new products, so without t
 split across batches (warfarin in 0001, an NSAID in 0002) would never get its text. Fetches stay bounded
 to pairs between drugs we have mapped.
 
+DDInter free text (interaction, management, disease text, food description and management) goes through
+``clean_text``: a placeholder ("None", "-", empty, ...) is stored as NULL, never as text. A pair whose interaction
+AND management are both missing gets no text row and is reported as ``text_missing``, like a pair without a text.
+A text row stored before this rule, with a placeholder in a field, counts as not stored: the next run re-fetches
+it and replaces it, or deletes it when DDInter still has neither text (idempotent, no migration needed).
+
 Everything this stage writes is shared: substance-level rows (DDInter mappings, names, coverage) by
 ``bds_id`` and DDInter rows (drug, pairs, texts, diseases, foods) by DDInter id, shown by every product
 with that substance. Each write reports whether it really inserted or changed a row (an identical re-run
@@ -33,15 +39,29 @@ from dataclasses import dataclass, field
 import psycopg
 
 from bddrug_etl.ddinter.client import DDInterClient
-from bddrug_etl.ddinter.html import DDInterDrug, InteractionText
+from bddrug_etl.ddinter.html import PLACEHOLDERS, DDInterDrug, InteractionText, clean_text
 from bddrug_etl.parse.names import normalize_name
-from bddrug_etl.stages.results import SharedChanges, StageResult
+from bddrug_etl.stages.results import SharedChanges, StageResult, error_note
 
 SOURCE = "ddinter2"
 NONE_NOTE = "No interaction data in DDInter for this substance"
 _ROUTE_SUFFIX = re.compile(r"^(?P<base>.*?)\s*\((?P<route>ophthalmic|otic|nasal|topical)\)\s*$", re.IGNORECASE)
 _SEVERITIES = frozenset({"major", "moderate", "minor", "unknown"})
 _NAME_TYPES = ("icd11", "rxnorm", "dgda_content")
+
+
+def _placeholder_sql(col: str) -> str:
+    """SQL: the column holds a placeholder (NULL counts as missing too). Same list as ``clean_text``."""
+    values = ", ".join(f"'{v}'" for v in sorted(PLACEHOLDERS))
+    return f"(lower(regexp_replace({col}, '^\\s+|\\s+$', '', 'g')) IN ({values}))"
+
+
+# A stored text row counts only if it has at least one real text and no placeholder left in either field.
+_TEXT_ROW_CLEAN = (f"(t.interaction IS NOT NULL OR t.management IS NOT NULL)"
+                   f" AND NOT coalesce({_placeholder_sql('t.interaction')}, false)"
+                   f" AND NOT coalesce({_placeholder_sql('t.management')}, false)")
+_TEXT_ROW_EMPTY = (f"coalesce({_placeholder_sql('t.interaction')}, true)"
+                   f" AND coalesce({_placeholder_sql('t.management')}, true)")
 
 Pair = tuple[str, str]  # (ddinter_a, ddinter_b) with a < b in text order
 
@@ -268,7 +288,7 @@ def _store_id_data(conn, run: _Run, ddinter_id: str) -> set[str]:
                      IS DISTINCT FROM (EXCLUDED.disease_name, EXCLUDED.severity, EXCLUDED.text, EXCLUDED.refs)
                RETURNING 1""",
             [(ddinter_id, iid, r.get("disease_name") or "", r.get("severity") or "unknown",
-              r.get("text") or "", list(r.get("references") or []))
+              clean_text(r.get("text")), list(r.get("references") or []))
              for iid, r in run.diseases(ddinter_id).items()],
         )
         own += _upsert_many(
@@ -285,22 +305,31 @@ def _store_id_data(conn, run: _Run, ddinter_id: str) -> set[str]:
                                        EXCLUDED.management, EXCLUDED.refs)
                RETURNING 1""",
             [(ddinter_id, iid, r.get("food_name") or "", r.get("severity") or "unknown", r.get("mechanism"),
-              r.get("interaction") or "", r.get("management") or "", list(r.get("references") or []))
+              clean_text(r.get("interaction")), clean_text(r.get("management")), list(r.get("references") or []))
              for iid, r in run.foods(ddinter_id).items()],
         )
     return {i for a, b in pairs for i in (a, b)} | ({ddinter_id} if own else set())
 
 
+def _clean_interaction(text: InteractionText) -> InteractionText | None:
+    """Placeholders as missing; None when DDInter has neither an interaction nor a management text."""
+    interaction, management = clean_text(text.interaction), clean_text(text.management)
+    if interaction is None and management is None:
+        return None
+    return InteractionText(interaction, management, tuple(text.refs))
+
+
 def _ensure_text(conn, run: _Run, pair: Pair, pending: _Pending) -> None:
     """Make sure the pair's interaction text is stored; fetch at most once per run, and not at all
-    if a previous run stored it (the pair row carries the interaction id)."""
+    if a previous run stored it (the pair row carries the interaction id). A stored row with a placeholder
+    counts as not stored (re-fetched); a text that is empty upstream is not stored and its old row is deleted."""
     a, b = pair
     if pair not in run.texts:
         row = conn.execute(
-            """SELECT p.interaction_id, t.interaction_id IS NOT NULL
-                 FROM curated.ddinter_pair p
-                 LEFT JOIN curated.ddinter_interaction_text t ON t.interaction_id = p.interaction_id
-                WHERE p.ddinter_a = %s AND p.ddinter_b = %s""",
+            f"""SELECT p.interaction_id, t.interaction_id IS NOT NULL AND {_TEXT_ROW_CLEAN}
+                  FROM curated.ddinter_pair p
+                  LEFT JOIN curated.ddinter_interaction_text t ON t.interaction_id = p.interaction_id
+                 WHERE p.ddinter_a = %s AND p.ddinter_b = %s""",
             pair,
         ).fetchone()
         iid, stored = row if row else (None, False)
@@ -315,10 +344,23 @@ def _ensure_text(conn, run: _Run, pair: Pair, pending: _Pending) -> None:
         if iid is None:
             run.texts[pair] = None
         else:
-            run.texts[pair] = (iid, run.client.interaction(iid))
+            text = _clean_interaction(run.client.interaction(iid))
             run.fetched.add(pair)
+            run.texts[pair] = None if text is None else (iid, text)
     hit = run.texts[pair]
-    if hit is not None:
+    if hit is None:
+        # No text this run: a row left from before the placeholder rule (both fields placeholders) is removed,
+        # so the pair reads as text missing rather than showing "None". Nothing to delete on later runs.
+        deleted = conn.execute(
+            f"""DELETE FROM curated.ddinter_interaction_text t USING curated.ddinter_pair p
+                 WHERE p.ddinter_a = %s AND p.ddinter_b = %s AND t.interaction_id = p.interaction_id
+                   AND {_TEXT_ROW_EMPTY}
+                RETURNING 1""",
+            pair,
+        ).fetchone() is not None
+        if deleted:
+            pending.changed.ddinter_ids |= {a, b}
+    else:
         iid, text = hit
         text_changed = conn.execute(
             """INSERT INTO curated.ddinter_interaction_text (interaction_id, interaction, management, refs)
@@ -426,7 +468,7 @@ class DDInterPlan:
         except (psycopg.OperationalError, psycopg.InterfaceError):
             raise
         except Exception as e:
-            return _fail(cid, f"error: {type(e).__name__}: {str(e)[:200]}")
+            return _fail(cid, error_note(e))
         self._run.stored_ids |= pending.ids
         self._run.stored_texts |= pending.texts
         if changes is not None:
@@ -449,7 +491,7 @@ def plan_ddinter(conn: psycopg.Connection, client: DDInterClient, concept_ids: l
         except (psycopg.OperationalError, psycopg.InterfaceError):
             raise
         except Exception as e:
-            plans[cid] = _fail(cid, f"error: {type(e).__name__}: {str(e)[:200]}")
+            plans[cid] = _fail(cid, error_note(e))
     for plan in plans.values():
         if isinstance(plan, list):
             for sub in plan:

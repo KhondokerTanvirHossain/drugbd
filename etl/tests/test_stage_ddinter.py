@@ -684,7 +684,10 @@ class _ChangedUpstream(FakeDDInter):
         return self._f.get(ddinter_id, super().foods(ddinter_id))
 
     def interaction(self, interaction_id):
-        return self._t.get(interaction_id) or super().interaction(interaction_id)
+        if interaction_id in self._t:
+            self.text_calls.append(interaction_id)
+            return self._t[interaction_id]
+        return super().interaction(interaction_id)
 
 
 @pytest.mark.parametrize("upstream, expected", [
@@ -732,3 +735,112 @@ def test_a_failed_product_reports_nothing(conn):
     res = map_and_load_ddinter(conn, FakeDDInter(fail={("graph", "DDInter1951"): RuntimeError("down")}), ["warf"], changes)
     assert res[0].status == "fail"
     assert changes == SharedChanges()
+
+
+# --- placeholders: DDInter's "None" / "-" / empty text is missing, never stored as text -----------------------
+
+PAIR_SQL = "SELECT interaction_id FROM curated.ddinter_pair WHERE ddinter_a = 'DDInter1951' AND ddinter_b = 'DDInter20'"
+TEXT_SQL = "SELECT interaction, management, refs FROM curated.ddinter_interaction_text WHERE interaction_id = '50001'"
+TEXT_NOTE = "DDInter text not found for DDInter1951/DDInter20"
+
+
+@pytest.mark.parametrize("interaction, management", [("None", "None"), ("None", "-"), (" n/a ", ""), ("NULL", "--")])
+def test_placeholder_text_is_not_stored_and_the_pair_warns_text_missing(conn, interaction, management):
+    client = _ChangedUpstream(text={"50001": InteractionText(interaction, management, ())})
+    res = map_and_load_ddinter(conn, client, ["warf", "asa"])
+    for r in res:
+        assert (r.status, r.note) == ("warn", TEXT_NOTE), r
+        assert r.evidence["text_missing"] == [["DDInter1951", "DDInter20"]]
+    assert client.text_calls == ["50001"]  # fetched once per run, not again for the second product
+    assert conn.execute("SELECT count(*) FROM curated.ddinter_interaction_text").fetchone()[0] == 0
+    # the severity survives: missing text is never "no interaction"
+    assert conn.execute(
+        "SELECT severity, interaction_id FROM curated.ddinter_pair WHERE ddinter_a = 'DDInter1951' AND ddinter_b = 'DDInter20'"
+    ).fetchone() == ("major", None)
+
+
+def test_one_placeholder_field_is_stored_as_null_and_the_other_kept(conn):
+    client = _ChangedUpstream(text={"50001": InteractionText("None", "  Monitor INR closely. ", ("Ref A",))})
+    res = map_and_load_ddinter(conn, client, ["warf", "asa"])
+    assert all(r.status == "ok" and r.evidence["text_missing"] == [] for r in res), res
+    assert conn.execute(TEXT_SQL).fetchone() == (None, "Monitor INR closely.", ["Ref A"])
+    assert conn.execute(PAIR_SQL).fetchone() == ("50001",)
+
+
+def test_existing_placeholder_text_row_is_refetched_and_replaced(conn):
+    """One-off cleanup of rows stored before the fix: a placeholder row counts as absent, so the next run fixes it."""
+    map_and_load_ddinter(conn, FakeDDInter(), ["warf", "asa"])
+    conn.execute("UPDATE curated.ddinter_interaction_text SET interaction = 'None', management = 'None' WHERE interaction_id = '50001'")
+    conn.commit()
+    client = FakeDDInter()
+    changes = SharedChanges()
+    res = map_and_load_ddinter(conn, client, ["warf", "asa"], changes)
+    assert all(r.status == "ok" for r in res), res
+    assert client.text_calls == ["50001"] and client.pair_calls == []  # interaction id known from the pair row
+    assert conn.execute(TEXT_SQL).fetchone() == (
+        "Aspirin may increase the anticoagulant effect of warfarin.", "Monitor INR closely.", ["Ref A", "Ref B"])
+    assert changes == SharedChanges(ddinter_ids={"DDInter1951", "DDInter20"})
+
+
+def test_existing_placeholder_text_row_still_empty_upstream_is_deleted_and_warns(conn):
+    map_and_load_ddinter(conn, FakeDDInter(), ["warf", "asa"])
+    conn.execute("UPDATE curated.ddinter_interaction_text SET interaction = 'None', management = '-' WHERE interaction_id = '50001'")
+    conn.commit()
+    still_none = {"50001": InteractionText("None", "None", ())}
+    changes = SharedChanges()
+    res = map_and_load_ddinter(conn, _ChangedUpstream(text=still_none), ["warf", "asa"], changes)
+    for r in res:
+        assert (r.status, r.note) == ("warn", TEXT_NOTE), r
+        assert r.evidence["text_missing"] == [["DDInter1951", "DDInter20"]]
+    assert conn.execute(TEXT_SQL).fetchone() is None
+    assert changes == SharedChanges(ddinter_ids={"DDInter1951", "DDInter20"})  # the shown text changed: re-open
+    conn.commit()
+    # idempotent: the next run with DDInter still empty changes nothing and still warns
+    changes = SharedChanges()
+    res = map_and_load_ddinter(conn, _ChangedUpstream(text=still_none), ["warf", "asa"], changes)
+    assert changes == SharedChanges()
+    assert all((r.status, r.note) == ("warn", TEXT_NOTE) for r in res), res
+    assert conn.execute("SELECT count(*) FROM curated.ddinter_interaction_text").fetchone()[0] == 0
+
+
+def test_existing_row_with_one_placeholder_field_is_refetched_and_cleaned(conn):
+    map_and_load_ddinter(conn, FakeDDInter(), ["warf", "asa"])
+    conn.execute("UPDATE curated.ddinter_interaction_text SET management = '' WHERE interaction_id = '50001'")
+    conn.commit()
+    client = _ChangedUpstream(text={"50001": InteractionText(TEXTS["50001"].interaction, "N/A", ())})
+    map_and_load_ddinter(conn, client, ["warf", "asa"])
+    assert client.text_calls == ["50001"]
+    assert conn.execute(TEXT_SQL).fetchone() == (TEXTS["50001"].interaction, None, [])
+    conn.commit()
+    # a row with a NULL field and no placeholder is stored: no further fetch
+    c2 = FakeDDInter()
+    map_and_load_ddinter(conn, c2, ["warf", "asa"])
+    assert c2.text_calls == []
+
+
+def test_placeholder_disease_and_food_texts_are_stored_as_null(conn):
+    diseases = {"DDInter1951": [dict(DISEASES["DDInter1951"][0], text="None")]}
+    foods = {"DDInter1951": [dict(FOODS["DDInter1951"][0], interaction=" n/a ", management="-")]}
+    map_and_load_ddinter(conn, _ChangedUpstream(diseases=diseases, foods=foods), ["warf"])
+    assert conn.execute("SELECT text FROM curated.ddinter_disease").fetchall() == [(None,)]
+    assert conn.execute("SELECT description, management FROM curated.ddinter_food").fetchall() == [(None, None)]
+
+
+def test_existing_placeholder_disease_and_food_rows_are_cleaned_on_the_next_run(conn):
+    map_and_load_ddinter(conn, FakeDDInter(), ["warf"])
+    conn.execute("UPDATE curated.ddinter_disease SET text = 'None'")
+    conn.execute("UPDATE curated.ddinter_food SET description = 'None', management = ''")
+    conn.commit()
+    diseases = {"DDInter1951": [dict(DISEASES["DDInter1951"][0], text="None")]}
+    foods = {"DDInter1951": [dict(FOODS["DDInter1951"][0], interaction="None", management="None")]}
+    changes = SharedChanges()
+    map_and_load_ddinter(conn, _ChangedUpstream(diseases=diseases, foods=foods), ["warf"], changes)
+    assert conn.execute("SELECT text FROM curated.ddinter_disease").fetchall() == [(None,)]
+    assert conn.execute("SELECT description, management FROM curated.ddinter_food").fetchall() == [(None, None)]
+    assert changes.ddinter_ids == {"DDInter1951"}
+
+
+def test_a_product_error_note_is_one_line(conn):
+    boom = RuntimeError("detail exploded\nCONTEXT:  while updating tuple (0,84) in relation \"batch_item\"")
+    res = map_and_load_ddinter(conn, FakeDDInter(fail={("drug_detail", "DDInter1951"): boom}), ["warf"])
+    assert (res[0].status, res[0].note) == ("fail", "error: RuntimeError: detail exploded")
