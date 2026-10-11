@@ -9,7 +9,8 @@ public interface ReviewPort {
     /**
      * In one transaction: append the decision, recompute the item's review and the batch status.
      * Errors with NotFoundException for an unknown batch item, and ConflictException when
-     * {@code expectedExtractedAt} is given and the record has been re-run since.
+     * {@code expectedExtractedAt} (null meaning "the page showed no run stamp") differs from the item's current
+     * {@code extracted_at}: the record has been re-run since the page was loaded.
      */
     Mono<Outcome> decide(String batchId, String conceptId, NewDecision decision);
 

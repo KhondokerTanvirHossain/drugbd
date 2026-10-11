@@ -16,7 +16,9 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import java.nio.charset.StandardCharsets;
+import com.jayway.jsonpath.JsonPath;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import static com.niramoy.bddrug.TestSupport.*;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -41,7 +43,9 @@ class ReviewApiIntegrationTest {
              ('R-iss',1, now() - interval '1 hour'), ('R-rerun',1, now() - interval '1 hour'),
              ('R-val',1, now() - interval '1 hour'), ('R-hist',1, now() - interval '1 hour'),
              ('R-rm',1, now() - interval '1 hour'), ('R-stale',1, now() - interval '1 hour'),
-             ('R-tok',1, now() - interval '1 hour'), ('R-log',1, now() - interval '1 hour');
+             ('R-tok',1, now() - interval '1 hour'), ('R-log',1, now() - interval '1 hour'),
+             ('R-req',1, now() - interval '1 hour'), ('R-null',1, now() - interval '1 hour'),
+             ('R-race',1, now() - interval '1 hour');
             INSERT INTO ops.batch_item (batch_id, source, concept_id, extracted_at) VALUES
              ('R-eng','DGDA-Drugs','D-1', now() - interval '1 hour'),
              ('R-flow','DGDA-Drugs','W-1', now() - interval '1 hour'),
@@ -53,7 +57,10 @@ class ReviewApiIntegrationTest {
              ('R-rm','DGDA-Drugs','X-NOSUB', now() - interval '1 hour'),
              ('R-stale','DGDA-Drugs','A-NOBDC', '2026-01-01T08:00:00.123456Z'),
              ('R-tok','DGDA-Drugs','X-NOMAP', now() - interval '1 hour'),
-             ('R-log','DGDA-Drugs','X-NOMAP', now() - interval '1 hour');
+             ('R-log','DGDA-Drugs','X-NOMAP', now() - interval '1 hour'),
+             ('R-req','DGDA-Drugs','W-1', now() - interval '1 hour'),
+             ('R-null','DGDA-Drugs','W-1', NULL),
+             ('R-race','DGDA-Drugs','C-EYE', now() - interval '1 hour');
             -- an item that left the batch file but has history: it does not hold the batch back
             INSERT INTO ops.batch_item (batch_id, source, concept_id, review, note, extracted_at) VALUES
              ('R-rm','DGDA-Drugs','gone-id','issue','removed from batch file', now() - interval '2 hour');
@@ -64,9 +71,29 @@ class ReviewApiIntegrationTest {
 
     @Autowired WebTestClient web;
 
+    /**
+     * Posts a decision as the review form does: echoing the {@code extractedAt} the batch page shows for the item
+     * (an explicit null when the page shows none or the item does not exist), unless the body already has the key.
+     */
     private WebTestClient.ResponseSpec decide(String batch, String concept, Map<String, ?> body) {
+        Map<String, Object> sent = new HashMap<>(body);
+        if (!sent.containsKey("extractedAt")) sent.put("extractedAt", shownExtractedAt(batch, concept));
+        return decideRaw(batch, concept, sent);
+    }
+
+    /** Posts the body exactly as given. */
+    private WebTestClient.ResponseSpec decideRaw(String batch, String concept, Object body) {
         return internal(web).post().uri("/v1/batches/{b}/items/{c}/decisions", batch, concept)
             .contentType(MediaType.APPLICATION_JSON).bodyValue(body).exchange();
+    }
+
+    /** The item's extractedAt as the (reviewer's) batch page shows it; null when there is none. */
+    private String shownExtractedAt(String batch, String concept) {
+        var res = internal(web).get().uri("/v1/batches/{b}", batch).exchange().expectBody().returnResult();
+        if (res.getStatus().value() != 200) return null;
+        List<String> stamps = JsonPath.read(new String(res.getResponseBody(), StandardCharsets.UTF_8),
+            "$.data.items[?(@.conceptId == '" + concept + "')].extractedAt");
+        return stamps.isEmpty() ? null : stamps.get(0);
     }
 
     private static Map<String, Object> body(String decision, String note, String email, String role) {
@@ -177,7 +204,7 @@ class ReviewApiIntegrationTest {
         expectInvalid(body("ok", null, PHARMACIST, "user"), "reviewerRole");
         expectInvalid(body("ok", null, PHARMACIST, null), "reviewerRole");
         expectInvalid(body("maybe", null, PHARMACIST, "pharmacist"), "decision");
-        decide("R-val", "W-2", Map.of()).expectStatus().isBadRequest();
+        decideRaw("R-val", "W-2", Map.of()).expectStatus().isBadRequest();
         internal(web).post().uri("/v1/batches/R-val/items/W-2/decisions").contentType(MediaType.APPLICATION_JSON)
             .bodyValue("{not json").exchange().expectStatus().isBadRequest();
         assertThat(decisions("R-val")).isZero();
@@ -265,6 +292,78 @@ class ReviewApiIntegrationTest {
         Map<String, Object> current = body("ok", null, PHARMACIST, "pharmacist");
         current.put("extractedAt", "2026-01-01T08:00:00.123456Z");
         expectDecision("R-stale", "A-NOBDC", current, "ok", "approved");
+    }
+
+    /** Fix round 1: a decision must say which run it reviewed; leaving extractedAt out fails closed. */
+    @Test void missingExtractedAtIs400AndWritesNothing() throws Exception {
+        for (Map<String, Object> b : List.of(body("ok", null, PHARMACIST, "pharmacist"),
+                                             body("issue", "strength looks wrong", PHARMACIST, "pharmacist"))) {
+            decideRaw("R-req", "W-1", b).expectStatus().isBadRequest().expectBody()
+                .jsonPath("$.success").isEqualTo(false)
+                .jsonPath("$.errors[0].code").isEqualTo("INVALID_QUERY")
+                .jsonPath("$.errors[0].field").isEqualTo("extractedAt");
+        }
+        assertThat(decisions("R-req")).isZero();
+        assertThat(itemReview("R-req", "W-1")).isEqualTo("pending");
+        assertThat(text(pg, "SELECT status FROM ops.batch WHERE batch_id = 'R-req'")).isEqualTo("in_review");
+    }
+
+    @Test void malformedExtractedAtIs400() throws Exception {
+        for (Object bad : new Object[]{"yesterday", "", 1767254400, true, List.of("2026-01-01T08:00:00Z")}) {
+            Map<String, Object> b = body("ok", null, PHARMACIST, "pharmacist");
+            b.put("extractedAt", bad);
+            decideRaw("R-req", "W-1", b).expectStatus().isBadRequest().expectBody()
+                .jsonPath("$.errors[0].code").isEqualTo("INVALID_QUERY")
+                .jsonPath("$.errors[0].field").isEqualTo("extractedAt");
+        }
+        assertThat(decisions("R-req")).isZero();
+    }
+
+    @Test void anItemWithNoRunStampAcceptsOnlyAnExplicitNull() throws Exception {
+        Map<String, Object> stamped = body("ok", null, PHARMACIST, "pharmacist");
+        stamped.put("extractedAt", "2026-01-01T08:00:00Z");
+        decideRaw("R-null", "W-1", stamped).expectStatus().isEqualTo(409)
+            .expectBody().jsonPath("$.errors[0].code").isEqualTo("CONFLICT").jsonPath("$.errors[0].field").isEqualTo("extractedAt");
+        decideRaw("R-null", "W-1", body("ok", null, PHARMACIST, "pharmacist")).expectStatus().isBadRequest();
+        assertThat(decisions("R-null")).isZero();
+
+        Map<String, Object> explicitNull = body("ok", null, PHARMACIST, "pharmacist");
+        explicitNull.put("extractedAt", null);
+        decideRaw("R-null", "W-1", explicitNull).expectStatus().isCreated()
+            .expectBody().jsonPath("$.data.review").isEqualTo("ok").jsonPath("$.data.batchStatus").isEqualTo("approved");
+        assertThat(decisions("R-null")).isEqualTo(1);
+    }
+
+    @Test void anExplicitNullOnAStampedItemIs409() throws Exception {
+        Map<String, Object> explicitNull = body("ok", null, PHARMACIST, "pharmacist");
+        explicitNull.put("extractedAt", null);
+        decideRaw("R-req", "W-1", explicitNull).expectStatus().isEqualTo(409)
+            .expectBody().jsonPath("$.errors[0].code").isEqualTo("CONFLICT");
+        assertThat(decisions("R-req")).isZero();
+        assertThat(itemReview("R-req", "W-1")).isEqualTo("pending");
+    }
+
+    /** The finding's scenario: the page is loaded, the ETL re-runs the record and commits, then the pharmacist clicks ok. */
+    @Test void okOnAPageLoadedBeforeAReRunIs409AndPublishesNothing() throws Exception {
+        String onScreen = shownExtractedAt("R-race", "C-EYE");
+        assertThat(onScreen).isNotNull();
+        exec(pg, """
+            UPDATE ops.batch_item SET review = 'pending', extracted_at = clock_timestamp()
+             WHERE batch_id = 'R-race' AND concept_id = 'C-EYE';
+            UPDATE ops.batch SET status = 'in_review' WHERE batch_id = 'R-race';""");
+
+        Map<String, Object> stale = body("ok", null, PHARMACIST, "pharmacist");
+        stale.put("extractedAt", onScreen);
+        decideRaw("R-race", "C-EYE", stale).expectStatus().isEqualTo(409)
+            .expectBody().jsonPath("$.errors[0].code").isEqualTo("CONFLICT");
+        // leaving the field out is no way around it
+        decideRaw("R-race", "C-EYE", body("ok", null, PHARMACIST, "pharmacist")).expectStatus().isBadRequest();
+        assertThat(decisions("R-race")).isZero();
+        assertThat(itemReview("R-race", "C-EYE")).isEqualTo("pending");
+        assertThat(text(pg, "SELECT status FROM ops.batch WHERE batch_id = 'R-race'")).isEqualTo("in_review");
+
+        // after a reload (the new stamp) the decision is accepted
+        expectDecision("R-race", "C-EYE", body("ok", null, PHARMACIST, "pharmacist"), "ok", "approved");
     }
 
     @Test void reviewerEmailsNeverReachTheLogs(CapturedOutput output) throws Exception {

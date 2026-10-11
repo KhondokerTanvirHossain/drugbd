@@ -2,6 +2,7 @@ package com.niramoy.bddrug.presentation;
 import com.niramoy.bddrug.application.ReviewService;
 import com.niramoy.bddrug.application.port.ReviewPort.Outcome;
 import com.niramoy.bddrug.domain.ReviewDecision;
+import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
@@ -24,14 +25,27 @@ public class ReviewController {
     /** For internal-token callers (reviewers) only. */
     public record ReviewerDecision(String decision, String note, String role, Instant decidedAt, String reviewerEmail) {}
 
+    /**
+     * The decision body. {@code extractedAt} is a JsonNode so a left-out field (null) can be told apart from an
+     * explicit JSON null (NullNode); the service requires the field and validates its value.
+     */
+    public record DecisionBody(String decision, String note, String reviewerEmail, String reviewerRole, JsonNode extractedAt) {
+        ReviewService.Request toRequest() {
+            boolean sent = extractedAt != null;
+            String stamp = !sent || extractedAt.isNull() ? null
+                : extractedAt.isTextual() ? extractedAt.textValue() : extractedAt.toString();
+            return new ReviewService.Request(decision, note, reviewerEmail, reviewerRole, sent, stamp);
+        }
+    }
+
     /** The token is checked before the body is read, so an unauthenticated request never gets as far as validation. */
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public Mono<ApiResponse<Outcome>> decide(@PathVariable String batchId, @PathVariable String conceptId,
                                              @RequestHeader(value = InternalAuth.HEADER, required = false) String token,
-                                             @RequestBody Mono<ReviewService.Request> body) {
+                                             @RequestBody Mono<DecisionBody> body) {
         auth.require(token);
-        return body.flatMap(r -> service.decide(batchId, conceptId, r)).map(ApiResponse::ok);
+        return body.flatMap(b -> service.decide(batchId, conceptId, b.toRequest())).map(ApiResponse::ok);
     }
 
     @GetMapping

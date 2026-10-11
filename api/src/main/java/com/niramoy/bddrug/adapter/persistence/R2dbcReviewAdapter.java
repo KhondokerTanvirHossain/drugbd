@@ -37,7 +37,7 @@ public class R2dbcReviewAdapter implements ReviewPort {
             .one()
             .switchIfEmpty(Mono.error(() -> new NotFoundException("conceptId", "Batch item not found")))
             .flatMap(extractedAt -> {
-                if (d.expectedExtractedAt() != null && !Objects.equals(d.expectedExtractedAt(), extractedAt.orElse(null)))
+                if (!Objects.equals(d.expectedExtractedAt(), extractedAt.orElse(null)))
                     return Mono.error(new ConflictException("extractedAt",
                         "This record was re-run after the page was loaded; reload it and review again"));
                 return lockBatch(batchId)
