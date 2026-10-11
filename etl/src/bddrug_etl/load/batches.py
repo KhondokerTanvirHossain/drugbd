@@ -5,8 +5,10 @@ import psycopg
 
 from bddrug_etl.load.products import LoadStats, load_products
 from bddrug_etl.ocl.transform import concept_to_product
+from bddrug_etl.stages.results import StageResult, write_stage_results
 
 OWNER, SOURCE = "MoHFW", "DGDA-Drugs"
+NOT_FOUND, NOT_A_DRUG = "not found at source", "not a registered Drug product"
 
 
 def read_batch_file(path: pathlib.Path) -> list[str]:
@@ -18,7 +20,23 @@ def read_batch_file(path: pathlib.Path) -> list[str]:
     return ids
 
 
+def _dgda_results(concept_ids: list[str], found: list[dict], missing: list[str], not_products: list[str]) -> list[StageResult]:
+    """One 'dgda' stage result per requested concept, in request order: ok when loaded, else fail."""
+    classes = {c["id"]: c.get("concept_class") for c in found}
+    missing_set, not_set = set(missing), set(not_products)
+    out = []
+    for cid in concept_ids:
+        if cid in missing_set:
+            out.append(StageResult(cid, "fail", NOT_FOUND, {"source": SOURCE, "concept_class": None}))
+        elif cid in not_set:
+            out.append(StageResult(cid, "fail", NOT_A_DRUG, {"source": SOURCE, "concept_class": classes.get(cid)}))
+        else:
+            out.append(StageResult(cid, "ok", "", {"source": SOURCE, "concept_class": classes.get(cid)}))
+    return out
+
+
 def run_batch(conn: psycopg.Connection, client, batch_id: str, concept_ids: list[str]) -> LoadStats:
+    """Load the batch and record its items and 'dgda' stage results in one transaction (committed here)."""
     found, missing = [], []
     for concept_id in concept_ids:
         concept = client.get_concept(OWNER, SOURCE, concept_id)
@@ -33,12 +51,13 @@ def run_batch(conn: psycopg.Connection, client, batch_id: str, concept_ids: list
             [(batch_id, SOURCE, c["id"]) for c in found if c["id"] not in not_products],
         )
         cur.executemany(
-            "INSERT INTO ops.batch_item (batch_id, source, concept_id, review, note) VALUES (%s, %s, %s, 'issue', 'not found at source')",
-            [(batch_id, SOURCE, concept_id) for concept_id in missing],
+            "INSERT INTO ops.batch_item (batch_id, source, concept_id, review, note) VALUES (%s, %s, %s, 'issue', %s)",
+            [(batch_id, SOURCE, concept_id, NOT_FOUND) for concept_id in missing],
         )
         cur.executemany(
-            "INSERT INTO ops.batch_item (batch_id, source, concept_id, review, note) VALUES (%s, %s, %s, 'issue', 'not a registered Drug product')",
-            [(batch_id, SOURCE, concept_id) for concept_id in not_products],
+            "INSERT INTO ops.batch_item (batch_id, source, concept_id, review, note) VALUES (%s, %s, %s, 'issue', %s)",
+            [(batch_id, SOURCE, concept_id, NOT_A_DRUG) for concept_id in not_products],
         )
+    write_stage_results(conn, batch_id, "dgda", _dgda_results(concept_ids, found, missing, not_products))
     conn.commit()
     return stats

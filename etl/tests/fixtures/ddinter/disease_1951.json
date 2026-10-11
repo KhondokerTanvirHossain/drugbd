@@ -1,0 +1,21 @@
+{
+ "draw": 1,
+ "recordsTotal": 8,
+ "recordsFiltered": 8,
+ "data": [
+  {
+   "interaction_id": 3572,
+   "level": "3",
+   "diseaseName": "Hemorrhage",
+   "references": "Dajani YF \"Hematuria in patients on anticoagulants.\" N Engl J Med 297 (1977):  222|Levine MN, Hirsh J \"Hemorrhagic complications of anticoagulant therapy.\" Semin Thromb Hemost 12 (1986):  39-57|Landfeld CS, Goldman L \"Major bleeding in outpatients treated with warfarin: incidence and prediction by factors known at the start of outpatient therapy.\" Am J Med 87 (1989):  144-52|Lee KS, Marwick T \"Hemopericardium and cardiac tamponade associated with warfarin therapy.\" Cleve Clin J Med 60 (1993):  336-8|Landefeld CS, Rosenblatt MW, Goldman L \"Bleeding in outpatients treated with warfarin: relation to the prothrombin time and important remediable lesions.\" Am J Med 87 (1989):  153-9|Landefeld CS, Cook EF, Flatley M, Weisberg M, Goldman L \"Identification and preliminary validation of predictors of major bleeding in hospitalized patients starting anticoagulant therapy.\" Am J Med 82 (1987):  703-13|Hylek EM, Singer DE \"Risk factors for intracranial hemorrhage in outpatients taking warfarin.\" Ann Intern Med 120 (1994):  897-902|\"Product Information. Coumadin (warfarin).\" DuPont Pharmaceuticals  (2001):|Brigden ML \"When bleeding complicates oral anticoagulant therapy: how to anticipate, investigate, and treat.\" Postgrad Med 98 (1995):  153|White RH, McKittrick T, Takakuwa J, Callahan C, McDonell M, Fihn S \"Management and prognosis of life-threatening bleeding during warfarin therapy.\" Arch Intern Med 156 (1996):  1197-201|Palareti G, Leali N, Coccheri S, Poggi M, Manotti C, Dangelo A, Pengo V, Erba N, Moia M, Ciavarella N, Devote G, Berrettini M, \"Bleeding complications of oral anticoagulant treatment: an inception-cohort, prospective collaborative study (ISCOAT).\" Lancet 348 (1996):  423-8|Morgan RJ, Bristol JB \"Unusual findings in a patient taking warfarin - Retroperitoneal haematoma.\" Postgrad Med J 75 (1999):  299-300|Jimenez J \"Abdominal pain in a patient using warfarin - Intramural haematoma of the small bowel in the setting of the warfarin anticoagulation.\" Postgrad Med J 75 (1999):  747-8",
+   "text": "In general, the use of oral anticoagulants is contraindicated in patients with active bleeding or a hemorrhagic diathesis or other significant risks for bleeding, including hemostatic and/or coagulation defects associated with hemophilia, hypoprothrombinemia, thrombocytopenia, thrombocytopathy, severe hepatic impairment, and myeloproliferative disorders such as leukemia or polycythemia vera.  Additionally, oral anticoagulants are usually contraindicated in the presence of any active ulceration of the gastrointestinal, respiratory, or genitourinary tracts; cerebrovascular hemorrhage; aneurysms (cerebral, dissecting aortic); pericarditis and pericardial effusions; bacterial endocarditis; and eclampsia, preeclampsia, or threatened abortion.  These patients may be at increased risk for uncontrollable hemorrhage or bleeding complications during therapy with oral anticoagulants.  Other potential contraindications include diverticulitis, vasculitis, malnutrition, and vitamin C or vitamin K deficiency.  The decision to administer anticoagulants must be based upon clinical judgment in which the risks are weighed against the benefits in each patient."
+  },
+  {
+   "interaction_id": 3573,
+   "level": "3",
+   "diseaseName": "Diabetes Mellitus",
+   "references": "\"Product Information. Coumadin (warfarin).\" DuPont Pharmaceuticals  (2001):",
+   "text": "Therapy with oral anticoagulants should be administered cautiously in patients with severe diabetes because they may be at increased risk for hemorrhage.  The INR should be monitored closely, and patients should be advised to promptly report any signs of bleeding to their physician, including pain, swelling, headache, dizziness, weakness, prolonged bleeding from cuts, increased menstrual flow, vaginal bleeding, nosebleeds, bleeding of gums from brushing, unusual bleeding or bruising, red or brown urine, or red or black stools."
+  }
+ ]
+}

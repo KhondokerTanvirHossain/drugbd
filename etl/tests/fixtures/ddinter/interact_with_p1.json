@@ -1,0 +1,59 @@
+{
+ "draw": 1,
+ "recordsTotal": 936,
+ "recordsFiltered": 936,
+ "data": [
+  {
+   "drug_id": "DDInter9",
+   "drug_name": "Acalabrutinib",
+   "interaction_id": 3039,
+   "level": 3,
+   "excretion": "0",
+   "absorption": "0",
+   "others": "0",
+   "antagonistic_effect": "0",
+   "distribution": "0",
+   "metabolism": "0",
+   "synergistic_effect": "1"
+  },
+  {
+   "drug_id": "DDInter1848",
+   "drug_name": "Trastuzumab emtansine",
+   "interaction_id": 9947,
+   "level": 3,
+   "excretion": "0",
+   "absorption": "0",
+   "others": "0",
+   "antagonistic_effect": "0",
+   "distribution": "0",
+   "metabolism": "0",
+   "synergistic_effect": "1"
+  },
+  {
+   "drug_id": "DDInter900",
+   "drug_name": "Ibuprofen",
+   "interaction_id": 10470,
+   "level": 3,
+   "excretion": "0",
+   "absorption": "0",
+   "others": "0",
+   "antagonistic_effect": "0",
+   "distribution": "0",
+   "metabolism": "0",
+   "synergistic_effect": "1"
+  },
+  {
+   "drug_id": "DDInter20",
+   "drug_name": "Acetylsalicylic acid",
+   "interaction_id": 34056,
+   "level": 3,
+   "excretion": "0",
+   "absorption": "0",
+   "others": "0",
+   "antagonistic_effect": "0",
+   "distribution": "0",
+   "metabolism": "0",
+   "synergistic_effect": "1"
+  }
+ ]
+}

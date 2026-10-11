@@ -1,9 +1,32 @@
 import { notFound } from "next/navigation";
-import { getBatch } from "@/lib/api";
+import { StatusPill } from "@/components/badges";
+import { getBatch, type StageResult } from "@/lib/api";
 import { summariseSource } from "@/lib/evidence";
 export const dynamic = "force-dynamic";
 
 const cell = { verticalAlign: "top", border: "1px solid #ccc", padding: 8, width: "50%" } as const;
+const stageCell = { verticalAlign: "top", border: "1px solid #ccc", padding: 6 } as const;
+const STAGES = ["dgda", "substances", "clinical", "ddinter"] as const;
+
+function StageTable({ stages }: { stages: StageResult[] }) {
+  return (
+    <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 8 }}>
+      <thead><tr><th style={stageCell}>Stage</th><th style={stageCell}>Status</th><th style={stageCell}>Note</th></tr></thead>
+      <tbody>{STAGES.map((name) => {
+        const r = stages.find((x) => x.stage === name);
+        return (
+          <tr key={name}>
+            <td style={stageCell}>{name}</td>
+            <td style={stageCell}><StatusPill status={r?.status ?? null} /></td>
+            <td style={stageCell}>{r ? (<>
+              {r.note}
+              <details><summary>Evidence</summary><pre style={{ whiteSpace: "pre-wrap" }}>{JSON.stringify(r.evidence ?? {}, null, 2)}</pre></details>
+            </>) : "This stage has not run for this item."}</td>
+          </tr>);
+      })}</tbody>
+    </table>
+  );
+}
 
 export default async function BatchPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -45,6 +68,7 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
                 </dl>) : <p>Nothing extracted.</p>}
               </td>
             </tr></tbody></table>
+            <StageTable stages={item.stages ?? []} />
           </section>
         );
       })}

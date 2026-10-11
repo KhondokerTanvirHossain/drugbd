@@ -1,0 +1,58 @@
+{
+ "info": {
+  "id": "DDInter1951",
+  "Name": "Warfarin"
+ },
+ "interactions": [
+  {
+   "id": "DDInter20",
+   "name": "Acetylsalicylic acid",
+   "level": [
+    "Major"
+   ],
+   "actions": [
+    "synergy"
+   ]
+  },
+  {
+   "id": "DDInter9",
+   "name": "Acalabrutinib",
+   "level": [
+    "Major"
+   ],
+   "actions": [
+    "synergy"
+   ]
+  },
+  {
+   "id": "DDInter1009",
+   "name": "Ketoprofen",
+   "level": [
+    "Major"
+   ],
+   "actions": [
+    "synergy"
+   ]
+  },
+  {
+   "id": "DDInter1010",
+   "name": "Ketorolac",
+   "level": [
+    "Major"
+   ],
+   "actions": [
+    "synergy"
+   ]
+  },
+  {
+   "id": "DDInter1037",
+   "name": "Lepirudin",
+   "level": [
+    "Major"
+   ],
+   "actions": [
+    "synergy"
+   ]
+  }
+ ]
+}

@@ -1,0 +1,33 @@
+{
+ "draw": 1,
+ "recordsTotal": 936,
+ "recordsFiltered": 936,
+ "data": [
+  {
+   "drug_id": "DDInter1388",
+   "drug_name": "Pantoprazole",
+   "interaction_id": 122526,
+   "level": 2,
+   "excretion": "0",
+   "absorption": "0",
+   "others": "0",
+   "antagonistic_effect": "0",
+   "distribution": "0",
+   "metabolism": "1",
+   "synergistic_effect": "0"
+  },
+  {
+   "drug_id": "DDInter1404",
+   "drug_name": "Pegaspargase",
+   "interaction_id": 122530,
+   "level": 2,
+   "excretion": "0",
+   "absorption": "0",
+   "others": "0",
+   "antagonistic_effect": "0",
+   "distribution": "0",
+   "metabolism": "0",
+   "synergistic_effect": "1"
+  }
+ ]
+}

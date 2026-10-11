@@ -1,5 +1,6 @@
 package com.niramoy.bddrug.presentation;
 import com.niramoy.bddrug.application.InvalidQueryException;
+import com.niramoy.bddrug.application.NotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -15,7 +16,11 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(InvalidQueryException.class)
     ResponseEntity<ApiResponse<Void>> invalid(InvalidQueryException e) {
-        return ResponseEntity.badRequest().body(ApiResponse.error("INVALID_QUERY", "q", e.getMessage()));
+        return ResponseEntity.badRequest().body(ApiResponse.error("INVALID_QUERY", e.field(), e.getMessage()));
+    }
+    @ExceptionHandler(NotFoundException.class)
+    ResponseEntity<ApiResponse<Void>> notFound(NotFoundException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error("NOT_FOUND", e.field(), e.getMessage()));
     }
     @ExceptionHandler(ServerWebInputException.class)
     ResponseEntity<ApiResponse<Void>> badInput(ServerWebInputException e) {
