@@ -73,6 +73,24 @@ def _align(parsed: tuple[ParsedIngredient, ...], subs: list[dict]) -> list[tuple
     return out
 
 
+def _empty_evidence(raw: str | None) -> dict:
+    return {"raw": raw, "parse_status": None, "parsed": [], "aligned": [], "bdc_id": None, "signature": None}
+
+
+def _raw_of(conn: psycopg.Connection, cid: str) -> str | None:
+    """Best-effort read after the product's savepoint rolled back."""
+    try:
+        with conn.transaction():
+            row = conn.execute(
+                "SELECT generic_content_raw FROM curated.brand_product WHERE concept_id = %s", (cid,)
+            ).fetchone()
+        return row[0] if row else None
+    except (psycopg.OperationalError, psycopg.InterfaceError):
+        raise
+    except Exception:
+        return None
+
+
 def build_clinical_drugs(conn: psycopg.Connection, concept_ids: list[str]) -> list[StageResult]:
     results: list[StageResult] = []
     for cid in concept_ids:
@@ -82,7 +100,7 @@ def build_clinical_drugs(conn: psycopg.Connection, concept_ids: list[str]) -> li
         except (psycopg.OperationalError, psycopg.InterfaceError):
             raise
         except Exception as e:
-            results.append(StageResult(cid, "fail", f"error: {type(e).__name__}: {str(e)[:200]}", {}))
+            results.append(StageResult(cid, "fail", f"error: {type(e).__name__}: {str(e)[:200]}", _empty_evidence(_raw_of(conn, cid))))
     return results
 
 
@@ -117,7 +135,7 @@ def _build_one(conn: psycopg.Connection, cid: str) -> StageResult:
         "SELECT dosage_form, generic_content_raw FROM curated.brand_product WHERE concept_id = %s", (cid,)
     ).fetchone()
     if prod is None:
-        return StageResult(cid, "fail", "product not found", {})
+        return StageResult(cid, "fail", "product not found", _empty_evidence(None))
     dose_form = " ".join(prod[0].split())
     raw = prod[1]
     pc = parse_generic_content(raw)

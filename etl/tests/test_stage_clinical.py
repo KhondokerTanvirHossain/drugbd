@@ -140,6 +140,8 @@ def test_isolation_and_operational_error(conn, monkeypatch):
     monkeypatch.setattr(mod, "_build_one", boom)
     res = build_clinical_drugs(conn, ["napa2", "chlor", "combo"])
     assert [r.status for r in res] == ["ok", "fail", "ok"]
+    assert res[1].evidence == {"raw": "Chloramphenicol 5 mg/ml", "parse_status": None, "parsed": [], "aligned": [],
+                               "bdc_id": None, "signature": None}
     assert res[1].note.startswith("error: ValueError: bad") and len(res[1].note) <= len("error: ValueError: ") + 200
 
     def down(c, cid):
@@ -238,3 +240,9 @@ def test_db_error_isolation_rolls_back_partial_writes(conn, monkeypatch):
     assert [r.status for r in res] == ["fail", "ok"]
     assert res[0].note.startswith("error: CheckViolation")
     assert conn.execute("SELECT count(*) FROM curated.clinical_drug WHERE signature LIKE '%7mg/1ml'").fetchone()[0] == 0
+
+
+def test_not_found_uniform_evidence(conn):
+    [r] = build_clinical_drugs(conn, ["no-such-product"])
+    assert r.status == "fail" and r.note == "product not found"
+    assert r.evidence == {"raw": None, "parse_status": None, "parsed": [], "aligned": [], "bdc_id": None, "signature": None}
