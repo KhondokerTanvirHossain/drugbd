@@ -17,7 +17,7 @@ def main() -> None:
     ids = read_batch_file(args.batch)
     base = os.environ.get("OCL_BASE_URL", "https://api.tr.ocl.dghs.gov.bd")
     with httpx.Client(headers={"User-Agent": "bddrug-etl/0.1 (+niramoy)"}) as http, \
-            psycopg.connect(os.environ["DATABASE_URL"]) as conn:
+            psycopg.connect(os.environ.get("DATABASE_URL", "")) as conn:
         stats = run_batch(conn, OclClient(base, http), args.batch.stem, ids)
     log.info("batch=%s requested=%d loaded=%d missing=%d", args.batch.stem, len(ids), stats.loaded, len(ids) - stats.seen)
 
