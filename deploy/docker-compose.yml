@@ -15,5 +15,53 @@ services:
     volumes: [../db/migrations:/flyway/sql:ro]
     depends_on: {db: {condition: service_healthy}}
     networks: [internal]
-volumes: {dbdata: {}}
-networks: {internal: {}}
+  api:
+    image: ghcr.io/${GHCR_OWNER}/bddrug-api:${IMAGE_TAG}
+    environment:
+      DB_R2DBC_URL: r2dbc:postgresql://db:5432/bddrug
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+    depends_on: {flyway: {condition: service_completed_successfully}}
+    networks: [internal]
+    restart: unless-stopped
+  web:
+    image: ghcr.io/${GHCR_OWNER}/bddrug-web:${IMAGE_TAG}
+    environment: {API_URL: "http://api:8080"}
+    depends_on: [api]
+    networks: [internal, edge]
+    restart: unless-stopped
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=bddrug_edge
+      - traefik.http.routers.web.rule=Host(`${PREVIEW_DOMAIN}`)
+      - traefik.http.routers.web.entrypoints=websecure
+      - traefik.http.routers.web.tls.certresolver=le
+      - traefik.http.routers.web.middlewares=ratelimit,secure
+      - traefik.http.middlewares.ratelimit.ratelimit.average=10
+      - traefik.http.middlewares.ratelimit.ratelimit.burst=30
+      - traefik.http.middlewares.ratelimit.ratelimit.period=1s
+      - traefik.http.middlewares.secure.headers.stsSeconds=31536000
+      - traefik.http.services.web.loadbalancer.server.port=3000
+  etl:
+    image: ghcr.io/${GHCR_OWNER}/bddrug-etl:${IMAGE_TAG}
+    environment: {DATABASE_URL: "postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/bddrug"}
+    volumes: [../batches:/app/batches:ro]
+    profiles: [jobs]
+    networks: [internal, edge]
+  traefik:
+    image: traefik:v3.2
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.le.acme.email=${ACME_EMAIL}
+      - --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.le.acme.httpchallenge.entrypoint=web
+    ports: ["80:80", "443:443"]
+    volumes: ["/var/run/docker.sock:/var/run/docker.sock:ro", "letsencrypt:/letsencrypt"]
+    networks: [edge]
+    restart: unless-stopped
+volumes: {dbdata: {}, letsencrypt: {}}
+networks: {internal: {internal: true}, edge: {}}
