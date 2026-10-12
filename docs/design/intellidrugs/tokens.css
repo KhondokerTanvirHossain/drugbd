@@ -1,0 +1,522 @@
+/* =====================================================================
+   IntelliDrugs design system v1.0  ·  tokens + base + components
+   Direction A "Clinical Calm". Apple HIG restraint, Material 3 structure.
+
+   Fonts (put this in the page <head> before this stylesheet):
+   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+   Rules this file enforces:
+   - Every colour is a token. Light on :root, dark in two blocks
+     (system preference unless data-theme="light", and data-theme="dark").
+   - Every text token passes 4.5:1 on every surface token, both themes.
+     Control boundaries (--line-ctl) and focus rings pass 3:1.
+   - Translucent material is for chrome only: toolbar, sidebar, decision bar.
+   - Hatch (.hatch) means "no interaction data" and nothing else.
+   - Green (--ok) means "approved by a pharmacist" and nothing else.
+   - Square-cornered chips are severity. Rounded pills are review status.
+   ===================================================================== */
+
+:root{
+  /* Type */
+  --font-ui:"Onest",-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+
+  /* Neutrals, biased very slightly toward the cobalt accent */
+  --bg:#F5F6F8;          /* page ground */
+  --canvas:#FFFFFF;      /* content panes */
+  --surface:#FFFFFF;     /* cards, plates */
+  --surface-2:#F2F4F7;   /* tonal container, source column */
+  --surface-3:#E8EBF0;   /* tonal button, pressed tint */
+  --line:#E2E5EA;        /* decorative dividers only */
+  --line-strong:#CBD0D8; /* decorative outlines only */
+  --line-ctl:#737A86;    /* boundary of inputs and controls, 3:1+ */
+  --fg:#15181D;          /* primary text */
+  --fg-2:#474E59;        /* secondary text */
+  --fg-3:#59606B;        /* tertiary text, still 4.5:1+ everywhere */
+
+  /* The one accent: selection, primary action, focus */
+  --accent:#1F5BB8;
+  --accent-hover:#174A99;
+  --on-accent:#FFFFFF;
+  --accent-soft:#E8EFFA;
+  --accent-line:#BACDEC;
+
+  /* Semantic roles (never decorative) */
+  --crit:#B42318;  --crit-soft:#FDEDEB; --crit-line:#F2BBB4; --on-crit:#FFFFFF;
+  --warn:#855000;  --warn-soft:#FFF4DF; --warn-line:#EED29C;
+  --ok:#1A7044;    --ok-soft:#E6F4EC;   --ok-line:#ADDAC1;   /* pharmacist approval only */
+  --info:#215E7C;  --info-soft:#E6F1F7; --info-line:#B5D5E6;
+  --nodata:#4F5661; --nodata-soft:#F3F4F6; --nodata-hatch:#DFE2E7; /* hatch material only */
+
+  /* Material (chrome only) */
+  --material:rgba(246,247,249,.82);
+  --material-solid:#F4F5F8;            /* reduced-transparency fallback */
+  --material-edge:rgba(255,255,255,.7);
+  --scrim:rgba(21,24,29,.32);
+
+  /* Toast (inverted surface) */
+  --toast-bg:#20242B; --toast-fg:#F2F4F7; --toast-action:#9DBEF5; --toast-track:#3A404A;
+
+  /* Brand mark (fixed in both themes) */
+  --brand-mark:#1F5BB8; --on-brand-mark:#FFFFFF;
+
+  /* Google sign-in glyph colours (Google's own) */
+  --g-blue:#4285F4; --g-red:#EA4335; --g-yellow:#FBBC05; --g-green:#34A853;
+
+  /* Elevation */
+  --shadow-1:0 1px 2px rgba(21,24,29,.06),0 0 0 1px rgba(21,24,29,.04);
+  --shadow-2:0 10px 28px -8px rgba(21,24,29,.18),0 0 0 1px rgba(21,24,29,.06);
+  --shadow-win:0 40px 80px -30px rgba(21,24,29,.28),0 0 0 1px rgba(21,24,29,.07);
+  --focus:#1F5BB8;
+
+  /* M3 state-layer opacities */
+  --sl-hover:.08; --sl-focus:.10; --sl-press:.12;
+
+  /* Spacing, 4-point */
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px; --s7:48px; --s8:72px;
+
+  /* Radius by role */
+  --r-sev:2px;     /* severity chips: square */
+  --r-chip:6px;    /* code chips, kbd */
+  --r-ctl:10px;    /* buttons, inputs, segmented track */
+  --r-ctl-sm:8px;  /* small buttons, filters, search, segments, toast undo */
+  --r-card:12px;   /* stage cards, banners, rows */
+  --r-panel:14px;  /* panels, tables */
+  --r-win:20px;    /* windows, sheets */
+  --r-pill:999px;  /* review-status pills only */
+
+  /* No-data hatch: one pitch everywhere (.hatch, .sev--nodata, swatches) */
+  --hatch:repeating-linear-gradient(135deg,var(--nodata-hatch) 0 2px,transparent 2px 7px);
+
+  /* Review desk pane widths (reviewer workspace and the board's live desk) */
+  --pane-side:232px; --pane-list:336px;
+
+  /* Motion (critically damped; nothing moves unless a person caused it) */
+  --dur-press:100ms; --dur-state:200ms; --dur-pane:320ms; --dur-exit:200ms; --dur-commit:8000ms;
+  --ease-std:cubic-bezier(.2,0,0,1);      /* M3 standard */
+  --ease-dec:cubic-bezier(.05,.7,.1,1);   /* M3 emphasized decelerate: enter */
+  --ease-acc:cubic-bezier(.3,0,.8,.15);   /* M3 emphasized accelerate: exit */
+
+  /* Type scale: size / line-height / weight / tracking */
+  --t-display:600 48px/1.08 var(--font-ui);  --tr-display:-.034em;
+  --t-title1:600 28px/1.2 var(--font-ui);    --tr-title1:-.02em;
+  --t-title2:600 20px/1.3 var(--font-ui);    --tr-title2:-.015em;
+  --t-title3:600 15px/1.35 var(--font-ui);   --tr-title3:-.008em;
+  --t-body:400 15px/1.47 var(--font-ui);     --tr-body:-.003em;
+  --t-callout:400 13.5px/1.45 var(--font-ui);--tr-callout:0;
+  --t-label:500 12.5px/1.3 var(--font-ui);   --tr-label:.005em;
+  --t-mono:400 12.5px/1.45 var(--font-mono);
+
+  /* Icon masks (stroke icons, drawn in currentColor via mask) */
+  --i-clock:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7v5l3.2 2'/%3E%3C/svg%3E");
+  --i-seal:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 2L14.2 3.9L17 3.3L17.9 6.1L20.7 7L20.1 9.8L22 12L20.1 14.2L20.7 17L17.9 17.9L17 20.7L14.2 20.1L12 22L9.8 20.1L7 20.7L6.1 17.9L3.3 17L3.9 14.2L2 12L3.9 9.8L3.3 7L6.1 6.1L7 3.3L9.8 3.9Z'/%3E%3Cpath d='M8.4 12.2l2.5 2.5 4.7-4.9'/%3E%3C/svg%3E");
+  --i-wrench:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14.5 5.2a4.3 4.3 0 0 0-5.3 5.3L3.8 15.9a1.9 1.9 0 0 0 2.7 2.7l5.4-5.4a4.3 4.3 0 0 0 5.3-5.3l-2.7 2.7-2.3-.6-.6-2.3z'/%3E%3C/svg%3E");
+  --i-flag:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 21V4h12l-2.5 4.5L17 13H5'/%3E%3C/svg%3E");
+  --i-refresh:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 11a8 8 0 0 0-14.6-4.5M4 3v4h4M4 13a8 8 0 0 0 14.6 4.5M20 21v-4h-4'/%3E%3C/svg%3E");
+  --i-check:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4.5 12.5l4.8 4.8L19.5 7'/%3E%3C/svg%3E");
+  --i-warn:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7.5v5.5'/%3E%3Cpath d='M12 16.6v.1' stroke-width='2.6'/%3E%3C/svg%3E");
+  --i-fail:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8.2 3h7.6L21 8.2v7.6L15.8 21H8.2L3 15.8V8.2z'/%3E%3Cpath d='M9.2 9.2l5.6 5.6M14.8 9.2l-5.6 5.6'/%3E%3C/svg%3E");
+  --i-info:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 11v6'/%3E%3Cpath d='M12 7.4v.1' stroke-width='2.6'/%3E%3C/svg%3E");
+  --i-shield:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3l7 2.8v5.4c0 4.4-2.9 8-7 9.8-4.1-1.8-7-5.4-7-9.8V5.8z'/%3E%3C/svg%3E");
+  --i-undo:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 14L4 9l5-5'/%3E%3Cpath d='M4 9h10.5a5.5 5.5 0 0 1 0 11H11'/%3E%3C/svg%3E");
+  --i-search:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='6.5'/%3E%3Cpath d='M16 16l4.5 4.5'/%3E%3C/svg%3E");
+  --i-external:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5'/%3E%3C/svg%3E");
+  --i-code:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 7l-5 5 5 5M15 7l5 5-5 5'/%3E%3C/svg%3E");
+  --i-up:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 15l6-6 6 6'/%3E%3C/svg%3E");
+  --i-down:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  --i-stack:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3.5' y='5' width='17' height='14' rx='2.5'/%3E%3Cpath d='M3.5 10h17'/%3E%3C/svg%3E");
+}
+
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0B0D10; --canvas:#111317; --surface:#16191E; --surface-2:#1C2026; --surface-3:#252A31;
+    --line:#2A2F37; --line-strong:#3A414B; --line-ctl:#747C89;
+    --fg:#ECEEF2; --fg-2:#B9BFC8; --fg-3:#9AA1AC;
+    --accent:#8AB2F5; --accent-hover:#A3C3F7; --on-accent:#0A1830; --accent-soft:#16233A; --accent-line:#2D4672;
+    --crit:#FF9488; --crit-soft:#3A1714; --crit-line:#6B2A24; --on-crit:#2A0A07;
+    --warn:#F0BA5C; --warn-soft:#30220A; --warn-line:#5C4314;
+    --ok:#6FD09E; --ok-soft:#0F291C; --ok-line:#1E5137;
+    --info:#8CC6E8; --info-soft:#112532; --info-line:#23465A;
+    --nodata:#B0B6C0; --nodata-soft:#1B1E23; --nodata-hatch:#2A2F36;
+    --hatch:repeating-linear-gradient(135deg,var(--nodata-hatch) 0 2px,transparent 2px 7px);
+    --material:rgba(22,25,30,.82); --material-solid:#181B20; --material-edge:rgba(255,255,255,.06); --scrim:rgba(0,0,0,.5);
+    --toast-bg:#E6E9EE; --toast-fg:#15181D; --toast-action:#1A4FA3; --toast-track:#C3C9D2;
+    --shadow-1:0 1px 2px rgba(0,0,0,.4),0 0 0 1px rgba(255,255,255,.05);
+    --shadow-2:0 12px 30px -8px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.07);
+    --shadow-win:0 40px 80px -30px rgba(0,0,0,.8),0 0 0 1px rgba(255,255,255,.08);
+    --focus:#8AB2F5;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0B0D10; --canvas:#111317; --surface:#16191E; --surface-2:#1C2026; --surface-3:#252A31;
+  --line:#2A2F37; --line-strong:#3A414B; --line-ctl:#747C89;
+  --fg:#ECEEF2; --fg-2:#B9BFC8; --fg-3:#9AA1AC;
+  --accent:#8AB2F5; --accent-hover:#A3C3F7; --on-accent:#0A1830; --accent-soft:#16233A; --accent-line:#2D4672;
+  --crit:#FF9488; --crit-soft:#3A1714; --crit-line:#6B2A24; --on-crit:#2A0A07;
+  --warn:#F0BA5C; --warn-soft:#30220A; --warn-line:#5C4314;
+  --ok:#6FD09E; --ok-soft:#0F291C; --ok-line:#1E5137;
+  --info:#8CC6E8; --info-soft:#112532; --info-line:#23465A;
+  --nodata:#B0B6C0; --nodata-soft:#1B1E23; --nodata-hatch:#2A2F36;
+  --hatch:repeating-linear-gradient(135deg,var(--nodata-hatch) 0 2px,transparent 2px 7px);
+  --material:rgba(22,25,30,.82); --material-solid:#181B20; --material-edge:rgba(255,255,255,.06); --scrim:rgba(0,0,0,.5);
+  --toast-bg:#E6E9EE; --toast-fg:#15181D; --toast-action:#1A4FA3; --toast-track:#C3C9D2;
+  --shadow-1:0 1px 2px rgba(0,0,0,.4),0 0 0 1px rgba(255,255,255,.05);
+  --shadow-2:0 12px 30px -8px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.07);
+  --shadow-win:0 40px 80px -30px rgba(0,0,0,.8),0 0 0 1px rgba(255,255,255,.08);
+  --focus:#8AB2F5;
+  color-scheme:dark;
+}
+
+/* ---------- Base elements ---------- */
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:var(--t-body);letter-spacing:var(--tr-body);-webkit-font-smoothing:antialiased}
+h1,h2,h3,h4,h5,p,ul,ol,dl,dd,figure,blockquote{margin:0}
+h1,h2,h3{text-wrap:balance}
+ul,ol{padding:0;list-style:none}
+button,input,textarea,select{font:inherit;color:inherit;letter-spacing:inherit}
+button{cursor:pointer}
+table{border-collapse:collapse}
+a{color:var(--accent);text-underline-offset:2px}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+::selection{background:var(--accent-soft);color:var(--fg)}
+[hidden]{display:none!important}
+.sr-only{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.mono{font-family:var(--font-mono);font-size:.86em;letter-spacing:0;font-variant-numeric:tabular-nums}
+.num{font-variant-numeric:tabular-nums}
+
+/* Type roles */
+.t-display{font:var(--t-display);letter-spacing:var(--tr-display)}
+.t-title1{font:var(--t-title1);letter-spacing:var(--tr-title1)}
+.t-title2{font:var(--t-title2);letter-spacing:var(--tr-title2)}
+.t-title3{font:var(--t-title3);letter-spacing:var(--tr-title3)}
+.t-body{font:var(--t-body);letter-spacing:var(--tr-body)}
+.t-callout{font:var(--t-callout);color:var(--fg-2)}
+.t-label{font:var(--t-label);letter-spacing:var(--tr-label);color:var(--fg-3)}
+.t-mono{font:var(--t-mono)}
+
+/* Shared icon atom: any element with .ico and a --ico mask draws a 16px stroke icon in currentColor */
+.ico{display:inline-block;width:16px;height:16px;flex:none;background:currentColor;-webkit-mask:var(--ico) center/contain no-repeat;mask:var(--ico) center/contain no-repeat}
+
+/* Example marker: anything not from real data (names, future timestamps) carries this */
+.example{display:inline-flex;align-items:center;height:18px;padding:0 6px;border-radius:var(--r-chip);font:500 11px/1 var(--font-ui);letter-spacing:.01em;color:var(--fg-2);box-shadow:inset 0 0 0 1px var(--line-ctl);background:transparent;vertical-align:middle;white-space:nowrap}
+
+/* ---------- Wordmark ---------- */
+/* IntelliDrugs wordmark: Onest 600, tight tracking, cobalt full stop (aria-hidden). Size with font-size only. */
+.wordmark{font-family:var(--font-ui);font-weight:600;letter-spacing:-.04em;line-height:1;color:var(--fg);white-space:nowrap;font-feature-settings:"kern"}
+.wordmark-dot{color:var(--accent);margin-left:.01em}
+.wordmark-sub{font-weight:500;letter-spacing:-.01em;color:var(--fg-3);font-size:.76em;margin-left:.35em}
+
+/* ---------- Buttons ---------- */
+/* .btn + one of --primary / --tonal / --plain / --destructive. M3 state layer drawn by ::before in currentColor.
+   Forced states for documentation: .is-hover .is-focus .is-pressed. Loading: aria-busy="true" + .btn-spinner. */
+.btn{position:relative;isolation:isolate;overflow:hidden;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:36px;padding:0 16px;border-radius:var(--r-ctl);border:0;font:600 14px/1 var(--font-ui);letter-spacing:-.005em;white-space:nowrap;text-decoration:none;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:background-color var(--dur-state) var(--ease-std),transform var(--dur-press) var(--ease-std)}
+.btn::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;background:currentColor;opacity:0;transition:opacity var(--dur-state) var(--ease-std);pointer-events:none}
+.btn:hover::before,.btn.is-hover::before{opacity:var(--sl-hover)}
+.btn:focus-visible::before,.btn.is-focus::before{opacity:var(--sl-focus)}
+.btn:active::before,.btn.is-pressed::before{opacity:var(--sl-press)}
+.btn:active,.btn.is-pressed{transform:scale(.97)}
+.btn:focus-visible,.btn.is-focus{outline:2px solid var(--focus);outline-offset:2px}
+.btn--primary{background:var(--accent);color:var(--on-accent)}
+.btn--tonal{background:var(--surface-3);color:var(--fg);box-shadow:inset 0 0 0 1px var(--line-ctl)}
+.btn--plain{background:transparent;color:var(--accent);padding:0 10px}
+.btn--plain:hover,.btn--plain.is-hover{text-decoration:underline;text-decoration-thickness:1px}
+.btn--destructive{background:var(--crit);color:var(--on-crit)}
+.btn--lg{min-height:44px;padding:0 20px;font-size:15px;border-radius:var(--r-ctl)}
+.btn--sm{min-height:28px;padding:0 10px;font-size:13px;border-radius:var(--r-ctl-sm);gap:6px}
+.btn--icon{width:32px;min-height:32px;padding:0}
+.btn .ico{width:15px;height:15px}
+.btn[disabled],.btn[aria-disabled="true"]{background:var(--surface-2);color:var(--fg-3);box-shadow:none;cursor:not-allowed;transform:none}
+.btn[disabled]::before,.btn[aria-disabled="true"]::before{opacity:0}
+.btn[aria-busy="true"]{cursor:progress}
+.btn-spinner{width:14px;height:14px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:id-spin .8s linear infinite;flex:none}
+@keyframes id-spin{to{transform:rotate(360deg)}}
+
+/* ---------- Keyboard key ---------- */
+/* .kbd prints the shortcut on the control it triggers. Inside a primary button it switches to an outline. */
+.kbd{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 5px;border-radius:var(--r-chip);font:600 11px/1 var(--font-ui);letter-spacing:0;background:var(--surface);color:var(--fg-2);box-shadow:inset 0 0 0 1px var(--line-ctl);white-space:nowrap}
+.btn--primary .kbd,.btn--destructive .kbd{background:transparent;color:inherit;box-shadow:inset 0 0 0 1px currentColor;opacity:1}
+.btn--tonal .kbd{background:var(--canvas)}
+.toast .kbd{background:transparent;color:inherit;box-shadow:inset 0 0 0 1px currentColor}
+
+/* ---------- Severity chips (square corners, shape glyph) ---------- */
+/* .sev + --major (triangle) / --moderate (diamond) / --minor (circle) / --unclassified (dashed ? circle) / --nodata (hatch + void square).
+   Always pair with words. Optional count: <b class="sev-n">138</b>. */
+.sev{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 8px 0 7px;border-radius:var(--r-sev);font:600 12.5px/1 var(--font-ui);letter-spacing:0;white-space:nowrap;border:1px solid transparent}
+.sev::before{content:"";flex:none;width:10px;height:10px;background:currentColor}
+.sev-n{font-weight:600;font-variant-numeric:tabular-nums;margin-left:2px}
+.sev--major{background:var(--crit-soft);color:var(--crit);border-color:var(--crit-line)}
+.sev--major::before{clip-path:polygon(50% 4%,100% 96%,0 96%)}
+.sev--moderate{background:var(--warn-soft);color:var(--warn);border-color:var(--warn-line)}
+.sev--moderate::before{clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%)}
+.sev--minor{background:var(--info-soft);color:var(--info);border-color:var(--info-line)}
+.sev--minor::before{width:9px;height:9px;border-radius:50%}
+.sev--unclassified{background:transparent;color:var(--fg);border:1px dashed var(--line-ctl)}
+.sev--unclassified::before{content:"?";width:13px;height:13px;border-radius:50%;background:transparent;border:1.25px dashed currentColor;display:grid;place-items:center;font:700 8.5px/1 var(--font-ui)}
+.sev--nodata{color:var(--fg);border-color:var(--line-ctl);background-color:var(--nodata-soft);background-image:var(--hatch)}
+.sev--nodata::before{width:10px;height:10px;background:var(--surface);box-shadow:inset 0 0 0 1.5px currentColor}
+
+/* ---------- Review-status pills (rounded, distinct icon) ---------- */
+/* .rv + --pending (hollow clock) / --approved (seal-check, the only green) / --engineer (wrench) / --issue (flag) / --back (refresh).
+   Use the exact wording. .rv--compact is for the reviewer record list only; it keeps the icon and colour and puts the rest
+   of the wording in sr-only text, never aria-label: <span class="rv rv--pending rv--compact">Not yet reviewed<span class="sr-only"> by a pharmacist</span></span>.
+   Public views always use the full pill. */
+.rv{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px 0 8px;border-radius:var(--r-pill);font:600 12.5px/1 var(--font-ui);letter-spacing:0;white-space:nowrap;border:1px solid transparent}
+.rv::before{content:"";flex:none;width:14px;height:14px;background:currentColor;-webkit-mask:var(--rv-ico) center/contain no-repeat;mask:var(--rv-ico) center/contain no-repeat}
+.rv--pending{--rv-ico:var(--i-clock);background:transparent;color:var(--fg-2);border-color:var(--line-ctl)}
+.rv--approved{--rv-ico:var(--i-seal);background:var(--ok-soft);color:var(--ok);border-color:var(--ok-line)}
+.rv--engineer{--rv-ico:var(--i-wrench);background:var(--surface-3);color:var(--fg);border-color:var(--line-strong)}
+.rv--issue{--rv-ico:var(--i-flag);background:transparent;color:var(--crit);border:1.5px solid var(--crit)}
+.rv--back{--rv-ico:var(--i-refresh);background:transparent;color:var(--accent);border:1.5px solid var(--accent)}
+.rv--compact{height:22px;padding:0 8px 0 6px;font-size:11.5px;gap:4px}
+.rv--compact::before{width:12px;height:12px}
+
+/* ---------- Stage-check cards ---------- */
+/* .stage + --ok / --warn / --fail. Icon and word always together in .stage-status. Note text is the pipeline's exact note. */
+.stage{display:flex;flex-direction:column;gap:6px;padding:12px 14px;border-radius:var(--r-card);background:var(--canvas);box-shadow:inset 0 0 0 1px var(--line-strong);min-width:0;font-size:13px;color:var(--fg-2)}
+.stage-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.stage-name{font:600 13.5px/1.3 var(--font-ui);color:var(--fg);letter-spacing:-.005em}
+.stage-status{display:inline-flex;align-items:center;gap:5px;font:600 12.5px/1 var(--font-ui);white-space:nowrap}
+.stage-status::before{content:"";width:14px;height:14px;flex:none;background:currentColor;-webkit-mask:var(--st-ico) center/contain no-repeat;mask:var(--st-ico) center/contain no-repeat}
+.stage-note{color:var(--fg);overflow-wrap:anywhere}
+.stage--ok{--st-ico:var(--i-check)}
+.stage--ok .stage-status{color:var(--fg-2)}
+.stage--warn{--st-ico:var(--i-warn);background:var(--warn-soft);box-shadow:inset 0 0 0 1px var(--warn-line)}
+.stage--warn .stage-status{color:var(--warn)}
+.stage--fail{--st-ico:var(--i-fail);background:var(--crit-soft);box-shadow:inset 0 0 0 1px var(--crit-line)}
+.stage--fail .stage-status{color:var(--crit)}
+.stage-pairs{display:flex;flex-direction:column;gap:6px;margin-top:2px}
+.stage-pair{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;color:var(--fg)}
+.stage-pair .mono{color:var(--fg-2)}
+
+/* ---------- Code chips ---------- */
+/* .code shows one crosswalk code: system label + value. Add .code-meta for method and confidence. Mono for the value only. */
+.code{display:inline-flex;align-items:baseline;gap:6px;padding:3px 8px;border-radius:var(--r-chip);background:var(--surface-2);color:var(--fg);box-shadow:inset 0 0 0 1px var(--line-strong);font:400 12.5px/1.35 var(--font-mono);white-space:nowrap;font-variant-numeric:tabular-nums}
+.code-sys{font:500 11.5px/1.35 var(--font-ui);color:var(--fg-2)}
+.code-meta{font:400 11.5px/1.35 var(--font-ui);color:var(--fg-3)}
+.codes{display:flex;flex-wrap:wrap;gap:6px}
+.raw{font:400 12.5px/1.4 var(--font-mono);background:var(--surface);padding:1px 6px;border-radius:var(--r-chip);box-shadow:inset 0 0 0 1px var(--line-strong);overflow-wrap:anywhere}
+
+/* ---------- Comparison table (DGDA source vs extracted) ---------- */
+/* A real <table class="cmp">: <th scope="col"> headers, <th scope="row"> field names, .cmp-src source column,
+   .match cell with a text label: --same Matches, --norm Normalised, --salt Salt removed, --added Added, --differs Differs. */
+.cmp-wrap{border-radius:var(--r-panel);box-shadow:inset 0 0 0 1px var(--line-strong);overflow-x:auto;background:var(--canvas)}
+.cmp{width:100%;min-width:560px;font-size:13.5px}
+.cmp caption{text-align:left;padding:12px 14px 4px;font:600 13.5px/1.3 var(--font-ui);color:var(--fg)}
+.cmp th,.cmp td{padding:10px 14px;text-align:left;vertical-align:top;border-top:1px solid var(--line)}
+.cmp thead th{font:600 12px/1.3 var(--font-ui);color:var(--fg-2);border-top:0;padding-block:10px 8px}
+.cmp tbody th{font:500 12.5px/1.4 var(--font-ui);color:var(--fg-2);width:140px}
+.cmp .cmp-src{background:var(--surface-2)}
+.cmp-sub{display:block;font-size:12px;color:var(--fg-2);margin-top:2px}
+.match{display:inline-flex;align-items:center;gap:6px;font:600 12.5px/1.2 var(--font-ui);color:var(--fg-2);white-space:nowrap}
+.match::before{width:16px;height:16px;border-radius:var(--r-chip);display:inline-grid;place-items:center;font:700 12px/1 var(--font-ui);box-shadow:inset 0 0 0 1px currentColor}
+.match--same::before{content:"="}
+.match--norm::before{content:"\2248"}
+.match--salt::before{content:"\2212"}
+.match--added::before{content:"+"}
+.match--differs{color:var(--warn)}
+.match--differs::before{content:"\2260"}
+
+/* ---------- Record list ---------- */
+/* .rec-list is role="listbox"; each .rec is role="option" with aria-selected. Row hints (.rec-hint--warn / --nodata) carry the triage note. */
+.rec-list{display:flex;flex-direction:column;gap:2px;padding:6px 8px;margin:0;list-style:none}
+.rec-list:focus-visible{outline-offset:-2px;border-radius:var(--r-card)}
+.rec{position:relative;isolation:isolate;display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:2px 10px;align-items:center;min-height:52px;padding:8px 10px;border-radius:var(--r-card);cursor:pointer;color:var(--fg);text-align:left;width:100%;border:0;background:transparent}
+.rec::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;background:var(--fg);opacity:0;transition:opacity var(--dur-state) var(--ease-std)}
+.rec:hover::before,.rec.is-hover::before{opacity:var(--sl-hover)}
+.rec.is-focus,.rec:focus-visible{outline:2px solid var(--focus);outline-offset:-2px}
+.rec-ix{grid-row:span 2;align-self:start;padding-top:2px;font-size:12px;color:var(--fg-3);font-variant-numeric:tabular-nums}
+.rec-name{font:600 13.5px/1.3 var(--font-ui);letter-spacing:-.008em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rec-sub{grid-column:2/4;font-size:12px;color:var(--fg-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rec-status{grid-row:1;grid-column:3;align-self:center}
+.rec-hint{grid-column:2/4;display:inline-flex;align-items:center;gap:5px;font:500 12px/1.3 var(--font-ui);color:var(--fg-2)}
+.rec-hint::before{content:"";width:12px;height:12px;flex:none}
+.rec-hint--warn{color:var(--warn)}
+.rec-hint--warn::before{background:currentColor;-webkit-mask:var(--i-warn) center/contain no-repeat;mask:var(--i-warn) center/contain no-repeat}
+.rec-hint--nodata{color:var(--fg)}
+.rec-hint--nodata::before{width:10px;height:10px;box-shadow:inset 0 0 0 1.5px currentColor}
+.rec[aria-selected="true"],.rec.is-selected{background:var(--accent);color:var(--on-accent)}
+.rec[aria-selected="true"]::before{background:var(--on-accent)}
+.rec[aria-selected="true"] .rec-ix,.rec[aria-selected="true"] .rec-sub,.rec[aria-selected="true"] .rec-hint,
+.rec.is-selected .rec-ix,.rec.is-selected .rec-sub,.rec.is-selected .rec-hint{color:var(--on-accent)}
+.rec[aria-selected="true"] .rv,.rec.is-selected .rv{background:transparent;color:var(--on-accent);border-color:var(--on-accent)}
+/* Focus on a selected (accent-filled) row: ring in --on-accent inside, accent halo outside, so it stays 3:1+ */
+.rec[aria-selected="true"]:focus-visible,.rec[aria-selected="true"].is-focus,.rec.is-selected.is-focus{outline-color:var(--on-accent);box-shadow:0 0 0 2px var(--accent)}
+
+/* ---------- Filters ---------- */
+/* .filter buttons in the sidebar; the active one has aria-current="true". Count sits right in tabular figures. */
+.filters{display:flex;flex-direction:column;gap:2px}
+.filter{position:relative;isolation:isolate;display:flex;align-items:center;gap:10px;width:100%;min-height:32px;padding:6px 10px;border:0;border-radius:var(--r-ctl-sm);background:transparent;color:var(--fg);font:400 13.5px/1.2 var(--font-ui);text-align:left;cursor:pointer}
+.filter::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;background:var(--fg);opacity:0;transition:opacity var(--dur-state) var(--ease-std)}
+.filter:hover::before,.filter.is-hover::before{opacity:var(--sl-hover)}
+.filter .ico{width:14px;height:14px;color:var(--fg-2)}
+.filter-n{margin-left:auto;font-size:12px;color:var(--fg-2);font-variant-numeric:tabular-nums}
+/* Selected states carry a 3:1 indicator: the accent bar (5.92:1 light, 7.94:1 dark on material) and the --line-ctl ring (3.88:1 or more against the track). */
+.filter[aria-current="true"]{background:var(--surface);box-shadow:inset 3px 0 0 var(--accent),var(--shadow-1);font-weight:600}
+.filter:focus-visible,.filter.is-focus{outline:2px solid var(--focus);outline-offset:-2px}
+.search{display:flex;align-items:center;gap:8px;height:32px;padding:0 10px;border-radius:var(--r-ctl-sm);background:var(--canvas);box-shadow:inset 0 0 0 1px var(--line-ctl)}
+.search::before{content:"";width:14px;height:14px;flex:none;background:var(--fg-2);-webkit-mask:var(--i-search) center/contain no-repeat;mask:var(--i-search) center/contain no-repeat}
+.search input{border:0;background:transparent;outline:none;flex:1;min-width:0;font-size:13px}
+.search input::placeholder{color:var(--fg-3);opacity:1}
+.search:focus-within{box-shadow:inset 0 0 0 2px var(--focus);outline:2px solid transparent;outline-offset:-2px}
+
+/* ---------- Decision bar ---------- */
+/* .decision-bar is chrome: translucent material, pinned to the bottom of the detail pane, never scrolls away.
+   .decision-promise states what the action does for this role. data-state="paused" when the record is stale. */
+.decision-bar{position:sticky;bottom:0;z-index:2;display:flex;flex-direction:column;gap:10px;padding:14px 24px 12px;background:var(--material);-webkit-backdrop-filter:blur(20px) saturate(170%);backdrop-filter:blur(20px) saturate(170%);border-top:1px solid var(--line);box-shadow:inset 0 1px 0 var(--material-edge)}
+.decision-main{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.decision-promise{font-size:13px;color:var(--fg-2);max-width:46ch}
+.decision-promise b{color:var(--fg);font-weight:600}
+.decision-actions{margin-left:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.botcheck{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--fg-2)}
+.botcheck::before{content:"";width:13px;height:13px;background:currentColor;-webkit-mask:var(--i-shield) center/contain no-repeat;mask:var(--i-shield) center/contain no-repeat}
+.decision-keys{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--fg-2)}
+.decision-keys span{display:inline-flex;align-items:center;gap:5px}
+.decision-hint{font-size:12.5px;color:var(--fg)}
+.decision-bar[data-state="paused"] .decision-promise b{color:var(--warn)}
+
+/* ---------- Banners ---------- */
+/* .banner + --info / --warn / --crit. Icon, a bold first sentence, what was or was not saved, one action. Stale page uses --warn. */
+.banner{display:grid;grid-template-columns:20px minmax(0,1fr) auto;gap:4px 12px;align-items:start;padding:14px 16px;border-radius:var(--r-card)}
+.banner::before{content:"";grid-row:span 2;width:20px;height:20px;margin-top:1px;background:currentColor;-webkit-mask:var(--bn-ico) center/contain no-repeat;mask:var(--bn-ico) center/contain no-repeat}
+.banner-title{font:600 14px/1.4 var(--font-ui);color:var(--fg)}
+.banner-body{grid-column:2;font-size:13px;color:var(--fg)}
+.banner-action{grid-column:3;grid-row:1/span 2;align-self:center}
+.banner--info{--bn-ico:var(--i-info);background:var(--info-soft);color:var(--info);box-shadow:inset 0 0 0 1px var(--info-line)}
+.banner--warn{--bn-ico:var(--i-warn);background:var(--warn-soft);color:var(--warn);box-shadow:inset 0 0 0 1px var(--warn-line)}
+.banner--crit{--bn-ico:var(--i-fail);background:var(--crit-soft);color:var(--crit);box-shadow:inset 0 0 0 1px var(--crit)}
+@media (max-width:560px){.banner{grid-template-columns:20px minmax(0,1fr)}.banner-action{grid-column:2;grid-row:auto;justify-self:start;margin-top:6px}}
+
+/* ---------- Toast with undo + countdown ---------- */
+/* .toast holds a commit-delayed action. .toast-bar > i shrinks over --dur-commit. Undo carries kbd U.
+   The toast never takes focus; announce once through a separate polite live region. */
+.toast{--focus:var(--toast-action);position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 12px;align-items:center;max-width:380px;padding:12px 12px 14px 16px;border-radius:var(--r-card);background:var(--toast-bg);color:var(--toast-fg);box-shadow:var(--shadow-2);overflow:hidden;font-size:13.5px}
+.toast-msg b{font-weight:600}
+.toast-sub{display:block;font-size:12px;opacity:1;color:var(--toast-fg)}
+.toast-undo{display:inline-flex;align-items:center;gap:6px;min-height:30px;padding:0 10px;border:0;border-radius:var(--r-ctl-sm);background:transparent;color:var(--toast-action);font:600 13px/1 var(--font-ui);cursor:pointer;position:relative;isolation:isolate}
+.toast-undo::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;background:currentColor;opacity:0;transition:opacity var(--dur-state) var(--ease-std)}
+.toast-undo:hover::before{opacity:var(--sl-hover)}
+.toast-undo:active::before{opacity:var(--sl-press)}
+.toast-undo .ico{--ico:var(--i-undo);width:14px;height:14px}
+.toast-bar{position:absolute;left:0;right:0;bottom:0;height:3px;background:var(--toast-track)}
+.toast-bar i{display:block;height:100%;background:var(--toast-action);transform-origin:left center;transform:scaleX(1)}
+.toast.is-running .toast-bar i{animation:id-countdown var(--dur-commit) linear forwards}
+@keyframes id-countdown{from{transform:scaleX(1)}to{transform:scaleX(0)}}
+
+/* ---------- Inputs ---------- */
+/* .field wraps label, control and .field-meta (help or error + counter). Error = aria-invalid="true" on the control. */
+.field{display:flex;flex-direction:column;gap:6px;min-width:0}
+.field-label{font:500 13px/1.3 var(--font-ui);color:var(--fg)}
+.input,.textarea{width:100%;border:0;border-radius:var(--r-ctl);background:var(--canvas);color:var(--fg);box-shadow:inset 0 0 0 1px var(--line-ctl);padding:9px 12px;font:400 14px/1.45 var(--font-ui);transition:box-shadow var(--dur-state) var(--ease-std)}
+.input{min-height:38px}
+.textarea{min-height:72px;resize:vertical}
+.input::placeholder,.textarea::placeholder{color:var(--fg-3);opacity:1}
+.input:hover,.textarea:hover,.input.is-hover,.textarea.is-hover{box-shadow:inset 0 0 0 1px var(--fg-2)}
+.input:focus-visible,.textarea:focus-visible,.input.is-focus,.textarea.is-focus{outline:2px solid transparent;outline-offset:-2px;box-shadow:inset 0 0 0 2px var(--focus)}
+.input[aria-invalid="true"],.textarea[aria-invalid="true"]{box-shadow:inset 0 0 0 2px var(--crit)}
+.input:disabled,.textarea:disabled{background:var(--surface-2);color:var(--fg-3);box-shadow:inset 0 0 0 1px var(--line-strong);cursor:not-allowed}
+.field-meta{display:flex;align-items:flex-start;gap:12px;font-size:12px;color:var(--fg-2)}
+.field-error{color:var(--crit);font-weight:500;display:inline-flex;gap:6px;align-items:flex-start}
+.field-error::before{content:"";width:13px;height:13px;margin-top:1px;flex:none;background:currentColor;-webkit-mask:var(--i-fail) center/contain no-repeat;mask:var(--i-fail) center/contain no-repeat}
+.field-count{margin-left:auto;font-variant-numeric:tabular-nums;white-space:nowrap}
+
+/* ---------- Segmented control ---------- */
+/* .seg is a role="group" of buttons with aria-pressed. One choice at a time (theme, reviewer role). */
+.seg{display:inline-flex;gap:2px;padding:2px;border-radius:var(--r-ctl);background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--line-ctl)}
+.seg button{position:relative;isolation:isolate;min-height:28px;padding:0 12px;border:0;border-radius:var(--r-ctl-sm);background:transparent;color:var(--fg-2);font:500 12.5px/1 var(--font-ui);cursor:pointer;transition:background-color var(--dur-state) var(--ease-std),color var(--dur-state) var(--ease-std)}
+.seg button::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;background:currentColor;opacity:0}
+.seg button:hover::before{opacity:var(--sl-hover)}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--fg);font-weight:600;box-shadow:inset 0 0 0 1.5px var(--line-ctl),var(--shadow-1)}
+.seg button:focus-visible{outline:2px solid var(--focus);outline-offset:1px}
+
+/* ---------- Frames and mockup chrome ---------- */
+/* .frame holds a desktop mockup that may be wider than the screen: keyboard-scrollable (give it tabindex="0" and aria-label). */
+.frame{background:var(--surface-2);border-radius:var(--r-win);padding:clamp(12px,3vw,36px);overflow-x:auto;box-shadow:inset 0 0 0 1px var(--line);-webkit-overflow-scrolling:touch}
+.frame:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.window{background:var(--canvas);border-radius:var(--r-win);box-shadow:var(--shadow-win);overflow:hidden;position:relative}
+.window-bar{display:flex;align-items:center;gap:8px;height:40px;padding:0 16px;background:var(--surface-2);border-bottom:1px solid var(--line)}
+.window-dot{width:10px;height:10px;border-radius:50%;box-shadow:inset 0 0 0 1.5px var(--line-ctl)}
+
+/* ---------- Material (chrome only) ---------- */
+/* .material for toolbar, sidebar, decision bar. Never on content, never stacked on another material. */
+.material{background:var(--material);-webkit-backdrop-filter:blur(20px) saturate(170%);backdrop-filter:blur(20px) saturate(170%);box-shadow:inset 0 1px 0 var(--material-edge)}
+.chrome-toolbar{display:flex;align-items:center;gap:14px;height:52px;padding:0 16px;border-bottom:1px solid var(--line)}
+.chrome-sidebar{display:flex;flex-direction:column;gap:18px;padding:14px 10px;border-right:1px solid var(--line)}
+.chrome-heading{font:600 11.5px/1.2 var(--font-ui);color:var(--fg-2);padding:0 10px 6px;letter-spacing:.01em}
+.role-badge{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:var(--r-chip);font:600 12.5px/1 var(--font-ui);background:var(--accent-soft);color:var(--accent)}
+
+/* ---------- Hatch (no interaction data, and only that) ---------- */
+/* .hatch is the no-data material. .nodata-block is the full statement: never collapsed, never green, exact wording. */
+.hatch{background-color:var(--nodata-soft);background-image:var(--hatch)}
+.nodata-block{display:grid;grid-template-columns:36px minmax(0,1fr);gap:12px;padding:12px;border-radius:var(--r-panel);box-shadow:inset 0 0 0 1px var(--line-ctl)}
+.nodata-glyph{width:36px;height:36px;border-radius:var(--r-ctl);background:var(--surface);display:grid;place-items:center;box-shadow:var(--shadow-1)}
+.nodata-glyph::before{content:"";width:14px;height:14px;box-shadow:inset 0 0 0 2px var(--nodata)}
+.nodata-plate{background:var(--surface);border-radius:var(--r-ctl);padding:12px 14px;box-shadow:var(--shadow-1);min-width:0}
+.nodata-title{font:600 14.5px/1.35 var(--font-ui);color:var(--fg)}
+.nodata-text{font-size:14px;color:var(--fg);margin-top:4px}
+.nodata-pairs{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px;font-size:12.5px;color:var(--fg-2)}
+
+/* ---------- Interaction pair ---------- */
+/* .pair shows one DDInter pair: severity chip, the two substances, action, management text truncated with a source line. */
+.pair{display:grid;grid-template-columns:minmax(0,1fr);gap:8px;padding:14px 16px;border-radius:var(--r-panel);background:var(--canvas);box-shadow:inset 0 0 0 1px var(--line-strong)}
+.pair-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
+.pair-names{font:600 15px/1.3 var(--font-ui);letter-spacing:-.01em}
+.pair-meta{font-size:12.5px;color:var(--fg-2)}
+.pair-text{font-size:13.5px;color:var(--fg);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;max-width:72ch}
+.pair-source{font-size:12px;color:var(--fg-2)}
+
+/* ---------- Review desk shared pieces ---------- */
+/* .prog: batch progress meter (role="img" with a worded aria-label). .p-ok approved, .p-issue issue reported. */
+.prog{width:160px;height:6px;border-radius:3px;background:var(--surface-3);overflow:hidden;display:flex;flex:none}
+.prog i{display:block;height:100%;transition:width var(--dur-pane) var(--ease-std)}
+.prog .p-ok{background:var(--ok)}
+.prog .p-issue{background:var(--crit)}
+.prog--wide{width:100%}
+/* .drawer: evidence drawer over the detail pane. Solid surface: it is content, not chrome. */
+.drawer{position:absolute;top:0;right:0;bottom:0;width:min(460px,100%);background:var(--surface);box-shadow:var(--shadow-2);display:flex;flex-direction:column;z-index:3;animation:dr-in var(--dur-pane) var(--ease-dec)}
+@keyframes dr-in{from{transform:translateX(24px);opacity:0}}
+.drawer-h{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line)}
+.drawer-h h4{font:var(--t-title3);letter-spacing:var(--tr-title3)}
+.drawer-h p{font-size:12.5px;color:var(--fg-2)}
+.drawer-b{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
+.drawer-b h5{font:600 13.5px/1.3 var(--font-ui);margin-top:4px}
+.drawer-b pre{margin:0;font:400 12px/1.5 var(--font-mono);white-space:pre-wrap;overflow-wrap:anywhere;background:var(--surface-2);padding:10px 12px;border-radius:var(--r-ctl-sm);box-shadow:inset 0 0 0 1px var(--line);color:var(--fg)}
+.dr-note{font-size:12.5px;color:var(--fg-2)}
+.dr-dl{display:grid;grid-template-columns:120px minmax(0,1fr);gap:8px 12px;font-size:13px}
+.dr-dl dt{color:var(--fg-2)}
+.dr-dl dd{display:flex;flex-direction:column;gap:4px;align-items:flex-start;min-width:0}
+/* .sheet-scrim + .sheet: the modal shortcuts sheet (role="dialog" aria-modal="true", background inert, Tab trapped). */
+.sheet-scrim{position:absolute;inset:0;z-index:8;background:var(--scrim);display:grid;place-items:center;padding:24px}
+.sheet{width:460px;max-width:100%;max-height:100%;overflow:auto;background:var(--surface);border-radius:var(--r-panel);box-shadow:var(--shadow-2);padding:18px 20px 20px;display:flex;flex-direction:column;gap:12px}
+.sheet-h{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.sheet-h h3,.sheet-h h4{font:var(--t-title3);letter-spacing:var(--tr-title3)}
+.sheet-note{font-size:13px;color:var(--fg-2)}
+.sheet dl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:9px 14px;font-size:13.5px;align-items:center}
+.sheet dt{display:flex;gap:4px}
+.sheet dd{color:var(--fg)}
+
+/* ---------- Accessibility and preference overrides ---------- */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{transition-duration:1ms!important;animation-duration:1ms!important;animation-iteration-count:1!important}
+  .btn:active,.btn.is-pressed{transform:none}
+  .btn-spinner{animation:none;border-right-color:currentColor;border-style:dotted}
+  .toast.is-running .toast-bar i{animation:none;transform:scaleX(1)}
+}
+@media (prefers-reduced-transparency: reduce){
+  .material,.decision-bar{background:var(--material-solid);-webkit-backdrop-filter:none;backdrop-filter:none}
+}
+@media (prefers-contrast: more){
+  :root{--line:var(--line-ctl);--line-strong:var(--line-ctl)}
+  .material,.decision-bar{background:var(--material-solid);-webkit-backdrop-filter:none;backdrop-filter:none}
+}
+@media (forced-colors: active){
+  .ico,.rv::before,.stage-status::before,.banner::before,.rec-hint::before,.botcheck::before,.search::before,.field-error::before,.sev::before{forced-color-adjust:none;background:CanvasText}
+  .sev--unclassified::before{background:transparent;color:CanvasText}
+  .sev,.rv,.stage,.banner,.code,.toast{border:1px solid CanvasText}
+  .search:focus-within,.input:focus-visible,.textarea:focus-visible,.input.is-focus,.textarea.is-focus{outline:2px solid Highlight}
+  .rec[aria-selected="true"],.rec.is-selected,.s-opt[aria-selected="true"],.filter[aria-current="true"],.seg button[aria-pressed="true"]{forced-color-adjust:none;background:Highlight;color:HighlightText}
+  .rec[aria-selected="true"] .rec-ix,.rec[aria-selected="true"] .rec-sub,.rec[aria-selected="true"] .rec-hint,.rec[aria-selected="true"] .rv,.filter[aria-current="true"] .filter-n{color:HighlightText;border-color:HighlightText}
+  .rec[aria-selected="true"] .rv::before,.rec[aria-selected="true"] .rec-hint::before,.filter[aria-current="true"] .ico{background:HighlightText}
+  .rec[aria-selected="true"]:focus-visible,.rec.is-focus{outline:2px solid HighlightText}
+}
