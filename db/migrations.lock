@@ -1,0 +1,7 @@
+# Database schema lock — db-schema-v1.0 (approved by the product owner on 2026-10-12).
+# sha256  file. Applied migrations are immutable. A schema change = new V<n>__name.sql + its line here, in one reviewed PR.
+c4a6d7133689b7fd5898a6f83559f098a659001478de0979684c69f8cbfabf80  V1__init.sql
+786ac9fd3aa2680ef221c4e35d60cec22e9b00c18f06d29a771e8952e0c39a90  V2__batches.sql
+46634fd5f4dbe3f75cdb4fbd48d473c1a0ee1c67901df146e755551077623a62  V3__pipeline.sql
+31ba9d8715cf8aac83738691154307b149cef887103bfc3d7b9f5a0ed154c6a2  V4__review_and_scale.sql
+ed481c6134c22571c472d664186945b6ea4ccbf0055bb13103810c38102d69c2  V5__ddinter_text_nullable.sql

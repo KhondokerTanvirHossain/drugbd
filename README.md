@@ -105,3 +105,9 @@ docker-compose up -d web     # recreates web with the new list; api and db keep 
 ```
 
 A removed reviewer loses review rights on their next request. A reviewer whose role changed signs out and in again. Rotating `SESSION_SECRET` signs everyone out (`docker-compose up -d web`). Rotating `INTERNAL_API_TOKEN` needs both services: `docker-compose up -d api web`.
+
+## Database changes
+
+The schema is **locked** (`db-schema-v1.0`, migrations V1–V5). Never edit an applied migration. To change the
+schema, add a new `db/migrations/V<next>__<what>.sql` and its checksum line in `db/migrations.lock` in the same
+reviewed PR. CI (`schema-lock`) enforces this. See [docs/design/database.md](docs/design/database.md).

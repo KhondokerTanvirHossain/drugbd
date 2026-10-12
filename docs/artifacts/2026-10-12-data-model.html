@@ -1,0 +1,539 @@
+<title>BDDrug KB Data Model</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a single reading column (about 72ch) with wide diagram panels that scroll horizontally on their own; schema colour-coding carries through chips, tables and diagrams. */
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --ink: #17202b;
+  --muted: #5a6573;
+  --rule: #dfe3e8;
+  --accent: #0e6e72;          /* curated: the drug master */
+  --raw: #6b5aa6;             /* raw: verbatim source snapshots */
+  --ops: #a5620e;             /* ops: batches, evidence, review */
+  --accent-soft: #e3f1f1;
+  --raw-soft: #ece9f6;
+  --ops-soft: #f7ecdc;
+  --code-bg: #eef1f4;
+  --ok: #2f7d43;
+  --warn: #9a6a00;
+  --font-body: "Public Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12161b; --surface: #1a2027; --ink: #e6eaef; --muted: #9aa5b1; --rule: #2c343d;
+    --accent: #4fb3b6; --raw: #a597dc; --ops: #e0a35a;
+    --accent-soft: #163236; --raw-soft: #26223a; --ops-soft: #352818; --code-bg: #222a33;
+    --ok: #6cc184; --warn: #e2b44d; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12161b; --surface: #1a2027; --ink: #e6eaef; --muted: #9aa5b1; --rule: #2c343d;
+  --accent: #4fb3b6; --raw: #a597dc; --ops: #e0a35a;
+  --accent-soft: #163236; --raw-soft: #26223a; --ops-soft: #352818; --code-bg: #222a33;
+  --ok: #6cc184; --warn: #e2b44d; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15.5px; line-height: 1.6; }
+.wrap { max-width: 1080px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 72px; display: grid; gap: 44px; }
+.col { max-width: 72ch; }
+h1, h2, h3 { text-wrap: balance; line-height: 1.2; margin: 0; }
+h1 { font-size: clamp(1.9rem, 4vw, 2.6rem); font-weight: 800; letter-spacing: -0.02em; }
+h2 { font-size: 1.45rem; font-weight: 700; letter-spacing: -0.01em; }
+h3 { font-size: 1.05rem; font-weight: 700; }
+p { margin: 0; }
+.stack { display: grid; gap: 14px; }
+.eyebrow { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); }
+.lede { font-size: 1.08rem; color: var(--muted); }
+code, .mono { font-family: var(--font-mono); font-size: 0.86em; }
+code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 18px; color: var(--muted); font-size: 0.9rem; }
+.chip { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 0.8rem; padding: 2px 10px; border-radius: 999px; white-space: nowrap; }
+.chip.raw { background: var(--raw-soft); color: var(--raw); }
+.chip.curated { background: var(--accent-soft); color: var(--accent); }
+.chip.ops { background: var(--ops-soft); color: var(--ops); }
+
+/* Schema overview: three columns that stack on phones */
+.schemas { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.schema { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 18px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.schema.raw { border-top: 3px solid var(--raw); }
+.schema.curated { border-top: 3px solid var(--accent); }
+.schema.ops { border-top: 3px solid var(--ops); }
+.schema ul { margin: 0; padding-left: 18px; display: grid; gap: 2px; font-size: 0.92rem; }
+.schema li span { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* Worked example: the Napa path as a chain */
+.chain { display: grid; gap: 0; background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; }
+.link { display: grid; grid-template-columns: 170px 1fr; gap: 14px; padding: 14px 18px; border-bottom: 1px solid var(--rule); align-items: start; }
+.link:last-child { border-bottom: 0; }
+.link .lvl { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding-top: 3px; }
+.link .val { min-width: 0; display: grid; gap: 4px; }
+.link .val b { font-size: 1.02rem; }
+.codes { display: flex; flex-wrap: wrap; gap: 6px; }
+.codes span { font-family: var(--font-mono); font-size: 0.78rem; background: var(--code-bg); padding: 2px 8px; border-radius: 4px; }
+@media (max-width: 560px) { .link { grid-template-columns: 1fr; gap: 4px; } }
+
+/* Diagram panels */
+.panel { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 8px; overflow-x: auto; }
+.panel pre.mermaid { margin: 0; min-width: 760px; background: transparent; text-align: center; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 0.86rem; color: var(--muted); }
+.legend b { color: var(--ink); font-family: var(--font-mono); font-weight: 600; }
+
+/* Table reference */
+.tablewrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; }
+table { border-collapse: collapse; width: 100%; min-width: 760px; font-size: 0.9rem; }
+th, td { text-align: left; vertical-align: top; padding: 10px 14px; border-bottom: 1px solid var(--rule); }
+th { font-size: 0.74rem; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); font-weight: 700; background: var(--bg); position: sticky; top: 0; }
+tr:last-child td { border-bottom: 0; }
+td.n { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+td.t { white-space: nowrap; font-family: var(--font-mono); font-size: 0.82rem; font-weight: 600; }
+tr.grp td { background: var(--bg); font-weight: 700; font-size: 0.8rem; letter-spacing: 0.04em; }
+
+/* Rules list */
+.rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+.rule { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 16px 18px; display: grid; gap: 6px; min-width: 0; }
+.rule p { color: var(--muted); font-size: 0.93rem; }
+.rule .where { font-family: var(--font-mono); font-size: 0.76rem; color: var(--accent); }
+
+/* Status lists */
+.status { display: grid; gap: 10px; }
+.status div { display: grid; grid-template-columns: 110px 1fr; gap: 12px; align-items: baseline; }
+.tag { font-size: 0.74rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
+.tag.built { color: var(--ok); }
+.tag.changed { color: var(--warn); }
+.tag.planned { color: var(--muted); }
+@media (max-width: 560px) { .status div { grid-template-columns: 1fr; gap: 2px; } }
+
+ol.q { margin: 0; padding-left: 22px; display: grid; gap: 10px; }
+ol.q li { padding-left: 4px; }
+footer { color: var(--muted); font-size: 0.85rem; border-top: 1px solid var(--rule); padding-top: 18px; }
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+
+<div class="wrap">
+
+  <header class="stack col">
+    <span class="eyebrow">Database design · for verification</span>
+    <h1>BDDrug KB data model</h1>
+    <p class="lede">How the Bangladesh drug knowledge base is stored in PostgreSQL. It covers the brand, clinical drug and substance levels, the crosswalk codes, the DDInter interaction mirror, and the evidence and review tables behind the approval gate.</p>
+    <div class="meta">
+      <span>Schema as of 12 Oct 2026</span>
+      <span>Migrations V1–V5, live on drugdb.eliooo.org</span>
+      <span>PostgreSQL 16</span>
+      <span>Row counts: live pilot (10 medicines)</span>
+    </div>
+  </header>
+
+  <section class="stack">
+    <div class="stack col">
+      <h2>Three schemas, 21 tables</h2>
+      <p>Data moves one way. Source responses are stored verbatim in <span class="chip raw">raw</span>. They are interpreted into the drug master and interaction knowledge in <span class="chip curated">curated</span>. Every pipeline run, review decision and flag is recorded in <span class="chip ops">ops</span>, and the public site only shows curated records whose ops review is approved.</p>
+    </div>
+    <div class="schemas">
+      <div class="schema raw">
+        <h3><span class="chip raw">raw</span> Source evidence</h3>
+        <p class="lede" style="font-size:.92rem">What the sources returned, byte for byte. Re-parsing never needs a re-fetch.</p>
+        <ul>
+          <li><code>ocl_concept</code> <span>10</span></li>
+          <li><code>http_snapshot</code> <span>140</span></li>
+        </ul>
+      </div>
+      <div class="schema curated">
+        <h3><span class="chip curated">curated</span> Drug master + interactions</h3>
+        <p class="lede" style="font-size:.92rem">Brands, clinical drugs, substances, codes, and the DDInter mirror.</p>
+        <ul>
+          <li><code>brand_product</code> <span>10</span></li>
+          <li><code>brand_product_ingredient</code> <span>11</span></li>
+          <li><code>clinical_drug</code> <span>10</span></li>
+          <li><code>clinical_drug_ingredient</code> <span>11</span></li>
+          <li><code>substance</code> <span>11</span></li>
+          <li><code>substance_name</code> <span>45</span></li>
+          <li><code>substance_code</code> <span>84</span></li>
+          <li><code>interaction_coverage</code> <span>11</span></li>
+          <li><code>ddinter_drug</code> <span>12</span></li>
+          <li><code>ddinter_pair</code> <span>6,305</span></li>
+          <li><code>ddinter_interaction_text</code> <span>15</span></li>
+          <li><code>ddinter_disease</code> <span>50</span></li>
+          <li><code>ddinter_food</code> <span>10</span></li>
+        </ul>
+      </div>
+      <div class="schema ops">
+        <h3><span class="chip ops">ops</span> Batches, evidence, review</h3>
+        <p class="lede" style="font-size:.92rem">Which records were loaded when, what each stage concluded, and who approved what.</p>
+        <ul>
+          <li><code>batch</code> <span>1</span></li>
+          <li><code>batch_item</code> <span>10</span></li>
+          <li><code>batch_run</code> <span>1</span></li>
+          <li><code>stage_result</code> <span>40</span></li>
+          <li><code>review_decision</code> <span>0</span></li>
+          <li><code>flag</code> <span>0</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="stack">
+    <div class="stack col">
+      <h2>One medicine, end to end</h2>
+      <p>Napa, as it is stored today. A brand points to one clinical drug. A clinical drug lists its substances with their strengths. Codes and interactions hang off the substance, so every brand containing paracetamol shares them.</p>
+    </div>
+    <div class="chain">
+      <div class="link">
+        <span class="lvl">Brand</span>
+        <div class="val"><b>Napa 500 mg tablet · Beximco</b>
+          <span class="mono">brand_product.concept_id = 186-0030-006--napa</span>
+          <span style="color:var(--muted)">DGDA DAR 186-0030-006 · raw text “Paracetamol 500 mg” · parse_status parsed</span></div>
+      </div>
+      <div class="link">
+        <span class="lvl">Clinical drug</span>
+        <div class="val"><b>BDC-000001 · Acetaminophen 500 mg tablet</b>
+          <span style="color:var(--muted)">route systemic · one ingredient: BDS-000001, 500 mg</span></div>
+      </div>
+      <div class="link">
+        <span class="lvl">Substance</span>
+        <div class="val"><b>BDS-000001 · Acetaminophen</b>
+          <span style="color:var(--muted)">names: Acetaminophen (ICD-11, DDInter, RxNorm) · Paracetamol (DGDA content)</span></div>
+      </div>
+      <div class="link">
+        <span class="lvl">Codes</span>
+        <div class="val codes"><span>ICD11_XM XM5DJ7</span><span>RXCUI 161</span><span>ATC N02BE01</span><span>DRUGBANK DB00316</span><span>SNOMEDCT 387517004</span><span>DDINTER DDInter14</span></div>
+      </div>
+      <div class="link">
+        <span class="lvl">Interactions</span>
+        <div class="val"><span>DDInter14’s drug–drug pairs, disease and food records, reached through the <code>DDINTER</code> code. Coverage: full.</span></div>
+      </div>
+      <div class="link">
+        <span class="lvl">Review</span>
+        <div class="val"><span>batch 0001-pilot · review pending. The record stays hidden from public pages until a pharmacist marks it OK.</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="stack">
+    <div class="stack col">
+      <h2>Diagram 1 · Drug master</h2>
+      <p>The three-level backbone (brand, clinical drug, substance) and the substance’s names, codes and interaction coverage. IDs prefixed <code>BDS-</code> and <code>BDC-</code> are minted by us once and never reused.</p>
+    </div>
+    <div class="legend"><span><b>──</b> enforced foreign key</span><span><b>‥‥</b> logical link (matched on a code, no foreign key)</span></div>
+    <div class="panel">
+<pre class="mermaid">
+erDiagram
+  brand_product ||--o{ brand_product_ingredient : "DGDA ingredient list"
+  brand_product }o--o| clinical_drug : "bdc_id"
+  clinical_drug ||--|{ clinical_drug_ingredient : "has"
+  substance ||--o{ clinical_drug_ingredient : "bds_id"
+  substance ||--|{ substance_code : "crosswalks"
+  substance ||--|{ substance_name : "synonyms"
+  substance ||--o| interaction_coverage : "coverage"
+  brand_product_ingredient }o..|| substance_code : "xm_code = code (system ICD11_XM)"
+
+  brand_product {
+    text concept_id PK "OCL id, e.g. 186-0030-006--napa"
+    text dar_number "DGDA registration"
+    text trade_name
+    text company
+    text dosage_form "as registered"
+    text generic_content_raw "e.g. Paracetamol 500 mg"
+    text quality_flag "DGDA flag, nullable"
+    text bdc_id FK "nullable"
+    text parse_status "parsed | partial | failed"
+    text parse_note
+  }
+  brand_product_ingredient {
+    text concept_id PK, FK
+    text xm_code PK "ICD-11 XM code"
+    text ingredient_name "XM name, salt-free"
+  }
+  clinical_drug {
+    text bdc_id PK "BDC-000001"
+    text signature UK "form|route|sorted strengths"
+    text display_name
+    text dose_form
+    text route "systemic | ophthalmic | otic | nasal | topical"
+  }
+  clinical_drug_ingredient {
+    text bdc_id PK, FK
+    text bds_id PK, FK
+    numeric strength_value
+    text strength_unit
+    numeric per_value
+    text per_unit
+    text raw_text
+  }
+  substance {
+    text bds_id PK "BDS-000001"
+    text preferred_name
+    text kind "allopathic (default)"
+    timestamptz created_at
+    timestamptz updated_at
+  }
+  substance_code {
+    text bds_id PK, FK
+    text system PK "ICD11_XM RXCUI ATC DRUGBANK SNOMEDCT DDINTER"
+    text code PK "XM code is unique"
+    text route_scope "any | systemic | ophthalmic | ..."
+    text source
+    text method "xm rxnav-exact drugbank name ..."
+    numeric confidence "0 to 1"
+  }
+  substance_name {
+    text bds_id PK, FK
+    text name PK
+    text name_type PK "icd11 dgda_content rxnorm ddinter"
+    text source
+  }
+  interaction_coverage {
+    text bds_id PK, FK
+    text coverage "full | none"
+    text note
+    timestamptz updated_at
+  }
+</pre>
+    </div>
+  </section>
+
+  <section class="stack">
+    <div class="stack col">
+      <h2>Diagram 2 · Interaction knowledge (DDInter mirror)</h2>
+      <p>DDInter data is kept in DDInter’s own ID space, so partner drugs we have not loaded yet still appear by name. It joins our substances through <code>substance_code</code> rows with <code>system = 'DDINTER'</code>, and those rows carry a <code>route_scope</code>. Chloramphenicol, for example, has three: DDInter351 systemic, DDInter352 ophthalmic and DDInter353 otic.</p>
+    </div>
+    <div class="legend"><span><b>──</b> enforced foreign key</span><span><b>‥‥</b> logical link (matched on an id, no foreign key)</span></div>
+    <div class="panel">
+<pre class="mermaid">
+erDiagram
+  substance_code }o..|| ddinter_drug : "code = ddinter_id (system DDINTER)"
+  ddinter_drug ||..o{ ddinter_pair : "ddinter_a or ddinter_b"
+  ddinter_pair }o..o| ddinter_interaction_text : "interaction_id"
+  ddinter_drug ||..o{ ddinter_disease : "ddinter_id"
+  ddinter_drug ||..o{ ddinter_food : "ddinter_id"
+
+  substance_code {
+    text bds_id PK
+    text system PK "DDINTER"
+    text code PK "DDInter352"
+    text route_scope "ophthalmic"
+  }
+  ddinter_drug {
+    text ddinter_id PK "DDInter1951"
+    text name "Warfarin"
+    text_array atc_codes
+    text drugbank_id "used to confirm the match"
+    text route_scope
+    timestamptz fetched_at
+  }
+  ddinter_pair {
+    text ddinter_a PK "a is less than b"
+    text ddinter_b PK
+    text severity "major moderate minor unknown"
+    text_array actions "synergy metabolism ..."
+    text partner_name_a
+    text partner_name_b
+    text interaction_id "nullable"
+  }
+  ddinter_interaction_text {
+    text interaction_id PK
+    text interaction "nullable"
+    text management "nullable, at least one present"
+    text_array refs
+  }
+  ddinter_disease {
+    text ddinter_id PK
+    text interaction_id PK
+    text disease_name
+    text severity
+    text text "nullable"
+    text_array refs
+  }
+  ddinter_food {
+    text ddinter_id PK
+    text interaction_id PK
+    text food
+    text severity
+    text mechanism
+    text description "nullable"
+    text management "nullable"
+    text_array refs
+  }
+</pre>
+    </div>
+  </section>
+
+  <section class="stack">
+    <div class="stack col">
+      <h2>Diagram 3 · Evidence, batches and review</h2>
+      <p>Every record enters through a batch. Each pipeline stage writes one result per record with its evidence. Review decisions are append-only, and the approval gate reads them together with <code>batch_item.extracted_at</code>, so a re-run automatically puts a record back into review.</p>
+    </div>
+    <div class="legend"><span><b>──</b> enforced foreign key</span><span><b>‥‥</b> logical link</span></div>
+    <div class="panel">
+<pre class="mermaid">
+erDiagram
+  batch ||--|{ batch_item : "contains"
+  batch ||--o{ stage_result : "per record, per stage"
+  batch_item ||--o{ review_decision : "append-only history"
+  batch ||..o{ batch_run : "run history"
+  batch_item }o..|| brand_product : "concept_id"
+  brand_product ||..|| ocl_concept : "concept_id, verbatim DGDA record"
+  flag }o..o| brand_product : "target_type, target_id"
+
+  batch {
+    text batch_id PK "0001-pilot"
+    text status "in_review | approved | rejected"
+    timestamptz run_at
+    int item_count
+  }
+  batch_item {
+    text batch_id PK, FK
+    text concept_id PK
+    text source "DGDA-Drugs"
+    text review "pending | ok | issue"
+    text note
+    timestamptz extracted_at "decisions before this do not count"
+  }
+  stage_result {
+    text batch_id PK, FK
+    text concept_id PK
+    text stage PK "dgda substances clinical ddinter"
+    text status "ok | warn | fail"
+    text note
+    jsonb evidence
+    timestamptz updated_at
+  }
+  review_decision {
+    bigint id PK
+    text batch_id FK
+    text concept_id FK
+    text decision "ok | issue"
+    text note
+    text reviewer_email "never public"
+    text reviewer_role "pharmacist | engineer"
+    timestamptz decided_at
+  }
+  batch_run {
+    bigint id PK
+    text batch_id
+    timestamptz run_at
+    text_array stages
+    jsonb counts "ok/warn/fail per stage"
+    text_array concept_ids "empty = full run"
+  }
+  flag {
+    bigint id PK
+    text target_type "product substance batch_item check other"
+    text target_id
+    text message "5 to 2000 chars"
+    text reporter_email "never public"
+    text status "open | resolved"
+    timestamptz created_at
+    timestamptz resolved_at
+    text resolved_by
+  }
+  brand_product {
+    text concept_id PK
+  }
+  ocl_concept {
+    text source PK "raw schema"
+    text concept_id PK
+    jsonb payload "verbatim OCL response"
+    timestamptz fetched_at
+  }
+</pre>
+    </div>
+    <p class="col" style="color:var(--muted);font-size:.92rem"><code>raw.http_snapshot</code> (source, request_key) → status, body, fetched_at sits beside these tables with no links. It keeps every RxNav and DDInter response, with CSRF tokens redacted, so each code and interaction can be traced to the exact response that produced it.</p>
+  </section>
+
+  <section class="stack">
+    <div class="stack col">
+      <h2>Rules the schema enforces</h2>
+      <p>These rules are enforced by database constraints, so the data cannot break them whatever the application code does.</p>
+    </div>
+    <div class="rules">
+      <div class="rule"><h3>One substance per ICD-11 XM code</h3><p>A partial unique index on <code>substance_code(code) WHERE system = 'ICD11_XM'</code>. DGDA maps every product to salt-free XM substances, so Warfarin Sodium and Warfarin share one substance.</p><span class="where">substance_code_xm_unique</span></div>
+      <div class="rule"><h3>Permanent, bounded IDs</h3><p><code>BDS-</code> and <code>BDC-</code> come from sequences capped at 999,999 with NO CYCLE. Re-runs look up existing IDs before minting, so an ID is never reused or renumbered.</p><span class="where">curated.bds_seq · curated.bdc_seq</span></div>
+      <div class="rule"><h3>Same strength and form, same clinical drug</h3><p><code>clinical_drug.signature</code> is unique: dose form, route and the sorted strengths. Two brands of paracetamol 500 mg tablet share one BDC.</p><span class="where">clinical_drug.signature UNIQUE</span></div>
+      <div class="rule"><h3>Route-aware interactions</h3><p>A DDINTER code carries a <code>route_scope</code>. An eye-drop product uses the ophthalmic DDInter entry when one exists; otherwise the alert is marked “route assumed”.</p><span class="where">substance_code.route_scope</span></div>
+      <div class="rule"><h3>“No data” is stored, not implied</h3><p><code>interaction_coverage</code> holds <code>full</code> or <code>none</code> per substance. Domperidone is <code>none</code>, so the site can say “no interaction data”, never “no interactions”.</p><span class="where">interaction_coverage.coverage</span></div>
+      <div class="rule"><h3>Missing text is NULL, never a placeholder</h3><p>Interaction texts may be NULL, but a text row needs at least one of interaction or management. DDInter’s “None” is stored as missing.</p><span class="where">ddinter_interaction_text_has_text</span></div>
+      <div class="rule"><h3>Each pair stored once</h3><p><code>ddinter_pair</code> requires <code>ddinter_a &lt; ddinter_b</code>, so A–B and B–A cannot both exist.</p><span class="where">CHECK (ddinter_a &lt; ddinter_b)</span></div>
+      <div class="rule"><h3>Review history cannot be deleted</h3><p><code>review_decision</code> references <code>batch_item</code> with ON DELETE NO ACTION, so a reviewed record cannot be removed. Decisions are only ever inserted.</p><span class="where">review_decision → batch_item (NO ACTION)</span></div>
+      <div class="rule"><h3>Confidence and enums are checked</h3><p>Confidence must be 0–1. Code systems, severities, stages, review states and roles are restricted by CHECK constraints.</p><span class="where">CHECK constraints</span></div>
+    </div>
+  </section>
+
+  <section class="stack">
+    <div class="stack col">
+      <h2>The approval gate</h2>
+      <p>The approval gate is computed from data rather than kept as a flag. The API derives each record’s state on every public read.</p>
+    </div>
+    <div class="chain">
+      <div class="link"><span class="lvl">OK (public)</span><div class="val"><span>A <b>pharmacist</b> recorded <code>ok</code> after the record’s latest <code>extracted_at</code>, and nobody recorded <code>issue</code> after that.</span></div></div>
+      <div class="link"><span class="lvl">Issue</span><div class="val"><span>The latest decision since extraction is <code>issue</code>.</span></div></div>
+      <div class="link"><span class="lvl">Pending</span><div class="val"><span>Anything else: no decisions yet, only an engineer’s <code>ok</code>, or decisions made before a re-run.</span></div></div>
+      <div class="link"><span class="lvl">Batch approved</span><div class="val"><span>Every record in the batch is OK.</span></div></div>
+      <div class="link"><span class="lvl">Re-open</span><div class="val"><span>A pipeline run that rewrites a record, or changes shared substance data it uses, moves <code>extracted_at</code> forward. Earlier approvals stop counting, and the history stays.</span></div></div>
+    </div>
+  </section>
+
+  <section class="stack">
+    <div class="stack col"><h2>Table reference</h2></div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Table</th><th>Key</th><th>Holds</th><th>Rows</th></tr></thead>
+        <tbody>
+          <tr class="grp"><td colspan="4"><span class="chip raw">raw</span></td></tr>
+          <tr><td class="t">ocl_concept</td><td class="mono">source, concept_id</td><td>The verbatim OCL/DGDA concept JSON for every product loaded.</td><td class="n">10</td></tr>
+          <tr><td class="t">http_snapshot</td><td class="mono">source, request_key</td><td>Every RxNav and DDInter response. A stored 2xx is never overwritten by an error.</td><td class="n">140</td></tr>
+          <tr class="grp"><td colspan="4"><span class="chip curated">curated · drug master</span></td></tr>
+          <tr><td class="t">brand_product</td><td class="mono">concept_id</td><td>One row per DGDA-registered product: trade name, company, form, raw content, parse status, link to its clinical drug.</td><td class="n">10</td></tr>
+          <tr><td class="t">brand_product_ingredient</td><td class="mono">concept_id, xm_code</td><td>DGDA’s own active-ingredient mapping to ICD-11 XM codes.</td><td class="n">11</td></tr>
+          <tr><td class="t">clinical_drug</td><td class="mono">bdc_id</td><td>Substance + strength + dose form + route, shared by all brands that match.</td><td class="n">10</td></tr>
+          <tr><td class="t">clinical_drug_ingredient</td><td class="mono">bdc_id, bds_id</td><td>Each ingredient’s strength (value, unit, per value, per unit) and source text.</td><td class="n">11</td></tr>
+          <tr><td class="t">substance</td><td class="mono">bds_id</td><td>One active ingredient, minted per ICD-11 XM code.</td><td class="n">11</td></tr>
+          <tr><td class="t">substance_name</td><td class="mono">bds_id, name, name_type</td><td>All the names a substance goes by (INN, local, RxNorm, DDInter).</td><td class="n">45</td></tr>
+          <tr><td class="t">substance_code</td><td class="mono">bds_id, system, code</td><td>Crosswalk codes with source, method and confidence; DDINTER codes carry a route scope.</td><td class="n">84</td></tr>
+          <tr><td class="t">interaction_coverage</td><td class="mono">bds_id</td><td>Whether DDInter covers the substance (full / none).</td><td class="n">11</td></tr>
+          <tr class="grp"><td colspan="4"><span class="chip curated">curated · DDInter mirror</span></td></tr>
+          <tr><td class="t">ddinter_drug</td><td class="mono">ddinter_id</td><td>DDInter entries we mapped: name, ATC codes, DrugBank id, route scope.</td><td class="n">12</td></tr>
+          <tr><td class="t">ddinter_pair</td><td class="mono">ddinter_a, ddinter_b</td><td>Every drug–drug pair of each mapped drug, including partners we have not loaded yet.</td><td class="n">6,305</td></tr>
+          <tr><td class="t">ddinter_interaction_text</td><td class="mono">interaction_id</td><td>Interaction and management text with references. Fetched for pairs where both drugs are ours.</td><td class="n">15</td></tr>
+          <tr><td class="t">ddinter_disease</td><td class="mono">ddinter_id, interaction_id</td><td>Drug–disease records with severity and guidance.</td><td class="n">50</td></tr>
+          <tr><td class="t">ddinter_food</td><td class="mono">ddinter_id, interaction_id</td><td>Drug–food records with mechanism, description and management.</td><td class="n">10</td></tr>
+          <tr class="grp"><td colspan="4"><span class="chip ops">ops</span></td></tr>
+          <tr><td class="t">batch</td><td class="mono">batch_id</td><td>A reviewed group of records and its approval status.</td><td class="n">1</td></tr>
+          <tr><td class="t">batch_item</td><td class="mono">batch_id, concept_id</td><td>One record in a batch: review state, note, last extraction time.</td><td class="n">10</td></tr>
+          <tr><td class="t">batch_run</td><td class="mono">id</td><td>Each pipeline run with ok/warn/fail counts per stage.</td><td class="n">1</td></tr>
+          <tr><td class="t">stage_result</td><td class="mono">batch_id, concept_id, stage</td><td>What each stage concluded for each record, with JSON evidence.</td><td class="n">40</td></tr>
+          <tr><td class="t">review_decision</td><td class="mono">id</td><td>Append-only OK / issue decisions with reviewer role and time.</td><td class="n">0</td></tr>
+          <tr><td class="t">flag</td><td class="mono">id</td><td>Problems reported by signed-in users, open or resolved.</td><td class="n">0</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="stack col">
+    <h2>Compared with the original design</h2>
+    <div class="status">
+      <div><span class="tag built">Built</span><span>Brand → clinical drug → substance, crosswalk codes with provenance, synonyms, route-aware DDInter mapping, coverage, drug–drug / disease / food tables, evidence per stage, append-only review.</span></div>
+      <div><span class="tag changed">Changed</span><span>Interactions are mirrored in DDInter’s ID space and joined through codes, instead of a <code>ddi</code> table keyed on our substance pairs. This lets partner drugs we haven’t loaded yet still show by name.</span></div>
+      <div><span class="tag changed">Changed</span><span><code>review_task</code> was replaced by <code>review_decision</code> plus a computed approval state on <code>batch_item</code>.</span></div>
+      <div><span class="tag changed">Changed</span><span>Substances are keyed on DGDA’s ICD-11 XM codes. Salts are already resolved there, so <code>salt_form</code> has not been needed yet.</span></div>
+      <div><span class="tag planned">Planned</span><span>Monthly release snapshots (versioned, read-only copies for partners), partner API keys and usage metering, a gold test set of known interactions, packs and MRP.</span></div>
+    </div>
+  </section>
+
+  <section class="stack col">
+    <h2>Worth checking while you review</h2>
+    <ol class="q">
+      <li><b>Substance identity.</b> One substance per ICD-11 XM code works when DGDA’s mapping is right. Should a pharmacist be able to merge two substances if DGDA ever splits one ingredient across two codes?</li>
+      <li><b>Interactions at substance level.</b> Interactions attach to the substance (and route), not to strength or brand. That is standard for checkers, but confirm it is acceptable clinically.</li>
+      <li><b>Same substance twice in one product.</b> <code>clinical_drug_ingredient</code> allows a substance only once per clinical drug. If a product lists the same base substance twice (two salts), the pipeline warns and creates no clinical drug.</li>
+      <li><b>Approval granularity.</b> Approval is per record (brand). An approved record can be re-opened by shared substance changes made in another batch. That is intentional, but it means more re-review as batches grow.</li>
+      <li><b>Personal data.</b> Reviewer and reporter emails are stored in <code>ops</code> only and never served publicly. Decide how long they should be kept.</li>
+    </ol>
+  </section>
+
+  <footer>Generated from <code>db/migrations/V1–V5</code> in the drugbd repository, with row counts read from the live database on 12 Oct 2026. Diagrams show every column. Mermaid diagrams scroll sideways on small screens.</footer>
+</div>
