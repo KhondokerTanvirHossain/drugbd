@@ -1,0 +1,448 @@
+<title>BDDrug KB System Overview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column (about 72ch) with full-width reference tables and diagram panels that scroll on their own. The colour code matches the data model page: violet = sources/raw, teal = pipeline + data, amber = operations. */
+:root {
+  --bg: #f6f7f9; --surface: #ffffff; --ink: #17202b; --muted: #5a6573; --rule: #dfe3e8;
+  --accent: #0e6e72; --raw: #6b5aa6; --ops: #a5620e;
+  --accent-soft: #e3f1f1; --raw-soft: #ece9f6; --ops-soft: #f7ecdc; --code-bg: #eef1f4;
+  --ok: #2f7d43; --warn: #9a6a00; --crit: #b23a3a;
+  --font-body: "Public Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12161b; --surface: #1a2027; --ink: #e6eaef; --muted: #9aa5b1; --rule: #2c343d;
+    --accent: #4fb3b6; --raw: #a597dc; --ops: #e0a35a;
+    --accent-soft: #163236; --raw-soft: #26223a; --ops-soft: #352818; --code-bg: #222a33;
+    --ok: #6cc184; --warn: #e2b44d; --crit: #e57373; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12161b; --surface: #1a2027; --ink: #e6eaef; --muted: #9aa5b1; --rule: #2c343d;
+  --accent: #4fb3b6; --raw: #a597dc; --ops: #e0a35a;
+  --accent-soft: #163236; --raw-soft: #26223a; --ops-soft: #352818; --code-bg: #222a33;
+  --ok: #6cc184; --warn: #e2b44d; --crit: #e57373; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15.5px; line-height: 1.6; }
+.wrap { max-width: 1120px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 72px; display: grid; gap: 48px; }
+.col { max-width: 72ch; }
+h1, h2, h3 { text-wrap: balance; line-height: 1.2; margin: 0; }
+h1 { font-size: clamp(1.9rem, 4vw, 2.6rem); font-weight: 800; letter-spacing: -0.02em; }
+h2 { font-size: 1.45rem; font-weight: 700; letter-spacing: -0.01em; }
+h3 { font-size: 1.05rem; font-weight: 700; }
+p { margin: 0; }
+.stack { display: grid; gap: 14px; }
+.eyebrow { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); }
+.lede { font-size: 1.08rem; color: var(--muted); }
+.muted { color: var(--muted); }
+code, .mono { font-family: var(--font-mono); font-size: 0.86em; }
+code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 18px; color: var(--muted); font-size: 0.9rem; }
+nav.toc { display: flex; flex-wrap: wrap; gap: 8px; }
+nav.toc a { font-size: 0.86rem; font-weight: 600; text-decoration: none; color: var(--ink); background: var(--surface); border: 1px solid var(--rule); padding: 4px 12px; border-radius: 999px; }
+nav.toc a:hover { border-color: var(--accent); color: var(--accent); }
+.chip { display: inline-flex; align-items: center; font-weight: 600; font-size: 0.78rem; padding: 1px 9px; border-radius: 999px; white-space: nowrap; }
+.chip.pub { background: var(--accent-soft); color: var(--accent); }
+.chip.tok { background: var(--ops-soft); color: var(--ops); }
+.chip.rev { background: var(--raw-soft); color: var(--raw); }
+
+/* Numbers strip */
+.nums { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.num { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px; display: grid; gap: 2px; }
+.num b { font-size: 1.6rem; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.num span { color: var(--muted); font-size: 0.86rem; }
+
+/* Diagram panels */
+.panel { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 12px; overflow-x: auto; }
+.panel pre.mermaid { margin: 0; min-width: 820px; background: transparent; text-align: center; }
+
+/* Reference tables */
+.tablewrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; }
+table { border-collapse: collapse; width: 100%; min-width: 820px; font-size: 0.9rem; }
+th, td { text-align: left; vertical-align: top; padding: 10px 14px; border-bottom: 1px solid var(--rule); }
+th { font-size: 0.74rem; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); font-weight: 700; background: var(--bg); }
+tr:last-child td { border-bottom: 0; }
+td.t { white-space: nowrap; font-family: var(--font-mono); font-size: 0.82rem; font-weight: 600; }
+td.m { white-space: nowrap; font-family: var(--font-mono); font-size: 0.78rem; font-weight: 700; color: var(--accent); }
+td.p { font-family: var(--font-mono); font-size: 0.78rem; color: var(--muted); }
+tr.grp td { background: var(--bg); font-weight: 700; font-size: 0.8rem; letter-spacing: 0.04em; }
+
+/* Stage cards */
+.stages { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.stage { background: var(--surface); border: 1px solid var(--rule); border-top: 3px solid var(--accent); border-radius: 10px; padding: 16px 18px; display: grid; gap: 8px; align-content: start; min-width: 0; }
+.stage .k { font-family: var(--font-mono); font-size: 0.8rem; color: var(--accent); font-weight: 700; }
+.stage p { font-size: 0.92rem; }
+.stage dl { margin: 0; display: grid; gap: 4px; font-size: 0.85rem; }
+.stage dt { font-weight: 700; color: var(--muted); font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; margin-top: 4px; }
+.stage dd { margin: 0; }
+
+/* Runbook */
+.runbook { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+.task { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 16px 18px; display: grid; gap: 8px; min-width: 0; }
+.task ol { margin: 0; padding-left: 20px; display: grid; gap: 4px; font-size: 0.92rem; }
+pre.cmd { margin: 0; background: var(--code-bg); border-radius: 6px; padding: 10px 12px; font-family: var(--font-mono); font-size: 0.78rem; overflow-x: auto; white-space: pre; }
+
+/* Notes */
+.notes { display: grid; gap: 10px; }
+.note { display: grid; grid-template-columns: 96px 1fr; gap: 12px; align-items: baseline; }
+.tag { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
+.tag.fix { color: var(--warn); }
+.tag.by { color: var(--accent); }
+.tag.doc { color: var(--muted); }
+@media (max-width: 560px) { .note { grid-template-columns: 1fr; gap: 2px; } }
+footer { color: var(--muted); font-size: 0.85rem; border-top: 1px solid var(--rule); padding-top: 18px; }
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+
+<div class="wrap">
+
+  <header class="stack col">
+    <span class="eyebrow">System reference · what each part does and how</span>
+    <h1>BDDrug KB system overview</h1>
+    <p class="lede">Every process, ETL stage, API endpoint, web page and deployment job in the drugbd repository, built from the code itself. It covers how a DGDA product becomes a reviewed, public record on drugdb.eliooo.org.</p>
+    <div class="meta">
+      <span>As of 12 Oct 2026</span>
+      <span>main @ 8cca602</span>
+      <span>Database locked: <code>db-schema-v1.0</code> (V1–V5)</span>
+      <span>Sprints 1–3 delivered</span>
+    </div>
+    <nav class="toc" aria-label="Sections">
+      <a href="#picture">Big picture</a><a href="#etl">ETL pipeline</a><a href="#api">API</a><a href="#web">Website</a><a href="#ops">Deploy and CI</a><a href="#runbook">How to</a><a href="#tests">Tests</a><a href="#notes">Known gaps</a>
+    </nav>
+  </header>
+
+  <section class="nums" aria-label="The system in numbers">
+    <div class="num"><b>4</b><span>pipeline stages</span></div>
+    <div class="num"><b>3</b><span>external sources (OCL, RxNav, DDInter)</span></div>
+    <div class="num"><b>21</b><span>database tables in 3 schemas</span></div>
+    <div class="num"><b>13</b><span>API endpoints under <code>/v1</code></span></div>
+    <div class="num"><b>8</b><span>web pages, plus 1 sign-in route</span></div>
+    <div class="num"><b>3</b><span>GitHub workflows</span></div>
+    <div class="num"><b>~600</b><span>automated tests (274 ETL · 116 API · ~212 web)</span></div>
+  </section>
+
+  <section class="stack" id="picture">
+    <div class="stack col">
+      <h2>The big picture</h2>
+      <p>Data flows one way, from public sources through the pipeline into PostgreSQL. The API reads it, and the website shows it. Pharmacists' decisions flow back through the website into the review tables, and the API uses those tables to decide what the public may see.</p>
+    </div>
+    <div class="panel">
+<pre class="mermaid">
+flowchart LR
+  subgraph SRC["External sources"]
+    OCL["National OCL server<br/>DGDA register (MoHFW)"]
+    RX["NLM RxNav<br/>RxCUI, ATC, DrugBank, SNOMED"]
+    DDI["DDInter 2.0<br/>interactions"]
+  end
+  subgraph ETL["bddrug-etl (Python, on-demand job)"]
+    S1["dgda"] --> S2["substances"] --> S3["clinical"] --> S4["ddinter"]
+  end
+  subgraph DB["PostgreSQL 16"]
+    RAW[("raw<br/>verbatim responses")]
+    CUR[("curated<br/>drug master + interactions")]
+    OPS[("ops<br/>batches, evidence, review")]
+  end
+  API["bddrug-api<br/>Spring Boot · internal only"]
+  WEB["bddrug-web<br/>Next.js server-rendered"]
+  CADDY["Shared Caddy<br/>TLS · drugdb.eliooo.org"]
+  PEOPLE["Visitors · pharmacists · engineers"]
+  OCL --> S1
+  RX --> S2
+  DDI --> S4
+  ETL --> RAW & CUR & OPS
+  CUR & OPS --> API
+  API <--> WEB
+  WEB <--> CADDY <--> PEOPLE
+  WEB -. "review decisions, flags (internal token)" .-> API
+</pre>
+    </div>
+  </section>
+
+  <section class="stack" id="etl">
+    <div class="stack col">
+      <h2>ETL pipeline: <code>bddrug-etl</code></h2>
+      <p>One Python 3.12 package with one command. It runs up to four stages for one batch file, always in the order dgda → substances → clinical → ddinter, and each stage commits on its own. Each product runs in its own savepoint, so one failing product never stops the others. A lost database connection stops the stage. Every run is appended to <code>ops.batch_run</code>, and the run ends with a log line such as <code>batch=0001-pilot dgda=10/0/0 substances=10/0/0 clinical=10/0/0 ddinter=0/10/0</code> (ok/warn/fail counts).</p>
+    </div>
+
+    <div class="stages">
+      <div class="stage">
+        <span class="k">stage 1 · dgda</span>
+        <h3>Load the registered product</h3>
+        <p>Fetches each concept in the batch file from the national OCL server and loads the product and its ICD-11 ingredients.</p>
+        <dl><dt>Calls</dt><dd>OCL <code>GET /orgs/MoHFW/sources/DGDA-Drugs/concepts/{id}/</code>, with a 0.5 s pause and a 60 s timeout</dd>
+        <dt>Writes</dt><dd><code>raw.ocl_concept</code>, <code>brand_product</code>, <code>brand_product_ingredient</code>, <code>ops.batch</code> / <code>batch_item</code></dd>
+        <dt>Results</dt><dd>ok · fail “not found at source” · fail “not a registered Drug product”</dd></dl>
+      </div>
+      <div class="stage">
+        <span class="k">stage 2 · substances</span>
+        <h3>Identify the active ingredients</h3>
+        <p>Finds or creates one <code>BDS-</code> substance per ICD-11 XM code. It records names (for example, Paracetamol for Acetaminophen) and adds RxNav codes.</p>
+        <dl><dt>Calls</dt><dd>RxNav <code>rxcui.json</code>, <code>approximateTerm.json</code>, <code>properties</code>, <code>allProperties?prop=codes</code>, at most 10 requests/s</dd>
+        <dt>Writes</dt><dd><code>substance</code>, <code>substance_name</code>, <code>substance_code</code> (XM, RXCUI, ATC, DRUGBANK, SNOMEDCT), <code>raw.http_snapshot</code></dd>
+        <dt>Results</dt><dd>ok · warn “no RxCUI for …” · fail “no ICD-11 ingredient mapping”</dd></dl>
+      </div>
+      <div class="stage">
+        <span class="k">stage 3 · clinical</span>
+        <h3>Strength, form and route</h3>
+        <p>Parses the strength text (for example “Amoxicillin + Clavulanic Acid 500 mg + 125 mg”), matches each strength to its substance by name, and links the product to a shared <code>BDC-</code> clinical drug.</p>
+        <dl><dt>Calls</dt><dd>None (pure parsing)</dd>
+        <dt>Writes</dt><dd><code>clinical_drug</code>, <code>clinical_drug_ingredient</code>, <code>brand_product.bdc_id / parse_status</code></dd>
+        <dt>Results</dt><dd>ok · warn (partial parse, unaligned ingredient, substance missing from the text) · fail (unparseable)</dd></dl>
+      </div>
+      <div class="stage">
+        <span class="k">stage 4 · ddinter</span>
+        <h3>Interactions</h3>
+        <p>Maps each substance to its DDInter entries, taking route into account and confirming the match by DrugBank ID. It stores the substance’s drug–drug pairs, disease and food records and interaction texts, and records explicit coverage (“none” for domperidone).</p>
+        <dl><dt>Calls</dt><dd>DDInter drug list, drug detail, pair graph, interact-with lists, interaction pages, at most 1 request/s with CSRF handled</dd>
+        <dt>Writes</dt><dd><code>ddinter_*</code> tables, <code>substance_code</code> (DDINTER), <code>interaction_coverage</code>, <code>raw.http_snapshot</code></dd>
+        <dt>Results</dt><dd>ok · warn (name-only match, no DDInter data, text not found) · fail. Commits every <code>--ddinter-chunk</code> products.</dd></dl>
+      </div>
+    </div>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Command, flag or module</th><th>What it does</th><th>Where</th></tr></thead>
+        <tbody>
+          <tr class="grp"><td colspan="3">Command line</td></tr>
+          <tr><td class="t">--batch FILE</td><td>Required. The batch file: one OCL concept ID per line, with <code>#</code> comments. Its name, for example <code>0001-pilot</code>, becomes the batch ID.</td><td class="p">jobs/run_pipeline.py</td></tr>
+          <tr><td class="t">--stages a,b</td><td>Runs only these stages. They still run in canonical order. An unknown name is a usage error (exit code 2).</td><td class="p">jobs/run_pipeline.py</td></tr>
+          <tr><td class="t">--concept ID</td><td>Re-runs only these records of an already-loaded batch. It resets their review to pending and leaves the others untouched. Can be repeated.</td><td class="p">jobs/run_pipeline.py</td></tr>
+          <tr><td class="t">--ddinter-chunk N</td><td>How many products the DDInter stage commits at a time (default 5). A crash keeps the chunks already committed.</td><td class="p">jobs/run_pipeline.py</td></tr>
+          <tr><td class="t">exit codes</td><td>0 = the run finished (products may still have failed). 1 = a stage aborted or the batch is not loaded. 2 = usage error.</td><td class="p">jobs/run_pipeline.py</td></tr>
+          <tr class="grp"><td colspan="3">Building blocks</td></tr>
+          <tr><td class="t">OclClient</td><td>Read-only client for the national OCL server. Fetches single concepts or pages through the register.</td><td class="p">ocl/client.py</td></tr>
+          <tr><td class="t">concept_to_product</td><td>Turns an OCL concept into a product row plus its ICD-11 ingredients. Pure, with no I/O.</td><td class="p">ocl/transform.py</td></tr>
+          <tr><td class="t">RxNavClient</td><td>Looks up an ingredient RxCUI by name: exact first, then a close match only when it is unambiguous and resolves to an ingredient. Fetches ATC (7-character), DrugBank and SNOMED codes.</td><td class="p">rxnav/client.py</td></tr>
+          <tr><td class="t">DDInterClient</td><td>Client for DDInter 2.0: CSRF token from the page script, DataTables paging, per-drug pair map cache.</td><td class="p">ddinter/client.py</td></tr>
+          <tr><td class="t">DDInter HTML parsers</td><td>Read drug-detail and interaction pages. Missing sections never swallow their neighbours. Treat “None”, “-” and empty values as missing.</td><td class="p">ddinter/html.py</td></tr>
+          <tr><td class="t">SnapshotHttp</td><td>Polite HTTP wrapper. Spaces out requests and stores every RxNav and DDInter response in <code>raw.http_snapshot</code> with CSRF tokens redacted. Never overwrites a good response with an error.</td><td class="p">http/snapshot.py</td></tr>
+          <tr><td class="t">parse_generic_content</td><td>Parses DGDA strength text. Supports combinations, “500 mg/5 ml”, thousands separators and per-ingredient segments. Rejects ambiguous decimal commas, and never guesses strengths on a partial parse.</td><td class="p">parse/content.py</td></tr>
+          <tr><td class="t">names helpers</td><td>Normalise names, strip salts (but never leave a bare “Magnesium”) and map dosage form to route (eye drops → ophthalmic).</td><td class="p">parse/names.py</td></tr>
+          <tr><td class="t">reopen_review</td><td>Resets processed records to pending. When shared substance or DDInter data really changed, it also re-opens other records that show that data.</td><td class="p">load/batches.py</td></tr>
+          <tr><td class="t">write_stage_results · error_note</td><td>Saves one result per record per stage, with JSON evidence. Error notes are one line and at most 200 characters.</td><td class="p">stages/results.py</td></tr>
+          <tr><td class="t">load_dgda (legacy)</td><td>Older loader for the DGDA stage only. Still importable, but nothing calls it any more.</td><td class="p">jobs/load_dgda.py</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="stack" id="api">
+    <div class="stack col">
+      <h2>API: <code>bddrug-api</code></h2>
+      <p>Java 21, Spring Boot WebFlux with R2DBC, in a hexagonal layout. It runs only on the internal Docker network and is never reachable from the internet. Every response uses the standard envelope <code>{success, data, message, errors, metadata}</code>. A request without the internal token gets <span class="chip pub">public</span> scope: only records a pharmacist approved. With the token, which only the web server holds, a request gets <span class="chip tok">all</span> scope and can write.</p>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Method</th><th>Path</th><th>Access</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr class="grp"><td colspan="4">Browse</td></tr>
+          <tr><td class="m">GET</td><td class="t">/v1/products?q=&amp;page=</td><td><span class="chip pub">public</span> <span class="chip tok">all</span></td><td>Search by brand or ingredient text, 20 per page. Wildcard characters are matched literally.</td></tr>
+          <tr><td class="m">GET</td><td class="t">/v1/products/loaded</td><td><span class="chip pub">public</span> <span class="chip tok">all</span></td><td>A light list of products for the checker’s picker.</td></tr>
+          <tr><td class="m">GET</td><td class="t">/v1/products/{conceptId}</td><td><span class="chip pub">public</span> <span class="chip tok">all</span></td><td>One product with its ingredients, clinical drug and DDInter entries. If it isn’t approved, anonymous callers get a hidden stub: <code>{conceptId, tradeName, reviewStatus, hidden: true}</code>.</td></tr>
+          <tr><td class="m">GET</td><td class="t">/v1/substances/{bdsId}</td><td><span class="chip pub">public</span> <span class="chip tok">all</span></td><td>A substance with its names, codes, coverage, products and its drug, disease and food interactions, ordered by severity.</td></tr>
+          <tr><td class="m">POST</td><td class="t">/v1/interactions/check</td><td><span class="chip pub">public</span> <span class="chip tok">all</span></td><td>Checks 2–20 products. Returns alerts (route-aware), duplicate substances, <code>noData</code> and <code>notReviewed</code>.</td></tr>
+          <tr class="grp"><td colspan="4">Batches and evidence (always readable)</td></tr>
+          <tr><td class="m">GET</td><td class="t">/v1/batches</td><td><span class="chip pub">open</span></td><td>All batches, newest first.</td></tr>
+          <tr><td class="m">GET</td><td class="t">/v1/batches/{batchId}</td><td><span class="chip pub">open</span></td><td>Every record with its extracted data, raw DGDA JSON, stage results and review state.</td></tr>
+          <tr><td class="m">GET</td><td class="t">/v1/batches/{batchId}/report</td><td><span class="chip pub">open</span></td><td>Ok/warn/fail per stage, review progress, warnings and fails, the last 5 runs, and the change against the previous run.</td></tr>
+          <tr class="grp"><td colspan="4">Review and flags</td></tr>
+          <tr><td class="m">POST</td><td class="t">/v1/batches/{b}/items/{c}/decisions</td><td><span class="chip tok">token</span></td><td>Records an OK or an issue, then recomputes the record’s and the batch’s approval. A stale page (the record was re-run) gets 409.</td></tr>
+          <tr><td class="m">GET</td><td class="t">/v1/batches/{b}/items/{c}/decisions</td><td><span class="chip pub">public</span> <span class="chip tok">all</span></td><td>Decision history, newest first. Shows roles only, and emails only with the token.</td></tr>
+          <tr><td class="m">POST</td><td class="t">/v1/flags</td><td><span class="chip tok">token</span></td><td>Creates a problem report against a product, substance, batch item or check.</td></tr>
+          <tr><td class="m">GET</td><td class="t">/v1/flags?status=</td><td><span class="chip tok">token</span></td><td>Lists open or resolved flags (up to 500).</td></tr>
+          <tr><td class="m">POST</td><td class="t">/v1/flags/{id}/resolve</td><td><span class="chip tok">token</span></td><td>Marks a flag resolved.</td></tr>
+          <tr class="grp"><td colspan="4">Platform</td></tr>
+          <tr><td class="m">GET</td><td class="t">/actuator/health</td><td><span class="chip pub">open</span></td><td>Spring health check (standard actuator JSON).</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="stack col">
+      <h3>Rules inside the API</h3>
+      <p><b>Approval gate</b> (<code>ApprovalRule</code>, <code>ReviewSql</code>): a record is public only after a pharmacist records OK after its latest extraction, with no issue recorded after that OK. An engineer’s OK is recorded but does not publish. <b>Route rule</b> (<code>RouteRule</code>): an eye-drop product uses the ophthalmic DDInter entry when one exists; otherwise the alert says the route was assumed. <b>Hidden records</b> (<code>HiddenRecord</code>): “not yet reviewed” is never shown as “not found” or “no data”. <b>Startup</b>: the API refuses to start without a strong internal token (at least 32 characters). <b>Validate</b>: shared input checks for every write.</p>
+    </div>
+  </section>
+
+  <section class="stack" id="web">
+    <div class="stack col">
+      <h2>Website: <code>bddrug-web</code></h2>
+      <p>Next.js 15 with every page rendered on the server. The only browser-side code is the Google sign-in button. The web server calls the API privately and attaches the internal token only for reviewers and for writes.</p>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Page</th><th>What it shows</th><th>Anonymous visitor</th><th>Signed-in user</th><th>Pharmacist / engineer</th></tr></thead>
+        <tbody>
+          <tr><td class="t">/</td><td>Product search</td><td>Approved products only</td><td>Same</td><td>Everything, with an “unreviewed” badge</td></tr>
+          <tr><td class="t">/products/[id]</td><td>Product: DGDA fields, ingredients, clinical drug, DDInter entries per ingredient</td><td>Approved data, or “Not yet reviewed by a pharmacist”</td><td>Same, plus a flag form</td><td>Full data, badge, flag form</td></tr>
+          <tr><td class="t">/substances/[id]</td><td>Substance: coverage, names, codes, interactions by severity, diseases, foods, products</td><td>Hidden until one product is approved</td><td>Same, plus a flag form</td><td>Full</td></tr>
+          <tr><td class="t">/check</td><td>Interaction checker for 2–20 products</td><td>Approved products; unapproved ones listed as “not yet reviewed”</td><td>Same, plus a flag form</td><td>All loaded products</td></tr>
+          <tr><td class="t">/batches</td><td>Batch list</td><td>Visible</td><td>Visible</td><td>Visible</td></tr>
+          <tr><td class="t">/batches/[id]</td><td>Review sheet: DGDA source next to extracted fields, stage evidence, batch report, history</td><td>Read-only (evidence is public)</td><td>Read-only</td><td>Mark OK / Report issue forms</td></tr>
+          <tr><td class="t">/flags</td><td>Open problem reports with a Resolve button</td><td>Not allowed</td><td>Not allowed</td><td>Visible</td></tr>
+          <tr><td class="t">/signin</td><td>Google sign-in, or the current role with a sign-out button</td><td>Sign-in button</td><td>Role shown, never the email</td><td>Role shown</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="panel">
+<pre class="mermaid">
+sequenceDiagram
+  autonumber
+  actor R as Reviewer
+  participant B as Browser (/signin)
+  participant G as Google via Firebase
+  participant W as Web server
+  participant A as API (internal)
+  R->>B: Sign in with Google
+  B->>G: popup sign-in
+  G-->>B: ID token
+  B->>W: POST /api/session {idToken}
+  W->>W: verify token, email verified, role from REVIEWERS
+  W-->>B: httpOnly session cookie (8 h)
+  R->>W: Mark OK on /batches/0001-pilot (with Turnstile)
+  W->>W: re-check session + role, verify Turnstile (fails closed)
+  W->>A: POST /v1/batches/…/decisions + internal token
+  A->>A: lock record, check not stale, append decision, recompute approval
+  A-->>W: review status + batch status
+  W-->>R: page refreshes, record shows OK
+</pre>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Piece</th><th>What it does</th><th>Where</th></tr></thead>
+        <tbody>
+          <tr><td class="t">POST /api/session</td><td>Exchanges a fresh Firebase ID token for the site’s own signed session cookie, with the role taken from <code>REVIEWERS</code>. Never returns or logs the email.</td><td class="p">app/api/session/route.ts</td></tr>
+          <tr><td class="t">DELETE /api/session</td><td>Clears the cookie. The UI uses the sign-out server action instead.</td><td class="p">app/api/session/route.ts</td></tr>
+          <tr><td class="t">reviewAction</td><td>Server action for OK / issue. Takes email and role from the session, never from the form.</td><td class="p">lib/review-actions.ts</td></tr>
+          <tr><td class="t">flagAction</td><td>Any signed-in visitor can report a problem on a product, substance or check.</td><td class="p">lib/review-actions.ts</td></tr>
+          <tr><td class="t">resolveFlagAction</td><td>Pharmacists and engineers close flags.</td><td class="p">lib/review-actions.ts</td></tr>
+          <tr><td class="t">signOutAction</td><td>Signs out from the header or /signin.</td><td class="p">lib/session-actions.ts</td></tr>
+          <tr><td class="t">Turnstile</td><td>Cloudflare bot check on every write, verified on the server (5 s timeout, fails closed).</td><td class="p">lib/turnstile.ts</td></tr>
+          <tr><td class="t">Rate limit</td><td>10 requests/s per IP with a burst of 30. Returns 429 above that.</td><td class="p">middleware.ts</td></tr>
+          <tr><td class="t">Security headers</td><td>CSP limited to Firebase and Turnstile hosts, plus noindex, no framing and nosniff.</td><td class="p">next.config.ts, lib/csp.ts</td></tr>
+          <tr><td class="t">Copy rules</td><td>Fixed wording: missing data is never shown as “no interactions”, a placeholder or “unknown”.</td><td class="p">lib/copy.ts, lib/severity.ts</td></tr>
+          <tr><td class="t">Secret checks</td><td>The server will not start without a strong <code>SESSION_SECRET</code>. The build fails if a server secret could reach the browser bundle.</td><td class="p">instrumentation.ts, scripts/check-client-bundle.mjs</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="stack" id="ops">
+    <div class="stack col">
+      <h2>Deployment and CI</h2>
+      <p>Three images (<code>bddrug-etl</code>, <code>bddrug-api</code>, <code>bddrug-web</code>) are built by GitHub Actions, tagged with the commit hash and stored in GHCR. They run with docker-compose on the shared EC2 host in <code>/home/ec2-user/drugdb</code>, next to medscribe and n8n. The existing Caddy handles HTTPS for drugdb.eliooo.org. No host ports are published, and only the website is on Caddy’s network.</p>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Workflow / service</th><th>Trigger or role</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr class="grp"><td colspan="3">GitHub Actions</td></tr>
+          <tr><td class="t">ci</td><td>Every push and pull request</td><td>Jobs: <code>schema-lock</code> (migrations unchanged), <code>etl</code> (pytest), <code>api</code> (Gradle tests), <code>web</code> (Vitest + production build), <code>images</code> (all three Docker builds).</td></tr>
+          <tr><td class="t">deploy</td><td>After <code>ci</code> passes on a push to main</td><td>Builds and pushes images tagged with the commit hash (public sign-in config baked in from repo variables). Copies compose, migrations and batch files to the host, checks the host <code>.env</code>, rolls the stack, then smoke-tests <code>https://drugdb.eliooo.org/batches</code>.</td></tr>
+          <tr><td class="t">load-dgda</td><td>Manual (Actions tab), input <code>batch</code></td><td>Runs the <b>full pipeline</b> (all four stages) for a batch file already on the host. The name is historical.</td></tr>
+          <tr class="grp"><td colspan="3">Compose services on the host</td></tr>
+          <tr><td class="t">db</td><td>Always on · 256 MB</td><td>PostgreSQL 16, internal network only, persistent volume.</td></tr>
+          <tr><td class="t">flyway</td><td>Runs once at each deploy</td><td>Applies any new migrations before the API starts and refuses edited ones.</td></tr>
+          <tr><td class="t">api</td><td>Always on · 448 MB</td><td>The API on <code>api:8080</code>, internal network only.</td></tr>
+          <tr><td class="t">web</td><td>Always on · 256 MB</td><td>The website. It joins Caddy’s <code>n8n_edge</code> network under the alias <code>bddrug-web</code>.</td></tr>
+          <tr><td class="t">etl</td><td>On demand (profile <code>jobs</code>) · 256 MB</td><td>The pipeline job. Batch files are mounted read-only. It is the only service with outbound internet access (OCL, RxNav, DDInter).</td></tr>
+          <tr class="grp"><td colspan="3">Configuration</td></tr>
+          <tr><td class="t">Host .env</td><td>~/drugdb/deploy/.env (mode 600)</td><td>The only place for secrets and reviewer emails: DB credentials, <code>SESSION_SECRET</code>, <code>INTERNAL_API_TOKEN</code>, <code>TURNSTILE_SECRET_KEY</code>, <code>REVIEWERS</code>, plus the public Firebase and Turnstile values.</td></tr>
+          <tr><td class="t">Repo variables</td><td>GitHub · public values</td><td><code>FIREBASE_API_KEY</code>, <code>FIREBASE_AUTH_DOMAIN</code>, <code>FIREBASE_PROJECT_ID</code>, <code>FIREBASE_APP_ID</code>, <code>TURNSTILE_SITE_KEY</code> (built into the web image).</td></tr>
+          <tr><td class="t">Repo secrets</td><td>GitHub</td><td><code>EC2_HOST</code>, <code>EC2_USER</code>, <code>EC2_SSH_KEY</code> (the same values as elioo-health).</td></tr>
+          <tr><td class="t">Caddy block</td><td>~/n8n/Caddyfile</td><td><code>drugdb.eliooo.org → bddrug-web:3000</code>, added once. A copy is in <code>deploy/caddy/drugdb.caddy</code>.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="panel">
+<pre class="mermaid">
+flowchart LR
+  A["Merge to main"] --> B["ci: schema-lock, etl, api, web, images"]
+  B -- green --> C["deploy: build + push images (commit hash)"]
+  C --> D["copy compose, migrations, batches to EC2"]
+  D --> E["docker-compose up: db → flyway → api → web"]
+  E --> F["smoke test https://drugdb.eliooo.org/batches"]
+  F --> G["Run load-dgda (manual) for a batch file"]
+  G --> H["Reviewers approve on /batches/&lt;id&gt;"]
+  H --> I["Approved records become public"]
+</pre>
+    </div>
+  </section>
+
+  <section class="stack" id="runbook">
+    <div class="stack col"><h2>How to do common things</h2></div>
+    <div class="runbook">
+      <div class="task">
+        <h3>Load a new batch</h3>
+        <ol>
+          <li>Add <code>batches/NNNN-name.txt</code> (one OCL concept ID per line) in a PR.</li>
+          <li>Merge. The deploy copies the file to the host.</li>
+          <li>In the Actions tab, run <b>load-dgda</b> with <code>batch=NNNN-name.txt</code>.</li>
+          <li>Reviewers open <code>/batches/NNNN-name</code>.</li>
+        </ol>
+      </div>
+      <div class="task">
+        <h3>Re-run one record</h3>
+        <ol><li>On the host, run:</li></ol>
+<pre class="cmd">cd ~/drugdb/deploy
+docker-compose --profile jobs run --rm etl \
+  --batch /app/batches/0001-pilot.txt \
+  --concept 186-0030-006--napa</pre>
+        <p class="muted" style="font-size:.88rem">The record goes back to pending and must be reviewed again.</p>
+      </div>
+      <div class="task">
+        <h3>Add or remove a reviewer</h3>
+        <ol>
+          <li>On the host, edit the <code>REVIEWERS=</code> line in <code>~/drugdb/deploy/.env</code> (<code>email:pharmacist,email:engineer</code>).</li>
+          <li>Run <code>docker-compose up -d --no-deps web</code>. Only the website restarts.</li>
+        </ol>
+      </div>
+      <div class="task">
+        <h3>Change the database</h3>
+        <ol>
+          <li>Never edit V1–V5.</li>
+          <li>Add <code>db/migrations/V6__what.sql</code> and its checksum line in <code>db/migrations.lock</code>.</li>
+          <li>Explain the change and its rollback in the PR. CI <code>schema-lock</code> enforces the rest.</li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <section class="stack" id="tests">
+    <div class="stack col">
+      <h2>Tests</h2>
+      <p>About 600 automated tests run on every push. Database tests start a real PostgreSQL 16 in Docker and apply the actual migrations.</p>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Suite</th><th>Size</th><th>What it covers</th></tr></thead>
+        <tbody>
+          <tr><td class="t">ETL · pytest</td><td>274 tests · 20 files</td><td>Parsers (the 10 pilot strings plus edge cases), clients (with recorded RxNav and DDInter fixtures), every stage, re-open logic, chunking and crash handling, the CLI, schema V3–V5.</td></tr>
+          <tr><td class="t">API · JUnit + Testcontainers</td><td>116 tests · 15 classes</td><td>Every endpoint, the approval gate, public vs reviewer visibility, flags, the route rule, placeholder text, startup token check.</td></tr>
+          <tr><td class="t">Web · Vitest</td><td>~212 tests · 24 files</td><td>Every page’s rendering, server actions (session, role, Turnstile), the session route, the API client, the client-bundle secret scan.</td></tr>
+          <tr><td class="t">CI checks</td><td>5 jobs</td><td>Schema lock, the three suites, and the three Docker image builds.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="stack col" id="notes">
+    <h2>Known gaps and notes</h2>
+    <p>These came out of reading the code against the docs. None of them breaks anything today.</p>
+    <div class="notes">
+      <div class="note"><span class="tag by">By design</span><span>Batch pages and their API endpoints are public, including extracted data and raw DGDA JSON for records not yet approved. They are evidence pages; the approval gate applies to search, product, substance and the checker.</span></div>
+      <div class="note"><span class="tag by">By design</span><span>The API uses <code>/v1/…</code> rather than the platform’s usual <code>/api/v1/…</code>. It is internal-only, behind the website.</span></div>
+      <div class="note"><span class="tag fix">To tidy</span><span>The workflow name <code>load-dgda</code> is historical: it runs the full pipeline. It doesn’t yet expose <code>--concept</code>, <code>--stages</code> or <code>--ddinter-chunk</code>; those need SSH for now.</span></div>
+      <div class="note"><span class="tag fix">To tidy</span><span>The legacy <code>jobs/load_dgda.py</code> module is no longer used and can be removed.</span></div>
+      <div class="note"><span class="tag fix">To tidy</span><span>No container health checks are defined for <code>api</code> and <code>web</code>. <code>restart: unless-stopped</code> recovers crashes, but a hung process would go unnoticed.</span></div>
+      <div class="note"><span class="tag fix">To tidy</span><span>The rate limiter keeps its counts in memory, which works because the site runs one web container. It needs a shared store if it ever scales out.</span></div>
+      <div class="note"><span class="tag doc">Docs</span><span>The README intro still describes Sprint 1, and a compose comment says the ETL network is “for OCL only” (it also reaches RxNav and DDInter). Both need updating.</span></div>
+      <div class="note"><span class="tag doc">Docs</span><span>Deferred minor items from each sprint’s reviews are listed in <code>docs/superpowers/plans/*-execution-ledger.md</code>.</span></div>
+    </div>
+  </section>
+
+  <footer>Built from the repository code (not the docs) by four parallel readers. A separate checker then compared every endpoint, page, action, flag, job and service against the source; its corrections are applied here. Repo copy: <code>docs/artifacts/2026-10-12-system-overview.html</code>. Companion page: the data model (schema v1.0).</footer>
+</div>
