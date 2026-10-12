@@ -1,6 +1,12 @@
 name: ci
 on: [pull_request, push]
 jobs:
+  schema-lock:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Locked migrations are unchanged and every migration is in db/migrations.lock
+        run: ./db/check-migration-lock.sh
   etl:
     runs-on: ubuntu-24.04
     steps:

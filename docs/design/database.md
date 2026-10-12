@@ -1,0 +1,36 @@
+# Database design and schema lock
+
+**Status:** locked as `db-schema-v1.0`. The product owner approved the design on 2026-10-12.
+**Schema:** migrations `V1`–`V5` in `db/migrations/`, applied on drugdb.eliooo.org.
+**Reference:** [Data model page](../artifacts/2026-10-12-data-model.html) (repo copy) · live version: https://claude.ai/artifact/5axV32KDeM55TrSUNF4qGc
+
+## What "locked" means
+1. **Applied migrations are immutable.** `V1`–`V5` are never edited, renamed or removed. Their SHA-256 checksums are recorded in `db/migrations.lock`.
+2. **CI enforces it.** The `schema-lock` job runs `db/check-migration-lock.sh` on every push and pull request. The job fails when:
+   - a locked file changed, is missing, or was renamed;
+   - a migration exists that is not in the lock file;
+   - two migrations share a version number.
+
+   Flyway also refuses to start the stack if an applied migration's checksum differs (`validateOnMigrate`).
+3. **Every schema change is a deliberate decision.** To change the schema:
+   - add a **new** migration `db/migrations/V<next>__<what>.sql` (additive where possible, and never destructive to live data without a written migration plan);
+   - add its line to `db/migrations.lock` (`shasum -a 256 V<next>__<what>.sql`);
+   - in the PR description, explain the change, why it is needed, what it does to existing rows, and how to roll it back;
+   - have it reviewed. A change to the data model also updates the data model page and this document.
+4. **Version tags.** Each approved schema state gets a git tag: `db-schema-v1.0` = V1–V5. Bump the minor version for additive changes (`v1.1`). Bump the major version for changes that alter or remove existing structures.
+
+## The design in one paragraph
+Three PostgreSQL schemas:
+- **`raw`** holds verbatim source responses: the DGDA/OCL concepts plus every RxNav and DDInter HTTP response.
+- **`curated`** holds the drug master. It has three levels: a brand (`brand_product`), its clinical drug (`clinical_drug`, ID `BDC-`), and its substances (`substance`, ID `BDS-`). Substances carry names, crosswalk codes (ICD-11 XM, RxCUI, ATC, DrugBank, SNOMED CT, DDInter, with route scope) and interaction coverage. `curated` also holds a mirror of DDInter's drug–drug, drug–disease and drug–food data, joined to our substances through `DDINTER` codes.
+- **`ops`** holds batches, per-stage evidence, run history, append-only review decisions and flags. The public approval gate is computed from these: a record is public only after a pharmacist's OK made since its latest extraction.
+
+## Rules enforced by the database
+- One substance per ICD-11 XM code (partial unique index).
+- `BDS-` and `BDC-` IDs come from sequences capped at 999,999 with no cycling, so they are never reused.
+- A clinical drug is unique by signature (dose form, route, sorted strengths).
+- Each DDInter pair is stored once (`ddinter_a < ddinter_b`).
+- Interaction coverage is stored explicitly (`full` or `none`). "No data" is never inferred.
+- Missing DDInter text is NULL. A text row needs at least one of interaction or management.
+- Review decisions are append-only. A reviewed record cannot be deleted (foreign key with NO ACTION).
+- Enumerations and confidence (0–1) are enforced by CHECK constraints.
