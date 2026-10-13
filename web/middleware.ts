@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { NEW_COPY, NEW_COPY_ROWS, TOO_MANY_REQUESTS } from "@/lib/copy";
 import { LIMITS, type Limits } from "@/lib/limits";
 import { accountKey, clientIp, secondsUntilDhakaMidnight } from "@/lib/rate-limit";
+import { logRequest, routeTemplate } from "@/lib/request-log";
 import { AUTH_PROXY_PREFIX, nextWithSecurityHeaders } from "@/lib/security-headers";
 import { LEGACY_SESSION_COOKIE, decryptSession, sessionCookieName } from "@/lib/session-crypto";
 
@@ -31,7 +32,7 @@ const isPage = (request: NextRequest, path: string) =>
   && !VERSIONS.test(path) && !path.startsWith(AUTH_PROXY_PREFIX);
 
 export function createMiddleware(limits: Limits, now: () => number = Date.now) {
-  return async function middleware(request: NextRequest): Promise<NextResponse> {
+  const handle = async (request: NextRequest): Promise<NextResponse> => {
     const path = request.nextUrl.pathname;
     if (path === "/healthz") return NextResponse.next();       // container healthcheck: never limited
 
@@ -59,6 +60,18 @@ export function createMiddleware(limits: Limits, now: () => number = Date.now) {
 
     const res = nextWithSecurityHeaders(request);
     if (request.cookies.has(LEGACY_SESSION_COOKIE)) res.cookies.set(LEGACY_SESSION_COOKIE, "", { path: "/", maxAge: 0 });
+    return res;
+  };
+
+  return async function middleware(request: NextRequest): Promise<NextResponse> {
+    const started = performance.now();
+    const res = await handle(request);
+    // Responses the middleware ends itself (429s; P1B's redirects) are logged here. A passed-on request
+    // (x-middleware-next: 1) is logged by its route handler or server action, if at all.
+    if (res.headers.get("x-middleware-next") !== "1") {
+      logRequest({ route: routeTemplate(request.nextUrl.pathname), method: request.method, status: res.status,
+        ms: performance.now() - started, requestId: crypto.randomUUID() });
+    }
     return res;
   };
 }

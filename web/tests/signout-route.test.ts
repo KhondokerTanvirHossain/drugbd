@@ -80,4 +80,13 @@ describe("POST /signout (§9.6)", () => {
   it("answers POST only", () => {
     expect(Object.keys(route).filter((k) => /^[A-Z]+$/.test(k))).toEqual(["POST"]);
   });
+
+  it("logs one request line: /signout, POST, 303 (§9.7), never the email", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    await signOut();
+    expect(log.mock.calls.map((c) => JSON.parse(String(c[0])))).toEqual([
+      { msg: "request", route: "/signout", method: "POST", status: 303, ms: expect.any(Number), requestId: null }]);
+    expect(JSON.stringify(log.mock.calls)).not.toContain("pharm@");
+    log.mockRestore();
+  });
 });

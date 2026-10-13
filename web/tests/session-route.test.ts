@@ -141,6 +141,17 @@ describe("POST /api/session", () => {
     expect(spies.flatMap((s) => s.mock.calls).flat().map(String).join(" ")).not.toMatch(/pharm@/i);
     spies.forEach((s) => s.mockRestore());
   });
+
+  it("logs one request line: /api/session, POST, the status, a duration and the request id (§9.7)", async () => {
+    const RID = "3f2b8c1e-5d4a-4c6b-9e7f-0a1b2c3d4e5f";
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    await route.POST(new Request("http://localhost/api/session", { method: "POST",
+      headers: { "Content-Type": "application/json", "x-request-id": RID },
+      body: JSON.stringify({ idToken: "tok", turnstileToken: "ts-1" }) }));
+    expect(log.mock.calls.map((c) => JSON.parse(String(c[0])))).toEqual([
+      { msg: "request", route: "/api/session", method: "POST", status: 200, ms: expect.any(Number), requestId: RID }]);
+    log.mockRestore();
+  });
 });
 
 describe("sign-out is not here", () => {

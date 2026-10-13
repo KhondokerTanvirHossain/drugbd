@@ -105,3 +105,18 @@ describe("middleware: limits and headers (§9.3, §9.4)", () => {
     expect(res.headers.get("x-middleware-request-x-request-id")).toBeTruthy();
   });
 });
+
+describe("middleware request log (§5.15, §9.7)", () => {
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+  it("logs each response it ends itself with the route template, never the query string or the email", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const mw = createMiddleware(createLimits(clock, { anonymousDaily: 1, accountDaily: 100 }), clock);
+    expect((await mw(req("/search?q=warfarin", { ip: "192.0.2.50" }))).status).toBe(200);   // passed on: not logged here
+    expect((await mw(req("/search?q=warfarin", { ip: "192.0.2.50" }))).status).toBe(429);
+    expect(log.mock.calls.map((c) => JSON.parse(String(c[0])))).toEqual([
+      { msg: "request", route: "/search", method: "GET", status: 429, ms: expect.any(Number), requestId: expect.stringMatching(UUID_RE) }]);
+    expect(JSON.stringify(log.mock.calls)).not.toMatch(/warfarin|pharm@/);
+    log.mockRestore();
+  });
+});

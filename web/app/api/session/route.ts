@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { recordAudit, type AuditInput } from "@/lib/audit";
 import { firebaseProjectId, verifyFirebaseIdToken } from "@/lib/firebase-admin";
 import { clientIp } from "@/lib/rate-limit";
+import { withRequestLog } from "@/lib/request-log";
 import { SIGN_IN_STATES } from "@/lib/copy";
 import { safeReturnTo } from "@/lib/return-to";
 import { roleFor } from "@/lib/reviewers";
@@ -34,7 +35,7 @@ const deny = async (outcome: "captcha" | "unverified" | "stale_auth" | "invalid"
  * requires a verified email and a fresh sign-in, maps the role from REVIEWERS, and sets the encrypted session cookie.
  * The email is never returned or logged. Rate limiting (10 per 10 minutes per IP) is in middleware.ts.
  */
-export async function POST(request: Request) {
+async function handle(request: Request): Promise<Response> {
   // A JSON body needs a CORS preflight cross-origin, so another site cannot post its own token here (login CSRF).
   const contentType = request.headers.get("content-type")?.split(";")[0].trim().toLowerCase();
   if (contentType !== "application/json") return fail(415, "UNSUPPORTED_MEDIA_TYPE", "Send the token as JSON.");
@@ -80,3 +81,5 @@ export async function POST(request: Request) {
   await audit({ event: "sign_in", actorEmail: email, actorRole: role, outcome: "ok" });
   return res;
 }
+
+export const POST = withRequestLog("/api/session", handle);

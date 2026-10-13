@@ -389,3 +389,19 @@ describe("decision_denied audit (§5.15, §9.3)", () => {
     expect(await submitReview(review())).toEqual({ status: 429, code: "rate_limited" });
   });
 });
+
+describe("server action log line (§5.15, §9.7)", () => {
+  it("logs action:review, action:flag and action:resolve with their status, never a note, a message or an email", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    getSession.mockResolvedValue(PHARMACIST);
+    await reviewAction(review({ note: "Patient Rahim has a rash" })).catch(() => {});          // ends in a redirect
+    await flagAction(flag({ message: "Wrong company for Rahim" })).catch(() => {});
+    fetchMock.mockResolvedValue(ok({ id: 1, status: "resolved" }));
+    await resolveFlagAction(form({ flagId: "7", "cf-turnstile-response": "ts-token" })).catch(() => {});
+    const lines = log.mock.calls.map((c) => JSON.parse(String(c[0])));
+    expect(lines.map((l) => [l.route, l.method, typeof l.status, typeof l.ms])).toEqual([
+      ["action:review", "POST", "number", "number"], ["action:flag", "POST", "number", "number"], ["action:resolve", "POST", "number", "number"]]);
+    expect(JSON.stringify(log.mock.calls)).not.toMatch(/Rahim|pharm@/);
+    log.mockRestore();
+  });
+});
