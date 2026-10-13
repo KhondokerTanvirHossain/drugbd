@@ -210,7 +210,7 @@ describe("check page", () => {
     }), error: null });
     const html = await render(["W-1", "A-1"]);
     expect(html).toContain("<h3>Severity not classified by DDInter (1)</h3>");
-    expect(html).toMatch(/<span class="badge"[^>]*>Severity not classified by DDInter<\/span>/);
+    expect(html).toMatch(/<span class="badge[^"]*"[^>]*>Severity not classified by DDInter<\/span>/);
     expect(html.toLowerCase()).not.toContain("unknown");
   });
 

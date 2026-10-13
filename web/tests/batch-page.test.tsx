@@ -93,10 +93,10 @@ describe("batch page (reviewers)", () => {
     const order = ["dgda", "substances", "clinical", "ddinter"].map((s) => html.search(new RegExp(`<td[^>]*>${s}</td>`)));
     expect(order.every((i) => i > -1)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
-    expect(html).toMatch(/<span class="pill pill-ok"[^>]*>ok<\/span>/);
-    expect(html).toMatch(/<span class="pill pill-warn"[^>]*>warn<\/span>/);
-    expect(html).toMatch(/<span class="pill pill-fail"[^>]*>fail<\/span>/);
-    expect(html).toMatch(/<span class="pill pill-none"[^>]*>not run<\/span>/);   // ddinter has no row
+    expect(html).toMatch(/<span class="pill pill-ok[^"]*"[^>]*>ok<\/span>/);
+    expect(html).toMatch(/<span class="pill pill-warn[^"]*"[^>]*>warn<\/span>/);
+    expect(html).toMatch(/<span class="pill pill-fail[^"]*"[^>]*>fail<\/span>/);
+    expect(html).toMatch(/<span class="pill pill-none[^"]*"[^>]*>not run<\/span>/);   // ddinter has no row
     expect(html).toContain("approx RxNav match");
     expect(html).toContain("error: ValueError: &lt;bad&gt;");                     // escaped, not raw HTML
     expect(html).toContain("<details><summary>Evidence</summary>");

@@ -1,3 +1,4 @@
+import styles from "./Header.module.css";
 import { ROLE_LABEL } from "@/lib/reviewers";
 import type { Session } from "@/lib/session";
 import { signOutAction } from "@/lib/session-actions";
@@ -12,7 +13,7 @@ export default function Header({ session }: { session: Session | null }) {
         <span>
           {session.role !== "user" && <><a href="/flags">Flags</a>{" "}</>}
           <small>Signed in as {ROLE_LABEL[session.role]}</small>{" "}
-          <form action={signOutAction} style={{ display: "inline" }}><button type="submit">Sign out</button></form>
+          <form action={signOutAction} className={styles.inlineForm}><button type="submit">Sign out</button></form>
         </span>
       ) : (
         <a href="/signin">Reviewer sign-in</a>

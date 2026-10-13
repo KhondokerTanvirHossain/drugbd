@@ -1,3 +1,4 @@
+import legacy from "@/app/legacy.module.css";
 import Turnstile from "@/components/Turnstile";
 import { listFlags, type Flag } from "@/lib/api";
 import { isReviewer } from "@/lib/reviewers";
@@ -42,7 +43,7 @@ export default async function FlagsPage({ searchParams }: { searchParams?: Promi
         <ul>{flags.map((f) => (
           <li key={f.id}>
             <Target f={f} />{` · ${formatUtc(f.createdAt)}`}
-            <p style={{ whiteSpace: "pre-wrap" }}>{f.message}</p>
+            <p className={legacy.pre}>{f.message}</p>
             <form action={resolveFlagAction}>
               <input type="hidden" name="flagId" value={String(f.id)} />
               <Turnstile />

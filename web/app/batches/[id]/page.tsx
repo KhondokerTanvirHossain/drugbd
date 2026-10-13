@@ -1,3 +1,4 @@
+import legacy from "@/app/legacy.module.css";
 import { notFound } from "next/navigation";
 import Turnstile from "@/components/Turnstile";
 import { StatusPill } from "@/components/badges";
@@ -14,8 +15,6 @@ import { reviewAction } from "@/lib/review-actions";
 import { getSession } from "@/lib/session";
 export const dynamic = "force-dynamic";
 
-const cell = { verticalAlign: "top", border: "1px solid #ccc", padding: 8, width: "50%" } as const;
-const stageCell = { verticalAlign: "top", border: "1px solid #ccc", padding: 6 } as const;
 const STAGES = ["dgda", "substances", "clinical", "ddinter"] as const;
 
 /** Fixed messages for the review action's outcome codes; anything else in the URL is ignored. */
@@ -58,7 +57,7 @@ function Report({ report }: { report: BatchReport | null }) {
     <section>
       <h2>Batch report</h2>
       <p>{`Review: ${report.review.ok} OK · ${report.review.issue} issue · ${report.review.pending} pending`}</p>
-      <table style={{ borderCollapse: "collapse" }}>
+      <table className={legacy.collapse}>
         <thead><tr><th>Stage</th><th>OK</th><th>Warn</th><th>Fail</th><th>Change vs previous full run (ok / warn / fail)</th></tr></thead>
         <tbody>{stages.map((name) => {
           const c = report.counts?.[name] ?? { ok: 0, warn: 0, fail: 0 };
@@ -135,17 +134,17 @@ function Outcome({ code }: { code: string }) {
 
 function StageTable({ stages }: { stages: StageResult[] }) {
   return (
-    <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 8 }}>
-      <thead><tr><th style={stageCell}>Stage</th><th style={stageCell}>Status</th><th style={stageCell}>Note</th></tr></thead>
+    <table className={legacy.stageTable}>
+      <thead><tr><th className={legacy.stageCell}>Stage</th><th className={legacy.stageCell}>Status</th><th className={legacy.stageCell}>Note</th></tr></thead>
       <tbody>{STAGES.map((name) => {
         const r = stages.find((x) => x.stage === name);
         return (
           <tr key={name}>
-            <td style={stageCell}>{name}</td>
-            <td style={stageCell}><StatusPill status={r?.status ?? null} /></td>
-            <td style={stageCell}>{r ? (<>
+            <td className={legacy.stageCell}>{name}</td>
+            <td className={legacy.stageCell}><StatusPill status={r?.status ?? null} /></td>
+            <td className={legacy.stageCell}>{r ? (<>
               {r.note}
-              <details><summary>Evidence</summary><pre style={{ whiteSpace: "pre-wrap" }}>{JSON.stringify(r.evidence ?? {}, null, 2)}</pre></details>
+              <details><summary>Evidence</summary><pre className={legacy.pre}>{JSON.stringify(r.evidence ?? {}, null, 2)}</pre></details>
             </>) : "This stage has not run for this item."}</td>
           </tr>);
       })}</tbody>
@@ -186,17 +185,17 @@ export default async function BatchPage({ params, searchParams }: {
           <section key={item.conceptId} id={item.conceptId}>
             <h2>{item.conceptId} <small>[{item.review}{item.note ? `: ${item.note}` : ""}]</small></h2>
             {outcomeItem === item.conceptId && <Outcome code={outcome} />}
-            <table style={{ width: "100%", borderCollapse: "collapse" }}><tbody><tr>
-              <td style={cell}>
+            <table className={legacy.table}><tbody><tr>
+              <td className={legacy.cell}>
                 <strong>Source (DGDA via OCL)</strong>
                 {src ? (<>
-                  <pre style={{ whiteSpace: "pre-wrap" }}>{JSON.stringify(src.extras, null, 2)}</pre>
+                  <pre className={legacy.pre}>{JSON.stringify(src.extras, null, 2)}</pre>
                   <ul>{src.ingredients.map((i, n) => <li key={`${i.code}-${n}`}>{i.name} <code>{i.code}</code>{i.retired ? " (retired)" : ""}</li>)}</ul>
                   <a href={src.oclUrl} rel="noopener noreferrer" target="_blank">Open original record</a>
-                  <details><summary>Full raw JSON</summary><pre style={{ whiteSpace: "pre-wrap" }}>{item.sourceJson}</pre></details>
+                  <details><summary>Full raw JSON</summary><pre className={legacy.pre}>{item.sourceJson}</pre></details>
                 </>) : <p>No source snapshot (not found at source).</p>}
               </td>
-              <td style={cell}>
+              <td className={legacy.cell}>
                 <strong>Extracted</strong>
                 {p ? (<dl>
                   <dt>Trade name</dt><dd>{p.tradeName}</dd>

@@ -1,3 +1,4 @@
+import legacy from "@/app/legacy.module.css";
 import FlagForm from "@/components/FlagForm";
 import { Badge } from "@/components/badges";
 import { checkInteractions, listLoadedProducts, type AlertSide, type CheckOutcome, type CheckResult } from "@/lib/api";
@@ -10,7 +11,6 @@ export const dynamic = "force-dynamic";
 
 const MIN_SELECTED = 2, MAX_SELECTED = 20;   // the API accepts 2-20 unique product IDs
 const FLAG_TARGET_MAX = 200;                 // the API's limit for a flag's targetId
-const box = { border: "1px solid #ccc", borderRadius: 4, padding: 12, margin: "8px 0" } as const;
 
 type Option = { conceptId: string; label: string };
 
@@ -99,7 +99,7 @@ function Results({ r }: { r: CheckResult }) {
             // A missing text (or DDInter's "None" placeholder) is never printed: it could read as "no interaction".
             const management = ddinterText(a.management);
             return (
-              <div key={n} style={box}>
+              <div key={n} className={legacy.box}>
                 <p><strong>{`${side(a.a)} + ${side(a.b)}`}</strong> <Badge>{severityText(a.severity)}</Badge></p>
                 {a.actions.length > 0 && <p>{`Actions: ${a.actions.join(", ")}`}</p>}
                 <p>{ddinterText(a.interaction) || NO_INTERACTION_TEXT}</p>
