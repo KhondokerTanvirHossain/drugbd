@@ -54,6 +54,25 @@ One-time setup:
 
 Run order: merge to `main` → `ci` green → `deploy` runs by itself → run `load-dgda` manually (Actions tab) with `batch=0001-pilot.txt` → open `https://drugdb.eliooo.org/batches/0001-pilot`. A new batch file has to be merged and deployed before `load-dgda` can use it.
 
+### Re-run one stage (the pilot DDInter re-run, spec §8.3)
+
+Run it only after the image that contains the change is deployed. Either start `load-dgda` from the Actions tab with
+`batch=0001-pilot.txt` and `stages=ddinter`, or run the same command on the host (it has no git checkout):
+
+```bash
+cd ~/drugdb/deploy && docker-compose --profile jobs run --rm etl --batch /app/batches/0001-pilot.txt --stages ddinter
+```
+
+What it does to review state:
+- every re-processed item gets a new `extracted_at`, its review goes back to `pending`, the batch goes back to
+  `in_review`, and a snapshot is written (`ops.item_snapshot`, one `run_id` for the whole command);
+- a decision made at or before the new stamp stops counting: an approved record is back in review and leaves public
+  view until a pharmacist approves it again; a record with an issue returns to "Not yet reviewed by a pharmacist";
+- a reviewer page open during the run must be reloaded before its decision is accepted (the API answers 409).
+
+Prefer `--concept ID` (repeatable) for later re-runs, so approved records are not re-opened needlessly. Only the
+`bddrug` project's `etl` job runs: medscribe, baymax, medioo, n8n and Caddy are never restarted.
+
 Notes:
 - `deploy/.env` must contain an `IMAGE_TAG=` line; deploy rewrites it with the deployed SHA. `GHCR_OWNER` must be lowercase.
 - Memory limits (db 256m, api 448m, web 256m) are sized for the 3.7 GB host shared with medscribe (1.2 GB) and n8n.
