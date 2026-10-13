@@ -23,8 +23,10 @@ function loadTurnstile(nonce?: string): Promise<TurnstileApi> {
     s.src = SCRIPT;
     s.async = true;
     if (nonce) s.setAttribute("nonce", nonce);
-    s.onload = () => (window.turnstile ? resolve(window.turnstile) : reject(new Error("Turnstile did not load")));
-    s.onerror = () => { loading = null; reject(new Error("Turnstile did not load")); };
+    // A failed load clears the shared promise and its tag, so a later retry requests the script again.
+    const fail = () => { loading = null; s.remove(); reject(new Error("Turnstile did not load")); };
+    s.onload = () => (window.turnstile ? resolve(window.turnstile) : fail());
+    s.onerror = fail;
     document.head.appendChild(s);
   });
   return loading;
@@ -45,6 +47,7 @@ export default function TurnstileField({ siteKey, action, nonce, resetKey = 0, o
   const callbacks = useRef({ onToken, onError });
   callbacks.current = { onToken, onError };
   const [state, setState] = useState<BotCheckState>("checking");
+  const [loadAttempt, setLoadAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -68,13 +71,14 @@ export default function TurnstileField({ siteKey, action, nonce, resetKey = 0, o
       if (widget.current && window.turnstile) window.turnstile.remove(widget.current);
       widget.current = null;
     };
-  }, [siteKey, action, nonce]);
+  }, [siteKey, action, nonce, loadAttempt]);
 
   useEffect(() => {
-    if (resetKey === 0 || !widget.current || !window.turnstile) return;
+    if (resetKey === 0) return;
     setState("checking");
     callbacks.current.onToken?.(null);
-    window.turnstile.reset(widget.current);
+    if (widget.current && window.turnstile) window.turnstile.reset(widget.current);
+    else setLoadAttempt((n) => n + 1); // no widget (the script failed to load): run the load again
   }, [resetKey]);
 
   return (

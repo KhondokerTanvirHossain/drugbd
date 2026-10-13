@@ -10,7 +10,12 @@ beforeEach(() => {
   api.render.mockReset().mockReturnValue("w1"); api.reset.mockReset(); api.remove.mockReset();
   (window as unknown as { turnstile?: typeof api }).turnstile = api;
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  // A pending script keeps the module's shared load promise; failing it resets that state and removes the tag.
+  for (const s of Array.from(document.head.querySelectorAll("script"))) (s as HTMLScriptElement).onerror?.(new Event("error"));
+  document.head.innerHTML = "";
+});
 const opts = () => api.render.mock.calls[0][1] as Opts;
 
 describe("TurnstileField island (§4.2)", () => {
@@ -69,5 +74,44 @@ describe("TurnstileField island (§4.2)", () => {
     expect(scripts).toHaveLength(1);
     expect(scripts[0].getAttribute("src")).toBe("https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit");
     expect(scripts[0].getAttribute("nonce")).toBe("n1");
+  });
+
+  it("Retry check after the script failed to load requests the script again and renders the widget", async () => {
+    delete (window as unknown as { turnstile?: unknown }).turnstile;
+    const onToken = vi.fn(), onError = vi.fn();
+    const sel = 'script[src^="https://challenges.cloudflare.com/turnstile/v0/api.js"]';
+    const { rerender } = render(<TurnstileField siteKey="k" action="signin" onToken={onToken} onError={onError} resetKey={0} />);
+    const first = document.head.querySelector(sel) as HTMLScriptElement;
+    expect(first).not.toBeNull();
+    act(() => { first.onerror?.(new Event("error")); });
+    await waitFor(() => expect(screen.getByText("Bot check failed")).toBeTruthy());
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(document.head.querySelectorAll(sel)).toHaveLength(0);
+
+    rerender(<TurnstileField siteKey="k" action="signin" onToken={onToken} onError={onError} resetKey={1} />);
+    await waitFor(() => expect(document.head.querySelectorAll(sel)).toHaveLength(1));
+    expect(screen.getByText("Checking")).toBeTruthy();
+    const second = document.head.querySelector(sel) as HTMLScriptElement;
+    expect(second).not.toBe(first);
+    (window as unknown as { turnstile?: typeof api }).turnstile = api;
+    act(() => { second.onload?.(new Event("load")); });
+    await waitFor(() => expect(api.render).toHaveBeenCalledTimes(1));
+    act(() => opts().callback("tok-2"));
+    expect(onToken).toHaveBeenLastCalledWith("tok-2");
+    expect(screen.getByText("Bot check passed")).toBeTruthy();
+    expect(document.head.querySelectorAll(sel)).toHaveLength(1);
+  });
+
+  it("a script that loads without defining Turnstile also fails and can be retried", async () => {
+    delete (window as unknown as { turnstile?: unknown }).turnstile;
+    const onError = vi.fn();
+    const sel = 'script[src^="https://challenges.cloudflare.com/turnstile/v0/api.js"]';
+    const { rerender } = render(<TurnstileField siteKey="k" action="signin" onError={onError} resetKey={0} />);
+    act(() => { (document.head.querySelector(sel) as HTMLScriptElement).onload?.(new Event("load")); });
+    await waitFor(() => expect(screen.getByText("Bot check failed")).toBeTruthy());
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(document.head.querySelectorAll(sel)).toHaveLength(0);
+    rerender(<TurnstileField siteKey="k" action="signin" onError={onError} resetKey={1} />);
+    await waitFor(() => expect(document.head.querySelectorAll(sel)).toHaveLength(1));
   });
 });
