@@ -1122,6 +1122,7 @@ No board draws these two pages. They use the reviewer toolbar (§5.1, without th
    - it contains no `\`, no `%5C` or `%5c`, and no control characters (U+0000–U+001F, U+007F);
    - `new URL(value, origin).origin === origin`.
    `safeReturnTo(value, origin)` takes the origin as a parameter. The server passes `https://{SITE_HOST}` (`SITE_HOST` is a server-only variable). The SignInButton island receives `siteOrigin` as a prop from the server page (the same value) and passes that. The redirect target is the parsed URL's `pathname + search + hash`, never the raw string. Unit cases: `/\evil.com`, `/%5Cevil.com`, `//evil.com`, `https://drugdb.eliooo.org.evil.com`, and values containing a raw line feed or tab are refused; `/review/0001-pilot/x?show=needs` is accepted.
+   - *Amendment (P1A Task 10 review):* the output is checked as well as the input, because dot-segment normalisation can turn a same-origin input into a protocol-relative path (`new URL("/.//evil.com", origin).pathname` is `//evil.com`). `safeReturnTo()` returns `null` when `pathname + search + hash` starts with `//`, and when `new URL(out, origin).origin !== origin`. Added unit cases, all refused: `/.//evil.com`, `/a/..//evil.com`, `/%2e//evil.com`, `/%2e%2e//evil.com`.
 
 **States** (each a server-rendered `Banner` or card, selected by `?state=` or by island state):
 

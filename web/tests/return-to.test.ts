@@ -5,7 +5,8 @@ const ORIGIN = "https://drugdb.eliooo.org";
 
 describe("safeReturnTo (§6.2 step 4)", () => {
   it.each(["/\\evil.com", "/%5Cevil.com", "/%5cevil.com", "//evil.com", "///evil.com", "https://drugdb.eliooo.org.evil.com",
-    "https://drugdb.eliooo.org/review", "/review\nx", "/review\tx", "/a\u0000b", "/a\u007fb", "/a\rb", "", "review", "javascript:alert(1)"])(
+    "https://drugdb.eliooo.org/review", "/review\nx", "/review\tx", "/a\u0000b", "/a\u007fb", "/a\rb", "", "review", "javascript:alert(1)",
+    "/.//evil.com", "/a/..//evil.com", "/%2e//evil.com", "/%2e%2e//evil.com"])(
     "refuses %j", (v) => expect(safeReturnTo(v, ORIGIN)).toBeNull());
 
   it("refuses non-strings", () => {
