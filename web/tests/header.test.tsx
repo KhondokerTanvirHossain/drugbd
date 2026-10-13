@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const getSession = vi.fn();
 vi.mock("@/lib/session", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/session")>()), getSession: () => getSession() }));
-const cookieStore = { delete: vi.fn() };
+const cookieStore = { get: vi.fn(), delete: vi.fn() };
 vi.mock("next/headers", () => ({ cookies: async () => cookieStore }));
 
 import Header from "@/components/Header";

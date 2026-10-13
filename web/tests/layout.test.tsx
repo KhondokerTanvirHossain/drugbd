@@ -49,3 +49,23 @@ describe("RootLayout (§3.1, §3.2)", () => {
     expect(Object.keys(layout).sort()).toEqual(["default", "metadata"]);
   });
 });
+
+describe("RootLayout theme (§3.3)", () => {
+  const withTheme = (v: string | undefined) =>
+    cookieStore.get.mockImplementation((name: string) => (name === "intellidrugs-theme" && v !== undefined ? { name, value: v } : undefined));
+
+  it("renders data-theme from the cookie, with no inline theme script", async () => {
+    withTheme("dark");
+    const html = await render();
+    expect(html).toMatch(/^<html lang="en" data-theme="dark">/);
+    expect(html).not.toMatch(/<script[^>]*>[^<]*(data-theme|intellidrugs-theme)/);
+  });
+  it("leaves the attribute off for system, a missing cookie or a bogus value", async () => {
+    for (const v of ["system", undefined, "blue", '"><script>x</script>']) {
+      withTheme(v);
+      const html = await render();
+      expect(html).toMatch(/^<html lang="en">/);
+      expect(html).not.toContain("script>x");
+    }
+  });
+});
