@@ -16,7 +16,16 @@ import org.springframework.test.web.reactive.server.WebTestClient;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.springframework.test.web.reactive.server.EntityExchangeResult;
 import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.util.ArrayList;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -413,6 +422,162 @@ class ReviewApiIntegrationTest {
         decide("nope", "W-2", body("ok", null, PHARMACIST, "pharmacist")).expectStatus().isNotFound();
         internal(web).get().uri("/v1/batches/R-val/items/nope/decisions").exchange().expectStatus().isNotFound();
         assertThat(count(pg, "SELECT count(*) FROM ops.review_decision WHERE concept_id = 'nope' OR batch_id = 'nope'")).isZero();
+    }
+
+    // ---- step 1: idempotency, and the audit rows
+
+    @Test void aRepeatedRequestIdIsAnsweredOnceAndBelongsToItsDecision() throws Exception {
+        String rid = UUID.randomUUID().toString();
+        Shown s = shown("R-idem", "W-1");
+        Map<String, Object> ok = body("ok", null, PHARMACIST, "pharmacist");
+        ok.put("extractedAt", s.extractedAt());
+        ok.put("expectedLastDecisionId", s.lastDecisionId());
+        ok.put("requestId", rid);
+        decideRaw("R-idem", "W-1", ok).expectStatus().isCreated().expectBody().jsonPath("$.data.replayed").isEqualTo(false);
+        // a retry after a lost response: 200, the current outcome, nothing written
+        decideRaw("R-idem", "W-1", ok).expectStatus().isOk().expectBody()
+            .jsonPath("$.data.replayed").isEqualTo(true)
+            .jsonPath("$.data.review").isEqualTo("ok")
+            .jsonPath("$.data.displayStatus").isEqualTo("approved");
+        // the same id in upper case is the same UUID
+        Map<String, Object> upper = new HashMap<>(ok);
+        upper.put("requestId", rid.toUpperCase());
+        decideRaw("R-idem", "W-1", upper).expectStatus().isOk().expectBody().jsonPath("$.data.replayed").isEqualTo(true);
+        assertThat(count(pg, "SELECT count(*) FROM ops.review_decision WHERE batch_id = 'R-idem' AND concept_id = 'W-1'"))
+            .isEqualTo(1);
+        assertThat(count(pg, "SELECT count(*) FROM ops.audit_event WHERE event = 'decision' AND request_id = '" + rid + "'"))
+            .isEqualTo(1);
+        assertThat(text(pg, "SELECT actor_email || '|' || actor_role || '|' || target_type || '|' || target_id || '|' || outcome"
+                            + " FROM ops.audit_event WHERE event = 'decision' AND request_id = '" + rid + "'"))
+            .isEqualTo(PHARMACIST + "|pharmacist|batch_item|R-idem/W-1|ok");
+        // the id belongs to that decision: another item or another decision is a 400
+        Map<String, Object> otherItem = body("ok", null, PHARMACIST, "pharmacist");
+        otherItem.put("requestId", rid);
+        decide("R-idem", "A-1", otherItem).expectStatus().isBadRequest()
+            .expectBody().jsonPath("$.errors[0].field").isEqualTo("requestId");
+        Map<String, Object> otherDecision = body("issue", "another decision", PHARMACIST, "pharmacist");
+        otherDecision.put("requestId", rid);
+        decide("R-idem", "W-1", otherDecision).expectStatus().isBadRequest()
+            .expectBody().jsonPath("$.errors[0].field").isEqualTo("requestId");
+        assertThat(decisions("R-idem")).isEqualTo(1);
+    }
+
+    /** Review Focus 1: two sends of one decision race; they serialise on the item lock and step 1 answers the second. */
+    @Test void concurrentSendsOfOneRequestIdWriteOneDecision() throws Exception {
+        Shown s = shown("R-conc", "N-1");
+        Map<String, Object> ok = body("ok", null, PHARMACIST, "pharmacist");
+        ok.put("extractedAt", s.extractedAt());
+        ok.put("expectedLastDecisionId", s.lastDecisionId());
+        ok.put("requestId", UUID.randomUUID().toString());
+        Callable<Integer> send = () -> decideRaw("R-conc", "N-1", ok).expectBody().returnResult().getStatus().value();
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            List<Integer> statuses = new ArrayList<>();
+            for (Future<Integer> f : pool.invokeAll(List.of(send, send))) statuses.add(f.get());
+            assertThat(statuses).containsExactlyInAnyOrder(200, 201);
+        } finally {
+            pool.shutdownNow();
+        }
+        assertThat(decisions("R-conc")).isEqualTo(1);
+        assertThat(count(pg, "SELECT count(*) FROM ops.audit_event WHERE event = 'decision' AND target_id = 'R-conc/N-1'"))
+            .isEqualTo(1);
+    }
+
+    @Test void a409AndA400EachLeaveExactlyOneDecisionRejectedRow() throws Exception {
+        String r409 = UUID.randomUUID().toString(), r400 = UUID.randomUUID().toString();
+        Map<String, Object> stale = body("ok", null, PHARMACIST, "pharmacist");
+        stale.put("extractedAt", "2020-01-01T00:00:00Z");
+        stale.put("requestId", r409);
+        decide("R-rej", "W-1", stale).expectStatus().isEqualTo(409);
+        Map<String, Object> badNote = body("issue", "bad", PHARMACIST, "pharmacist");
+        badNote.put("requestId", r400);
+        decide("R-rej", "W-1", badNote).expectStatus().isBadRequest();
+        String row = "SELECT actor_email || '|' || actor_role || '|' || target_id || '|' || outcome FROM ops.audit_event"
+                     + " WHERE event = 'decision_rejected' AND request_id = '%s'";
+        assertThat(count(pg, "SELECT count(*) FROM ops.audit_event WHERE event = 'decision_rejected' AND request_id = '" + r409 + "'"))
+            .isEqualTo(1);
+        assertThat(text(pg, row.formatted(r409))).isEqualTo(PHARMACIST + "|pharmacist|R-rej/W-1|CONFLICT");
+        assertThat(count(pg, "SELECT count(*) FROM ops.audit_event WHERE event = 'decision_rejected' AND request_id = '" + r400 + "'"))
+            .isEqualTo(1);
+        assertThat(text(pg, row.formatted(r400))).isEqualTo(PHARMACIST + "|pharmacist|R-rej/W-1|INVALID_QUERY");
+        assertThat(count(pg, "SELECT count(*) FROM ops.audit_event WHERE event = 'decision' AND target_id = 'R-rej/W-1'")).isZero();
+        assertThat(decisions("R-rej")).isZero();
+    }
+
+    /** §7.2 backstop: a send whose step-1 read missed a concurrent commit hits the unique request index and is answered
+     *  as a replay in a fresh transaction. The racing row is an audit row alone: a review_decision row would lock the
+     *  item through its foreign key and send this request down the step-1 path instead. */
+    @Test void aUniqueIndexHitIsAnsweredAsAReplay() throws Exception {
+        String rid = UUID.randomUUID().toString();
+        Shown s = shown("R-bk", "W-1");
+        Map<String, Object> ok = body("ok", null, PHARMACIST, "pharmacist");
+        ok.put("extractedAt", s.extractedAt());
+        ok.put("expectedLastDecisionId", s.lastDecisionId());
+        ok.put("requestId", rid);
+        ExecutorService pool = Executors.newSingleThreadExecutor();
+        try (Connection c = DriverManager.getConnection(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword())) {
+            c.setAutoCommit(false);
+            try (var st = c.createStatement()) {
+                st.execute("INSERT INTO ops.audit_event (event, actor_email, actor_role, target_type, target_id, outcome,"
+                    + " request_id) VALUES ('decision', 'p@example.org', 'pharmacist', 'batch_item', 'R-bk/W-1', 'ok', '"
+                    + rid + "')");
+            }
+            Future<EntityExchangeResult<byte[]>> sent =
+                pool.submit(() -> decideRaw("R-bk", "W-1", ok).expectBody().returnResult());
+            Thread.sleep(500);   // the request now waits on the uncommitted index entry
+            assertThat(sent.isDone()).isFalse();
+            c.commit();
+            EntityExchangeResult<byte[]> res = sent.get(30, TimeUnit.SECONDS);
+            assertThat(res.getStatus().value()).isEqualTo(200);
+            String json = new String(res.getResponseBody(), StandardCharsets.UTF_8);
+            assertThat((Boolean) JsonPath.read(json, "$.data.replayed")).isTrue();
+        } finally {
+            pool.shutdownNow();
+        }
+        // the request's own decision rolled back with its transaction; the index holds one decision row for the id
+        assertThat(decisions("R-bk")).isZero();
+        assertThat(count(pg, "SELECT count(*) FROM ops.audit_event WHERE event = 'decision' AND request_id = '" + rid + "'"))
+            .isEqualTo(1);
+    }
+
+    /** A retry of an approval sent before a re-run reports the current state: back in review, nothing written. */
+    @Test void aRetryOfAnApprovalAfterAReRunReportsBackInReview() throws Exception {
+        Shown s = shown("R-back", "W-1");
+        Map<String, Object> approval = body("ok", null, PHARMACIST, "pharmacist");
+        approval.put("extractedAt", s.extractedAt());
+        approval.put("expectedLastDecisionId", s.lastDecisionId());
+        approval.put("requestId", UUID.randomUUID().toString());
+        decideRaw("R-back", "W-1", approval).expectStatus().isCreated();
+        // what bddrug_etl.load.batches.reopen_review does when the record is re-run
+        exec(pg, """
+            UPDATE ops.batch_item SET review = 'pending', extracted_at = clock_timestamp()
+             WHERE batch_id = 'R-back' AND concept_id = 'W-1';
+            UPDATE ops.batch SET status = 'in_review' WHERE batch_id = 'R-back';""");
+        decideRaw("R-back", "W-1", approval).expectStatus().isOk().expectBody()
+            .jsonPath("$.data.replayed").isEqualTo(true)
+            .jsonPath("$.data.review").isEqualTo("pending")
+            .jsonPath("$.data.displayStatus").isEqualTo("back_in_review");
+        assertThat(decisions("R-back")).isEqualTo(1);
+    }
+
+    /** §5.2: an issue fixed and re-run is pending; a retry of the issue reports that and writes nothing. */
+    @Test void anIssueFixedAndReRunIsPending() throws Exception {
+        Shown s = shown("R-pend", "W-1");
+        Map<String, Object> issue = body("issue", "strength looks wrong", PHARMACIST, "pharmacist");
+        issue.put("extractedAt", s.extractedAt());
+        issue.put("expectedLastDecisionId", s.lastDecisionId());
+        issue.put("requestId", UUID.randomUUID().toString());
+        decideRaw("R-pend", "W-1", issue).expectStatus().isCreated().expectBody()
+            .jsonPath("$.data.displayStatus").isEqualTo("issue");
+        exec(pg, """
+            UPDATE ops.batch_item SET review = 'pending', extracted_at = clock_timestamp()
+             WHERE batch_id = 'R-pend' AND concept_id = 'W-1';
+            UPDATE ops.batch SET status = 'in_review' WHERE batch_id = 'R-pend';""");
+        decideRaw("R-pend", "W-1", issue).expectStatus().isOk().expectBody()
+            .jsonPath("$.data.replayed").isEqualTo(true)
+            .jsonPath("$.data.review").isEqualTo("pending")
+            .jsonPath("$.data.displayStatus").isEqualTo("pending");
+        assertThat(decisions("R-pend")).isEqualTo(1);
     }
 
     // ---- token and privacy

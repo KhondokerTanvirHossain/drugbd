@@ -2,7 +2,10 @@ package com.niramoy.bddrug.application;
 import com.niramoy.bddrug.application.port.ReviewPort;
 import com.niramoy.bddrug.application.port.ReviewPort.NewDecision;
 import com.niramoy.bddrug.application.port.ReviewPort.Outcome;
+import com.niramoy.bddrug.application.port.ReviewPort.Rejection;
 import com.niramoy.bddrug.domain.ReviewDecision;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 import java.time.Instant;
@@ -12,9 +15,10 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
-/** Review decisions: validated here, guarded, appended and applied by the port. */
+/** Review decisions: validated here, guarded, appended and applied by the port; every 400 and 409 is audited. */
 @Service
 public class ReviewService {
+    private static final Logger log = LoggerFactory.getLogger(ReviewService.class);
     public static final Set<String> DECISIONS = Set.of("ok", "issue"), ROLES = Set.of("pharmacist", "engineer");
     public static final int ISSUE_NOTE_MIN = 5, NOTE_MAX = 1000;
     private static final Pattern UUID_TEXT =
@@ -34,7 +38,15 @@ public class ReviewService {
                           boolean lastDecisionIdSent, String expectedLastDecisionId, String requestId) {}
 
     public Mono<Outcome> decide(String batchId, String conceptId, Request r) {
-        return Mono.fromCallable(() -> validate(r)).flatMap(d -> port.decide(batchId, conceptId, d));
+        return Mono.fromCallable(() -> validate(r))
+            .flatMap(d -> port.decide(batchId, conceptId, d))
+            .onErrorResume(e -> e instanceof InvalidQueryException || e instanceof ConflictException,
+                e -> port.recordRejection(rejection(batchId, conceptId, r, e))
+                    .onErrorResume(x -> {
+                        log.error("decision_rejected audit row not written: {}", x.getClass().getName());
+                        return Mono.empty();
+                    })
+                    .then(Mono.<Outcome>error(e)));
     }
 
     static NewDecision validate(Request r) {
@@ -75,9 +87,22 @@ public class ReviewService {
     }
 
     private static UUID requestId(String value) {
-        if (value == null || !UUID_TEXT.matcher(value).matches())
-            throw new InvalidQueryException("requestId", "requestId must be a UUID, reused unchanged on every retry");
-        return UUID.fromString(value);
+        UUID id = uuidOrNull(value);
+        if (id == null) throw new InvalidQueryException("requestId", "requestId must be a UUID, reused unchanged on every retry");
+        return id;
+    }
+
+    /** The UUID in canonical 8-4-4-4-12 form (either case), or null for anything else. */
+    private static UUID uuidOrNull(String value) {
+        return value != null && UUID_TEXT.matcher(value).matches() ? UUID.fromString(value) : null;
+    }
+
+    /** What a rejection may record: never free text; the email and role only when they were valid. */
+    static Rejection rejection(String batchId, String conceptId, Request r, Throwable e) {
+        String email = Validate.stripped(r.reviewerEmail());
+        String role = r.reviewerRole() != null && ROLES.contains(r.reviewerRole()) ? r.reviewerRole() : null;
+        return new Rejection(batchId, conceptId, Validate.isEmail(email) ? email : null, role,
+            e instanceof ConflictException ? "CONFLICT" : "INVALID_QUERY", uuidOrNull(r.requestId()));
     }
 
     public Mono<List<ReviewDecision>> history(String batchId, String conceptId, boolean withEmails) {
