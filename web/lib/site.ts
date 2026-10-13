@@ -12,7 +12,7 @@ export function assertSiteConfig(): void {
   const host = (process.env.SITE_HOST ?? "").trim();
   if (isProduction() && !host) throw new Error("SITE_HOST must be set (for example SITE_HOST=drugdb.eliooo.org)");
   if (host && !HOST.test(host)) throw new Error("SITE_HOST must be a host name, optionally with a port");
-  if (isE2e() && host.toLowerCase() === PRODUCTION_HOST)
+  if (isE2e() && host.toLowerCase().replace(/:\d+$/, "") === PRODUCTION_HOST)
     throw new Error("INTELLIDRUGS_E2E=1 must never run with SITE_HOST=drugdb.eliooo.org");
 }
 

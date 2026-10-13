@@ -20,6 +20,12 @@ describe("SITE_HOST (§9.2, §12.4)", () => {
     vi.stubEnv("SITE_HOST", "drugdb.eliooo.org");
     expect(() => assertSiteConfig()).toThrow("INTELLIDRUGS_E2E=1 must never run with SITE_HOST=drugdb.eliooo.org");
   });
+  it.each(["drugdb.eliooo.org:443", "DRUGDB.eliooo.org"])(
+    "refuses INTELLIDRUGS_E2E=1 with the production host spelled %j", (host) => {
+      vi.stubEnv("INTELLIDRUGS_E2E", "1");
+      vi.stubEnv("SITE_HOST", host);
+      expect(() => assertSiteConfig()).toThrow("INTELLIDRUGS_E2E=1 must never run with SITE_HOST=drugdb.eliooo.org");
+    });
   it("passes for the production host and for the e2e host", () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("SITE_HOST", "drugdb.eliooo.org");
