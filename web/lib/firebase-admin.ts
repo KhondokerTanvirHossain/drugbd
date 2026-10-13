@@ -16,6 +16,6 @@ export function firebaseProjectId(): string | null {
  * session route instead accepts only tokens from a sign-in within the last few minutes.
  */
 export async function verifyFirebaseIdToken(idToken: string, projectId: string): Promise<DecodedIdToken> {
-  app ??= initializeApp({ projectId }, "bddrug-session");
+  app ??= initializeApp({ projectId }, "intellidrugs-session");
   return getAuth(app).verifyIdToken(idToken, false);
 }
