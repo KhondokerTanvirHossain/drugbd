@@ -148,9 +148,13 @@ class _PairList:
     ``graph``: rows of the graph endpoint; they carry actions and are upserted. ``extra``: partners only
     ``interact-with`` lists; they are inserted with no actions and never overwrite a stored row, because the partner's
     own graph may hold that pair with actions (DDInter's lists are not symmetric). So the stored row, and the "changed"
-    report that re-opens approved records, do not depend on the order in which entries are processed."""
+    report that re-opens approved records, do not depend on the order in which entries are processed.
+
+    ``dropped``: the incomplete partners (their own read failed this run) whose pairs were left out. A list that
+    dropped any pair is not the entry's full list: the entry gets no new ``ddinter_drug`` row (§7.4, D41)."""
     graph: dict[Pair, PairData]
     extra: dict[Pair, PairData]
+    dropped: frozenset[str] = frozenset()
 
     def all(self) -> dict[Pair, PairData]:
         return {**self.extra, **self.graph}
@@ -232,7 +236,8 @@ class _Run:
         (its ``drug_name``, its level's severity, no actions). None when interact-with could not be read in full.
 
         Pairs with an entry in ``incomplete`` are left out: no pair row of an incomplete entry is written in this run,
-        not even from its partner's complete list, and no text is looked up through it (its read would fail again)."""
+        not even from its partner's complete list, and no text is looked up through it (its read would fail again).
+        Those partners are recorded in ``dropped``; ``incomplete`` itself is not extended, so failures do not chain."""
         if ddinter_id not in self._pair_lists:
             listed = self.listing(ddinter_id)
             if ddinter_id in self.incomplete or not listed.complete:
@@ -241,19 +246,29 @@ class _Run:
                 skip = lambda pair: pair[0] in self.incomplete or pair[1] in self.incomplete  # noqa: E731
                 all_graph = self.pairs(ddinter_id)
                 graph = {p: v for p, v in all_graph.items() if not skip(p)}
+                dropped = {p[0] if p[1] == ddinter_id else p[1] for p in all_graph if skip(p)}
                 me = self.detail(ddinter_id).name
                 extra: dict[Pair, PairData] = {}
                 for row in listed.rows:
                     if row.partner_id == ddinter_id:
                         continue
                     pair = (ddinter_id, row.partner_id) if ddinter_id < row.partner_id else (row.partner_id, ddinter_id)
-                    if pair in all_graph or skip(pair):
+                    if skip(pair):
+                        dropped.add(row.partner_id)
+                        continue
+                    if pair in all_graph:
                         continue
                     sev = row.severity if row.severity in _SEVERITIES else "unknown"
                     extra.setdefault(pair, (me, row.partner_name, sev, []) if pair[0] == ddinter_id
                                      else (row.partner_name, me, sev, []))
-                self._pair_lists[ddinter_id] = _PairList(graph, extra)
+                self._pair_lists[ddinter_id] = _PairList(graph, extra, frozenset(dropped))
         return self._pair_lists[ddinter_id]
+
+    def missing_from(self, ddinter_id: str) -> set[str]:
+        """The entries whose missing read keeps this entry's full pair list from being stored in this run: the entry
+        itself when its own read is incomplete, else the incomplete partners its list dropped (empty: stored in full)."""
+        listed = self.pair_list(ddinter_id)
+        return {ddinter_id} if listed is None else set(listed.dropped)
 
     def diseases(self, ddinter_id: str) -> dict[str, dict]:
         if ddinter_id not in self._diseases:
@@ -527,8 +542,9 @@ def _process(conn: psycopg.Connection, run: _Run, cid: str, plan: _ProductPlan, 
             d = run.detail(e.ddinter_id)
             confirmed = d.drugbank_id is not None and d.drugbank_id.strip().upper() in sub.drugbank
             method, confidence = ("drugbank", 1.0) if confirmed else ("name", 0.7)
-            # the drug row means "this entry's full pair list is stored": written only from a complete list
-            if run.pair_list(e.ddinter_id) is not None and _upsert_drug(conn, d, e.route_scope):
+            # the drug row means "this entry's full pair list is stored": written only when no pair of the list was
+            # left out (§7.4, D41); an earlier row and its list stay
+            if not run.missing_from(e.ddinter_id) and _upsert_drug(conn, d, e.route_scope):
                 pending.changed.ddinter_ids.add(e.ddinter_id)
             if _upsert_code(conn, sub.bds_id, e.ddinter_id, e.route_scope, method, confidence):
                 pending.changed.bds_ids.add(sub.bds_id)
@@ -586,9 +602,10 @@ def _process(conn: psycopg.Connection, run: _Run, cid: str, plan: _ProductPlan, 
                 "disease_count": disease_count, "food_count": food_count,
                 "text_fetch_count": len(pairs & run.fetched), "text_missing": [list(p) for p in text_missing],
                 "route": plan.route, "chosen": chosen, "route_assumed": route_assumed}
-    incomplete = sorted((i for i in chosen_ids if run.pair_list(i) is None), key=_idkey)
+    incomplete = sorted({m for i in chosen_ids for m in run.missing_from(i)}, key=_idkey)
     if incomplete:
-        # "No interaction listed" must never come from a partial list: the product cannot be approved (§7.2 step 5)
+        # "No interaction listed" must never come from a partial list: the product cannot be approved (§7.2 step 5).
+        # One note per entry whose read failed, whether the chosen entry itself or a partner its list dropped
         return StageResult(cid, "fail", "; ".join(INCOMPLETE_NOTE.format(i) for i in incomplete), evidence)
     return StageResult(cid, "warn" if notes else "ok", "; ".join(notes), evidence)
 

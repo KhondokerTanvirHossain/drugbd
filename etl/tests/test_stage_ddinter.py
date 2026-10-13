@@ -1009,7 +1009,9 @@ def test_an_interact_with_only_row_never_overwrites_a_graph_row(conn):
 def test_an_incomplete_entry_writes_no_pair_rows_even_from_a_complete_partner(conn):
     res = dict(zip(["warf", "asa"], map_and_load_ddinter(conn, FakeDDInter(incomplete={"DDInter1951"}), ["warf", "asa"])))
     assert res["warf"].status == "fail"
-    assert res["asa"].status != "fail"
+    # aspirin's list names warfarin, so aspirin's full list is not stored this run: no drug row, its product fails
+    assert (res["asa"].status, res["asa"].note) == ("fail", "DDInter pair list incomplete for DDInter1951")
+    assert conn.execute("SELECT count(*) FROM curated.ddinter_drug WHERE ddinter_id = 'DDInter20'").fetchone()[0] == 0
     assert conn.execute("SELECT count(*) FROM curated.ddinter_pair "
                         "WHERE 'DDInter1951' IN (ddinter_a, ddinter_b)").fetchone()[0] == 0
 
@@ -1021,7 +1023,9 @@ def test_a_failing_lookup_on_an_incomplete_entry_does_not_fail_another_product(c
                          fail={("pair_interaction_id", ("DDInter1951", "DDInter20")): RuntimeError("page 3 failed")})
     r_warf, r_asa = map_and_load_ddinter(conn, client, ["warf", "asa"])
     assert (r_warf.status, r_warf.note) == ("fail", "DDInter pair list incomplete for DDInter1951")
-    assert r_asa.status != "fail", r_asa
+    # aspirin fails for the pair it dropped, never with the failing lookup's error
+    assert (r_asa.status, r_asa.note) == ("fail", "DDInter pair list incomplete for DDInter1951"), r_asa
+    assert conn.execute("SELECT count(*) FROM curated.ddinter_drug WHERE ddinter_id = 'DDInter20'").fetchone()[0] == 0
     assert ("DDInter1951", "DDInter20") not in client.pair_calls
 
 
@@ -1050,6 +1054,50 @@ def test_an_incomplete_entry_the_product_did_not_choose_does_not_fail_it(conn):
     assert (r.status, r.note) == ("ok", "")
     assert conn.execute("SELECT ddinter_id FROM curated.ddinter_drug ORDER BY ddinter_id").fetchall() == [
         ("DDInter352",), ("DDInter353",)]
+
+
+def test_an_entry_whose_list_names_an_incomplete_partner_gets_no_drug_row(conn):
+    """Reviewer's scenario (§7.4, D41): warfarin (B) has an earlier complete list without metformin (A). Metformin's
+    complete list names warfarin; warfarin's read is incomplete this run. Metformin's full list is not stored, so it
+    gets no drug row (the checker would otherwise say "No interaction listed" for A + B) and its product fails."""
+    map_and_load_ddinter(conn, FakeDDInter(), ["warf"])
+    conn.commit()
+    assert conn.execute("SELECT count(*) FROM curated.ddinter_drug WHERE ddinter_id = 'DDInter1951'").fetchone()[0] == 1
+    client = FakeDDInter(interact_extra={"DDInter1164": [("DDInter1951", "Warfarin", 3)]}, incomplete={"DDInter1951"})
+    r_metf, r_warf = map_and_load_ddinter(conn, client, ["metf", "warf"])
+    assert (r_metf.status, r_metf.note) == ("fail", "DDInter pair list incomplete for DDInter1951")
+    assert (r_warf.status, r_warf.note) == ("fail", "DDInter pair list incomplete for DDInter1951")
+    assert conn.execute("SELECT count(*) FROM curated.ddinter_drug WHERE ddinter_id = 'DDInter1164'").fetchone()[0] == 0
+    # warfarin's earlier row stays; no metformin/warfarin pair row is written
+    assert conn.execute("SELECT count(*) FROM curated.ddinter_drug WHERE ddinter_id = 'DDInter1951'").fetchone()[0] == 1
+    assert conn.execute("SELECT count(*) FROM curated.ddinter_pair WHERE ddinter_a = 'DDInter1164' "
+                        "AND ddinter_b = 'DDInter1951'").fetchone()[0] == 0
+    # the substance mapping is still written (a shared fact); with no ddinter_drug row the API never counts it checked
+    assert ddinter_codes(conn, METF)[0][0] == "DDInter1164"
+
+
+def test_dropped_partner_notes_are_one_per_partner_in_id_order(conn):
+    """Warfarin's list drops three incomplete partners: one note each, numeric id order (79 before 393)."""
+    client = FakeDDInter(graph_extra={"DDInter1951": [("DDInter79", "Amlodipine", "minor", ())]},
+                         incomplete={"DDInter20", "DDInter393", "DDInter79"})
+    [r_warf] = map_and_load_ddinter(conn, client, ["warf", "asa", "clar", "amlo"])[:1]
+    assert (r_warf.status, r_warf.note) == ("fail", "; ".join(
+        f"DDInter pair list incomplete for {i}" for i in ("DDInter20", "DDInter79", "DDInter393")))
+    assert conn.execute("SELECT count(*) FROM curated.ddinter_drug WHERE ddinter_id = 'DDInter1951'").fetchone()[0] == 0
+    # warfarin's pair with a complete partner is still stored
+    assert conn.execute("SELECT count(*) FROM curated.ddinter_pair WHERE ddinter_a = 'DDInter14' "
+                        "AND ddinter_b = 'DDInter1951'").fetchone()[0] == 1
+
+
+def test_one_note_per_dropped_partner_across_the_chosen_entries(conn):
+    """Amoxicillin and clavulanic acid both list warfarin, which is incomplete: the combination fails with one note."""
+    client = FakeDDInter(graph_extra={"DDInter83": [("DDInter1951", "Warfarin", "moderate", ())],
+                                      "DDInter394": [("DDInter1951", "Warfarin", "moderate", ())]},
+                         incomplete={"DDInter1951"})
+    r_combo, r_warf = map_and_load_ddinter(conn, client, ["combo", "warf"])
+    assert (r_combo.status, r_combo.note) == ("fail", "DDInter pair list incomplete for DDInter1951")
+    assert (r_warf.status, r_warf.note) == ("fail", "DDInter pair list incomplete for DDInter1951")
+    assert conn.execute("SELECT count(*) FROM curated.ddinter_drug").fetchone()[0] == 0
 
 
 def test_ddinter352_pair_list_is_stored_without_text_fetches(conn):
