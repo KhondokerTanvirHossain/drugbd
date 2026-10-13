@@ -55,6 +55,10 @@ services:
       TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
       # email:role pairs, comma-separated; role is pharmacist or engineer. Personal data: host .env only.
       REVIEWERS: ${REVIEWERS:-}
+      # Public host (§9.2): Turnstile hostname check, sign-out Origin check, return paths. Required in production.
+      SITE_HOST: ${SITE_HOST}
+      # Landing page hero product (§6.1).
+      HERO_CONCEPT_ID: ${HERO_CONCEPT_ID:-}
     depends_on: [api]
     mem_limit: 256m
     networks:

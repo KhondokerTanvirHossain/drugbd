@@ -73,10 +73,11 @@ jobs:
               v="$(grep "^${k}=" .env | tail -n 1 | cut -d= -f2-)"
               [ "${#v}" -ge 32 ] || { echo "deploy/.env: ${k} must be at least 32 characters (openssl rand -hex 32); see README Reviewer sign-in setup" >&2; exit 1; }
             done
+            grep -q '^SITE_HOST=..*' .env || { echo "deploy/.env: SITE_HOST must be set (SITE_HOST=drugdb.eliooo.org); see README Deploy" >&2; exit 1; }
             sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=${TAG}/" .env
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
             trap 'docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
             docker-compose --profile jobs pull
             docker-compose up -d --remove-orphans
             docker image prune -f >/dev/null || true
-      - run: curl -fsS --retry 12 --retry-delay 10 --retry-all-errors "$PUBLIC_URL/batches" -o /dev/null
+      - run: curl -fsS --retry 12 --retry-delay 10 --retry-all-errors "$PUBLIC_URL/healthz" -o /dev/null

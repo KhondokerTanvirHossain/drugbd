@@ -96,7 +96,7 @@ Where each value lives:
    - Authentication > Settings > **Authorized domains** > Add domain `drugdb.eliooo.org` (`localhost` is listed by default for local runs).
    - Project settings > General > Your apps > Add app > Web (`</>`). Register it without Hosting and copy `apiKey`, `authDomain` (`<project>.firebaseapp.com`), `projectId` and `appId` from the config snippet.
    - No service account is needed: the server verifies Google ID tokens with the project ID alone.
-2. **Cloudflare Turnstile** (Cloudflare dashboard > Turnstile > Add widget): hostname `drugdb.eliooo.org`, mode Managed. Copy the site key and the secret key. For local runs use Cloudflare's always-pass test keys (site `1x00000000000000000000AA`, secret `1x0000000000000000000000000000000AA`); the app rejects them in production.
+2. **Cloudflare Turnstile** (Cloudflare dashboard > Turnstile > Add widget): hostname `drugdb.eliooo.org`, mode Managed. Copy the site key and the secret key. For local runs use Cloudflare's always-pass test keys (site `1x00000000000000000000AA`, secret `1x0000000000000000000000000000000AA`); the app rejects them in production Local runs with these keys also need `INTELLIDRUGS_E2E=1` and `SITE_HOST=localhost:3000` in your shell (see "Firebase auth domain" below); without them every local sign-in and flag fails.
 3. **GitHub repo variables** (Settings > Secrets and variables > Actions > **Variables** tab, not Secrets): `FIREBASE_API_KEY`, `FIREBASE_AUTH_DOMAIN`, `FIREBASE_PROJECT_ID`, `FIREBASE_APP_ID`, `TURNSTILE_SITE_KEY`. `next build` inlines them into the web image, so a change takes effect only with the next deploy (push to `main` or re-run `deploy`). An unset variable builds an image with sign-in disabled.
 4. **Host `.env`** (`~/drugdb/deploy/.env`, `chmod 600`). Add the lines from `deploy/.env.example`:
    ```bash
@@ -124,6 +124,26 @@ docker-compose up -d web     # recreates web with the new list; api and db keep 
 ```
 
 A removed reviewer loses review rights on their next request. A reviewer whose role changed signs out and in again. Rotating `SESSION_SECRET` signs everyone out (`docker-compose up -d web`). Rotating `INTERNAL_API_TOKEN` needs both services: `docker-compose up -d api web`.
+
+### Firebase auth domain (before the P1A deploy, in this order)
+
+"Continue in this tab" (sign-in with a redirect) needs Firebase's auth handler on our own domain. The web app proxies
+`/__/auth/*` to `https://<project>.firebaseapp.com/__/auth/*`; Caddy needs no change.
+
+1. Set the GitHub repository variable `FIREBASE_AUTH_DOMAIN=drugdb.eliooo.org` (the deploy workflow bakes it into the
+   web image as `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`) and the same value for `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` in the
+   host `~/drugdb/deploy/.env`.
+2. Google Cloud console > APIs & Services > Credentials > the Firebase web OAuth client: add the authorized redirect URI
+   `https://drugdb.eliooo.org/__/auth/handler`. Without it sign-in fails with `redirect_uri_mismatch`.
+3. Add `SITE_HOST=drugdb.eliooo.org` and `HERO_CONCEPT_ID=186-0030-006--napa` to the host `.env`. Deploy refuses to
+   run without `SITE_HOST`.
+
+Do all three before P1A merges to `main`. Until then the image keeps `<project>.firebaseapp.com`, which the CSP still
+allows for the popup.
+
+Local runs with Cloudflare's test keys: the server checks each Turnstile token's action and hostname, and the test keys
+answer with neither, so set `INTELLIDRUGS_E2E=1` and `SITE_HOST=localhost:3000` in your shell for a local production
+build. Never set `INTELLIDRUGS_E2E` on the host.
 
 ## Database changes
 

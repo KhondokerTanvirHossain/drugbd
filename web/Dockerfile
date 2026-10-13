@@ -19,4 +19,5 @@ COPY --from=build /app/.next/standalone ./
 COPY --from=build /app/.next/static ./.next/static
 USER node
 EXPOSE 3000
+HEALTHCHECK --interval=30s CMD wget -qO- http://127.0.0.1:3000/healthz || exit 1
 CMD ["node", "server.js"]
