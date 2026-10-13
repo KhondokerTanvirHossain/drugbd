@@ -1,0 +1,3 @@
+/* Busy state keeps the button's width: the label stays in flow, hidden, and the busy label overlays it. */
+.hold { display: inline-flex; align-items: center; gap: inherit; visibility: hidden; }
+.busy { position: absolute; inset: 0; display: inline-flex; align-items: center; justify-content: center; gap: inherit; }
