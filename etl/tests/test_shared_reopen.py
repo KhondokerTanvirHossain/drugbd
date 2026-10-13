@@ -15,7 +15,7 @@ import psycopg
 import pytest
 from testcontainers.postgres import PostgresContainer
 
-from bddrug_etl.ddinter.client import DDInterPairRow
+from bddrug_etl.ddinter.client import DDInterPairRow, InteractWithList, InteractWithRow
 from bddrug_etl.ddinter.html import DDInterDrug, InteractionText
 from bddrug_etl.jobs import run_pipeline
 from bddrug_etl.load.batches import reopen_review
@@ -86,6 +86,10 @@ class FakeDDInter:
                 (other,) = e - {ddinter_id}
                 rows.append(DDInterPairRow(other, self.drugs.get(other, other), sev, ()))
         return rows
+
+    def interact_with(self, ddinter_id):
+        return InteractWithList(tuple(InteractWithRow(r.partner_id, r.partner_name, "0", r.severity)
+                                      for r in self.graph(ddinter_id)), True)
 
     def diseases(self, ddinter_id):
         return []

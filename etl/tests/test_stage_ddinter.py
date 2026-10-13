@@ -5,7 +5,7 @@ import psycopg
 import pytest
 from testcontainers.postgres import PostgresContainer
 
-from bddrug_etl.ddinter.client import DDInterPairRow
+from bddrug_etl.ddinter.client import DDInterPairRow, InteractWithList, InteractWithRow, severity
 from bddrug_etl.ddinter.html import DDInterDrug, InteractionText
 from bddrug_etl.parse.names import route_for_dosage_form
 from bddrug_etl.stages.ddinter import _mapped_chosen, map_and_load_ddinter, plan_ddinter
@@ -117,13 +117,17 @@ FOODS = {"DDInter1951": [{"interaction_id": "9001", "severity": "moderate", "foo
 class FakeDDInter:
     """Fake DDInterClient. Records every call; ``fail`` maps (method, key) to an exception to raise."""
 
-    def __init__(self, extra_drugs=None, fail=None, one_sided=None, graph_extra=None):
+    def __init__(self, extra_drugs=None, fail=None, one_sided=None, graph_extra=None, interact_extra=None,
+                 incomplete=None):
         self.extra = extra_drugs or {}  # id -> (name, drugbank)
         self.fail = fail or {}
         # directed (ddinter_id, partner_id) lookups that find nothing: DDInter's per-drug interact-with
         # lists are not provably symmetric (warfarin: graph 934 rows, interact-with recordsTotal 936)
         self.one_sided = set(one_sided or ())
         self.graph_extra = graph_extra or {}  # id -> extra graph rows (partner_id, name, severity, actions)
+        self.interact_extra = interact_extra or {}  # id -> rows only interact-with lists: (partner_id, name, level)
+        self.incomplete = set(incomplete or ())     # ids whose interact-with list cannot be read in full
+        self.interact_calls = []
         self.drug_list_calls = 0
         self.detail_calls, self.graph_calls, self.disease_calls, self.food_calls = [], [], [], []
         self.pair_calls, self.text_calls = [], []
@@ -149,6 +153,17 @@ class FakeDDInter:
         self.graph_calls.append(ddinter_id)
         self._boom("graph", ddinter_id)
         return [DDInterPairRow(*r) for r in GRAPH.get(ddinter_id, []) + self.graph_extra.get(ddinter_id, [])]
+
+    def interact_with(self, ddinter_id):
+        """The graph's partners (same severity) plus ``interact_extra``; incomplete for ids in ``incomplete``."""
+        self.interact_calls.append(ddinter_id)
+        self._boom("interact_with", ddinter_id)
+        if ddinter_id in self.incomplete:
+            return InteractWithList((), False)
+        rows = [InteractWithRow(p, n, INTERACTION_ID.get(frozenset((ddinter_id, p)), "0"), sev)
+                for p, n, sev, _ in GRAPH.get(ddinter_id, []) + self.graph_extra.get(ddinter_id, [])]
+        rows += [InteractWithRow(p, n, "0", severity(level)) for p, n, level in self.interact_extra.get(ddinter_id, [])]
+        return InteractWithList(tuple(rows), True)
 
     def diseases(self, ddinter_id):
         self.disease_calls.append(ddinter_id)
@@ -949,3 +964,101 @@ def test_mapped_products_choose_by_their_own_route(conn):
     chosen = _mapped_chosen(conn)
     assert {"DDInter351", "DDInter352"} <= chosen   # the capsule and the no-route product pick 351, the eye drop 352
     assert "DDInter353" not in chosen               # no otic product: the otic entry is never chosen
+
+
+# --- pair-list reconciliation (spec §8.1 item 5) ----------------------------------------------------
+
+
+def test_graph_and_interact_with_partner_sets_reconciled(conn):
+    client = FakeDDInter(interact_extra={"DDInter1951": [("DDInter777", "Extradrug", 1), ("DDInter778", "Nolevel", None)]})
+    [r] = map_and_load_ddinter(conn, client, ["warf"])
+    assert r.status == "ok" and r.evidence["pair_count"] == 5   # 3 graph partners + 2 only in interact-with
+    assert conn.execute(
+        """SELECT ddinter_a, ddinter_b, severity, actions, partner_name_a, partner_name_b FROM curated.ddinter_pair
+            WHERE ddinter_b IN ('DDInter777', 'DDInter778') ORDER BY ddinter_b""").fetchall() == [
+        ("DDInter1951", "DDInter777", "minor", [], "Warfarin", "Extradrug"),
+        ("DDInter1951", "DDInter778", "unknown", [], "Warfarin", "Nolevel")]
+    # a partner the graph lists keeps the graph's severity and actions
+    assert conn.execute("SELECT severity, actions FROM curated.ddinter_pair WHERE ddinter_a = 'DDInter1951' "
+                        "AND ddinter_b = 'DDInter20'").fetchone() == ("major", ["synergy"])
+    # spec §11.3: an incomplete interact-with read fails the stage and writes no ddinter_drug row
+    [r_clar] = map_and_load_ddinter(conn, FakeDDInter(incomplete={"DDInter393"}), ["clar"])
+    assert (r_clar.status, r_clar.note) == ("fail", "DDInter pair list incomplete for DDInter393")
+    assert conn.execute("SELECT count(*) FROM curated.ddinter_drug WHERE ddinter_id = 'DDInter393'").fetchone()[0] == 0
+
+
+def test_an_interact_with_only_row_never_overwrites_a_graph_row(conn):
+    """Warfarin's graph lists metformin with actions; metformin's graph does not list warfarin, but its interact-with
+    does, at another level. The graph row wins whatever the order, and the extra row reports no change."""
+    one_sided = {"DDInter1951": [("DDInter1164", "Metformin", "moderate", (S,))]}
+    map_and_load_ddinter(conn, FakeDDInter(graph_extra=one_sided), ["warf"])
+    stored = "SELECT severity, actions FROM curated.ddinter_pair WHERE ddinter_a = 'DDInter1164' AND ddinter_b = 'DDInter1951'"
+    assert conn.execute(stored).fetchone() == ("moderate", ["synergy"])
+    metf_only = FakeDDInter(interact_extra={"DDInter1164": [("DDInter1951", "Warfarin", 1)]})   # level 1 = minor
+    changes = SharedChanges()
+    [r] = map_and_load_ddinter(conn, metf_only, ["metf"], changes)
+    assert r.status in ("ok", "warn")
+    assert conn.execute(stored).fetchone() == ("moderate", ["synergy"])
+    # the pair was not changed, so warfarin's products are not re-opened (no shared_change snapshot)
+    assert "DDInter1951" not in changes.ddinter_ids
+    again = SharedChanges()
+    map_and_load_ddinter(conn, metf_only, ["metf"], again)
+    assert again == SharedChanges()
+
+
+def test_an_incomplete_entry_writes_no_pair_rows_even_from_a_complete_partner(conn):
+    res = dict(zip(["warf", "asa"], map_and_load_ddinter(conn, FakeDDInter(incomplete={"DDInter1951"}), ["warf", "asa"])))
+    assert res["warf"].status == "fail"
+    assert res["asa"].status != "fail"
+    assert conn.execute("SELECT count(*) FROM curated.ddinter_pair "
+                        "WHERE 'DDInter1951' IN (ddinter_a, ddinter_b)").fetchone()[0] == 0
+
+
+def test_a_failing_lookup_on_an_incomplete_entry_does_not_fail_another_product(conn):
+    """The interact-with read of an incomplete entry is not memoised by the client, so a text lookup through it would
+    raise again; no product may look up a text through an entry that is incomplete in this run."""
+    client = FakeDDInter(incomplete={"DDInter1951"},
+                         fail={("pair_interaction_id", ("DDInter1951", "DDInter20")): RuntimeError("page 3 failed")})
+    r_warf, r_asa = map_and_load_ddinter(conn, client, ["warf", "asa"])
+    assert (r_warf.status, r_warf.note) == ("fail", "DDInter pair list incomplete for DDInter1951")
+    assert r_asa.status != "fail", r_asa
+    assert ("DDInter1951", "DDInter20") not in client.pair_calls
+
+
+def test_incomplete_interact_with_fails_the_products_that_chose_it(conn):
+    [r] = map_and_load_ddinter(conn, FakeDDInter(incomplete={"DDInter1951"}), ["warf"])
+    assert (r.status, r.note) == ("fail", "DDInter pair list incomplete for DDInter1951")
+    assert conn.execute("SELECT count(*) FROM curated.ddinter_drug WHERE ddinter_id = 'DDInter1951'").fetchone()[0] == 0
+    assert conn.execute("SELECT count(*) FROM curated.ddinter_pair "
+                        "WHERE 'DDInter1951' IN (ddinter_a, ddinter_b)").fetchone()[0] == 0
+    # the substance mapping is still written (a shared fact); with no ddinter_drug row the API never counts it checked
+    assert ddinter_codes(conn, WARF)[0][0] == "DDInter1951"
+
+
+def test_an_earlier_complete_list_stays_when_a_later_read_is_incomplete(conn):
+    map_and_load_ddinter(conn, FakeDDInter(), ["warf"])
+    conn.commit()
+    pairs_before = conn.execute("SELECT count(*) FROM curated.ddinter_pair").fetchone()[0]
+    [r] = map_and_load_ddinter(conn, FakeDDInter(incomplete={"DDInter1951"}), ["warf"])
+    assert r.status == "fail"
+    assert conn.execute("SELECT count(*) FROM curated.ddinter_drug WHERE ddinter_id = 'DDInter1951'").fetchone()[0] == 1
+    assert conn.execute("SELECT count(*) FROM curated.ddinter_pair").fetchone()[0] == pairs_before
+
+
+def test_an_incomplete_entry_the_product_did_not_choose_does_not_fail_it(conn):
+    [r] = map_and_load_ddinter(conn, FakeDDInter(incomplete={"DDInter351"}), ["chlor_eye"])
+    assert (r.status, r.note) == ("ok", "")
+    assert conn.execute("SELECT ddinter_id FROM curated.ddinter_drug ORDER BY ddinter_id").fetchall() == [
+        ("DDInter352",), ("DDInter353",)]
+
+
+def test_ddinter352_pair_list_is_stored_without_text_fetches(conn):
+    """Regression fixture (spec §11.3): DDInter352 has 112 pairs (1 major, 111 moderate) and no pilot partner."""
+    eye = [(f"DDInter{5000 + i}", f"Partner {i}", "major" if i == 0 else "moderate", ()) for i in range(112)]
+    client = FakeDDInter(graph_extra={"DDInter352": eye})
+    r_eye = map_and_load_ddinter(conn, client, ["chlor_eye", "warf", "asa"])[0]
+    assert (r_eye.status, r_eye.note) == ("ok", "")
+    assert r_eye.evidence["pair_count"] == 112 and r_eye.evidence["text_fetch_count"] == 0
+    assert conn.execute("""SELECT count(*), count(*) FILTER (WHERE severity = 'major') FROM curated.ddinter_pair
+                            WHERE 'DDInter352' IN (ddinter_a, ddinter_b)""").fetchone() == (112, 1)
+    assert not any("DDInter352" in call for call in client.pair_calls)

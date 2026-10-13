@@ -45,13 +45,14 @@ from typing import TypeVar
 
 import psycopg
 
-from bddrug_etl.ddinter.client import DDInterClient
+from bddrug_etl.ddinter.client import DDInterClient, InteractWithList
 from bddrug_etl.ddinter.html import PLACEHOLDERS, DDInterDrug, InteractionText, clean_text
 from bddrug_etl.parse.names import normalize_name
 from bddrug_etl.stages.results import SharedChanges, StageResult, error_note
 
 SOURCE = "ddinter2"
 NONE_NOTE = "No interaction data in DDInter for this substance"
+INCOMPLETE_NOTE = "DDInter pair list incomplete for {}"
 _ROUTE_SUFFIX = re.compile(r"^(?P<base>.*?)\s*\((?P<route>ophthalmic|otic|nasal|topical)\)\s*$", re.IGNORECASE)
 _SEVERITIES = frozenset({"major", "moderate", "minor", "unknown"})
 _NAME_TYPES = ("icd11", "rxnorm", "dgda_content")
@@ -137,6 +138,24 @@ class _Pending:
     changed: SharedChanges = field(default_factory=SharedChanges)  # shared rows really inserted or changed
 
 
+PairData = tuple[str, str, str, list[str]]  # (name_a, name_b, severity, actions)
+
+
+@dataclass(frozen=True)
+class _PairList:
+    """An entry's full pair list (§8.1 item 5).
+
+    ``graph``: rows of the graph endpoint; they carry actions and are upserted. ``extra``: partners only
+    ``interact-with`` lists; they are inserted with no actions and never overwrite a stored row, because the partner's
+    own graph may hold that pair with actions (DDInter's lists are not symmetric). So the stored row, and the "changed"
+    report that re-opens approved records, do not depend on the order in which entries are processed."""
+    graph: dict[Pair, PairData]
+    extra: dict[Pair, PairData]
+
+    def all(self) -> dict[Pair, PairData]:
+        return {**self.extra, **self.graph}
+
+
 def _idkey(ddinter_id: str) -> tuple[int, str]:
     m = re.search(r"\d+", ddinter_id)
     return (int(m.group()) if m else 0, ddinter_id)
@@ -168,6 +187,9 @@ class _Run:
         self.fetched: set[Pair] = set()
         self._detail: dict[str, DDInterDrug] = {}
         self._graph: dict[str, dict[Pair, tuple[str, str, str, list[str]]]] = {}
+        self.incomplete: set[str] = set()  # candidate entries whose interact-with list was not read in full
+        self._listings: dict[str, InteractWithList] = {}
+        self._pair_lists: dict[str, _PairList | None] = {}
         self._diseases: dict[str, dict[str, dict]] = {}
         self._foods: dict[str, dict[str, dict]] = {}
         self.texts: dict[Pair, tuple[str, InteractionText] | None] = {}  # None: neither side lists the pair
@@ -198,6 +220,40 @@ class _Run:
                     out[(r.partner_id, ddinter_id)] = (r.partner_name, me, sev, list(r.actions))
             self._graph[ddinter_id] = out
         return self._graph[ddinter_id]
+
+    def listing(self, ddinter_id: str) -> InteractWithList:
+        """The entry's interact-with list, read once per run (the client never raises for an HTTP or shape problem)."""
+        if ddinter_id not in self._listings:
+            self._listings[ddinter_id] = self.client.interact_with(ddinter_id)
+        return self._listings[ddinter_id]
+
+    def pair_list(self, ddinter_id: str) -> _PairList | None:
+        """The entry's full pair list (§8.1 item 5): every graph pair, plus each interact-with partner the graph lacks
+        (its ``drug_name``, its level's severity, no actions). None when interact-with could not be read in full.
+
+        Pairs with an entry in ``incomplete`` are left out: no pair row of an incomplete entry is written in this run,
+        not even from its partner's complete list, and no text is looked up through it (its read would fail again)."""
+        if ddinter_id not in self._pair_lists:
+            listed = self.listing(ddinter_id)
+            if ddinter_id in self.incomplete or not listed.complete:
+                self._pair_lists[ddinter_id] = None
+            else:
+                skip = lambda pair: pair[0] in self.incomplete or pair[1] in self.incomplete  # noqa: E731
+                all_graph = self.pairs(ddinter_id)
+                graph = {p: v for p, v in all_graph.items() if not skip(p)}
+                me = self.detail(ddinter_id).name
+                extra: dict[Pair, PairData] = {}
+                for row in listed.rows:
+                    if row.partner_id == ddinter_id:
+                        continue
+                    pair = (ddinter_id, row.partner_id) if ddinter_id < row.partner_id else (row.partner_id, ddinter_id)
+                    if pair in all_graph or skip(pair):
+                        continue
+                    sev = row.severity if row.severity in _SEVERITIES else "unknown"
+                    extra.setdefault(pair, (me, row.partner_name, sev, []) if pair[0] == ddinter_id
+                                     else (row.partner_name, me, sev, []))
+                self._pair_lists[ddinter_id] = _PairList(graph, extra)
+        return self._pair_lists[ddinter_id]
 
     def diseases(self, ddinter_id: str) -> dict[str, dict]:
         if ddinter_id not in self._diseases:
@@ -318,9 +374,10 @@ def _upsert_many(cur: psycopg.Cursor, sql: str, rows: list[tuple]) -> list[tuple
             return out
 
 
-def _store_id_data(conn, run: _Run, ddinter_id: str) -> set[str]:
+def _store_id_data(conn, run: _Run, ddinter_id: str, pair_list: _PairList | None) -> set[str]:
     """Pairs, diseases and foods of one mapped DDInter drug (idempotent upserts; an identical row is not
-    rewritten). Returns the DDInter ids whose rows were inserted or changed: both sides of a changed pair."""
+    rewritten). ``pair_list`` None (incomplete) writes no pair row; its ``extra`` pairs are inserted only where no row
+    exists. Returns the DDInter ids whose rows were inserted or changed: both sides of a changed pair."""
     with conn.cursor() as cur:
         pairs = _upsert_many(
             cur,
@@ -332,7 +389,18 @@ def _store_id_data(conn, run: _Run, ddinter_id: str) -> set[str]:
                WHERE (ddinter_pair.severity, ddinter_pair.actions, ddinter_pair.partner_name_a, ddinter_pair.partner_name_b)
                      IS DISTINCT FROM (EXCLUDED.severity, EXCLUDED.actions, EXCLUDED.partner_name_a, EXCLUDED.partner_name_b)
                RETURNING ddinter_a, ddinter_b""",
-            [(a, b, sev, actions, na, nb) for (a, b), (na, nb, sev, actions) in run.pairs(ddinter_id).items()],
+            [] if pair_list is None else
+            [(a, b, sev, actions, na, nb) for (a, b), (na, nb, sev, actions) in pair_list.graph.items()],
+        )
+        # interact-with-only partners: never overwrite a row a graph wrote, and an existing row is not "changed"
+        pairs += _upsert_many(
+            cur,
+            """INSERT INTO curated.ddinter_pair (ddinter_a, ddinter_b, severity, actions, partner_name_a, partner_name_b)
+               VALUES (%s, %s, %s, %s, %s, %s)
+               ON CONFLICT (ddinter_a, ddinter_b) DO NOTHING
+               RETURNING ddinter_a, ddinter_b""",
+            [] if pair_list is None else
+            [(a, b, sev, actions, na, nb) for (a, b), (na, nb, sev, actions) in pair_list.extra.items()],
         )
         own = _upsert_many(
             cur,
@@ -459,7 +527,8 @@ def _process(conn: psycopg.Connection, run: _Run, cid: str, plan: _ProductPlan, 
             d = run.detail(e.ddinter_id)
             confirmed = d.drugbank_id is not None and d.drugbank_id.strip().upper() in sub.drugbank
             method, confidence = ("drugbank", 1.0) if confirmed else ("name", 0.7)
-            if _upsert_drug(conn, d, e.route_scope):
+            # the drug row means "this entry's full pair list is stored": written only from a complete list
+            if run.pair_list(e.ddinter_id) is not None and _upsert_drug(conn, d, e.route_scope):
                 pending.changed.ddinter_ids.add(e.ddinter_id)
             if _upsert_code(conn, sub.bds_id, e.ddinter_id, e.route_scope, method, confidence):
                 pending.changed.bds_ids.add(sub.bds_id)
@@ -488,10 +557,11 @@ def _process(conn: psycopg.Connection, run: _Run, cid: str, plan: _ProductPlan, 
     fetchable: set[Pair] = set()
     disease_count = food_count = 0
     for ddinter_id in sorted(ids, key=_idkey):
+        listed = run.pair_list(ddinter_id)
         if ddinter_id not in run.stored_ids:
-            pending.changed.ddinter_ids |= _store_id_data(conn, run, ddinter_id)
+            pending.changed.ddinter_ids |= _store_id_data(conn, run, ddinter_id, listed)
             pending.ids.add(ddinter_id)
-        mine = run.pairs(ddinter_id)
+        mine = listed.all() if listed is not None else {}
         if ddinter_id in chosen_ids:
             pairs.update(mine)
         disease_count += len(run.diseases(ddinter_id))
@@ -500,7 +570,8 @@ def _process(conn: psycopg.Connection, run: _Run, cid: str, plan: _ProductPlan, 
             other = pair[1] if pair[0] == ddinter_id else pair[0]
             # Texts only where both sides are in scope (this batch or mapped by an earlier one); pairs with
             # an unmapped drug keep severity/actions and get their text once that drug is mapped.
-            if other in run.scope_ids:
+            # (pair_list already leaves out pairs with an incomplete entry; the second test keeps that explicit)
+            if other in run.scope_ids and other not in run.incomplete:
                 fetchable.add(pair)
                 if pair not in run.stored_texts and pair not in pending.texts:
                     _ensure_text(conn, run, pair, pending)
@@ -515,6 +586,10 @@ def _process(conn: psycopg.Connection, run: _Run, cid: str, plan: _ProductPlan, 
                 "disease_count": disease_count, "food_count": food_count,
                 "text_fetch_count": len(pairs & run.fetched), "text_missing": [list(p) for p in text_missing],
                 "route": plan.route, "chosen": chosen, "route_assumed": route_assumed}
+    incomplete = sorted((i for i in chosen_ids if run.pair_list(i) is None), key=_idkey)
+    if incomplete:
+        # "No interaction listed" must never come from a partial list: the product cannot be approved (§7.2 step 5)
+        return StageResult(cid, "fail", "; ".join(INCOMPLETE_NOTE.format(i) for i in incomplete), evidence)
     return StageResult(cid, "warn" if notes else "ok", "; ".join(notes), evidence)
 
 
@@ -564,12 +639,17 @@ def plan_ddinter(conn: psycopg.Connection, client: DDInterClient, concept_ids: l
             raise
         except Exception as e:
             plans[cid] = _fail(cid, error_note(e))
+    candidate_ids: set[str] = set()
     for plan in plans.values():
         if isinstance(plan, _ProductPlan):
             for sub in plan.subs:
                 entries = run.candidates(sub.keys)
+                candidate_ids.update(e.ddinter_id for e in entries)
                 run.scope_ids.update(e.ddinter_id for e in entries)
                 run.scope_chosen.update(e.ddinter_id for e in choose(entries, plan.route)[0])
+    # §8.1 item 5: read every candidate's interact-with list now (memoised; no detail or graph read), so an incomplete
+    # entry is known before any product writes a pair row that touches it
+    run.incomplete = {i for i in sorted(candidate_ids, key=_idkey) if not run.listing(i).complete}
     return DDInterPlan(run, plans)
 
 

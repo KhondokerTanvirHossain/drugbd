@@ -10,7 +10,7 @@ import psycopg
 import pytest
 from testcontainers.postgres import PostgresContainer
 
-from bddrug_etl.ddinter.client import DDInterClient, DDInterPairRow
+from bddrug_etl.ddinter.client import DDInterClient, DDInterPairRow, InteractWithList, InteractWithRow
 from bddrug_etl.ddinter.html import DDInterDrug, InteractionText
 from bddrug_etl.http.snapshot import SnapshotHttp
 from bddrug_etl.jobs import run_pipeline
@@ -89,6 +89,10 @@ class FakeDDInter:
     def graph(self, ddinter_id):
         partner = {"DDInter1951": ("DDInter20", "Acetylsalicylic acid"), "DDInter20": ("DDInter1951", "Warfarin")}
         return [DDInterPairRow(*partner[ddinter_id], "major", ())]
+
+    def interact_with(self, ddinter_id):
+        return InteractWithList(tuple(InteractWithRow(r.partner_id, r.partner_name, "50001", r.severity)
+                                      for r in self.graph(ddinter_id)), True)
 
     def diseases(self, ddinter_id):
         return []
