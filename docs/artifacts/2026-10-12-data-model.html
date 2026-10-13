@@ -130,7 +130,7 @@ a { color: var(--accent); }
 
   <section class="stack">
     <div class="stack col">
-      <h2>Three schemas, 21 tables</h2>
+      <h2>Three schemas, 23 tables</h2>
       <p>Data moves one way. Source responses are stored verbatim in <span class="chip raw">raw</span>. They are interpreted into the drug master and interaction knowledge in <span class="chip curated">curated</span>. Every pipeline run, review decision and flag is recorded in <span class="chip ops">ops</span>, and the public site only shows curated records whose ops review is approved.</p>
     </div>
     <div class="schemas">
@@ -171,6 +171,8 @@ a { color: var(--accent); }
           <li><code>stage_result</code> <span>40</span></li>
           <li><code>review_decision</code> <span>0</span></li>
           <li><code>flag</code> <span>0</span></li>
+          <li><code>item_snapshot</code> <span>0</span></li>
+          <li><code>audit_event</code> <span>0</span></li>
         </ul>
       </div>
     </div>
@@ -375,6 +377,8 @@ erDiagram
   batch ||--o{ stage_result : "per record, per stage"
   batch_item ||--o{ review_decision : "append-only history"
   batch ||..o{ batch_run : "run history"
+  batch_item ||--o{ item_snapshot : "one per pipeline stamp, append-only"
+  audit_event }o..o| batch_item : "target_type, target_id"
   batch_item }o..|| brand_product : "concept_id"
   brand_product ||..|| ocl_concept : "concept_id, verbatim DGDA record"
   flag }o..o| brand_product : "target_type, target_id"
@@ -431,6 +435,26 @@ erDiagram
     timestamptz resolved_at
     text resolved_by
   }
+  item_snapshot {
+    text batch_id PK, FK
+    text concept_id PK, FK
+    timestamptz extracted_at PK "the stamp it records"
+    uuid run_id "one per ETL invocation"
+    text reason "run | rerun | shared_change"
+    jsonb payload "brand, clinical drug, ingredients, stages"
+    timestamptz created_at
+  }
+  audit_event {
+    bigint id PK
+    timestamptz at
+    text event "sign_in decision decision_rejected ..."
+    text actor_email "never public"
+    text actor_role "pharmacist | engineer | user"
+    text target_type
+    text target_id
+    text outcome
+    uuid request_id "unique for event = decision"
+  }
   brand_product {
     text concept_id PK
   }
@@ -459,6 +483,7 @@ erDiagram
       <div class="rule"><h3>Missing text is NULL, never a placeholder</h3><p>Interaction texts may be NULL, but a text row needs at least one of interaction or management. DDInter’s “None” is stored as missing.</p><span class="where">ddinter_interaction_text_has_text</span></div>
       <div class="rule"><h3>Each pair stored once</h3><p><code>ddinter_pair</code> requires <code>ddinter_a &lt; ddinter_b</code>, so A–B and B–A cannot both exist.</p><span class="where">CHECK (ddinter_a &lt; ddinter_b)</span></div>
       <div class="rule"><h3>Review history cannot be deleted</h3><p><code>review_decision</code> references <code>batch_item</code> with ON DELETE NO ACTION, so a reviewed record cannot be removed. Decisions are only ever inserted.</p><span class="where">review_decision → batch_item (NO ACTION)</span></div>
+      <div class="rule"><h3>Snapshots and the audit trail are append-only</h3><p>Triggers reject UPDATE, DELETE and TRUNCATE on <code>item_snapshot</code> and <code>audit_event</code>. A batch item with a snapshot cannot be deleted, so an item that leaves the batch file is kept and marked “removed from batch file”.</p><span class="where">ops.reject_change() triggers</span></div>
       <div class="rule"><h3>Confidence and enums are checked</h3><p>Confidence must be 0–1. Code systems, severities, stages, review states and roles are restricted by CHECK constraints.</p><span class="where">CHECK constraints</span></div>
     </div>
   </section>
@@ -508,6 +533,8 @@ erDiagram
           <tr><td class="t">stage_result</td><td class="mono">batch_id, concept_id, stage</td><td>What each stage concluded for each record, with JSON evidence.</td><td class="n">40</td></tr>
           <tr><td class="t">review_decision</td><td class="mono">id</td><td>Append-only OK / issue decisions with reviewer role and time.</td><td class="n">0</td></tr>
           <tr><td class="t">flag</td><td class="mono">id</td><td>Problems reported by signed-in users, open or resolved.</td><td class="n">0</td></tr>
+          <tr><td class="t">item_snapshot</td><td class="mono">batch_id, concept_id, extracted_at</td><td>The record as each pipeline stamp left it, grouped by run. Append-only.</td><td class="n">0</td></tr>
+          <tr><td class="t">audit_event</td><td class="mono">id</td><td>Who did what and when: sign-ins, decisions, rejections, flags. Append-only.</td><td class="n">0</td></tr>
         </tbody>
       </table>
     </div>
