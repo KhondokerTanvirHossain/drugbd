@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { firebaseProjectId, verifyFirebaseIdToken } from "@/lib/firebase-admin";
+import { SIGN_IN_STATES } from "@/lib/copy";
 import { roleFor } from "@/lib/reviewers";
 import { SESSION_COOKIE, createSessionCookie, sessionCookieOptions } from "@/lib/session";
 
@@ -32,14 +33,14 @@ export async function POST(request: Request) {
   try {
     decoded = await verifyFirebaseIdToken(idToken, projectId);
   } catch {
-    return fail(401, "UNAUTHORIZED", "Sign-in could not be verified. Please try again.");
+    return fail(401, "UNAUTHORIZED", SIGN_IN_STATES.invalidBody);
   }
   if (typeof decoded.email !== "string" || !decoded.email.includes("@") || decoded.email_verified !== true) {
-    return fail(401, "UNAUTHORIZED", "Your Google account email is not verified.");
+    return fail(401, "UNAUTHORIZED", SIGN_IN_STATES.unverifiedBody);
   }
   const authAge = Math.floor(Date.now() / 1000) - Number(decoded.auth_time);
   if (!Number.isFinite(authAge) || authAge > MAX_SIGN_IN_AGE_SECONDS) {
-    return fail(401, "UNAUTHORIZED", "Sign-in is too old. Please sign in again.");
+    return fail(401, "UNAUTHORIZED", SIGN_IN_STATES.staleAuthBody);
   }
 
   const email = decoded.email.trim().toLowerCase();

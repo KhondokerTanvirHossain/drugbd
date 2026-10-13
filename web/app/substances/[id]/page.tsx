@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import FlagForm from "@/components/FlagForm";
 import { Badge } from "@/components/badges";
 import { getSubstance, isHidden } from "@/lib/api";
-import { NO_DATA_SENTENCE, NO_INTERACTION_TEXT, NO_MANAGEMENT_TEXT, NOT_REVIEWED } from "@/lib/copy";
+import { NO_DATA_SENTENCE, NO_INTERACTION_TEXT, NO_MANAGEMENT, NOT_REVIEWED } from "@/lib/copy";
 import { ddinterText } from "@/lib/ddinter-text";
 import { firstParam } from "@/lib/params";
 import { getSession } from "@/lib/session";
@@ -87,7 +87,7 @@ export default async function SubstancePage({ params, searchParams }: {
           <tbody>{s.foods.map((f) => (
             <tr key={`${f.interactionId}|${f.routeScope}`}><td>{f.food}</td><td>{severityText(f.severity)}</td>
               <td>{ddinterText(f.description) || NO_INTERACTION_TEXT}</td>
-              <td>{ddinterText(f.management) || NO_MANAGEMENT_TEXT}</td></tr>))}</tbody>
+              <td>{ddinterText(f.management) || NO_MANAGEMENT}</td></tr>))}</tbody>
         </table>)}
 
       <h2>Products using it</h2>

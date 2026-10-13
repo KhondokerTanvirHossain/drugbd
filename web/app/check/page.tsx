@@ -1,7 +1,7 @@
 import FlagForm from "@/components/FlagForm";
 import { Badge } from "@/components/badges";
 import { checkInteractions, listLoadedProducts, type AlertSide, type CheckOutcome, type CheckResult } from "@/lib/api";
-import { NO_INTERACTION_TEXT, NO_MANAGEMENT_TEXT } from "@/lib/copy";
+import { NO_INTERACTION_TEXT, NO_MANAGEMENT } from "@/lib/copy";
 import { ddinterText } from "@/lib/ddinter-text";
 import { firstParam, listParam } from "@/lib/params";
 import { getSession } from "@/lib/session";
@@ -103,7 +103,7 @@ function Results({ r }: { r: CheckResult }) {
                 <p><strong>{`${side(a.a)} + ${side(a.b)}`}</strong> <Badge>{severityText(a.severity)}</Badge></p>
                 {a.actions.length > 0 && <p>{`Actions: ${a.actions.join(", ")}`}</p>}
                 <p>{ddinterText(a.interaction) || NO_INTERACTION_TEXT}</p>
-                <p>{management ? `Management: ${management}` : NO_MANAGEMENT_TEXT}</p>
+                <p>{management ? `Management: ${management}` : NO_MANAGEMENT}</p>
                 {a.routeAssumed && <p><small>Route assumed: the general DDInter entry was used for at least one of these products.</small></p>}
                 <p><small>{`Source: ${a.source}`}</small></p>
               </div>);

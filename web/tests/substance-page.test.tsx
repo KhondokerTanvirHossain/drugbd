@@ -138,7 +138,7 @@ describe("substance page", () => {
       ] });
     const html = await render("BDS-000001");
     expect(html.match(/Interaction text not available from DDInter\./g)).toHaveLength(4);
-    expect(html.match(/Management advice not available from DDInter\./g)).toHaveLength(2);
+    expect(html.match(/DDInter 2\.0 gives no management text for this pair\./g)).toHaveLength(2);
     expect(html).not.toMatch(/<td>\s*(None|-|N\/A|null)\s*<\/td>/);
     // no empty disease / food text cell either (the interactions table's empty Actions cell is unrelated)
     const tables = html.slice(html.indexOf("<h2>Diseases</h2>"), html.indexOf("<h2>Products using it</h2>"));
