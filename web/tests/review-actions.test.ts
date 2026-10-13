@@ -18,6 +18,7 @@ const TOKEN = "test-internal-token-0123456789abcdef";
 const PHARMACIST = { email: "pharm@example.org", role: "pharmacist" };
 const ENGINEER = { email: "eng@example.org", role: "engineer" };
 const USER = { email: "someone@gmail.com", role: "user" };
+const REQ = "3f2504e0-4f89-41d3-9a0c-0305e82c3301";
 
 const form = (fields: Record<string, string>) => {
   const fd = new FormData();
@@ -25,7 +26,8 @@ const form = (fields: Record<string, string>) => {
   return fd;
 };
 const review = (over: Record<string, string> = {}) => form({ batchId: "0001-pilot", conceptId: "N-1", decision: "ok",
-  note: "", extractedAt: "2026-10-12T09:00:00Z", "cf-turnstile-response": "ts-token", ...over });
+  note: "", extractedAt: "2026-10-12T09:00:00Z", expectedLastDecisionId: "41", requestId: REQ,
+  "cf-turnstile-response": "ts-token", ...over });
 const flag = (over: Record<string, string> = {}) => form({ targetType: "product", targetId: "P-1",
   message: "Wrong company name", "cf-turnstile-response": "ts-token", ...over });
 const ok = (data: unknown, status = 200) => new Response(JSON.stringify({ success: true, data }), { status });
@@ -78,7 +80,7 @@ describe("submitReview (review decision server action)", () => {
     expect(h.get("X-Internal-Token")).toBe(TOKEN);
     expect(h.get("Content-Type")).toBe("application/json");
     expect(JSON.parse(init.body)).toEqual({ decision: "ok", note: "", reviewerEmail: "pharm@example.org",
-      reviewerRole: "pharmacist", extractedAt: "2026-10-12T09:00:00Z" });
+      reviewerRole: "pharmacist", extractedAt: "2026-10-12T09:00:00Z", expectedLastDecisionId: 41, requestId: REQ });
     expect(revalidatePath).toHaveBeenCalledWith("/batches/0001-pilot");
   });
 
@@ -87,7 +89,8 @@ describe("submitReview (review decision server action)", () => {
     await submitReview(review({ reviewerEmail: "forged@evil.test", reviewerRole: "pharmacist", decision: "issue",
       note: "  Strength is 250 mg, not 500 mg  " }));
     expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ decision: "issue", note: "Strength is 250 mg, not 500 mg",
-      reviewerEmail: "eng@example.org", reviewerRole: "engineer", extractedAt: "2026-10-12T09:00:00Z" });
+      reviewerEmail: "eng@example.org", reviewerRole: "engineer", extractedAt: "2026-10-12T09:00:00Z",
+      expectedLastDecisionId: 41, requestId: REQ });
   });
 
   it("sends extractedAt as null when the item has none, and refuses a form without the field", async () => {
@@ -124,6 +127,42 @@ describe("submitReview (review decision server action)", () => {
     getSession.mockResolvedValue(PHARMACIST);
     await expect(reviewAction(review({ batchId: "a b/c" }))).rejects.toSatisfy((e) =>
       redirectTarget(e) === "/batches/a%20b%2Fc?review=saved&item=N-1#N-1");
+  });
+
+  it("sends expectedLastDecisionId as null when the item has no decision, and refuses a malformed one or requestId", async () => {
+    getSession.mockResolvedValue(PHARMACIST);
+    expect(await submitReview(review({ expectedLastDecisionId: "" }))).toMatchObject({ status: 200 });
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).expectedLastDecisionId).toBeNull();
+    for (const bad of [{ expectedLastDecisionId: "abc" }, { expectedLastDecisionId: "0" }, { expectedLastDecisionId: "-1" },
+      { expectedLastDecisionId: "1".repeat(16) }, { requestId: "" }, { requestId: "not-a-uuid" }])
+      expect(await submitReview(review(bad))).toMatchObject({ status: 400, code: "invalid" });
+    const noId = review(); noId.delete("expectedLastDecisionId");
+    expect(await submitReview(noId)).toMatchObject({ status: 400, code: "invalid" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("a replayed decision (the same form sent again) is reported as saved", async () => {
+    getSession.mockResolvedValue(PHARMACIST);
+    fetchMock.mockResolvedValue(ok({ review: "ok", displayStatus: "approved", batchStatus: "approved", replayed: true }, 200));
+    expect(await submitReview(review())).toMatchObject({ status: 200, code: "saved" });
+  });
+
+  it("maps each 409 field from the API to its own outcome code", async () => {
+    getSession.mockResolvedValue(PHARMACIST);
+    const cases: [string, string, string][] = [
+      ["extractedAt", "This record was re-run after the page was loaded; reload it and review again", "stale"],
+      ["lastDecisionId", "Another reviewer decided on this record after the page was loaded; reload it and review again", "decided"],
+      ["stages", "A check failed on this record. It returns to review after the fix and re-run.", "checks"],
+      ["review", "An issue is open on this record. It returns to review after the fix and re-run.", "issue_open"],
+      ["review", "This record is already approved by a pharmacist", "approved"],
+      ["review", "Your check is already recorded for this record", "checked"],
+      ["conceptId", "This record was removed from the batch file", "removed"],
+    ];
+    for (const [field, message, code] of cases) {
+      fetchMock.mockResolvedValueOnce(new Response(
+        JSON.stringify({ success: false, errors: [{ field, code: "CONFLICT", message }] }), { status: 409 }));
+      expect(await submitReview(review())).toMatchObject({ status: 409, code });
+    }
   });
 });
 

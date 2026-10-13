@@ -17,13 +17,33 @@ import { TURNSTILE_RESPONSE_FIELD, verifyTurnstile } from "./turnstile";
  * Nothing here logs: the session email is personal data.
  */
 
-export type ReviewCode = "saved" | "forbidden" | "captcha" | "invalid" | "stale" | "failed";
+export type ReviewCode = "saved" | "forbidden" | "captcha" | "invalid" | "stale" | "decided" | "checks" | "issue_open"
+  | "approved" | "checked" | "removed" | "failed";
 export type FlagCode = "sent" | "forbidden" | "captcha" | "invalid" | "failed";
 export type ResolveCode = "resolved" | "forbidden" | "captcha" | "invalid" | "failed";
 export type ActionResult<C extends string> = { status: 200 | 400 | 403 | 409 | 502; code: C };
 
 export const ISSUE_NOTE_MIN = 5, NOTE_MAX = 1000, FLAG_MESSAGE_MIN = 5, FLAG_MESSAGE_MAX = 2000;
 const ID_MAX = 200;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const DECISION_ID_RE = /^[1-9][0-9]{0,14}$/;
+/** The API's step 6 to 8 messages (spec §7.2), which share the field `review`. */
+const REVIEW_REFUSALS: Record<string, ReviewCode> = {
+  "An issue is open on this record. It returns to review after the fix and re-run.": "issue_open",
+  "This record is already approved by a pharmacist": "approved",
+  "Your check is already recorded for this record": "checked",
+};
+
+/** A 409 from the decision endpoint, by its `field` (spec §7.2). Anything unknown asks for a reload. */
+function conflictCode(field: string | null, message: string): ReviewCode {
+  switch (field) {
+    case "lastDecisionId": return "decided";
+    case "stages": return "checks";
+    case "conceptId": return "removed";
+    case "review": return REVIEW_REFUSALS[message] ?? "stale";
+    default: return "stale";
+  }
+}
 export const FLAG_TARGETS: readonly FlagTarget[] = ["product", "substance", "check"];
 
 const field = (fd: FormData, name: string) => {
@@ -51,6 +71,12 @@ export async function submitReview(fd: FormData): Promise<ActionResult<ReviewCod
   const rawExtractedAt = fd.get("extractedAt");
   if (typeof rawExtractedAt !== "string" || rawExtractedAt.length > 64) return { status: 400, code: "invalid" };
   const extractedAt = rawExtractedAt || null;
+  // The form also carries the newest decision id ("" when none, sent as null) and a requestId rendered with the page.
+  const rawLast = fd.get("expectedLastDecisionId");
+  if (typeof rawLast !== "string" || (rawLast !== "" && !DECISION_ID_RE.test(rawLast))) return { status: 400, code: "invalid" };
+  const expectedLastDecisionId = rawLast === "" ? null : Number(rawLast);
+  const requestId = field(fd, "requestId");
+  if (!UUID_RE.test(requestId)) return { status: 400, code: "invalid" };
   if (!validId(batchId) || !validId(conceptId)) return { status: 400, code: "invalid" };
   if (decision !== "ok" && decision !== "issue") return { status: 400, code: "invalid" };
   if (note.length > NOTE_MAX || (decision === "issue" && note.length < ISSUE_NOTE_MIN)) return { status: 400, code: "invalid" };
@@ -58,10 +84,10 @@ export async function submitReview(fd: FormData): Promise<ActionResult<ReviewCod
   if (!(await turnstilePassed(fd))) return { status: 403, code: "captcha" };
 
   const r = await postDecision(batchId, conceptId, { decision, note, reviewerEmail: session.email,
-    reviewerRole: session.role, extractedAt });
+    reviewerRole: session.role, extractedAt, expectedLastDecisionId, requestId });
   if (r.ok || r.status === 409) revalidatePath(batchPath(batchId));
-  if (r.ok) return { status: 200, code: "saved" };
-  if (r.status === 409) return { status: 409, code: "stale" };
+  if (r.ok) return { status: 200, code: "saved" };   // a replayed request (200) is the same saved decision
+  if (r.status === 409) return { status: 409, code: conflictCode(r.field, r.error) };
   if (r.status === 400) return { status: 400, code: "invalid" };
   return { status: 502, code: "failed" };
 }

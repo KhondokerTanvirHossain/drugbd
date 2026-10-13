@@ -6,6 +6,7 @@ const batch: Batch = {
   batchId: "0001-pilot", status: "in_review", runAt: "2026-10-11T00:00:00Z", itemCount: 1,
   items: [{
     conceptId: "N-1", review: "pending", note: null, sourceJson: null, extractedAt: "2026-10-12T09:00:00.123456Z",
+    lastDecisionId: 41,
     extracted: { conceptId: "N-1", darNumber: "D", tradeName: "Napa", company: "Beximco", dosageForm: "Tablet",
       genericContentRaw: "Paracetamol 500 mg", qualityFlag: null, ingredients: [], parseStatus: "parsed", parseNote: null,
       clinicalDrug: null },
@@ -37,10 +38,15 @@ const getSession = vi.fn();
 vi.mock("@/lib/session", () => ({ getSession: () => getSession() }));
 import BatchPage from "@/app/batches/[id]/page";
 
+const GATE = "Only pharmacists and engineers can see batches.";
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const PHARMACIST = { email: "pharm@example.org", role: "pharmacist" };
-const render = async (sp: Record<string, string> = {}) => renderToStaticMarkup(await BatchPage({
-  params: Promise.resolve({ id: "0001-pilot" }), searchParams: Promise.resolve(sp) }));
+const render = async (sp: Record<string, string> = {}, id = "0001-pilot") => renderToStaticMarkup(await BatchPage({
+  params: Promise.resolve({ id }), searchParams: Promise.resolve(sp) }));
 const forms = (html: string) => html.match(/<form[\s\S]*?<\/form>/g) ?? [];
+const fieldValue = (form: string, name: string) =>
+  form.match(new RegExp(`<input[^>]*name="${name}"[^>]*value="([^"]*)"`))?.[1]
+  ?? form.match(new RegExp(`<input[^>]*value="([^"]*)"[^>]*name="${name}"`))?.[1];
 
 beforeEach(() => {
   getBatch.mockReset(); getBatch.mockResolvedValue(batch);
@@ -50,12 +56,38 @@ beforeEach(() => {
     { decision: "issue", note: "Strength wrong", role: "engineer", decidedAt: "2026-10-12T10:05:00Z" },
     { decision: "ok", note: "", role: "pharmacist", decidedAt: "2026-10-12T09:30:00Z" },
   ]);
-  getSession.mockReset(); getSession.mockResolvedValue(null);
+  getSession.mockReset(); getSession.mockResolvedValue(PHARMACIST);
   vi.stubEnv("NEXT_PUBLIC_TURNSTILE_SITE_KEY", "1x00000000000000000000AA");
 });
 afterEach(() => vi.unstubAllEnvs());
 
-describe("batch page", () => {
+describe("batch page gate (spec §12.1, phase 0)", () => {
+  it.each([null, { email: "someone@gmail.com", role: "user" }])("shows only the gate line to %o, with no API call", async (s) => {
+    getSession.mockResolvedValue(s);
+    const html = await render();
+    expect(html).toContain(GATE);
+    for (const absent of ["Napa", "Paracetamol", "Batch report", "Mark OK", "someone@gmail.com"]) expect(html).not.toContain(absent);
+    expect(getBatch).not.toHaveBeenCalled();
+    expect(getBatchReport).not.toHaveBeenCalled();
+    expect(getDecisions).not.toHaveBeenCalled();
+  });
+
+  it("an anonymous visitor gets the gate even for an unknown batch, with no API call", async () => {
+    getSession.mockResolvedValue(null);
+    getBatch.mockResolvedValue(null);
+    expect(await render({}, "no-such-batch")).toContain(GATE);
+    expect(getBatch).not.toHaveBeenCalled();
+  });
+
+  it("a reviewer gets a 404 for an unknown batch", async () => {
+    getBatch.mockResolvedValue(null);
+    // R17: the notFound digest, not a bare toThrow() (which would also pass on a crash or a missing-token error).
+    await expect(render({}, "no-such-batch")).rejects.toSatisfy(
+      (e: { digest?: string }) => /NEXT_HTTP_ERROR_FALLBACK;404|NEXT_NOT_FOUND/.test(String(e.digest)));
+  });
+});
+
+describe("batch page (reviewers)", () => {
   it("shows a stage table in pipeline order with status pills, notes and collapsible evidence", async () => {
     const html = await render();
     const order = ["dgda", "substances", "clinical", "ddinter"].map((s) => html.search(new RegExp(`<td[^>]*>${s}</td>`)));
@@ -88,15 +120,23 @@ describe("batch page", () => {
     expect(html).toMatch(/<h3>Fails \(1\)<\/h3><ul><li><a href="#N-7">N-7<\/a> · dgda: not found at source<\/li><\/ul>/);
   });
 
-  it("says approved when the batch is approved, and copes without a report or a previous run", async () => {
+  it("says approved when the batch is approved", async () => {
     getBatch.mockResolvedValue({ ...batch, status: "approved" });
+    expect(await render()).toContain("Approval: approved");
+  });
+
+  it("copes without a report or a previous run", async () => {
     getBatchReport.mockRejectedValue(new Error("API error 500"));
-    let html = await render();
-    expect(html).toContain("Approval: approved");
-    expect(html).toContain("The batch report is temporarily unavailable.");
+    expect(await render()).toContain("The batch report is temporarily unavailable.");
     getBatchReport.mockResolvedValue({ ...report, deltaVsPrevious: {} });
-    html = await render();
+    expect(await render()).toContain("No previous full run to compare with.");
+  });
+
+  it("copes with a null delta: no previous run, and a dash in the delta cell", async () => {
+    getBatchReport.mockResolvedValue({ ...report, deltaVsPrevious: null });
+    const html = await render();
     expect(html).toContain("No previous full run to compare with.");
+    expect(html).toMatch(/<tr><td>dgda<\/td><td>9<\/td><td>0<\/td><td>1<\/td><td>—<\/td><\/tr>/);
   });
 
   it("shows the decision history with decision, role and time, never an email", async () => {
@@ -107,51 +147,50 @@ describe("batch page", () => {
     expect(html).not.toContain("@");
   });
 
-  it("echoes a null extractedAt as an empty field (the action sends null), and copes with a null delta", async () => {
-    getSession.mockResolvedValue(PHARMACIST);
-    getBatch.mockResolvedValue({ ...batch, items: [{ ...batch.items[0], extractedAt: null }] });
-    getBatchReport.mockResolvedValue({ ...report, deltaVsPrevious: null });
-    const html = await render();
-    for (const f of forms(html)) expect(f).toContain('name="extractedAt" value=""');
-    expect(html).toContain("No previous full run to compare with.");
-    expect(html).toMatch(/<tr><td>dgda<\/td><td>9<\/td><td>0<\/td><td>1<\/td><td>\u2014<\/td><\/tr>/);
-  });
-
-  it("anonymous visitors and role user see no review forms", async () => {
-    expect(forms(await render())).toHaveLength(0);
-    getSession.mockResolvedValue({ email: "someone@gmail.com", role: "user" });
-    const html = await render();
-    expect(forms(html)).toHaveLength(0);
-    expect(html).not.toContain("Mark OK");
-    expect(html).not.toContain("someone@gmail.com");
-  });
-
-  it("reviewers get Mark OK and Report issue forms with Turnstile, the item and its extractedAt", async () => {
-    getSession.mockResolvedValue(PHARMACIST);
-    const html = await render();
-    const fs = forms(html);
+  it("review forms echo extractedAt, lastDecisionId and a server-rendered requestId per form", async () => {
+    const fs = forms(await render());
     expect(fs).toHaveLength(2);
     const [okForm, issueForm] = fs;
     expect(okForm).toContain(">Mark OK</button>");
-    expect(okForm).toContain('name="decision" value="ok"');
+    expect(fieldValue(okForm, "decision")).toBe("ok");
     expect(issueForm).toContain(">Report issue</button>");
-    expect(issueForm).toContain('name="decision" value="issue"');
+    expect(fieldValue(issueForm, "decision")).toBe("issue");
     expect(issueForm).toMatch(/<textarea[^>]*name="note"[^>]*required=""/);
     expect(issueForm).toMatch(/<textarea[^>]*minLength="5"[^>]*maxLength="1000"|<textarea[^>]*maxLength="1000"[^>]*minLength="5"/);
     for (const f of fs) {
-      expect(f).toContain('name="batchId" value="0001-pilot"');
-      expect(f).toContain('name="conceptId" value="N-1"');
-      expect(f).toContain('name="extractedAt" value="2026-10-12T09:00:00.123456Z"');
+      expect(fieldValue(f, "batchId")).toBe("0001-pilot");
+      expect(fieldValue(f, "conceptId")).toBe("N-1");
+      expect(fieldValue(f, "extractedAt")).toBe("2026-10-12T09:00:00.123456Z");
+      expect(fieldValue(f, "expectedLastDecisionId")).toBe("41");
+      expect(fieldValue(f, "requestId")).toMatch(UUID);
       expect(f).toContain('class="cf-turnstile"');
       expect(f).not.toContain("reviewerEmail");
     }
-    expect(html).not.toContain("pharm@example.org");
+    expect(fieldValue(okForm, "requestId")).not.toBe(fieldValue(issueForm, "requestId"));
+  });
+
+  it("echoes a null extractedAt and a null lastDecisionId as empty fields", async () => {
+    getBatch.mockResolvedValue({ ...batch, items: [{ ...batch.items[0], extractedAt: null, lastDecisionId: null }] });
+    const fs = forms(await render());
+    expect(fs).toHaveLength(2);
+    for (const f of fs) {
+      expect(fieldValue(f, "extractedAt")).toBe("");
+      expect(fieldValue(f, "expectedLastDecisionId")).toBe("");
+    }
   });
 
   it("shows the outcome of a review next to the item, for known codes only", async () => {
-    getSession.mockResolvedValue(PHARMACIST);
-    expect(await render({ review: "saved", item: "N-1" })).toContain("Your decision was recorded.");
-    expect(await render({ review: "stale", item: "N-1" })).toContain("re-run after you opened the page");
+    const cases: [string, string][] = [
+      ["saved", "Your decision was recorded."],
+      ["stale", "re-run after you opened the page"],
+      ["decided", "Another reviewer decided on this record after you opened the page"],
+      ["checks", "A check failed on this record. It returns to review after the fix and re-run."],
+      ["issue_open", "An issue is open on this record. It returns to review after the fix and re-run."],
+      ["approved", "This record is already approved by a pharmacist."],
+      ["checked", "Your check is already recorded for this record."],
+      ["removed", "This record was removed from the batch file."],
+    ];
+    for (const [code, text] of cases) expect(await render({ review: code, item: "N-1" })).toContain(text);
     const weird = await render({ review: "<script>x</script>", item: "N-1" });
     expect(weird).not.toContain("<script>x");
     expect(weird).not.toContain('role="alert"');
