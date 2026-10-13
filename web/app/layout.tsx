@@ -1,6 +1,7 @@
 import "@/styles/tokens.css";
 import "@/styles/fonts.css";
 import { cookies } from "next/headers";
+import Footer from "@/components/Footer";
 import Header from "@/components/Header";
 import { ONEST_URL } from "@/lib/fonts";
 import { getSession } from "@/lib/session";
@@ -19,8 +20,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       </head>
       <body>
         <a className={styles.skipLink} href="#content">Skip to content</a>
-        <Header session={session} />
+        <Header session={session} theme={theme} />
         <main id="content" className={styles.main}>{children}</main>
+        <Footer theme={theme} />
       </body>
     </html>
   );

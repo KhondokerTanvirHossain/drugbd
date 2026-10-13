@@ -1,22 +1,48 @@
-import styles from "./Header.module.css";
+import AccountMenu from "@/components/AccountMenu";
+import ThemeSwitch from "@/components/ThemeSwitch";
+import { buttonClass } from "@/components/ui/Button";
+import Wordmark from "@/components/ui/Wordmark";
 import { ROLE_LABEL } from "@/lib/reviewers";
 import type { Session } from "@/lib/session";
+import type { Theme } from "@/lib/theme";
+import styles from "./Header.module.css";
 
-/** Site header. A signed-in visitor sees their role only, never their email (Global Constraints). */
-export default function Header({ session }: { session: Session | null }) {
+/** Two initials from the display name, else from the email's parts. */
+const initials = (s: Session) => ((s.name ?? "").trim() || s.email)
+  .split(/[\s@._-]+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join("");
+
+/**
+ * Site header. The owner's own name and email appear only inside their account menu (§2.2); nobody else's email
+ * is ever rendered. The links are the current routes until P1B (/review) and P2 (§6.1 navigation) replace them.
+ */
+export default function Header({ session, theme }: { session: Session | null; theme: Theme }) {
+  const reviewer = session?.role === "pharmacist" || session?.role === "engineer";
+  const displayName = session ? (session.name ?? "").trim() || session.email : "";
   return (
-    <header>
-      <a href="/"><strong>BDDrug KB</strong></a> <a href="/batches">Batches</a> <a href="/check">Check</a>{" "}
-      <small>preview: data may be incomplete</small>{" "}
-      {session ? (
-        <span>
-          {session.role !== "user" && <><a href="/flags">Flags</a>{" "}</>}
-          <small>Signed in as {ROLE_LABEL[session.role]}</small>{" "}
-          <form method="post" action="/signout" className={styles.inlineForm}><button type="submit">Sign out</button></form>
-        </span>
-      ) : (
-        <a href="/signin">Reviewer sign-in</a>
-      )}
+    <header className={styles.bar}>
+      <a className={styles.home} href="/"><Wordmark size={20} /></a>
+      <nav className={styles.nav} aria-label="Main">
+        <a href="/check">Interaction checker</a>
+        {reviewer && <a href="/batches">Batches</a>}
+        {reviewer && <a href="/flags">Flags</a>}
+      </nav>
+      <div className={styles.end}>
+        {session ? (
+          <AccountMenu>
+            <summary className={styles.avatar}>
+              <span aria-hidden="true">{initials(session)}</span><span className="sr-only">{`Account menu for ${displayName}`}</span>
+            </summary>
+            <div className={styles.panel}>
+              <p className={styles.who}><b>{displayName}</b><span>{session.email}</span></p>
+              {reviewer && <span className="role-badge">{ROLE_LABEL[session.role]}</span>}
+              <ThemeSwitch value={theme} />
+              <form method="post" action="/signout"><button type="submit" className={buttonClass("plain", "sm")}>Sign out</button></form>
+            </div>
+          </AccountMenu>
+        ) : (
+          <a className={buttonClass("tonal", "sm")} href="/signin">Sign in</a>
+        )}
+      </div>
     </header>
   );
 }

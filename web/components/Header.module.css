@@ -1,1 +1,9 @@
-.inlineForm { display: inline; }
+.bar { display: flex; align-items: center; gap: var(--s5); max-width: 1040px; margin: 0 auto; padding: var(--s3) var(--s4); border-bottom: 1px solid var(--line); }
+.home { color: var(--fg); text-decoration: none; min-height: 24px; display: inline-flex; align-items: center; }
+.nav { display: flex; flex-wrap: wrap; gap: var(--s4); }
+.end { margin-left: auto; }
+.avatar { display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font: 600 13px/1 var(--font-ui); }
+.panel { position: absolute; right: 0; top: calc(100% + var(--s2)); z-index: 20; min-width: 260px; display: flex; flex-direction: column; align-items: flex-start; gap: var(--s3); padding: var(--s4); border-radius: var(--r-panel); background: var(--surface); box-shadow: var(--shadow-2); }
+.who { display: flex; flex-direction: column; gap: 2px; }
+.who span { color: var(--fg-2); font-size: 13px; overflow-wrap: anywhere; }
+@media (max-width: 720px) { .bar { flex-wrap: wrap; gap: var(--s3); } }
