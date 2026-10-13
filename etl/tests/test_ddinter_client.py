@@ -8,7 +8,7 @@ import respx
 from testcontainers.postgres import PostgresContainer
 
 import bddrug_etl.ddinter.client as mod
-from bddrug_etl.ddinter.client import DDInterClient, DDInterPairRow, severity
+from bddrug_etl.ddinter.client import DDInterClient, DDInterPairRow, InteractWithList, InteractWithRow, severity
 from bddrug_etl.http.snapshot import SnapshotHttp
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -265,3 +265,72 @@ def test_disease_and_food_real_texts_are_kept_stripped(client, conn):
     dis["data"][0]["text"] = "  Warfarin may worsen bleeding.  "
     respx.post(f"{B}/server/interact-with-dis/DDInter1951/").mock(return_value=httpx.Response(200, json=dis))
     assert client.diseases("DDInter1951")[0]["text"] == "Warfarin may worsen bleeding."
+
+
+def _start(request) -> str:
+    return dict(httpx.QueryParams(request.content.decode()))["start"]
+
+
+@respx.mock
+def test_interact_with_is_complete_when_every_row_is_read(client, monkeypatch):
+    mock_session()
+    p1, p2 = fxj("interact_with_p1.json"), fxj("interact_with_p2.json")
+    p1["recordsTotal"] = p2["recordsTotal"] = 6
+    monkeypatch.setattr(mod, "PAGE", 4)
+    respx.post(f"{B}/server/interact-with/DDInter1951/").mock(
+        side_effect=lambda r: httpx.Response(200, json=p1 if _start(r) == "0" else p2))
+    listed = client.interact_with("DDInter1951")
+    assert listed.complete is True and len(listed.rows) == 6
+    assert listed.rows[0] == InteractWithRow("DDInter9", "Acalabrutinib", "3039", "major")
+    assert listed.rows[4] == InteractWithRow("DDInter1388", "Pantoprazole", "122526", "moderate")
+    # one memoised read serves the text lookups too: session GET + two pages, nothing more
+    assert client.pair_interaction_id("DDInter1951", "DDInter20") == "34056"
+    assert respx.calls.call_count == 3
+
+
+@respx.mock
+def test_interact_with_is_incomplete_when_rows_are_missing(client):
+    mock_session()
+    p1, p2 = fxj("interact_with_p1.json"), fxj("interact_with_p2.json")   # 6 rows of a real recordsTotal of 936
+    respx.post(f"{B}/server/interact-with/DDInter1951/").mock(
+        side_effect=lambda r: httpx.Response(200, json=p1 if _start(r) == "0" else p2))
+    listed = client.interact_with("DDInter1951")
+    assert listed.complete is False and len(listed.rows) == 6
+
+
+@respx.mock
+def test_interact_with_is_incomplete_when_a_page_fails(client):
+    mock_session()
+    p1 = fxj("interact_with_p1.json")
+    respx.post(f"{B}/server/interact-with/DDInter1951/").mock(
+        side_effect=lambda r: httpx.Response(200, json=p1) if _start(r) == "0" else httpx.Response(500, text="boom"))
+    assert client.interact_with("DDInter1951") == InteractWithList((), False)
+
+
+@respx.mock
+def test_interact_with_is_incomplete_when_a_repeated_row_makes_up_the_count(client, monkeypatch):
+    """Review Focus 2: a paging overlap repeats rows; the count matches recordsTotal but partners are missing."""
+    mock_session()
+    p1 = fxj("interact_with_p1.json")
+    p1["recordsTotal"] = 6
+    p2 = {**p1, "data": p1["data"][:2]}   # page 2 repeats the first two rows of page 1
+    monkeypatch.setattr(mod, "PAGE", 4)
+    respx.post(f"{B}/server/interact-with/DDInter1951/").mock(
+        side_effect=lambda r: httpx.Response(200, json=p1 if _start(r) == "0" else p2))
+    listed = client.interact_with("DDInter1951")
+    assert len(listed.rows) == 6 and listed.complete is False
+
+
+@respx.mock
+def test_interact_with_is_incomplete_when_a_page_is_json_but_not_an_object(client):
+    mock_session()
+    respx.post(f"{B}/server/interact-with/DDInter1951/").mock(return_value=httpx.Response(200, json=[{"drug_id": "x"}]))
+    assert client.interact_with("DDInter1951") == InteractWithList((), False)
+
+
+@respx.mock
+def test_interact_with_row_without_a_level_is_unknown(client):
+    mock_session()
+    page = {"recordsTotal": 1, "data": [{"drug_id": "DDInter5", "drug_name": "Alpha", "interaction_id": 77}]}
+    respx.post(f"{B}/server/interact-with/DDInter1/").mock(return_value=httpx.Response(200, json=page))
+    assert client.interact_with("DDInter1") == InteractWithList((InteractWithRow("DDInter5", "Alpha", "77", "unknown"),), True)

@@ -2,6 +2,8 @@
 import re
 from dataclasses import dataclass
 
+import httpx
+
 from bddrug_etl.ddinter.html import DDInterDrug, InteractionText, clean_text, parse_drug_detail, parse_interaction
 
 PAGE = 500
@@ -15,6 +17,24 @@ class DDInterPairRow:
     partner_name: str
     severity: str
     actions: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class InteractWithRow:
+    """One row of a drug's interact-with list: the partner, the interaction id and the mapped severity."""
+    partner_id: str
+    partner_name: str
+    interaction_id: str
+    severity: str
+
+
+@dataclass(frozen=True)
+class InteractWithList:
+    """A drug's interact-with list. ``complete`` is False when a page failed, when fewer or more rows were read than
+    ``recordsTotal``, or when a row came back twice (paging overlap). An incomplete list must never be used to say
+    "no interaction listed" (spec §6.7.2, §8.1 item 5)."""
+    rows: tuple[InteractWithRow, ...]
+    complete: bool
 
 
 def severity(level) -> str:
@@ -36,6 +56,7 @@ class DDInterClient:
         assert http.min_interval_s >= 1.0, "DDInter requires min_interval_s >= 1.0"
         self.http = http
         self._token: str | None = None
+        self._interact_rows: dict[str, tuple[list[dict], int]] = {}
         self._interact_maps: dict[str, dict[str, str]] = {}
 
     def _csrf(self) -> str:
@@ -105,17 +126,49 @@ class DDInterClient:
                                       tuple(str(a).lower() for a in it.get("actions") or [])))
         return out
 
-    def interact_with_map(self, ddinter_id: str) -> dict[str, str]:
-        """partner drug id -> interaction id. Pages the full list once per drug (memoised).
+    def _read_interact_with(self, ddinter_id: str) -> tuple[list[dict], int]:
+        """Every row of the drug's interact-with list and the server's recordsTotal, read once per drug (memoised).
 
-        The server ignores search[value] (verified 2026-10-11), so the whole list is read.
+        The server ignores search[value] (verified 2026-10-11), so the whole list is read. Raises on a failed page.
         """
+        if ddinter_id not in self._interact_rows:
+            path, referer = f"/server/interact-with/{ddinter_id}/", f"/server/drug-detail/{ddinter_id}/"
+            rows: list[dict] = []
+            start = 0
+            while True:
+                body = self._post_page(path, referer, start, {"severity": "", "mechanism": ""})
+                try:
+                    total = int(body["recordsTotal"])
+                except (KeyError, TypeError, ValueError):
+                    raise ValueError(f"DDInter POST {path}: missing or non-integer recordsTotal") from None
+                page = body["data"]
+                if not page:
+                    break
+                rows.extend(page)
+                start += PAGE
+                if start >= total:
+                    break
+            self._interact_rows[ddinter_id] = (rows, total)
+        return self._interact_rows[ddinter_id]
+
+    def interact_with(self, ddinter_id: str) -> InteractWithList:
+        """The drug's full interact-with list, with ``complete`` saying whether it can be trusted as the whole list."""
+        try:
+            raw, total = self._read_interact_with(ddinter_id)
+            rows = tuple(InteractWithRow(str(r["drug_id"]), str(r.get("drug_name") or r["drug_id"]),
+                                         str(r["interaction_id"]), severity(r.get("level"))) for r in raw)
+        except (httpx.HTTPError, RuntimeError, ValueError, KeyError, TypeError, AttributeError):
+            # AttributeError: a page that is valid JSON but not an object (``_post_page`` calls ``body.get``)
+            return InteractWithList((), False)
+        distinct = {(row.partner_id, row.interaction_id) for row in rows}
+        return InteractWithList(rows, len(rows) == total and len(distinct) == total)
+
+    def interact_with_map(self, ddinter_id: str) -> dict[str, str]:
+        """partner drug id -> interaction id, from the same memoised read as ``interact_with``. Raises on a failed page."""
         if ddinter_id not in self._interact_maps:
             m: dict[str, str] = {}
-            for rows in self._pages(f"/server/interact-with/{ddinter_id}/", f"/server/drug-detail/{ddinter_id}/",
-                                    {"severity": "", "mechanism": ""}):
-                for r in rows:
-                    m.setdefault(r["drug_id"], str(r["interaction_id"]))
+            for r in self._read_interact_with(ddinter_id)[0]:
+                m.setdefault(r["drug_id"], str(r["interaction_id"]))
             self._interact_maps[ddinter_id] = m
         return self._interact_maps[ddinter_id]
 
