@@ -11,6 +11,8 @@ import org.springframework.test.web.reactive.server.WebTestClient;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import java.util.Collections;
+import java.util.List;
 import static com.niramoy.bddrug.TestSupport.*;
 
 @Testcontainers
@@ -36,6 +38,8 @@ class BatchReportApiIntegrationTest {
              ('RP','D-1','ddinter','warn','No interaction data in DDInter for this substance'),
              ('RP','W-1','substances','ok',''), ('RP','A-1','substances','ok',''),
              ('RP','D-1','substances','fail','error: RuntimeError: boom');
+            INSERT INTO ops.review_decision (batch_id, concept_id, decision, note, reviewer_email, reviewer_role) VALUES
+             ('RP','W-1','ok','','p@example.org','pharmacist'), ('RP','W-1','issue','label differs','p@example.org','pharmacist');
             INSERT INTO ops.batch_run (batch_id, run_at, stages, counts, concept_ids) VALUES
              ('RP', now() - interval '7 hour', '{dgda}', '{"dgda": {"ok": 1, "warn": 0, "fail": 0}}', '{}'),
              ('RP', now() - interval '6 hour', '{dgda,ddinter}',
@@ -52,7 +56,7 @@ class BatchReportApiIntegrationTest {
     @Autowired WebTestClient web;
 
     @Test void reportCountsStagesReviewsWarningsAndFails() {
-        web.get().uri("/v1/batches/RP/report").exchange().expectStatus().isOk()
+        internal(web).get().uri("/v1/batches/RP/report").exchange().expectStatus().isOk()
             .expectBody()
             .jsonPath("$.success").isEqualTo(true)
             .jsonPath("$.data.batchId").isEqualTo("RP")
@@ -82,7 +86,7 @@ class BatchReportApiIntegrationTest {
     }
 
     @Test void reportListsTheLastFiveRunsNewestFirst() {
-        web.get().uri("/v1/batches/RP/report").exchange().expectStatus().isOk()
+        internal(web).get().uri("/v1/batches/RP/report").exchange().expectStatus().isOk()
             .expectBody()
             .jsonPath("$.data.runs.length()").isEqualTo(5)
             .jsonPath("$.data.runs[0].stages[0]").isEqualTo("ddinter")
@@ -97,7 +101,7 @@ class BatchReportApiIntegrationTest {
 
     @Test void deltaIsBetweenTheLastTwoFullRuns() {
         // last full run (4 h ago) minus the previous full run (6 h ago); single-record runs are skipped
-        web.get().uri("/v1/batches/RP/report").exchange().expectStatus().isOk()
+        internal(web).get().uri("/v1/batches/RP/report").exchange().expectStatus().isOk()
             .expectBody()
             .jsonPath("$.data.deltaVsPrevious.dgda.ok").isEqualTo(1)
             .jsonPath("$.data.deltaVsPrevious.dgda.warn").isEqualTo(0)
@@ -110,7 +114,7 @@ class BatchReportApiIntegrationTest {
     }
 
     @Test void deltaIsNullWithFewerThanTwoFullRuns() {
-        web.get().uri("/v1/batches/RP-one/report").exchange().expectStatus().isOk()
+        internal(web).get().uri("/v1/batches/RP-one/report").exchange().expectStatus().isOk()
             .expectBody()
             .jsonPath("$.data.runs.length()").isEqualTo(1)
             .jsonPath("$.data.deltaVsPrevious").doesNotExist()
@@ -121,7 +125,20 @@ class BatchReportApiIntegrationTest {
     }
 
     @Test void unknownBatchIs404() {
-        web.get().uri("/v1/batches/nope/report").exchange().expectStatus().isNotFound()
+        internal(web).get().uri("/v1/batches/nope/report").exchange().expectStatus().isNotFound()
             .expectBody().jsonPath("$.errors[0].code").isEqualTo("NOT_FOUND");
+    }
+    @Test void batchReadsNeedTheToken() {
+        for (String uri : List.of("/v1/batches", "/v1/batches/RP", "/v1/batches/RP/report"))
+            web.get().uri(uri).exchange().expectStatus().isUnauthorized()
+                .expectBody().jsonPath("$.errors[0].code").isEqualTo("UNAUTHORIZED");
+    }
+
+    @Test void batchItemsCarryTheirLastDecisionId() throws Exception {
+        long last = count(pg, "SELECT max(id) FROM ops.review_decision WHERE batch_id = 'RP' AND concept_id = 'W-1'");
+        internal(web).get().uri("/v1/batches/RP").exchange().expectStatus().isOk()
+            .expectBody()
+            .jsonPath("$.data.items[?(@.conceptId == 'W-1')].lastDecisionId").isEqualTo(List.of((int) last))
+            .jsonPath("$.data.items[?(@.conceptId == 'A-1')].lastDecisionId").isEqualTo(Collections.singletonList(null));
     }
 }

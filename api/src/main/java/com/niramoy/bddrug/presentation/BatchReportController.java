@@ -6,15 +6,21 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
 
-/** Batch pages are public evidence, so the report is readable without the token. It holds no emails. */
+/** The batch report is batch evidence: reviewers only, with the internal token (A1). It holds no emails. */
 @RestController
 @RequestMapping("/v1/batches")
 public class BatchReportController {
     private final BatchQueryPort batches;
-    public BatchReportController(BatchQueryPort batches) { this.batches = batches; }
+    private final InternalAuth auth;
+    public BatchReportController(BatchQueryPort batches, InternalAuth auth) {
+        this.batches = batches;
+        this.auth = auth;
+    }
 
     @GetMapping("/{batchId}/report")
-    public Mono<ApiResponse<BatchReport>> report(@PathVariable String batchId) {
+    public Mono<ApiResponse<BatchReport>> report(@PathVariable String batchId,
+                                                 @RequestHeader(value = InternalAuth.HEADER, required = false) String token) {
+        auth.require(token);
         return batches.report(batchId).map(ApiResponse::ok)
             .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Batch not found")));
     }

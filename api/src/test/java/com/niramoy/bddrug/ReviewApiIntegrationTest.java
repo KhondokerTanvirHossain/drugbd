@@ -137,7 +137,7 @@ class ReviewApiIntegrationTest {
         expectDecision("R-flow", "W-1", body("ok", "", PHARMACIST, "pharmacist"), "ok", "in_review");
         expectDecision("R-flow", "A-1", body("ok", "label matches", PHARMACIST, "pharmacist"), "ok", "approved");
         assertThat(text(pg, "SELECT status FROM ops.batch WHERE batch_id = 'R-flow'")).isEqualTo("approved");
-        web.get().uri("/v1/batches/R-flow").exchange().expectStatus().isOk()
+        internal(web).get().uri("/v1/batches/R-flow").exchange().expectStatus().isOk()
             .expectBody().jsonPath("$.data.status").isEqualTo("approved")
             .jsonPath("$.data.items[0].review").isEqualTo("ok").jsonPath("$.data.items[1].review").isEqualTo("ok");
         // an engineer issue after the approval reopens the item and the batch
@@ -169,7 +169,7 @@ class ReviewApiIntegrationTest {
         web.get().uri("/v1/products/N-1").exchange().expectStatus().isOk()
             .expectBody().jsonPath("$.data.hidden").isEqualTo(true).jsonPath("$.data.reviewStatus").isEqualTo("pending")
             .jsonPath("$.data.genericContentRaw").doesNotExist();
-        web.get().uri("/v1/batches/R-rerun/items/N-1/decisions").exchange().expectStatus().isOk()
+        internal(web).get().uri("/v1/batches/R-rerun/items/N-1/decisions").exchange().expectStatus().isOk()
             .expectBody().jsonPath("$.data.length()").isEqualTo(1).jsonPath("$.data[0].decision").isEqualTo("ok");
 
         // the pre-run pharmacist ok no longer counts: an engineer ok now leaves it pending
@@ -218,7 +218,7 @@ class ReviewApiIntegrationTest {
         decide("R-val", "nope", body("ok", null, PHARMACIST, "pharmacist")).expectStatus().isNotFound()
             .expectBody().jsonPath("$.errors[0].code").isEqualTo("NOT_FOUND");
         decide("nope", "W-2", body("ok", null, PHARMACIST, "pharmacist")).expectStatus().isNotFound();
-        web.get().uri("/v1/batches/R-val/items/nope/decisions").exchange().expectStatus().isNotFound();
+        internal(web).get().uri("/v1/batches/R-val/items/nope/decisions").exchange().expectStatus().isNotFound();
         assertThat(count(pg, "SELECT count(*) FROM ops.review_decision WHERE concept_id = 'nope' OR batch_id = 'nope'")).isZero();
     }
 
@@ -240,38 +240,32 @@ class ReviewApiIntegrationTest {
             .bodyValue(Map.of()).exchange().expectStatus().isUnauthorized();
         web.get().uri("/v1/batches/R-tok/items/X-NOMAP/decisions").header(HEADER, "wrong")
             .exchange().expectStatus().isUnauthorized();
+        web.get().uri("/v1/batches/R-tok/items/X-NOMAP/decisions").exchange().expectStatus().isUnauthorized();
         assertThat(decisions("R-tok")).isZero();
         assertThat(itemReview("R-tok", "X-NOMAP")).isEqualTo("pending");
     }
 
-    @Test void decisionHistoryIsNewestFirstWithRoleOnlyUnlessTokenGiven() throws Exception {
+    @Test void decisionHistoryNeedsTheTokenAndIsNewestFirst() throws Exception {
         decide("R-hist", "C-CAP", body("ok", null, ENGINEER, "engineer")).expectStatus().isCreated();
         decide("R-hist", "C-CAP", body("issue", "dose form mismatch", PHARMACIST, "pharmacist")).expectStatus().isCreated();
 
-        // Review Focus 4: an anonymous request never sees reviewer emails
-        byte[] anon = web.get().uri("/v1/batches/R-hist/items/C-CAP/decisions").exchange().expectStatus().isOk()
+        // A1 and A2: no batch evidence and no decision history without the token
+        for (String uri : new String[]{"/v1/batches/R-hist/items/C-CAP/decisions", "/v1/batches/R-hist",
+                                       "/v1/batches/R-hist/report", "/v1/batches"})
+            web.get().uri(uri).exchange().expectStatus().isUnauthorized()
+                .expectBody().jsonPath("$.errors[0].code").isEqualTo("UNAUTHORIZED");
+
+        internal(web).get().uri("/v1/batches/R-hist/items/C-CAP/decisions").exchange().expectStatus().isOk()
             .expectBody()
             .jsonPath("$.data.length()").isEqualTo(2)
             .jsonPath("$.data[0].decision").isEqualTo("issue")
             .jsonPath("$.data[0].note").isEqualTo("dose form mismatch")
             .jsonPath("$.data[0].role").isEqualTo("pharmacist")
-            .jsonPath("$.data[0].decidedAt").exists()
-            .jsonPath("$.data[0].length()").isEqualTo(4)
-            .jsonPath("$.data[0].reviewerEmail").doesNotExist()
-            .jsonPath("$.data[1].decision").isEqualTo("ok")
-            .jsonPath("$.data[1].role").isEqualTo("engineer")
-            .returnResult().getResponseBody();
-        assertThat(new String(anon, StandardCharsets.UTF_8)).doesNotContain("@");
-
-        internal(web).get().uri("/v1/batches/R-hist/items/C-CAP/decisions").exchange().expectStatus().isOk()
-            .expectBody()
             .jsonPath("$.data[0].reviewerEmail").isEqualTo(PHARMACIST)
-            .jsonPath("$.data[0].role").isEqualTo("pharmacist")
             .jsonPath("$.data[1].reviewerEmail").isEqualTo(ENGINEER);
 
-        // batch pages, the report and product pages never carry emails either
-        for (String uri : new String[]{"/v1/batches/R-hist", "/v1/batches/R-hist/report", "/v1/batches",
-                                       "/v1/products/C-CAP", "/v1/substances/BDS-000003"}) {
+        // public product and substance pages never carry emails
+        for (String uri : new String[]{"/v1/products/C-CAP", "/v1/substances/BDS-000003"}) {
             byte[] page = web.get().uri(uri).exchange().expectStatus().isOk().expectBody().returnResult().getResponseBody();
             assertThat(new String(page, StandardCharsets.UTF_8)).as(uri).doesNotContain("@");
         }
@@ -285,7 +279,7 @@ class ReviewApiIntegrationTest {
         assertThat(decisions("R-stale")).isZero();
 
         // the batch page carries extractedAt; echoing it back is accepted
-        String shown = new String(web.get().uri("/v1/batches/R-stale").exchange().expectStatus().isOk()
+        String shown = new String(internal(web).get().uri("/v1/batches/R-stale").exchange().expectStatus().isOk()
             .expectBody().jsonPath("$.data.items[0].extractedAt").isEqualTo("2026-01-01T08:00:00.123456Z")
             .returnResult().getResponseBody(), StandardCharsets.UTF_8);
         assertThat(shown).contains("extractedAt");

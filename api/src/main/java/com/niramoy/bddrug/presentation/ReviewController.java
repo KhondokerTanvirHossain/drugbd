@@ -9,7 +9,7 @@ import reactor.core.publisher.Mono;
 import java.time.Instant;
 import java.util.List;
 
-/** Review decisions per batch record. Writing needs the internal token; the history is public without emails. */
+/** Review decisions per batch record. Writing and reading the history both need the internal token. */
 @RestController
 @RequestMapping("/v1/batches/{batchId}/items/{conceptId}/decisions")
 public class ReviewController {
@@ -20,8 +20,6 @@ public class ReviewController {
         this.auth = auth;
     }
 
-    /** What anyone may see of a decision: the role, never the reviewer's email. */
-    public record PublicDecision(String decision, String note, String role, Instant decidedAt) {}
     /** For internal-token callers (reviewers) only. */
     public record ReviewerDecision(String decision, String note, String role, Instant decidedAt, String reviewerEmail) {}
 
@@ -48,17 +46,14 @@ public class ReviewController {
         return body.flatMap(b -> service.decide(batchId, conceptId, b.toRequest())).map(ApiResponse::ok);
     }
 
+    /** Decision notes and history are never served without the token (A2); with it, emails are included. */
     @GetMapping
-    public Mono<ApiResponse<List<?>>> history(@PathVariable String batchId, @PathVariable String conceptId,
-                                              @RequestHeader(value = InternalAuth.HEADER, required = false) String token) {
-        boolean reviewer = auth.present(token);
-        return service.history(batchId, conceptId, reviewer)
-            .map(list -> list.stream().<Object>map(d -> reviewer ? reviewerView(d) : publicView(d)).toList())
+    public Mono<ApiResponse<List<ReviewerDecision>>> history(@PathVariable String batchId, @PathVariable String conceptId,
+                                                             @RequestHeader(value = InternalAuth.HEADER, required = false) String token) {
+        auth.require(token);
+        return service.history(batchId, conceptId, true)
+            .map(list -> list.stream().map(ReviewController::reviewerView).toList())
             .map(ApiResponse::ok);
-    }
-
-    private static PublicDecision publicView(ReviewDecision d) {
-        return new PublicDecision(d.decision(), d.note(), d.reviewerRole(), d.decidedAt());
     }
 
     private static ReviewerDecision reviewerView(ReviewDecision d) {

@@ -256,4 +256,13 @@ class VisibilityApiIntegrationTest {
             .jsonPath("$.data[1].tradeName").isEqualTo("Chloramex")
             .jsonPath("$.data[9].tradeName").isEqualTo("Warin");
     }
+
+    // ---- batch evidence (A1, A2)
+
+    @Test void batchEvidenceAndDecisionHistoryNeedTheToken() {
+        for (String uri : List.of("/v1/batches", "/v1/batches/V-1", "/v1/batches/V-1/report",
+                                  "/v1/batches/V-1/items/W-1/decisions"))
+            web.get().uri(uri).exchange().expectStatus().isUnauthorized()
+                .expectBody().jsonPath("$.errors[0].code").isEqualTo("UNAUTHORIZED");
+    }
 }
