@@ -105,6 +105,24 @@ class AuditApiIntegrationTest {
         assertThat(rows()).isEqualTo(before);
     }
 
+    @Test void targetIdIsAnIdOrABatchItemPairNeverFreeText() throws Exception {
+        long before = rows();
+        for (String bad : List.of("0001 pilot/N-1", "<script>alert(1)</script>", "0001-pilot/N-1 call me", "../x", "/N-1",
+                "0001-pilot/", "a/b/c", "0001-pilot//N-1", "\u09a8\u09be\u09aa\u09be", "x".repeat(100) + "/N-1")) {
+            Map<String, Object> b = event("decision_denied", "forbidden", UUID.randomUUID().toString());
+            b.put("targetType", "batch_item");
+            b.put("targetId", bad);
+            expectInvalid(b, "targetId");
+        }
+        assertThat(rows()).isEqualTo(before);
+        for (String good : List.of("0001-pilot/186-0030-006--napa", "42", "b.2026:10/N-1")) {
+            Map<String, Object> b = event("decision_denied", "forbidden", UUID.randomUUID().toString());
+            b.put("targetType", "batch_item");
+            b.put("targetId", good);
+            post(internal(web), b).expectStatus().isCreated();
+        }
+    }
+
     @Test void needsTheInternalToken() throws Exception {
         long before = rows();
         post(web, event("sign_out", "ok", UUID.randomUUID().toString())).expectStatus().isUnauthorized()

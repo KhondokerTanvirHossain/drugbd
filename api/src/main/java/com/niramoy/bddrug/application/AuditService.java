@@ -19,6 +19,9 @@ public class AuditService {
     public static final Set<String> ROLES = Set.of("pharmacist", "engineer", "user");
     public static final Set<String> TARGET_TYPES = Set.of("batch_item", "flag");
     public static final int TARGET_ID_MAX = 200;
+    /** An id (a flag id, a batch id or a concept id) or a batch item `{batchId}/{conceptId}`; never free text (§5.15). */
+    private static final Pattern TARGET_ID =
+        Pattern.compile("[A-Za-z0-9][A-Za-z0-9._:-]{0,98}(/[A-Za-z0-9][A-Za-z0-9._:-]{0,98})?");
     private static final Pattern OUTCOME = Pattern.compile("[a-z_]{1,32}");
     private static final Pattern UUID_TEXT =
         Pattern.compile("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
@@ -39,6 +42,8 @@ public class AuditService {
         String role = r.actorRole() == null ? null : Validate.oneOf(r.actorRole(), ROLES, "actorRole");
         String targetType = r.targetType() == null ? null : Validate.oneOf(r.targetType(), TARGET_TYPES, "targetType");
         String targetId = r.targetId() == null ? null : Validate.text(r.targetId(), 1, TARGET_ID_MAX, "targetId");
+        if (targetId != null && !TARGET_ID.matcher(targetId).matches())
+            throw new InvalidQueryException("targetId", "targetId must be an id or a batch item id pair");
         if (r.outcome() == null || !OUTCOME.matcher(r.outcome()).matches())
             throw new InvalidQueryException("outcome", "outcome must be 1-32 lower-case letters or underscores");
         if (r.requestId() == null || !UUID_TEXT.matcher(r.requestId()).matches())

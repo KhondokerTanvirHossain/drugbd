@@ -302,10 +302,10 @@ describe("decision_denied audit (§5.15, §9.3)", () => {
   const denied = (outcome: string, actorEmail: string | null, actorRole: string | null) => ({ event: "decision_denied", outcome,
     actorEmail, actorRole, targetType: "batch_item", targetId: "0001-pilot/N-1" });
 
-  it("no session: unauthenticated, with no actor", async () => {
+  it("no session: unauthenticated, with no actor and no target (an anonymous caller's ids are unverified form text)", async () => {
     getSession.mockResolvedValue(null);
     await submitReview(review());
-    expect(recordAudit).toHaveBeenCalledWith(denied("unauthenticated", null, null));
+    expect(recordAudit).toHaveBeenCalledWith({ ...denied("unauthenticated", null, null), targetType: null, targetId: null });
   });
   it("a reader: forbidden, with the reader as actor", async () => {
     getSession.mockResolvedValue(USER);
@@ -323,6 +323,19 @@ describe("decision_denied audit (§5.15, §9.3)", () => {
     verifyTurnstile.mockResolvedValue(false);
     await submitReview(review());
     expect(recordAudit).toHaveBeenCalledWith(denied("captcha", "eng@example.org", "engineer"));
+  });
+  it("no target when either id is outside the id pattern: spaces, markup, a leading dot or slash, over 99 characters", async () => {
+    getSession.mockResolvedValue(USER);
+    for (const bad of [{ batchId: "0001 pilot" }, { batchId: "<script>alert(1)</script>" }, { conceptId: "N-1 call me 01711" },
+      { conceptId: "../x" }, { batchId: "a/b" }, { conceptId: "\u09a8\u09be\u09aa\u09be" }, { batchId: "x".repeat(100) }]) {
+      recordAudit.mockClear();
+      expect(await submitReview(review(bad))).toEqual({ status: 403, code: "forbidden" });
+      expect(recordAudit).toHaveBeenCalledWith({ ...denied("forbidden", "someone@gmail.com", "user"), targetType: null, targetId: null });
+    }
+    recordAudit.mockClear();
+    await submitReview(review({ batchId: "0001-pilot", conceptId: "186-0030-006--napa" }));
+    expect(recordAudit).toHaveBeenCalledWith({ ...denied("forbidden", "someone@gmail.com", "user"),
+      targetId: "0001-pilot/186-0030-006--napa" });
   });
   it("no target when the ids are invalid; no event for a saved or invalid decision", async () => {
     getSession.mockResolvedValue(null);

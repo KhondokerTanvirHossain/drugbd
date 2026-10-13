@@ -56,15 +56,18 @@ const field = (fd: FormData, name: string) => {
 const isReviewer = (s: Session | null): s is Session & { role: ReviewerRole } =>
   s?.role === "pharmacist" || s?.role === "engineer";
 const validId = (s: string) => s.length > 0 && s.length <= ID_MAX;
+/** A batch or concept id fit for an audit row: a strict character set, so no form text reaches it (§5.15). */
+const AUDIT_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,98}$/;
 
 type DeniedOutcome = "unauthenticated" | "forbidden" | "rate_limited" | "captcha";
 /**
- * §5.15 decision_denied: a decision stopped here, before any API call. The target is the batch item only when both
- * ids are valid (never other form text). Best effort: an audit outage never changes the action's answer.
+ * §5.15 decision_denied: a decision stopped here, before any API call. The target is the batch item only for a
+ * signed-in caller and only when both ids match AUDIT_ID_RE (never other form text; an anonymous caller's ids are
+ * unverified form text, so its row has no target). Best effort: an audit outage never changes the action's answer.
  */
 async function denyDecision(outcome: DeniedOutcome, session: Session | null, fd: FormData): Promise<void> {
   const batchId = field(fd, "batchId"), conceptId = field(fd, "conceptId");
-  const targetId = validId(batchId) && validId(conceptId) && batchId.length + conceptId.length < ID_MAX
+  const targetId = outcome !== "unauthenticated" && AUDIT_ID_RE.test(batchId) && AUDIT_ID_RE.test(conceptId)
     ? `${batchId}/${conceptId}` : null;
   await recordAudit({ event: "decision_denied", outcome, actorEmail: session?.email ?? null, actorRole: session?.role ?? null,
     targetType: targetId ? "batch_item" : null, targetId }).catch(() => false);
