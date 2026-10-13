@@ -37,6 +37,12 @@ describe("nextWithSecurityHeaders (§9.4)", () => {
     expect(res.headers.get("x-middleware-request-cookie")).toBeNull();
     expect(res.headers.get("x-middleware-override-headers")?.split(",")).not.toContain("cookie");
   });
+  // The rewrite /__/auth/:path* matches case-insensitively and with zero segments, so the strip must too.
+  it.each(["/__/auth", "/__/AUTH/handler"])("strips cookies on %s, which the case-insensitive rewrite also proxies", (path) => {
+    const res = nextWithSecurityHeaders(req(path, { cookie: "__Host-intellidrugs_session=jwe; intellidrugs-theme=dark" }));
+    expect(res.headers.get("x-middleware-request-cookie")).toBeNull();
+    expect(res.headers.get("x-middleware-override-headers")?.split(",")).not.toContain("cookie");
+  });
   it("keeps cookies on every other path, where the app needs the session", () => {
     const res = nextWithSecurityHeaders(req("/signin", { cookie: "intellidrugs-theme=dark" }));
     expect(res.headers.get("x-middleware-request-cookie")).toBe("intellidrugs-theme=dark");

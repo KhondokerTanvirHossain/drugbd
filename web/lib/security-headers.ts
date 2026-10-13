@@ -17,7 +17,9 @@ export function nextWithSecurityHeaders(request: NextRequest): NextResponse {
   headers.set("x-request-id", crypto.randomUUID());
   headers.delete("x-nonce");
   headers.delete("content-security-policy");
-  if (request.nextUrl.pathname.startsWith(AUTH_PROXY_PREFIX)) {
+  // Match the way the rewrite does: case-insensitive (caseSensitiveRoutes is false) and `:path*` allows zero segments.
+  const p = request.nextUrl.pathname.toLowerCase();
+  if (p === "/__/auth" || p.startsWith(AUTH_PROXY_PREFIX)) {
     headers.delete("cookie");
     return NextResponse.next({ request: { headers } });
   }
