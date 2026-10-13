@@ -12,6 +12,8 @@ const revalidatePath = vi.fn();
 vi.mock("next/cache", () => ({ revalidatePath: (p: string) => revalidatePath(p) }));
 const allowAccountAction = vi.fn((_kind: string, _email: string) => true);
 vi.mock("@/lib/limits", () => ({ allowAccountAction: (k: string, e: string) => allowAccountAction(k, e) }));
+const recordAudit = vi.fn();
+vi.mock("@/lib/audit", () => ({ recordAudit: (e: unknown) => recordAudit(e) }));
 
 import { submitFlag, submitResolve, submitReview } from "@/lib/actions-core";
 import { flagAction, resolveFlagAction, reviewAction } from "@/lib/review-actions";
@@ -44,6 +46,7 @@ beforeEach(() => {
   verifyTurnstile.mockResolvedValue(true);
   revalidatePath.mockReset();
   allowAccountAction.mockReset(); allowAccountAction.mockReturnValue(true);
+  recordAudit.mockReset(); recordAudit.mockResolvedValue(true);
   fetchMock = vi.fn().mockResolvedValue(ok({ review: "ok", batchStatus: "approved" }, 201));
   vi.stubGlobal("fetch", fetchMock);
 });
@@ -292,5 +295,49 @@ describe("Turnstile actions (§9.2)", () => {
     fetchMock.mockResolvedValue(ok({ id: 1, status: "resolved" }));
     await submitResolve(form({ flagId: "7", "cf-turnstile-response": "ts-token" }));
     expect(verifyTurnstile).toHaveBeenLastCalledWith("ts-token", "203.0.113.9", "resolve");
+  });
+});
+
+describe("decision_denied audit (§5.15, §9.3)", () => {
+  const denied = (outcome: string, actorEmail: string | null, actorRole: string | null) => ({ event: "decision_denied", outcome,
+    actorEmail, actorRole, targetType: "batch_item", targetId: "0001-pilot/N-1" });
+
+  it("no session: unauthenticated, with no actor", async () => {
+    getSession.mockResolvedValue(null);
+    await submitReview(review());
+    expect(recordAudit).toHaveBeenCalledWith(denied("unauthenticated", null, null));
+  });
+  it("a reader: forbidden, with the reader as actor", async () => {
+    getSession.mockResolvedValue(USER);
+    await submitReview(review());
+    expect(recordAudit).toHaveBeenCalledWith(denied("forbidden", "someone@gmail.com", "user"));
+  });
+  it("over the decision limit: rate_limited", async () => {
+    getSession.mockResolvedValue(PHARMACIST);
+    allowAccountAction.mockReturnValue(false);
+    await submitReview(review());
+    expect(recordAudit).toHaveBeenCalledWith(denied("rate_limited", "pharm@example.org", "pharmacist"));
+  });
+  it("a failed bot check: captcha", async () => {
+    getSession.mockResolvedValue(ENGINEER);
+    verifyTurnstile.mockResolvedValue(false);
+    await submitReview(review());
+    expect(recordAudit).toHaveBeenCalledWith(denied("captcha", "eng@example.org", "engineer"));
+  });
+  it("no target when the ids are invalid; no event for a saved or invalid decision", async () => {
+    getSession.mockResolvedValue(null);
+    await submitReview(review({ batchId: "" }));
+    expect(recordAudit).toHaveBeenLastCalledWith({ ...denied("unauthenticated", null, null), targetType: null, targetId: null });
+    recordAudit.mockClear();
+    getSession.mockResolvedValue(PHARMACIST);
+    await submitReview(review());
+    await submitReview(review({ decision: "maybe" }));
+    expect(recordAudit).not.toHaveBeenCalled();
+  });
+  it("an audit outage never changes the answer", async () => {
+    getSession.mockResolvedValue(PHARMACIST);
+    allowAccountAction.mockReturnValue(false);
+    recordAudit.mockRejectedValue(new Error("audit API down"));
+    expect(await submitReview(review())).toEqual({ status: 429, code: "rate_limited" });
   });
 });

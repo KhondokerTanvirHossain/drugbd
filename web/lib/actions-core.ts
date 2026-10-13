@@ -2,6 +2,7 @@ import "server-only";
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { createFlag, postDecision, resolveFlag, type FlagTarget } from "./api";
+import { recordAudit } from "./audit";
 import { allowAccountAction } from "./limits";
 import { clientIp } from "./rate-limit";
 import type { ReviewerRole } from "./reviewers";
@@ -56,6 +57,19 @@ const isReviewer = (s: Session | null): s is Session & { role: ReviewerRole } =>
   s?.role === "pharmacist" || s?.role === "engineer";
 const validId = (s: string) => s.length > 0 && s.length <= ID_MAX;
 
+type DeniedOutcome = "unauthenticated" | "forbidden" | "rate_limited" | "captcha";
+/**
+ * §5.15 decision_denied: a decision stopped here, before any API call. The target is the batch item only when both
+ * ids are valid (never other form text). Best effort: an audit outage never changes the action's answer.
+ */
+async function denyDecision(outcome: DeniedOutcome, session: Session | null, fd: FormData): Promise<void> {
+  const batchId = field(fd, "batchId"), conceptId = field(fd, "conceptId");
+  const targetId = validId(batchId) && validId(conceptId) && batchId.length + conceptId.length < ID_MAX
+    ? `${batchId}/${conceptId}` : null;
+  await recordAudit({ event: "decision_denied", outcome, actorEmail: session?.email ?? null, actorRole: session?.role ?? null,
+    targetType: targetId ? "batch_item" : null, targetId }).catch(() => false);
+}
+
 async function turnstilePassed(fd: FormData, action: TurnstileAction): Promise<boolean> {
   return verifyTurnstile(fd.get(TURNSTILE_RESPONSE_FIELD), clientIp(await headers()), action);
 }
@@ -65,7 +79,10 @@ export const batchPath = (batchId: string) => `/batches/${encodeURIComponent(bat
 
 export async function submitReview(fd: FormData): Promise<ActionResult<ReviewCode>> {
   const session = await getSession();
-  if (!isReviewer(session)) return { status: 403, code: "forbidden" };
+  if (!isReviewer(session)) {
+    await denyDecision(session ? "forbidden" : "unauthenticated", session, fd);
+    return { status: 403, code: "forbidden" };
+  }
 
   const batchId = field(fd, "batchId"), conceptId = field(fd, "conceptId"), decision = field(fd, "decision");
   const note = field(fd, "note").trim();
@@ -83,8 +100,14 @@ export async function submitReview(fd: FormData): Promise<ActionResult<ReviewCod
   if (decision !== "ok" && decision !== "issue") return { status: 400, code: "invalid" };
   if (note.length > NOTE_MAX || (decision === "issue" && note.length < ISSUE_NOTE_MIN)) return { status: 400, code: "invalid" };
 
-  if (!allowAccountAction("decision", session.email)) return { status: 429, code: "rate_limited" };
-  if (!(await turnstilePassed(fd, "decision"))) return { status: 403, code: "captcha" };
+  if (!allowAccountAction("decision", session.email)) {
+    await denyDecision("rate_limited", session, fd);
+    return { status: 429, code: "rate_limited" };
+  }
+  if (!(await turnstilePassed(fd, "decision"))) {
+    await denyDecision("captcha", session, fd);
+    return { status: 403, code: "captcha" };
+  }
 
   const r = await postDecision(batchId, conceptId, { decision, note, reviewerEmail: session.email,
     reviewerRole: session.role, extractedAt, expectedLastDecisionId, requestId });
