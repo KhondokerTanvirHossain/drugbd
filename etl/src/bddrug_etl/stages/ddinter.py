@@ -18,6 +18,11 @@ candidates of this batch's substances, plus every DDInter id already mapped in `
 by earlier batches. A later batch normally holds only new products, so without the stored ids a pair
 split across batches (warfarin in 0001, an NSAID in 0002) would never get its text. Fetches stay bounded
 to pairs between drugs we have mapped.
+Route scope (spec §8.1): each product is checked against the entries the route rule (``choose``, the twin of the API's
+RouteRule) picks for its clinical drug's route. ``pair_count`` counts those entries' pairs, ``text_missing`` lists a pair
+only when one side is chosen by this product and the other by an in-scope product, and the route notes ("DDInter route
+assumed: …", "No DDInter entry for route …") explain an assumed or missing route. Mapping, coverage and the stored
+DDInter rows still cover every candidate entry: they are shared substance facts.
 
 DDInter free text (interaction, management, disease text, food description and management) goes through
 ``clean_text``: a placeholder ("None", "-", empty, ...) is stored as NULL, never as text. A pair whose interaction
@@ -34,7 +39,9 @@ when the product's savepoint commits; the pipeline then re-opens the other produ
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass, field
+from typing import TypeVar
 
 import psycopg
 
@@ -48,6 +55,42 @@ NONE_NOTE = "No interaction data in DDInter for this substance"
 _ROUTE_SUFFIX = re.compile(r"^(?P<base>.*?)\s*\((?P<route>ophthalmic|otic|nasal|topical)\)\s*$", re.IGNORECASE)
 _SEVERITIES = frozenset({"major", "moderate", "minor", "unknown"})
 _NAME_TYPES = ("icd11", "rxnorm", "dgda_content")
+GENERAL_SCOPES = ("systemic", "any")
+E = TypeVar("E")
+
+
+def route_assumed_note(ddinter_id: str, scope: str, route: str | None) -> str:
+    """§8.1 item 3: the general entry stands in for the product's route (NULL route: "unknown route", never None)."""
+    return f"DDInter route assumed: {ddinter_id} ({scope}) used for {route if route is not None else 'unknown route'}"
+
+
+def no_route_entry_note(route: str | None) -> str:
+    """§8.1 item 3: the substance has DDInter entries, but none for this route and no general one."""
+    return f"No DDInter entry for route {route}" if route is not None else "No DDInter entry for unknown route"
+
+
+def choose(entries: Iterable[E], route: str | None) -> tuple[list[E], bool]:
+    """Which DDInter entries speak for a substance in a product: the Python twin of the API's ``RouteRule.choose``.
+
+    Entries whose ``route_scope`` equals the product's route (not assumed); otherwise the ``systemic`` or ``any``
+    entries (assumed); otherwise none. A NULL route never matches exactly. Sorted by the numeric part of the id.
+    Works on any objects with ``ddinter_id`` and ``route_scope`` attributes.
+    """
+    items = list(entries)
+    by_id = lambda e: _idkey(e.ddinter_id)  # noqa: E731
+    if route is not None:
+        exact = sorted((e for e in items if e.route_scope == route), key=by_id)
+        if exact:
+            return exact, False
+    general = sorted((e for e in items if e.route_scope in GENERAL_SCOPES), key=by_id)
+    return (general, True) if general else ([], False)
+
+
+def _applies(pair: Pair, chosen_ids: set[str], scope_chosen: set[str]) -> bool:
+    """§8.1 item 3: a missing text concerns this product only when one side is an entry it chose and the other side
+    is an entry chosen by an in-scope product (this run, or a product mapped by an earlier batch, by its own route)."""
+    a, b = pair
+    return (a in chosen_ids and b in scope_chosen) or (b in chosen_ids and a in scope_chosen)
 
 
 def _placeholder_sql(col: str) -> str:
@@ -78,6 +121,12 @@ class _Sub:
     bds_id: str
     keys: frozenset[str]  # normalized icd11 / rxnorm / dgda_content names
     drugbank: frozenset[str]
+
+
+@dataclass(frozen=True)
+class _ProductPlan:
+    route: str | None  # the clinical drug's route; None when the product has no clinical drug
+    subs: list[_Sub]
 
 
 @dataclass
@@ -113,6 +162,7 @@ class _Run:
             if key:
                 self.by_key.setdefault(key, {})[ddinter_id] = _Entry(ddinter_id, name, route)
         self.scope_ids: set[str] = set()  # DDInter ids whose pairs get texts: batch candidates + already mapped
+        self.scope_chosen: set[str] = set()  # entries chosen by the route rule for some in-scope product
         self.stored_ids: set[str] = set()
         self.stored_texts: set[Pair] = set()
         self.fetched: set[Pair] = set()
@@ -163,7 +213,7 @@ class _Run:
 # --- planning (read-only) ---------------------------------------------------------------------
 
 
-def _plan(conn: psycopg.Connection, cid: str) -> list[_Sub] | StageResult:
+def _plan(conn: psycopg.Connection, cid: str) -> _ProductPlan | StageResult:
     rows = conn.execute(
         """SELECT bpi.xm_code, c.bds_id
              FROM curated.brand_product_ingredient bpi
@@ -187,7 +237,13 @@ def _plan(conn: psycopg.Connection, cid: str) -> list[_Sub] | StageResult:
         ).fetchall()
         keys = frozenset(k for (n,) in names if (k := normalize_name(n)))
         subs.append(_Sub(bds_id, keys, frozenset(c.strip().upper() for (c,) in codes)))
-    return subs
+    route = conn.execute(
+        """SELECT cd.route FROM curated.brand_product bp
+           LEFT JOIN curated.clinical_drug cd ON cd.bdc_id = bp.bdc_id
+           WHERE bp.concept_id = %s""",
+        (cid,),
+    ).fetchone()
+    return _ProductPlan(route[0] if route else None, subs)
 
 
 # --- per-product work (inside the product's savepoint) ----------------------------------------
@@ -383,12 +439,15 @@ def _ensure_text(conn, run: _Run, pair: Pair, pending: _Pending) -> None:
     pending.texts.add(pair)
 
 
-def _process(conn: psycopg.Connection, run: _Run, cid: str, subs: list[_Sub], pending: _Pending) -> StageResult:
+def _process(conn: psycopg.Connection, run: _Run, cid: str, plan: _ProductPlan, pending: _Pending) -> StageResult:
     mappings: list[dict] = []
     coverage: list[dict] = []
     notes: list[str] = []
-    ids: set[str] = set()
-    for sub in subs:
+    ids: set[str] = set()         # every candidate entry: shared substance facts, stored whatever the route
+    chosen_ids: set[str] = set()  # the entries the route rule picks for this product (§8.1 item 2)
+    chosen: list[dict] = []
+    route_assumed = False
+    for sub in plan.subs:
         entries = run.candidates(sub.keys)
         if not entries:
             if _upsert_coverage(conn, sub.bds_id, "none", NONE_NOTE):
@@ -414,16 +473,27 @@ def _process(conn: psycopg.Connection, run: _Run, cid: str, subs: list[_Sub], pe
         if _upsert_coverage(conn, sub.bds_id, "full", "DDInter " + ", ".join(e.ddinter_id for e in entries)):
             pending.changed.bds_ids.add(sub.bds_id)
         coverage.append({"bds_id": sub.bds_id, "coverage": "full"})
+        picked, assumed = choose(entries, plan.route)
+        if not picked:
+            notes.append(no_route_entry_note(plan.route))
+        for e in picked:
+            if assumed:
+                notes.append(route_assumed_note(e.ddinter_id, e.route_scope, plan.route))
+            chosen_ids.add(e.ddinter_id)
+            chosen.append({"bds_id": sub.bds_id, "ddinter_id": e.ddinter_id, "route_scope": e.route_scope,
+                           "route_assumed": assumed})
+        route_assumed = route_assumed or (assumed and bool(picked))
 
     pairs: set[Pair] = set()
-    in_scope: set[Pair] = set()
+    fetchable: set[Pair] = set()
     disease_count = food_count = 0
     for ddinter_id in sorted(ids, key=_idkey):
         if ddinter_id not in run.stored_ids:
             pending.changed.ddinter_ids |= _store_id_data(conn, run, ddinter_id)
             pending.ids.add(ddinter_id)
         mine = run.pairs(ddinter_id)
-        pairs.update(mine)
+        if ddinter_id in chosen_ids:
+            pairs.update(mine)
         disease_count += len(run.diseases(ddinter_id))
         food_count += len(run.foods(ddinter_id))
         for pair in sorted(mine):
@@ -431,26 +501,27 @@ def _process(conn: psycopg.Connection, run: _Run, cid: str, subs: list[_Sub], pe
             # Texts only where both sides are in scope (this batch or mapped by an earlier one); pairs with
             # an unmapped drug keep severity/actions and get their text once that drug is mapped.
             if other in run.scope_ids:
-                in_scope.add(pair)
+                fetchable.add(pair)
                 if pair not in run.stored_texts and pair not in pending.texts:
                     _ensure_text(conn, run, pair, pending)
 
-    # In-scope pairs whose text neither side's list holds this run: the pair keeps severity/actions with
-    # interaction_id NULL. Flag it on every product of the pair in this run so the review queue sees the
-    # missing text (for a cross-batch pair, that is the later batch's product).
-    text_missing = sorted(p for p in in_scope if p in run.texts and run.texts[p] is None)
+    # A pair without text is reported only on the products it applies to (§8.1 item 3): one side chosen by this
+    # product, the other chosen by an in-scope product. Fetching texts stays as wide as before (shared facts).
+    text_missing = sorted(p for p in fetchable
+                          if p in run.texts and run.texts[p] is None and _applies(p, chosen_ids, run.scope_chosen))
     notes.extend(f"DDInter text not found for {a}/{b}" for a, b in text_missing)
 
     evidence = {"mappings": mappings, "coverage": coverage, "pair_count": len(pairs),
                 "disease_count": disease_count, "food_count": food_count,
-                "text_fetch_count": len(pairs & run.fetched), "text_missing": [list(p) for p in text_missing]}
+                "text_fetch_count": len(pairs & run.fetched), "text_missing": [list(p) for p in text_missing],
+                "route": plan.route, "chosen": chosen, "route_assumed": route_assumed}
     return StageResult(cid, "warn" if notes else "ok", "; ".join(notes), evidence)
 
 
 class DDInterPlan:
     """A planned DDInter run: the per-run client caches and one plan per product of the run."""
 
-    def __init__(self, run: _Run, plans: dict[str, list[_Sub] | StageResult]):
+    def __init__(self, run: _Run, plans: dict[str, _ProductPlan | StageResult]):
         self._run = run
         self._plans = plans
 
@@ -482,8 +553,9 @@ def plan_ddinter(conn: psycopg.Connection, client: DDInterClient, concept_ids: l
     # DDInter ids mapped by earlier batches: pairs between them and this batch's drugs get texts too
     run.scope_ids.update(code for (code,) in conn.execute(
         "SELECT DISTINCT code FROM curated.substance_code WHERE system = 'DDINTER'").fetchall())
+    run.scope_chosen.update(_mapped_chosen(conn))
 
-    plans: dict[str, list[_Sub] | StageResult] = {}
+    plans: dict[str, _ProductPlan | StageResult] = {}
     for cid in dict.fromkeys(concept_ids):
         try:
             with conn.transaction():
@@ -493,10 +565,31 @@ def plan_ddinter(conn: psycopg.Connection, client: DDInterClient, concept_ids: l
         except Exception as e:
             plans[cid] = _fail(cid, error_note(e))
     for plan in plans.values():
-        if isinstance(plan, list):
-            for sub in plan:
-                run.scope_ids.update(e.ddinter_id for e in run.candidates(sub.keys))
+        if isinstance(plan, _ProductPlan):
+            for sub in plan.subs:
+                entries = run.candidates(sub.keys)
+                run.scope_ids.update(e.ddinter_id for e in entries)
+                run.scope_chosen.update(e.ddinter_id for e in choose(entries, plan.route)[0])
     return DDInterPlan(run, plans)
+
+
+def _mapped_chosen(conn: psycopg.Connection) -> set[str]:
+    """The DDInter entries the route rule picks for every product already mapped (earlier batches), each by its own
+    route. Read before this run writes anything, so it describes the earlier batches only."""
+    rows = conn.execute(
+        """SELECT bp.concept_id, cd.route, xm.bds_id, dd.code, dd.route_scope
+             FROM curated.brand_product bp
+             LEFT JOIN curated.clinical_drug cd ON cd.bdc_id = bp.bdc_id
+             JOIN curated.brand_product_ingredient bpi ON bpi.concept_id = bp.concept_id
+             JOIN curated.substance_code xm ON xm.system = 'ICD11_XM' AND xm.code = bpi.xm_code
+             JOIN curated.substance_code dd ON dd.bds_id = xm.bds_id AND dd.system = 'DDINTER'""").fetchall()
+    groups: dict[tuple[str, str], tuple[str | None, list[_Entry]]] = {}
+    for concept_id, route, bds_id, code, scope in rows:
+        groups.setdefault((concept_id, bds_id), (route, []))[1].append(_Entry(code, "", scope))
+    out: set[str] = set()
+    for route, entries in groups.values():
+        out.update(e.ddinter_id for e in choose(entries, route)[0])
+    return out
 
 
 def map_and_load_ddinter(conn: psycopg.Connection, client: DDInterClient, concept_ids: list[str],
