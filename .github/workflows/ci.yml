@@ -42,3 +42,23 @@ jobs:
           for s in etl api web; do
             docker build -t "bddrug-$s:ci" "$s"
           done
+  e2e:
+    runs-on: ubuntu-24.04
+    env:
+      DB_USER: bddrug
+      DB_PASSWORD: ci
+      GHCR_OWNER: ci
+      IMAGE_TAG: ci
+      COMPOSE: docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.ci.yml
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: "22"}
+      - run: cd web && npm ci && npx playwright install --with-deps chromium
+      - run: $COMPOSE up -d --build db flyway api web
+      - run: $COMPOSE run --rm seed
+      - run: curl -fsS --retry 30 --retry-delay 2 --retry-all-errors http://localhost:3000/healthz
+      - run: cd web && E2E_BASE_URL=http://localhost:3000 npx playwright test
+      - run: cd web && npx lhci autorun
+      - if: failure()
+        run: $COMPOSE logs --no-color web api | tail -n 300

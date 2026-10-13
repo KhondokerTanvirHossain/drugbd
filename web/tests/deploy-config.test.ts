@@ -31,3 +31,24 @@ describe("deploy configuration (§12.4)", () => {
     expect(d).toContain('source: "deploy/docker-compose.yml,db/migrations,batches"');
   });
 });
+
+describe("CI-only compose override (§11.4)", () => {
+  it("builds api and web from source, runs web in e2e mode on localhost, and makes edge a local network", () => {
+    const ci = repo("deploy/docker-compose.ci.yml");
+    expect(ci).toContain('INTELLIDRUGS_E2E: "1"');
+    expect(ci).toContain("SITE_HOST: localhost:3000");
+    expect(ci).toContain("context: ../web");
+    expect(ci).toContain("context: ../api");
+    expect(ci).toMatch(/edge: \{external: false/);
+    expect(ci).not.toContain("drugdb.eliooo.org");
+  });
+  it("runs as its own compose project, so it never touches the bddrug containers or the bddrug_dbdata volume", () => {
+    expect(repo("deploy/docker-compose.ci.yml")).toMatch(/^name: bddrug-ci$/m);
+  });
+  it("the e2e job runs Playwright and Lighthouse CI against both compose files", () => {
+    const yml = repo(".github/workflows/ci.yml");
+    expect(yml).toContain("-f deploy/docker-compose.yml -f deploy/docker-compose.ci.yml");
+    expect(yml).toContain("npx playwright test");
+    expect(yml).toContain("npx lhci autorun");
+  });
+});
