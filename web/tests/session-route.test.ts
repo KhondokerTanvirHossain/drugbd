@@ -16,8 +16,8 @@ const decoded = (over: Record<string, unknown> = {}) => ({
 const post = (body: unknown) => POST(new Request("http://localhost/api/session", {
   method: "POST", headers: { "Content-Type": "application/json" },
   body: typeof body === "string" ? body : JSON.stringify(body) }));
-const sessionCookie = (res: Response) => res.headers.getSetCookie().find((c) => c.startsWith("bddrug_session="));
-const jwtOf = (cookie: string) => cookie.split(";")[0].slice("bddrug_session=".length);
+const sessionCookie = (res: Response) => res.headers.getSetCookie().find((c) => /^(__Host-)?intellidrugs_session=/.test(c));
+const jwtOf = (cookie: string) => cookie.split(";")[0].replace(/^[^=]*=/, "");
 
 beforeEach(() => {
   vi.stubEnv("SESSION_SECRET", "s".repeat(32));
@@ -45,7 +45,7 @@ describe("POST /api/session", () => {
     expect(cookie).toMatch(/; Path=\//);
     expect(cookie).toMatch(/; Max-Age=28800/);
     expect(cookie).not.toMatch(/; Secure/i);
-    expect(await verifySessionToken(jwtOf(cookie))).toEqual({ email: "pharm@example.org", role: "pharmacist" });
+    expect(await verifySessionToken(jwtOf(cookie))).toMatchObject({ email: "pharm@example.org", role: "pharmacist" });
     expect(await res.json()).toEqual({ success: true, data: { role: "pharmacist" }, message: "Signed in", errors: [] });
   });
 
@@ -58,7 +58,7 @@ describe("POST /api/session", () => {
     verifyIdToken.mockResolvedValue(decoded({ email: "someone@gmail.com" }));
     const res = await post({ idToken: "tok" });
     expect(res.status).toBe(200);
-    expect(await verifySessionToken(jwtOf(sessionCookie(res)!))).toEqual({ email: "someone@gmail.com", role: "user" });
+    expect(await verifySessionToken(jwtOf(sessionCookie(res)!))).toMatchObject({ email: "someone@gmail.com", role: "user" });
   });
 
   it("maps the engineer role", async () => {
@@ -142,7 +142,7 @@ describe("DELETE /api/session", () => {
     const res = await DELETE();
     expect(res.status).toBe(200);
     const cookie = sessionCookie(res)!;
-    expect(cookie).toMatch(/^bddrug_session=;/);
+    expect(cookie).toMatch(/^intellidrugs_session=;/);
     expect(cookie).toMatch(/Max-Age=0/);
     expect(cookie).toMatch(/; Path=\//);
   });

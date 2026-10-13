@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { firebaseProjectId, verifyFirebaseIdToken } from "@/lib/firebase-admin";
 import { SIGN_IN_STATES } from "@/lib/copy";
 import { roleFor } from "@/lib/reviewers";
-import { SESSION_COOKIE, createSessionCookie, sessionCookieOptions } from "@/lib/session";
+import { createSessionCookie, sessionCookieName, sessionCookieOptions } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -46,13 +46,13 @@ export async function POST(request: Request) {
   const email = decoded.email.trim().toLowerCase();
   const role = roleFor(email);
   const res = NextResponse.json({ success: true, data: { role }, message: "Signed in", errors: [] });
-  res.cookies.set(SESSION_COOKIE, await createSessionCookie({ email, role }), sessionCookieOptions());
+  res.cookies.set(sessionCookieName(), await createSessionCookie({ email, name: typeof decoded.name === "string" ? decoded.name : "", role }), sessionCookieOptions());
   return res;
 }
 
 /** DELETE: clears the session cookie (sign-out). */
 export async function DELETE() {
   const res = NextResponse.json({ success: true, data: null, message: "Signed out", errors: [] });
-  res.cookies.set(SESSION_COOKIE, "", { ...sessionCookieOptions(), maxAge: 0 });
+  res.cookies.set(sessionCookieName(), "", { ...sessionCookieOptions(), maxAge: 0 });
   return res;
 }

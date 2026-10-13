@@ -67,6 +67,6 @@ describe("RootLayout", () => {
 describe("signOutAction", () => {
   it("deletes the session cookie and redirects home", async () => {
     await expect(signOutAction()).rejects.toSatisfy((e: { digest?: string }) => /NEXT_REDIRECT;[^;]*;\/;/.test(String(e.digest)));
-    expect(cookieStore.delete).toHaveBeenCalledWith("bddrug_session");
+    expect(cookieStore.delete).toHaveBeenCalledWith("intellidrugs_session");
   });
 });
