@@ -90,8 +90,11 @@ public class InteractionCheckService {
                 if (s.bdsId() == null) { noData.add(new NoData(id, null, s.name())); continue; }
                 dupNames.putIfAbsent(s.bdsId(), s.name());
                 dupConcepts.computeIfAbsent(s.bdsId(), k -> new ArrayList<>()).add(id);
+                // RouteRule picks from every entry (no systemic fallback past an exact one, §8.2); a chosen entry without
+                // a stored full pair list makes the substance noData, never "no interactions" (§7.4, D41)
                 Optional<RouteRule.Choice> choice = "full".equals(s.coverage())
                     ? RouteRule.choose(data.codesByBds().getOrDefault(s.bdsId(), List.of()), p.route())
+                        .filter(c -> c.codes().stream().allMatch(code -> data.listedCodes().contains(code.code())))
                     : Optional.empty();
                 if (choice.isEmpty()) noData.add(new NoData(id, s.bdsId(), s.name()));
                 else mine.add(new Usable(id, s.bdsId(), s.name(), choice.get()));

@@ -3,6 +3,7 @@ import com.niramoy.bddrug.domain.DdinterCode;
 import reactor.core.publisher.Mono;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /** Loads what the interaction checker needs for a set of products, in a few set-based queries. */
 public interface CheckQueryPort {
@@ -18,7 +19,11 @@ public interface CheckQueryPort {
                          String coverage) {}
     record PairRow(String ddinterA, String ddinterB, String severity, List<String> actions, String interaction,
                    String management) {}
-    /** pairs holds every stored pair whose two sides are both among the loaded DDInter codes. */
+    /**
+     * pairs holds every stored pair whose two sides are both among the loaded DDInter codes.
+     * listedCodes holds the loaded codes that have a curated.ddinter_drug row, i.e. whose full pair list is stored
+     * (§7.4, §8.1 item 5). A chosen code outside it was never read in full, so its substance is not checked.
+     */
     record CheckData(List<ProductRow> products, List<IngredientRow> ingredients, Map<String, List<DdinterCode>> codesByBds,
-                     List<PairRow> pairs) {}
+                     Set<String> listedCodes, List<PairRow> pairs) {}
 }
