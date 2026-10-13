@@ -36,7 +36,11 @@ def test_missing_concept_is_recorded_as_issue_and_rest_loads(conn):
 def test_rerun_resets_review_to_pending(conn):
     conn.execute("UPDATE ops.batch_item SET review='ok' WHERE concept_id=%s", (FIX["id"],))
     run_batch(conn, FakeClient(), "0001-pilot", [FIX["id"]])
-    assert conn.execute("SELECT review FROM ops.batch_item WHERE batch_id='0001-pilot'").fetchall() == [("pending",)]
+    assert conn.execute("SELECT review FROM ops.batch_item WHERE batch_id='0001-pilot' AND concept_id=%s",
+                        (FIX["id"],)).fetchall() == [("pending",)]
+    # typo-id left the file but has a snapshot from the first run, so it is kept and marked (§8.1 item 6)
+    assert conn.execute("SELECT review, note FROM ops.batch_item WHERE batch_id='0001-pilot' AND concept_id='typo-id'"
+                        ).fetchall() == [("issue", "removed from batch file")]
 
 
 class MultiClient:
@@ -136,8 +140,14 @@ def test_item_found_on_rerun_turns_pending(conn):
     assert items(conn, "0008-recovered") == {FIX["id"]: ("pending", None)}
 
 
-def test_removed_item_without_decisions_is_deleted_with_its_stage_results(conn):
-    run_batch(conn, MultiClient({FIX["id"]: FIX}), "0009-removed", [FIX["id"], "gone-5"])
+def test_removed_item_without_decisions_or_snapshots_is_deleted_with_its_stage_results(conn):
+    run_batch(conn, MultiClient({FIX["id"]: FIX}), "0009-removed", [FIX["id"]])
+    # an item from before V6: no snapshot and no decision
+    conn.execute("INSERT INTO ops.batch_item (batch_id, source, concept_id, extracted_at) "
+                 "VALUES ('0009-removed', 'DGDA-Drugs', 'gone-5', now())")
+    conn.execute("INSERT INTO ops.stage_result (batch_id, concept_id, stage, status, note) "
+                 "VALUES ('0009-removed', 'gone-5', 'dgda', 'fail', 'not found at source')")
+    conn.commit()
     run_batch(conn, MultiClient({FIX["id"]: FIX}), "0009-removed", [FIX["id"]])
     assert items(conn, "0009-removed") == {FIX["id"]: ("pending", None)}
     assert stage_rows(conn, "0009-removed") == {FIX["id"]: ("ok", "")}
@@ -160,3 +170,37 @@ def test_rerun_clears_the_batch_stage_results_as_before(conn):
     conn.commit()
     run_batch(conn, MultiClient({FIX["id"]: FIX}), "0011-stale", [FIX["id"]])
     assert conn.execute("SELECT stage FROM ops.stage_result WHERE batch_id = '0011-stale'").fetchall() == [("dgda",)]
+
+
+def snapshot_reasons(conn, batch_id, cid):
+    return [r for (r,) in conn.execute(
+        "SELECT reason FROM ops.item_snapshot WHERE batch_id = %s AND concept_id = %s ORDER BY extracted_at",
+        (batch_id, cid)).fetchall()]
+
+
+def test_run_batch_writes_one_snapshot_per_item(conn):
+    run_batch(conn, MultiClient({FIX["id"]: FIX}), "0012-snap", [FIX["id"], "gone-7"])
+    assert snapshot_reasons(conn, "0012-snap", FIX["id"]) == ["run"]
+    assert snapshot_reasons(conn, "0012-snap", "gone-7") == ["run"]
+    payload = conn.execute("SELECT payload FROM ops.item_snapshot WHERE batch_id = '0012-snap' AND concept_id = %s",
+                           (FIX["id"],)).fetchone()[0]
+    assert payload["brand"]["trade_name"] == "Tericin"
+    assert payload["stages"] == {"dgda": {"status": "ok", "note": ""}}
+
+
+def test_removed_item_with_snapshot_is_kept_and_marked(conn):
+    run_batch(conn, MultiClient({FIX["id"]: FIX}), "0013-snapkept", [FIX["id"], "gone-8"])   # gone-8 gets a snapshot
+    run_batch(conn, MultiClient({FIX["id"]: FIX}), "0013-snapkept", [FIX["id"]])             # must not fail on the FK
+    assert items(conn, "0013-snapkept") == {FIX["id"]: ("pending", None), "gone-8": ("issue", "removed from batch file")}
+    assert snapshot_reasons(conn, "0013-snapkept", "gone-8") == ["run"]
+
+
+def test_removed_item_readded_to_the_file_is_restamped_with_a_rerun_snapshot(conn):
+    """Review Focus 4: removed, then back in a later run."""
+    run_batch(conn, MultiClient({FIX["id"]: FIX}), "0014-back", [FIX["id"], "gone-9"])
+    run_batch(conn, MultiClient({FIX["id"]: FIX}), "0014-back", [FIX["id"]])
+    assert items(conn, "0014-back")["gone-9"] == ("issue", "removed from batch file")
+    run_batch(conn, MultiClient({FIX["id"]: FIX}), "0014-back", [FIX["id"], "gone-9"])
+    assert items(conn, "0014-back")["gone-9"] == ("issue", "not found at source")
+    assert snapshot_reasons(conn, "0014-back", "gone-9") == ["run", "rerun"]
+    assert snapshot_reasons(conn, "0014-back", FIX["id"]) == ["run", "rerun", "rerun"]

@@ -498,3 +498,28 @@ def test_default_clients_wire_snapshot_http_with_polite_intervals(url):
 def test_workflow_command_is_unchanged():
     wf = (ROOT / ".github/workflows/load-dgda.yml").read_text()
     assert 'docker-compose --profile jobs run --rm etl --batch "/app/batches/$BATCH"' in wf
+
+
+def test_snapshot_written_on_stamp_with_one_run_id_per_invocation(url, tmp_path):
+    f = batch_file(tmp_path, "0120-snapshots", [WARF, MISSING])
+    assert Harness(url).main("--batch", f) == 0
+    rows = q(url, """SELECT concept_id, reason, run_id, extracted_at, payload FROM ops.item_snapshot
+                     WHERE batch_id = '0120-snapshots' ORDER BY concept_id, extracted_at""")
+    warf = [r for r in rows if r[0] == WARF]
+    assert [r[1] for r in warf] == ["run", "rerun", "rerun", "rerun"]   # dgda, substances, clinical, ddinter
+    assert [r[1] for r in rows if r[0] == MISSING] == ["run"]          # only the dgda stage stamps it
+    assert len({r[2] for r in rows}) == 1                              # one run_id for the whole invocation
+    current = q(url, "SELECT extracted_at FROM ops.batch_item WHERE batch_id = '0120-snapshots' AND concept_id = %s",
+                (WARF,))[0][0]
+    assert warf[-1][3] == current
+    payload = warf[-1][4]
+    assert payload["brand"]["trade_name"] == WARF
+    assert payload["clinical_drug"]["route"] == "systemic"
+    assert payload["ingredients"][0]["ddinter_chosen"] == ["DDInter1951"]
+    assert set(payload["stages"]) == {"dgda", "substances", "clinical", "ddinter"}
+
+    first_run = warf[0][2]
+    assert Harness(url).main("--batch", f, "--stages", "ddinter") == 0
+    again = q(url, """SELECT reason, run_id FROM ops.item_snapshot WHERE batch_id = '0120-snapshots'
+                      AND concept_id = %s ORDER BY extracted_at""", (WARF,))
+    assert len(again) == 5 and again[-1][0] == "rerun" and again[-1][1] != first_run
