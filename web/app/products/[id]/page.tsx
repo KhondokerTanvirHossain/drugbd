@@ -6,6 +6,7 @@ import { formatStrength } from "@/lib/format";
 import { NOT_REVIEWED } from "@/lib/copy";
 import { ddinterText } from "@/lib/ddinter-text";
 import { firstParam } from "@/lib/params";
+import { cspNonce } from "@/lib/nonce";
 import { getSession } from "@/lib/session";
 export const dynamic = "force-dynamic";
 
@@ -19,9 +20,10 @@ export default async function ProductPage({ params, searchParams }: {
   let decoded: string;
   try { decoded = decodeURIComponent(id); } catch { notFound(); }
   const session = await getSession();
+  const nonce = await cspNonce();
   const p = await getProduct(decoded);   // public scope for every session (spec §2.2)
   if (!p) notFound();
-  const flagForm = <FlagForm session={session} targetType="product" targetId={decoded} outcome={flag} />;
+  const flagForm = <FlagForm nonce={nonce} session={session} targetType="product" targetId={decoded} outcome={flag} />;
   // Unapproved under public scope: the API sent no data, and the page shows nothing but this.
   if (isHidden(p)) return <article><h1>{NOT_REVIEWED}</h1>{flagForm}</article>;
   const cd = p.clinicalDrug;

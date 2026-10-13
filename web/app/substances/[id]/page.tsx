@@ -6,6 +6,7 @@ import { getSubstance, isHidden } from "@/lib/api";
 import { NO_DATA_SENTENCE, NO_INTERACTION_TEXT, NO_MANAGEMENT, NOT_REVIEWED } from "@/lib/copy";
 import { ddinterText } from "@/lib/ddinter-text";
 import { firstParam } from "@/lib/params";
+import { cspNonce } from "@/lib/nonce";
 import { getSession } from "@/lib/session";
 import { groupBySeverity, severityLabel, severityText } from "@/lib/severity";
 export const dynamic = "force-dynamic";
@@ -18,9 +19,10 @@ export default async function SubstancePage({ params, searchParams }: {
   let decoded: string;
   try { decoded = decodeURIComponent(id); } catch { notFound(); }
   const session = await getSession();
+  const nonce = await cspNonce();
   const s = await getSubstance(decoded);   // public scope for every session (spec §2.2)
   if (!s) notFound();
-  const flagForm = <FlagForm session={session} targetType="substance" targetId={decoded} outcome={flag} />;
+  const flagForm = <FlagForm nonce={nonce} session={session} targetType="substance" targetId={decoded} outcome={flag} />;
   // None of its products is approved (public scope): the API sent no data, and the page shows nothing but this.
   if (isHidden(s)) return <article><h1>{NOT_REVIEWED}</h1>{flagForm}</article>;
   const none = s.coverage.coverage !== "full";

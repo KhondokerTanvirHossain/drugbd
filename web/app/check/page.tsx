@@ -5,6 +5,7 @@ import { checkInteractions, listLoadedProducts, type AlertSide, type CheckOutcom
 import { NO_INTERACTION_TEXT, NO_MANAGEMENT } from "@/lib/copy";
 import { ddinterText } from "@/lib/ddinter-text";
 import { firstParam, listParam } from "@/lib/params";
+import { cspNonce } from "@/lib/nonce";
 import { getSession } from "@/lib/session";
 import { groupBySeverity, severityLabel, severityText } from "@/lib/severity";
 export const dynamic = "force-dynamic";
@@ -39,6 +40,7 @@ export default async function CheckPage({ searchParams }: {
   const sp = await searchParams;
   const ids = listParam(sp.ids);
   const session = await getSession();
+  const nonce = await cspNonce();
   const checkable = ids.length >= MIN_SELECTED && ids.length <= MAX_SELECTED;
   const [options, outcome] = await Promise.all([
     loadOptions(),   // public scope for every session (spec §2.2)
@@ -72,7 +74,7 @@ export default async function CheckPage({ searchParams }: {
       {ids.length > MAX_SELECTED && <p>Select at most 20 products to check.</p>}
       {outcome?.error && <p role="alert">{outcome.error}</p>}
       {outcome?.result && <Results r={outcome.result} />}
-      <FlagForm session={session} targetType="check" targetId={flagTarget(ids)} outcome={firstParam(sp.flag)} />
+      <FlagForm nonce={nonce} session={session} targetType="check" targetId={flagTarget(ids)} outcome={firstParam(sp.flag)} />
     </>
   );
 }

@@ -9,6 +9,7 @@ import {
 import { BATCHES_REVIEWERS_ONLY, TOO_MANY_REQUESTS } from "@/lib/copy";
 import { summariseSource } from "@/lib/evidence";
 import { formatUtc } from "@/lib/format";
+import { cspNonce } from "@/lib/nonce";
 import { firstParam } from "@/lib/params";
 import { ROLE_LABEL, isReviewer, type Role } from "@/lib/reviewers";
 import { reviewAction } from "@/lib/review-actions";
@@ -104,13 +105,13 @@ function ItemFields({ batchId, conceptId, version, decision }:
 }
 
 /** Reviewer controls. The server action re-checks the session, the role and Turnstile before calling the API. */
-function ReviewForms({ batchId, conceptId, version, role }:
-    { batchId: string; conceptId: string; version: ItemVersion; role: Role }) {
+function ReviewForms({ batchId, conceptId, version, role, nonce }:
+    { batchId: string; conceptId: string; version: ItemVersion; role: Role; nonce?: string }) {
   return (
     <div>
       <form action={reviewAction}>
         <ItemFields batchId={batchId} conceptId={conceptId} version={version} decision="ok" />
-        <Turnstile />
+        <Turnstile action="decision" nonce={nonce} />
         <button type="submit">Mark OK</button>
       </form>
       <form action={reviewAction}>
@@ -120,7 +121,7 @@ function ReviewForms({ batchId, conceptId, version, role }:
           <br />
           <textarea name="note" required minLength={ISSUE_NOTE_MIN} maxLength={NOTE_MAX} rows={3} cols={60} />
         </label>
-        <Turnstile />
+        <Turnstile action="decision" nonce={nonce} />
         <button type="submit">Report issue</button>
       </form>
       {role === "engineer" && <p><small>An engineer&apos;s OK is recorded, but only a pharmacist&apos;s OK approves a record.</small></p>}
@@ -158,6 +159,7 @@ export default async function BatchPage({ params, searchParams }: {
   // Batch evidence shows unreviewed records: reviewers only (spec §12.1). Checked before any API call, so an
   // anonymous visitor learns nothing, not even whether the batch exists (status 200, never 404).
   const session = await getSession();
+  const nonce = await cspNonce();
   if (!isReviewer(session)) return <><h1>Batches</h1><p role="status">{BATCHES_REVIEWERS_ONLY}</p></>;
   const { id } = await params;
   const sp = (await searchParams) ?? {};
@@ -211,7 +213,7 @@ export default async function BatchPage({ params, searchParams }: {
             <StageTable stages={item.stages ?? []} />
             <History decisions={histories[n]} />
             <ReviewForms batchId={batch.batchId} conceptId={item.conceptId}
-              version={{ extractedAt: item.extractedAt, lastDecisionId: item.lastDecisionId }} role={session.role} />
+              version={{ extractedAt: item.extractedAt, lastDecisionId: item.lastDecisionId }} role={session.role} nonce={nonce} />
           </section>
         );
       })}

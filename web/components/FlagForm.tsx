@@ -17,8 +17,8 @@ const OUTCOME: Record<string, string> = {
  * "Flag a problem" for any signed-in visitor (role user included). A plain server-action <form>: works without JS.
  * The action re-checks the session, the message length and Turnstile; the email comes from the session, never the form.
  */
-export default function FlagForm({ session, targetType, targetId, outcome }:
-    { session: Session | null; targetType: FlagTarget; targetId: string; outcome?: string }) {
+export default function FlagForm({ session, targetType, targetId, outcome, nonce }:
+    { session: Session | null; targetType: FlagTarget; targetId: string; outcome?: string; nonce?: string }) {
   const message = outcome ? OUTCOME[outcome] : undefined;
   if (!session) return message && outcome === "forbidden" ? <p id="flag" role="alert">{message}</p> : null;
   return (
@@ -34,7 +34,7 @@ export default function FlagForm({ session, targetType, targetId, outcome }:
             <br />
             <textarea name="message" required minLength={FLAG_MESSAGE_MIN} maxLength={FLAG_MESSAGE_MAX} rows={4} cols={60} />
           </label>
-          <Turnstile />
+          <Turnstile action="flag" nonce={nonce} />
           <button type="submit">Send flag</button>
         </form>
       </details>

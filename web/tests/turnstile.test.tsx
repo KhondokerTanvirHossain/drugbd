@@ -98,14 +98,21 @@ describe("verifyTurnstile", () => {
 describe("Turnstile widget", () => {
   it("renders the widget div with the site key and the Cloudflare script", () => {
     vi.stubEnv("NEXT_PUBLIC_TURNSTILE_SITE_KEY", "0x4AAAAAAA-site");
-    const html = renderToStaticMarkup(<Turnstile />);
-    expect(html).toContain('<div class="cf-turnstile" data-sitekey="0x4AAAAAAA-site"></div>');
+    const html = renderToStaticMarkup(<Turnstile action="decision" />);
+    expect(html).toContain('<div class="cf-turnstile" data-sitekey="0x4AAAAAAA-site" data-action="decision"></div>');
     expect(html).toMatch(/<script[^>]*src="https:\/\/challenges\.cloudflare\.com\/turnstile\/v0\/api\.js"/);
+  });
+
+  it("passes the nonce to the Cloudflare script and the action to the widget", () => {
+    vi.stubEnv("NEXT_PUBLIC_TURNSTILE_SITE_KEY", "0x4AAAAAAA-site");
+    const html = renderToStaticMarkup(<Turnstile action="resolve" nonce="abc" />);
+    expect(html).toContain('<div class="cf-turnstile" data-sitekey="0x4AAAAAAA-site" data-action="resolve"></div>');
+    expect(html).toMatch(/<script[^>]*nonce="abc"/);
   });
 
   it("says verification is not configured when there is no site key", () => {
     vi.stubEnv("NEXT_PUBLIC_TURNSTILE_SITE_KEY", "");
-    const html = renderToStaticMarkup(<Turnstile />);
+    const html = renderToStaticMarkup(<Turnstile action="decision" />);
     expect(html).not.toContain("cf-turnstile");
     expect(html).toContain("Verification is not configured");
   });
@@ -113,13 +120,13 @@ describe("Turnstile widget", () => {
   it("renders the test site key outside production", () => {
     vi.stubEnv("NODE_ENV", "development");
     vi.stubEnv("NEXT_PUBLIC_TURNSTILE_SITE_KEY", TURNSTILE_TEST_SITE_KEY);
-    expect(renderToStaticMarkup(<Turnstile />)).toContain(`data-sitekey="${TURNSTILE_TEST_SITE_KEY}"`);
+    expect(renderToStaticMarkup(<Turnstile action="decision" />)).toContain(`data-sitekey="${TURNSTILE_TEST_SITE_KEY}"`);
   });
 
   it("refuses the test site key in production", () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("NEXT_PUBLIC_TURNSTILE_SITE_KEY", TURNSTILE_TEST_SITE_KEY);
-    const html = renderToStaticMarkup(<Turnstile />);
+    const html = renderToStaticMarkup(<Turnstile action="decision" />);
     expect(html).not.toContain(TURNSTILE_TEST_SITE_KEY);
     expect(html).toContain("Verification is not configured");
   });
