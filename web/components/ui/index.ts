@@ -15,3 +15,4 @@ export { default as ReviewStatus, type PublicReviewStatus, type ReviewDisplaySta
 export { default as Severity } from "./Severity";
 export { default as StageCheck } from "./StageCheck";
 export { default as Wordmark, type WordmarkSize } from "./Wordmark";
+export { default as PairCard } from "./PairCard";
