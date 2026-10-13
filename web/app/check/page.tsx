@@ -1,6 +1,6 @@
 import FlagForm from "@/components/FlagForm";
 import { Badge } from "@/components/badges";
-import { checkInteractions, listLoadedProducts, scopeFor, type AlertSide, type CheckOutcome, type CheckResult } from "@/lib/api";
+import { checkInteractions, listLoadedProducts, type AlertSide, type CheckOutcome, type CheckResult } from "@/lib/api";
 import { NO_INTERACTION_TEXT, NO_MANAGEMENT_TEXT } from "@/lib/copy";
 import { ddinterText } from "@/lib/ddinter-text";
 import { firstParam, listParam } from "@/lib/params";
@@ -15,9 +15,9 @@ const box = { border: "1px solid #ccc", borderRadius: 4, padding: 12, margin: "8
 type Option = { conceptId: string; label: string };
 
 /** The light product list (approved products only under public scope), sorted by the API. null when unavailable. */
-async function loadOptions(scope: "public" | "all"): Promise<Option[] | null> {
+async function loadOptions(): Promise<Option[] | null> {
   try {
-    return (await listLoadedProducts(scope)).map((p) => ({ conceptId: p.conceptId, label: `${p.tradeName} (${p.dosageForm})` }));
+    return (await listLoadedProducts()).map((p) => ({ conceptId: p.conceptId, label: `${p.tradeName} (${p.dosageForm})` }));
   } catch {
     return null;
   }
@@ -39,11 +39,10 @@ export default async function CheckPage({ searchParams }: {
   const sp = await searchParams;
   const ids = listParam(sp.ids);
   const session = await getSession();
-  const scope = scopeFor(session);
   const checkable = ids.length >= MIN_SELECTED && ids.length <= MAX_SELECTED;
   const [options, outcome] = await Promise.all([
-    loadOptions(scope),
-    checkable ? checkInteractions(ids, scope) : Promise.resolve<CheckOutcome | null>(null),
+    loadOptions(),   // public scope for every session (spec §2.2)
+    checkable ? checkInteractions(ids) : Promise.resolve<CheckOutcome | null>(null),
   ]);
   const selected = new Set(ids);
   const known = new Set((options ?? []).map((o) => o.conceptId));
@@ -55,7 +54,7 @@ export default async function CheckPage({ searchParams }: {
       <h1>Interaction checker</h1>
       <form method="get" action="/check">
         <fieldset>
-          <legend>{scope === "all" ? "Loaded products (reviewer view: includes unreviewed products)" : "Products reviewed by a pharmacist"}</legend>
+          <legend>Products reviewed by a pharmacist</legend>
           {options === null && <p role="alert">The product list is temporarily unavailable.</p>}
           {options !== null && shown.length === 0 && <p>No reviewed products yet.</p>}
           {shown.map((o) => (

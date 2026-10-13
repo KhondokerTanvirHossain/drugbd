@@ -4,11 +4,11 @@ import "server-only";
  * The BDDrug API client. Server-only: it reads INTERNAL_API_TOKEN, which must never reach a client bundle
  * (scripts/check-client-bundle.mjs fails the build if it does).
  *
- * Visibility: anonymous visitors (and signed-in users with role `user`) read with `scope=public`, which returns approved
- * records only. Pharmacists and engineers read with `scope=all`, which the API grants only with the internal token.
+ * Visibility (spec §2.2, Decision): every public page reads with `scope=public`, whatever the session, so a reviewer
+ * sees exactly what a reader sees there. Public reads never send the internal token. Unapproved data is read only by
+ * the reviewer pages, through token-gated endpoints.
  */
 
-export type Scope = "public" | "all";
 export type ReviewStatus = "pending" | "ok" | "issue";
 
 export type Ingredient = { xmCode: string; name: string };
@@ -23,8 +23,6 @@ export type Product = {
   conceptId: string; darNumber: string; tradeName: string; company: string; dosageForm: string;
   genericContentRaw: string; qualityFlag: string | null; ingredients: Ingredient[];
   parseStatus: "parsed" | "partial" | "failed" | null; parseNote: string | null; clinicalDrug: ClinicalDrug | null;
-  /** The product's current review; served under scope=all so reviewers can see what is not approved yet. */
-  reviewStatus?: ReviewStatus | null;
 };
 /** What the API returns under public scope for a record no pharmacist has approved: no data fields. */
 export type HiddenProduct = { conceptId: string; tradeName?: string; reviewStatus: "pending" | "issue"; hidden: true };
@@ -33,11 +31,6 @@ export type SearchResult = { items: Product[]; error: string | null };
 
 export function isHidden(x: unknown): x is { hidden: true } {
   return typeof x === "object" && x !== null && (x as { hidden?: unknown }).hidden === true;
-}
-
-/** Reviewers (pharmacist, engineer) read everything; everyone else reads approved records only. */
-export function scopeFor(session: { role: string } | null): Scope {
-  return session?.role === "pharmacist" || session?.role === "engineer" ? "all" : "public";
 }
 
 const base = () => process.env.API_URL ?? "http://api:8080";
@@ -50,26 +43,16 @@ function internalToken(): string | null {
   return token.length >= MIN_TOKEN_LENGTH ? token : null;
 }
 
-/**
- * The scope actually requested and its headers. `all` without a configured token falls back to `public`:
- * a misconfigured server shows reviewers less, never anonymous visitors more.
- */
-function scoped(scope: Scope): { scope: Scope; headers: Record<string, string> } {
-  const token = scope === "all" ? internalToken() : null;
-  return token ? { scope: "all", headers: { [TOKEN_HEADER]: token } } : { scope: "public", headers: {} };
-}
-
 const read = (url: string, headers: Record<string, string> = {}) =>
   fetch(url, { headers, cache: "no-store", signal: AbortSignal.timeout(5000) });
 
-export async function searchProducts(q: string, page: number, scope: Scope = "public"): Promise<SearchResult> {
+export async function searchProducts(q: string, page: number): Promise<SearchResult> {
   const term = q.trim();
   if (term.length < 2) return { items: [], error: null };
-  const s = scoped(scope);
-  const params = new URLSearchParams({ q: term, page: String(page), scope: s.scope });
+  const params = new URLSearchParams({ q: term, page: String(page), scope: "public" });
   let res: Response;
   try {
-    res = await read(`${base()}/v1/products?${params}`, s.headers);
+    res = await read(`${base()}/v1/products?${params}`);
   } catch {
     return { items: [], error: "Search is temporarily unavailable. Please try again." };
   }
@@ -79,9 +62,8 @@ export async function searchProducts(q: string, page: number, scope: Scope = "pu
   return { items: body.data, error: null };
 }
 
-export async function getProduct(id: string, scope: Scope = "public"): Promise<Product | HiddenProduct | null> {
-  const s = scoped(scope);
-  const res = await read(`${base()}/v1/products/${encodeURIComponent(id)}?scope=${s.scope}`, s.headers);
+export async function getProduct(id: string): Promise<Product | HiddenProduct | null> {
+  const res = await read(`${base()}/v1/products/${encodeURIComponent(id)}?scope=public`);
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`API error ${res.status}`);
   return (await res.json()).data as Product | HiddenProduct;
@@ -89,10 +71,9 @@ export async function getProduct(id: string, scope: Scope = "public"): Promise<P
 
 export type LoadedProduct = { conceptId: string; tradeName: string; dosageForm: string };
 
-/** The light product list for the checker's picker, sorted by trade name. Public scope: approved products only. */
-export async function listLoadedProducts(scope: Scope = "public"): Promise<LoadedProduct[]> {
-  const s = scoped(scope);
-  const res = await read(`${base()}/v1/products/loaded?scope=${s.scope}`, s.headers);
+/** The light product list for the checker's picker (approved products only), sorted by trade name. */
+export async function listLoadedProducts(): Promise<LoadedProduct[]> {
+  const res = await read(`${base()}/v1/products/loaded?scope=public`);
   if (!res.ok) throw new Error(`API error ${res.status}`);
   const data = (await res.json())?.data;
   if (!Array.isArray(data)) throw new Error("API error: no product list");
@@ -133,7 +114,7 @@ export type BatchReport = {
   deltaVsPrevious: Record<string, StageCounts> | null;
 };
 
-/** Public evidence: read without the token. null for an unknown batch. */
+/** null for an unknown batch. */
 export async function getBatchReport(id: string): Promise<BatchReport | null> {
   const res = await read(`${base()}/v1/batches/${encodeURIComponent(id)}/report`);
   if (res.status === 404) return null;
@@ -144,10 +125,7 @@ export async function getBatchReport(id: string): Promise<BatchReport | null> {
 /** One decision as shown on the batch page: the role, never the reviewer's email. */
 export type PublicDecision = { decision: "ok" | "issue"; note: string; role: string; decidedAt: string };
 
-/**
- * The decision history, newest first. Always read WITHOUT the token, so the API never sends emails here; the
- * mapping below keeps only the public fields even if a future API version sent more.
- */
+/** The decision history, newest first. The mapping keeps only the fields a page may show, never an email. */
 export async function getDecisions(batchId: string, conceptId: string): Promise<PublicDecision[]> {
   const res = await read(`${base()}/v1/batches/${encodeURIComponent(batchId)}/items/${encodeURIComponent(conceptId)}/decisions`);
   if (!res.ok) throw new Error(`API error ${res.status}`);
@@ -161,7 +139,7 @@ export type Substance = {
   names: { name: string; nameType: string; source: string }[];
   codes: { system: string; code: string; routeScope: string; source: string; method: string; confidence: number }[];
   coverage: { coverage: "full" | "none"; note: string };
-  products: { conceptId: string; tradeName: string; company: string; reviewStatus?: ReviewStatus | null }[];
+  products: { conceptId: string; tradeName: string; company: string }[];
   interactions: { partnerName: string; partnerBdsId: string | null; severity: string; actions: string[];
     interactionId: string | null; routeScope: string }[];
   diseases: { diseaseName: string; severity: string; text: string | null; refs: string[]; interactionId: string;
@@ -170,9 +148,8 @@ export type Substance = {
     refs: string[]; interactionId: string; routeScope: string }[];
 };
 
-export async function getSubstance(id: string, scope: Scope = "public"): Promise<Substance | HiddenSubstance | null> {
-  const s = scoped(scope);
-  const res = await read(`${base()}/v1/substances/${encodeURIComponent(id)}?scope=${s.scope}`, s.headers);
+export async function getSubstance(id: string): Promise<Substance | HiddenSubstance | null> {
+  const res = await read(`${base()}/v1/substances/${encodeURIComponent(id)}?scope=public`);
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`API error ${res.status}`);
   return (await res.json()).data as Substance | HiddenSubstance;
@@ -189,17 +166,16 @@ export type CheckResult = {
   duplicates: { bdsId: string; name: string; conceptIds: string[] }[];
   /** Substances the checker has no interaction data for: never to be read as "no interactions". */
   noData: { conceptId: string; bdsId: string | null; name: string }[];
-  /** Products left out because no pharmacist has approved them yet (public scope): never to be read as "no interactions". */
+  /** Products left out because no pharmacist has approved them yet: never to be read as "no interactions". */
   notReviewed: { conceptId: string }[];
 };
 export type CheckOutcome = { result: CheckResult | null; error: string | null };
 
-export async function checkInteractions(conceptIds: string[], scope: Scope = "public"): Promise<CheckOutcome> {
-  const s = scoped(scope);
+export async function checkInteractions(conceptIds: string[]): Promise<CheckOutcome> {
   let res: Response;
   try {
-    res = await fetch(`${base()}/v1/interactions/check?scope=${s.scope}`, {
-      method: "POST", headers: { "Content-Type": "application/json", ...s.headers }, body: JSON.stringify({ conceptIds }),
+    res = await fetch(`${base()}/v1/interactions/check?scope=public`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ conceptIds }),
       cache: "no-store", signal: AbortSignal.timeout(5000),
     });
   } catch {

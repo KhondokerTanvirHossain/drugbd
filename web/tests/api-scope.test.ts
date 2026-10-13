@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   checkInteractions, createFlag, getBatchReport, getDecisions, getProduct, getSubstance, isHidden, listFlags,
-  listLoadedProducts, postDecision, resolveFlag, scopeFor, searchProducts,
+  listLoadedProducts, postDecision, resolveFlag, searchProducts,
 } from "../lib/api";
 
 /** A test-only internal token (never a real one). The client-bundle scan also looks for this value. */
@@ -20,40 +20,14 @@ beforeEach(() => {
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
-describe("scopeFor", () => {
-  it("is all for pharmacists and engineers, public for users and anonymous visitors", () => {
-    expect(scopeFor({ role: "pharmacist" })).toBe("all");
-    expect(scopeFor({ role: "engineer" })).toBe("all");
-    expect(scopeFor({ role: "user" })).toBe("public");
-    expect(scopeFor(null)).toBe("public");
-  });
-});
-
-describe("scoped reads", () => {
-  it("anonymous search sends scope=public and no internal token", async () => {
-    await searchProducts("napa", 0);
-    expect(f.mock.calls[0][0]).toBe("http://api:8080/v1/products?q=napa&page=0&scope=public");
+describe("public reads (spec §2.2: always scope=public, never the token)", () => {
+  it("search sends scope=public and no internal token, even with a token configured", async () => {
+    await searchProducts("napa", 1);
+    expect(f.mock.calls[0][0]).toBe("http://api:8080/v1/products?q=napa&page=1&scope=public");
     expect(headerOf(f.mock.calls[0][1], "X-Internal-Token")).toBeNull();
   });
 
-  it("reviewer search sends scope=all with the internal token header", async () => {
-    await searchProducts("napa", 1, "all");
-    expect(f.mock.calls[0][0]).toBe("http://api:8080/v1/products?q=napa&page=1&scope=all");
-    expect(headerOf(f.mock.calls[0][1], "X-Internal-Token")).toBe(TOKEN);
-  });
-
-  it("falls back to public scope (no header) when the internal token is not configured", async () => {
-    vi.stubEnv("INTERNAL_API_TOKEN", "");
-    await searchProducts("napa", 0, "all");
-    expect(f.mock.calls[0][0]).toContain("scope=public");
-    expect(headerOf(f.mock.calls[0][1], "X-Internal-Token")).toBeNull();
-    vi.stubEnv("INTERNAL_API_TOKEN", "too-short");
-    await searchProducts("napa", 0, "all");
-    expect(f.mock.calls[1][0]).toContain("scope=public");
-    expect(headerOf(f.mock.calls[1][1], "X-Internal-Token")).toBeNull();
-  });
-
-  it("getProduct passes the scope and returns the hidden shape as-is", async () => {
+  it("getProduct reads with public scope and returns the hidden shape as-is", async () => {
     const hidden = { conceptId: "P-1", tradeName: "Napa", reviewStatus: "pending", hidden: true };
     f.mockImplementation(async () => ok(hidden));
     const p = await getProduct("P/1");
@@ -61,9 +35,6 @@ describe("scoped reads", () => {
     expect(headerOf(f.mock.calls[0][1], "X-Internal-Token")).toBeNull();
     expect(p).toEqual(hidden);
     expect(isHidden(p)).toBe(true);
-    await getProduct("P-1", "all");
-    expect(f.mock.calls[1][0]).toBe("http://api:8080/v1/products/P-1?scope=all");
-    expect(headerOf(f.mock.calls[1][1], "X-Internal-Token")).toBe(TOKEN);
   });
 
   it("isHidden is false for a full record and for null", () => {
@@ -71,41 +42,41 @@ describe("scoped reads", () => {
     expect(isHidden(null)).toBe(false);
   });
 
-  it("getSubstance passes the scope", async () => {
+  it("getSubstance reads with public scope", async () => {
     f.mockImplementation(async () => ok({ bdsId: "BDS-1", preferredName: "X", reviewStatus: "pending", hidden: true }));
     expect(isHidden(await getSubstance("BDS-1"))).toBe(true);
     expect(f.mock.calls[0][0]).toBe("http://api:8080/v1/substances/BDS-1?scope=public");
-    await getSubstance("BDS-1", "all");
-    expect(f.mock.calls[1][0]).toBe("http://api:8080/v1/substances/BDS-1?scope=all");
-    expect(headerOf(f.mock.calls[1][1], "X-Internal-Token")).toBe(TOKEN);
+    expect(headerOf(f.mock.calls[0][1], "X-Internal-Token")).toBeNull();
   });
 
-  it("checkInteractions passes the scope and requires the notReviewed array", async () => {
+  it("checkInteractions reads with public scope and requires the notReviewed array", async () => {
     const data = { products: [], alerts: [], duplicates: [], noData: [], notReviewed: [{ conceptId: "P-2" }] };
     f.mockResolvedValue(ok(data));
     expect(await checkInteractions(["P-1", "P-2"])).toEqual({ result: data, error: null });
     expect(f.mock.calls[0][0]).toBe("http://api:8080/v1/interactions/check?scope=public");
     expect(headerOf(f.mock.calls[0][1], "Content-Type")).toBe("application/json");
     expect(headerOf(f.mock.calls[0][1], "X-Internal-Token")).toBeNull();
-    await checkInteractions(["P-1", "P-2"], "all");
-    expect(f.mock.calls[1][0]).toBe("http://api:8080/v1/interactions/check?scope=all");
-    expect(headerOf(f.mock.calls[1][1], "X-Internal-Token")).toBe(TOKEN);
     f.mockResolvedValue(ok({ products: [], alerts: [], duplicates: [], noData: [] }));
     expect(await checkInteractions(["P-1", "P-2"])).toEqual({ result: null, error: "Interaction check failed" });
   });
 
-  it("listLoadedProducts reads the light list with the scope", async () => {
+  it("listLoadedProducts reads the light list with public scope", async () => {
     const rows = [{ conceptId: "P-1", tradeName: "Ace", dosageForm: "Tablet" }];
     f.mockImplementation(async () => ok(rows));
     expect(await listLoadedProducts()).toEqual(rows);
     expect(f.mock.calls[0][0]).toBe("http://api:8080/v1/products/loaded?scope=public");
+    expect(headerOf(f.mock.calls[0][1], "X-Internal-Token")).toBeNull();
     expect(f.mock.calls[0][1].cache).toBe("no-store");
     expect(f.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
-    await listLoadedProducts("all");
-    expect(f.mock.calls[1][0]).toBe("http://api:8080/v1/products/loaded?scope=all");
-    expect(headerOf(f.mock.calls[1][1], "X-Internal-Token")).toBe(TOKEN);
     f.mockResolvedValue(new Response("boom", { status: 500 }));
     await expect(listLoadedProducts()).rejects.toThrow("API error 500");
+  });
+
+  it("no public read ever asks for scope=all", async () => {
+    f.mockImplementation(async () => ok([]));
+    await searchProducts("napa", 0); await getProduct("P"); await getSubstance("S"); await listLoadedProducts();
+    await checkInteractions(["A", "B"]);
+    for (const [url] of f.mock.calls) expect(String(url)).not.toContain("scope=all");
   });
 });
 

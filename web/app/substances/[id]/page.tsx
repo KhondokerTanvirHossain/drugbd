@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import FlagForm from "@/components/FlagForm";
-import { Badge, UnreviewedBadge } from "@/components/badges";
-import { getSubstance, isHidden, scopeFor } from "@/lib/api";
+import { Badge } from "@/components/badges";
+import { getSubstance, isHidden } from "@/lib/api";
 import { NO_DATA_SENTENCE, NO_INTERACTION_TEXT, NO_MANAGEMENT_TEXT, NOT_REVIEWED } from "@/lib/copy";
 import { ddinterText } from "@/lib/ddinter-text";
 import { firstParam } from "@/lib/params";
@@ -20,8 +20,7 @@ export default async function SubstancePage({ params, searchParams }: {
   let decoded: string;
   try { decoded = decodeURIComponent(id); } catch { notFound(); }
   const session = await getSession();
-  const scope = scopeFor(session);
-  const s = await getSubstance(decoded, scope);
+  const s = await getSubstance(decoded);   // public scope for every session (spec §2.2)
   if (!s) notFound();
   const flagForm = <FlagForm session={session} targetType="substance" targetId={decoded} outcome={flag} />;
   // None of its products is approved (public scope): the API sent no data, and the page shows nothing but this.
@@ -94,8 +93,7 @@ export default async function SubstancePage({ params, searchParams }: {
       <h2>Products using it</h2>
       {s.products.length === 0 ? <p>No loaded product uses this substance.</p> : (
         <ul>{s.products.map((p) => (
-          <li key={p.conceptId}><a href={`/products/${encodeURIComponent(p.conceptId)}`}>{p.tradeName}</a>{` (${p.company})`}
-            <UnreviewedBadge scope={scope} reviewStatus={p.reviewStatus} /></li>))}</ul>)}
+          <li key={p.conceptId}><a href={`/products/${encodeURIComponent(p.conceptId)}`}>{p.tradeName}</a>{` (${p.company})`}</li>))}</ul>)}
 
       <p><small>Sources: DGDA register via OCL, RxNav, DDInter 2.0.</small></p>
       {flagForm}

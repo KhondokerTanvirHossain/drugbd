@@ -8,8 +8,8 @@ const listBatches = vi.fn();
 const getBatch = vi.fn();
 vi.mock("@/lib/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api")>()),
-  listLoadedProducts: (scope?: string) => listLoadedProducts(scope),
-  checkInteractions: (ids: string[], scope?: string) => checkInteractions(ids, scope),
+  listLoadedProducts: (...args: unknown[]) => listLoadedProducts(...args),
+  checkInteractions: (...args: unknown[]) => checkInteractions(...args),
   listBatches: () => listBatches(),
   getBatch: (id: string) => getBatch(id),
 }));
@@ -41,18 +41,20 @@ beforeEach(() => {
 describe("check page visibility", () => {
   it("lists products from /v1/products/loaded with scope=public for anonymous visitors, not from batches", async () => {
     const html = await render();
-    expect(listLoadedProducts).toHaveBeenCalledWith("public");
+    expect(listLoadedProducts).toHaveBeenCalledWith();
     expect(listBatches).not.toHaveBeenCalled();
     expect(getBatch).not.toHaveBeenCalled();
     expect(html).toContain(" Motigut (Suspension)");
   });
 
-  it("uses scope=all for reviewers, for the list and the check", async () => {
+  it("reads the public list and checks with public scope for reviewers too (spec §2.2)", async () => {
     getSession.mockResolvedValue({ email: "pharm@example.org", role: "pharmacist" });
     checkInteractions.mockResolvedValue({ result: emptyResult({}), error: null });
     const html = await render(["W-1", "A-1"]);
-    expect(listLoadedProducts).toHaveBeenCalledWith("all");
-    expect(checkInteractions).toHaveBeenCalledWith(["W-1", "A-1"], "all");
+    expect(listLoadedProducts).toHaveBeenCalledWith();
+    expect(checkInteractions).toHaveBeenCalledWith(["W-1", "A-1"]);
+    expect(html).toContain("Products reviewed by a pharmacist");
+    expect(html).not.toContain("reviewer view");
     expect(html).not.toContain("pharm@example.org");
   });
 
@@ -62,7 +64,7 @@ describe("check page visibility", () => {
       notReviewed: [{ conceptId: "H-9" }],
     }), error: null });
     const html = await render(["W-1", "H-9"]);
-    expect(checkInteractions).toHaveBeenCalledWith(["W-1", "H-9"], "public");
+    expect(checkInteractions).toHaveBeenCalledWith(["W-1", "H-9"]);
     expect(html).toContain("<h2>Not yet reviewed</h2>");
     expect(html).toMatch(/<li>H-9<\/li>/);
     expect(html).toContain("not yet reviewed by a pharmacist, so they were not checked");
@@ -108,7 +110,7 @@ describe("check page", () => {
     expect(checkInteractions).not.toHaveBeenCalled();
     checkInteractions.mockResolvedValue({ result: emptyResult({}), error: null });
     await render(["W-1", "A-1", "W-1"]);
-    expect(checkInteractions).toHaveBeenCalledWith(["W-1", "A-1"], "public");
+    expect(checkInteractions).toHaveBeenCalledWith(["W-1", "A-1"]);
   });
 
   it("renders the No interaction data section for a domperidone product", async () => {
@@ -120,7 +122,7 @@ describe("check page", () => {
       noData: [{ conceptId: "D-1", bdsId: "BDS-000004", name: "Domperidone" }],
     }), error: null });
     const html = await render(["D-1", "W-1"]);
-    expect(checkInteractions).toHaveBeenCalledWith(["D-1", "W-1"], "public");
+    expect(checkInteractions).toHaveBeenCalledWith(["D-1", "W-1"]);
     expect(html).toContain("<h2>No interaction data</h2>");
     expect(html).toContain('<a href="/substances/BDS-000004">Domperidone</a>');
     expect(html).toContain("Motigut");
@@ -237,7 +239,7 @@ describe("check page", () => {
     listLoadedProducts.mockRejectedValue(new Error("API error 500"));
     checkInteractions.mockResolvedValue({ result: emptyResult({}), error: null });
     const html = await render(["W-1", "A-1"]);
-    expect(checkInteractions).toHaveBeenCalledWith(["W-1", "A-1"], "public");
+    expect(checkInteractions).toHaveBeenCalledWith(["W-1", "A-1"]);
     expect(html).toContain("The product list is temporarily unavailable.");
     expect(checkbox(html, "W-1")).toContain('checked=""');                // selected ids stay in the form
   });

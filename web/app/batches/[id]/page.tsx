@@ -3,12 +3,12 @@ import Turnstile from "@/components/Turnstile";
 import { StatusPill } from "@/components/badges";
 import { ISSUE_NOTE_MIN, NOTE_MAX } from "@/lib/actions-core";
 import {
-  getBatch, getBatchReport, getDecisions, scopeFor, type BatchReport, type PublicDecision, type StageCounts, type StageResult,
+  getBatch, getBatchReport, getDecisions, type BatchReport, type PublicDecision, type StageCounts, type StageResult,
 } from "@/lib/api";
 import { summariseSource } from "@/lib/evidence";
 import { formatUtc } from "@/lib/format";
 import { firstParam } from "@/lib/params";
-import { ROLE_LABEL, type Role } from "@/lib/reviewers";
+import { ROLE_LABEL, isReviewer, type Role } from "@/lib/reviewers";
 import { reviewAction } from "@/lib/review-actions";
 import { getSession } from "@/lib/session";
 export const dynamic = "force-dynamic";
@@ -150,7 +150,7 @@ export default async function BatchPage({ params, searchParams }: {
   const batch = await getBatch(decoded);
   if (!batch) notFound();
   const session = await getSession();
-  const reviewer = scopeFor(session) === "all" && session ? session : null;
+  const reviewer = isReviewer(session) ? session : null;
   const [report, histories] = await Promise.all([
     getBatchReport(batch.batchId).catch(() => null),
     Promise.all(batch.items.map((i) => getDecisions(batch.batchId, i.conceptId).catch(() => null))),
