@@ -2,6 +2,7 @@ import "server-only";
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { createFlag, postDecision, resolveFlag, type FlagTarget } from "./api";
+import { allowAccountAction } from "./limits";
 import { clientIp } from "./rate-limit";
 import type { ReviewerRole } from "./reviewers";
 import { getSession, type Session } from "./session";
@@ -18,10 +19,10 @@ import { TURNSTILE_RESPONSE_FIELD, verifyTurnstile } from "./turnstile";
  */
 
 export type ReviewCode = "saved" | "forbidden" | "captcha" | "invalid" | "stale" | "decided" | "checks" | "issue_open"
-  | "approved" | "checked" | "removed" | "failed";
+  | "approved" | "checked" | "removed" | "failed" | "rate_limited";
 export type FlagCode = "sent" | "forbidden" | "captcha" | "invalid" | "failed";
 export type ResolveCode = "resolved" | "forbidden" | "captcha" | "invalid" | "failed";
-export type ActionResult<C extends string> = { status: 200 | 400 | 403 | 409 | 502; code: C };
+export type ActionResult<C extends string> = { status: 200 | 400 | 403 | 409 | 429 | 502; code: C };
 
 export const ISSUE_NOTE_MIN = 5, NOTE_MAX = 1000, FLAG_MESSAGE_MIN = 5, FLAG_MESSAGE_MAX = 2000;
 const ID_MAX = 200;
@@ -81,6 +82,7 @@ export async function submitReview(fd: FormData): Promise<ActionResult<ReviewCod
   if (decision !== "ok" && decision !== "issue") return { status: 400, code: "invalid" };
   if (note.length > NOTE_MAX || (decision === "issue" && note.length < ISSUE_NOTE_MIN)) return { status: 400, code: "invalid" };
 
+  if (!allowAccountAction("decision", session.email)) return { status: 429, code: "rate_limited" };
   if (!(await turnstilePassed(fd))) return { status: 403, code: "captcha" };
 
   const r = await postDecision(batchId, conceptId, { decision, note, reviewerEmail: session.email,
@@ -112,6 +114,7 @@ export async function submitFlag(fd: FormData): Promise<ActionResult<FlagCode>> 
   if (!(FLAG_TARGETS as readonly string[]).includes(targetType) || !validId(targetId)) return { status: 400, code: "invalid" };
   if (message.length < FLAG_MESSAGE_MIN || message.length > FLAG_MESSAGE_MAX) return { status: 400, code: "invalid" };
 
+  if (!allowAccountAction("flag", session.email)) return { status: 429, code: "failed" };
   if (!(await turnstilePassed(fd))) return { status: 403, code: "captcha" };
 
   const r = await createFlag({ targetType: targetType as FlagTarget, targetId, message, reporterEmail: session.email });

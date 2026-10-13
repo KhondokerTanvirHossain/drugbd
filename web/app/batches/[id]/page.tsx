@@ -6,7 +6,7 @@ import { ISSUE_NOTE_MIN, NOTE_MAX } from "@/lib/actions-core";
 import {
   getBatch, getBatchReport, getDecisions, type BatchReport, type PublicDecision, type StageCounts, type StageResult,
 } from "@/lib/api";
-import { BATCHES_REVIEWERS_ONLY } from "@/lib/copy";
+import { BATCHES_REVIEWERS_ONLY, TOO_MANY_REQUESTS } from "@/lib/copy";
 import { summariseSource } from "@/lib/evidence";
 import { formatUtc } from "@/lib/format";
 import { firstParam } from "@/lib/params";
@@ -31,6 +31,7 @@ const REVIEW_OUTCOME: Record<string, { text: string; ok: boolean }> = {
   checked: { text: "Your check is already recorded for this record.", ok: false },
   removed: { text: "This record was removed from the batch file.", ok: false },
   failed: { text: "The decision could not be saved. Please try again.", ok: false },
+  rate_limited: { text: TOO_MANY_REQUESTS, ok: false },
 };
 
 const approvalLabel = (status: string) => status === "approved" ? "approved" : status === "in_review" ? "in review" : status;

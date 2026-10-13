@@ -10,6 +10,8 @@ vi.mock("@/lib/turnstile", async (importOriginal) => ({
 vi.mock("next/headers", () => ({ headers: async () => new Headers({ "x-forwarded-for": "203.0.113.9, 10.0.0.1" }) }));
 const revalidatePath = vi.fn();
 vi.mock("next/cache", () => ({ revalidatePath: (p: string) => revalidatePath(p) }));
+const allowAccountAction = vi.fn((_kind: string, _email: string) => true);
+vi.mock("@/lib/limits", () => ({ allowAccountAction: (k: string, e: string) => allowAccountAction(k, e) }));
 
 import { submitFlag, submitResolve, submitReview } from "@/lib/actions-core";
 import { flagAction, resolveFlagAction, reviewAction } from "@/lib/review-actions";
@@ -41,6 +43,7 @@ beforeEach(() => {
   verifyTurnstile.mockReset();
   verifyTurnstile.mockResolvedValue(true);
   revalidatePath.mockReset();
+  allowAccountAction.mockReset(); allowAccountAction.mockReturnValue(true);
   fetchMock = vi.fn().mockResolvedValue(ok({ review: "ok", batchStatus: "approved" }, 201));
   vi.stubGlobal("fetch", fetchMock);
 });
@@ -260,5 +263,23 @@ describe("submitResolve (resolve flag server action)", () => {
     getSession.mockResolvedValue(USER);
     await expect(resolveFlagAction(form({ flagId: "3" }))).rejects.toSatisfy((e) =>
       redirectTarget(e) === "/flags?resolve=forbidden");
+  });
+});
+
+describe("per-account action limits (§9.3)", () => {
+  it("over 60 decisions a minute: rate_limited, with no Turnstile or API call", async () => {
+    getSession.mockResolvedValue(PHARMACIST);
+    allowAccountAction.mockReturnValue(false);
+    expect(await submitReview(review())).toEqual({ status: 429, code: "rate_limited" });
+    expect(allowAccountAction).toHaveBeenCalledWith("decision", "pharm@example.org");
+    expect(verifyTurnstile).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+  it("over 10 flags an hour: the flag outcome is failed", async () => {
+    getSession.mockResolvedValue(USER);
+    allowAccountAction.mockReturnValue(false);
+    expect(await submitFlag(flag())).toEqual({ status: 429, code: "failed" });
+    expect(allowAccountAction).toHaveBeenCalledWith("flag", "someone@gmail.com");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
