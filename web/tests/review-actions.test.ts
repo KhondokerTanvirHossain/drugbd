@@ -5,7 +5,7 @@ vi.mock("@/lib/session", () => ({ getSession: () => getSession() }));
 const verifyTurnstile = vi.fn();
 vi.mock("@/lib/turnstile", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/turnstile")>()),
-  verifyTurnstile: (token: unknown, ip: unknown) => verifyTurnstile(token, ip),
+  verifyTurnstile: (token: unknown, ip: unknown, action: unknown) => verifyTurnstile(token, ip, action),
 }));
 vi.mock("next/headers", () => ({ headers: async () => new Headers({ "x-forwarded-for": "203.0.113.9, 10.0.0.1" }) }));
 const revalidatePath = vi.fn();
@@ -69,7 +69,7 @@ describe("submitReview (review decision server action)", () => {
     expect(await submitReview(review())).toMatchObject({ status: 403, code: "captcha" });
     expect(await submitReview(review({ "cf-turnstile-response": "" }))).toMatchObject({ status: 403, code: "captcha" });
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(verifyTurnstile).toHaveBeenCalledWith("ts-token", "203.0.113.9");
+    expect(verifyTurnstile).toHaveBeenCalledWith("ts-token", "203.0.113.9", "decision");
   });
 
   it("a pharmacist's OK calls the API with the token, the session's email and role, then revalidates the page", async () => {
@@ -281,5 +281,16 @@ describe("per-account action limits (§9.3)", () => {
     expect(await submitFlag(flag())).toEqual({ status: 429, code: "failed" });
     expect(allowAccountAction).toHaveBeenCalledWith("flag", "someone@gmail.com");
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("Turnstile actions (§9.2)", () => {
+  it("flags check action=flag and resolve checks action=resolve", async () => {
+    getSession.mockResolvedValue(PHARMACIST);
+    await submitFlag(flag());
+    expect(verifyTurnstile).toHaveBeenLastCalledWith("ts-token", "203.0.113.9", "flag");
+    fetchMock.mockResolvedValue(ok({ id: 1, status: "resolved" }));
+    await submitResolve(form({ flagId: "7", "cf-turnstile-response": "ts-token" }));
+    expect(verifyTurnstile).toHaveBeenLastCalledWith("ts-token", "203.0.113.9", "resolve");
   });
 });

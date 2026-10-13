@@ -7,6 +7,7 @@ import { clientIp } from "./rate-limit";
 import type { ReviewerRole } from "./reviewers";
 import { getSession, type Session } from "./session";
 import { TURNSTILE_RESPONSE_FIELD, verifyTurnstile } from "./turnstile";
+import type { TurnstileAction } from "./turnstile-actions";
 
 /**
  * The checks behind the review and flag server actions. Each write runs, in order:
@@ -55,8 +56,8 @@ const isReviewer = (s: Session | null): s is Session & { role: ReviewerRole } =>
   s?.role === "pharmacist" || s?.role === "engineer";
 const validId = (s: string) => s.length > 0 && s.length <= ID_MAX;
 
-async function turnstilePassed(fd: FormData): Promise<boolean> {
-  return verifyTurnstile(fd.get(TURNSTILE_RESPONSE_FIELD), clientIp(await headers()));
+async function turnstilePassed(fd: FormData, action: TurnstileAction): Promise<boolean> {
+  return verifyTurnstile(fd.get(TURNSTILE_RESPONSE_FIELD), clientIp(await headers()), action);
 }
 
 /** Path of a batch page, used for both revalidation and the redirect back. */
@@ -83,7 +84,7 @@ export async function submitReview(fd: FormData): Promise<ActionResult<ReviewCod
   if (note.length > NOTE_MAX || (decision === "issue" && note.length < ISSUE_NOTE_MIN)) return { status: 400, code: "invalid" };
 
   if (!allowAccountAction("decision", session.email)) return { status: 429, code: "rate_limited" };
-  if (!(await turnstilePassed(fd))) return { status: 403, code: "captcha" };
+  if (!(await turnstilePassed(fd, "decision"))) return { status: 403, code: "captcha" };
 
   const r = await postDecision(batchId, conceptId, { decision, note, reviewerEmail: session.email,
     reviewerRole: session.role, extractedAt, expectedLastDecisionId, requestId });
@@ -115,7 +116,7 @@ export async function submitFlag(fd: FormData): Promise<ActionResult<FlagCode>> 
   if (message.length < FLAG_MESSAGE_MIN || message.length > FLAG_MESSAGE_MAX) return { status: 400, code: "invalid" };
 
   if (!allowAccountAction("flag", session.email)) return { status: 429, code: "failed" };
-  if (!(await turnstilePassed(fd))) return { status: 403, code: "captcha" };
+  if (!(await turnstilePassed(fd, "flag"))) return { status: 403, code: "captcha" };
 
   const r = await createFlag({ targetType: targetType as FlagTarget, targetId, message, reporterEmail: session.email });
   if (r.ok) {
@@ -132,7 +133,7 @@ export async function submitResolve(fd: FormData): Promise<ActionResult<ResolveC
   const raw = field(fd, "flagId");
   if (!/^[1-9][0-9]{0,17}$/.test(raw)) return { status: 400, code: "invalid" };
 
-  if (!(await turnstilePassed(fd))) return { status: 403, code: "captcha" };
+  if (!(await turnstilePassed(fd, "resolve"))) return { status: 403, code: "captcha" };
 
   const r = await resolveFlag(Number(raw), session.email);
   if (!r.ok) return r.status === 404 || r.status === 409 ? { status: 400, code: "invalid" } : { status: 502, code: "failed" };
