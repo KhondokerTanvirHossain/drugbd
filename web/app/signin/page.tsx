@@ -1,6 +1,5 @@
 import { ROLE_LABEL } from "@/lib/reviewers";
 import { getSession } from "@/lib/session";
-import { signOutAction } from "@/lib/session-actions";
 import SignInButton, { type FirebaseWebConfig } from "./SignInButton";
 
 export const dynamic = "force-dynamic";
@@ -26,7 +25,7 @@ export default async function SignInPage() {
       {session ? (
         <>
           <p>Signed in as {ROLE_LABEL[session.role]}.</p>
-          <form action={signOutAction}><button type="submit">Sign out</button></form>
+          <form method="post" action="/signout"><button type="submit">Sign out</button></form>
         </>
       ) : configured ? (
         <SignInButton config={config} />

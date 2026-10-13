@@ -9,7 +9,6 @@ vi.mock("next/headers", () => ({ cookies: async () => cookieStore }));
 
 import Header from "@/components/Header";
 import RootLayout from "@/app/layout";
-import { signOutAction } from "@/lib/session-actions";
 
 beforeEach(() => { getSession.mockReset(); cookieStore.delete.mockReset(); });
 
@@ -18,6 +17,7 @@ describe("Header", () => {
     const html = renderToStaticMarkup(<Header session={{ email: "pharm@example.org", role: "pharmacist" }} />);
     expect(html).toContain("Signed in as Pharmacist");
     expect(html).toMatch(/<form[^>]*>.*<button[^>]*type="submit"[^>]*>Sign out<\/button><\/form>/);
+    expect(html).toContain('<form class="inlineForm" action="/signout" method="post">');
     expect(html).not.toContain("pharm@example.org");
     expect(html).not.toContain("Reviewer sign-in");
   });
@@ -61,12 +61,5 @@ describe("RootLayout", () => {
   it("renders the sign-in link for an anonymous visitor", async () => {
     getSession.mockResolvedValue(null);
     expect(renderToStaticMarkup(await RootLayout({ children: null }))).toContain("Reviewer sign-in");
-  });
-});
-
-describe("signOutAction", () => {
-  it("deletes the session cookie and redirects home", async () => {
-    await expect(signOutAction()).rejects.toSatisfy((e: { digest?: string }) => /NEXT_REDIRECT;[^;]*;\/;/.test(String(e.digest)));
-    expect(cookieStore.delete).toHaveBeenCalledWith("intellidrugs_session");
   });
 });
