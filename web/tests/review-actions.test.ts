@@ -11,11 +11,19 @@ vi.mock("next/headers", () => ({ headers: async () => new Headers({ "x-forwarded
 const revalidatePath = vi.fn();
 vi.mock("next/cache", () => ({ revalidatePath: (p: string) => revalidatePath(p) }));
 const allowAccountAction = vi.fn((_kind: string, _email: string) => true);
-vi.mock("@/lib/limits", () => ({ allowAccountAction: (k: string, e: string) => allowAccountAction(k, e) }));
+const deniedAudit = { now: 0, limits: undefined as unknown };
+vi.mock("@/lib/limits", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/limits")>();
+  return { ...real, allowAccountAction: (k: string, e: string) => allowAccountAction(k, e),
+    // The real denied-audit limiter on a fresh instance per test with a controlled clock.
+    allowDeniedAudit: (o: string, e: string | null, ip: string) =>
+      real.allowDeniedAudit(o, e, ip, deniedAudit.limits as ReturnType<typeof real.createLimits>) };
+});
 const recordAudit = vi.fn();
 vi.mock("@/lib/audit", () => ({ recordAudit: (e: unknown) => recordAudit(e) }));
 
 import { submitFlag, submitResolve, submitReview } from "@/lib/actions-core";
+import { createLimits } from "@/lib/limits";
 import { flagAction, resolveFlagAction, reviewAction } from "@/lib/review-actions";
 
 const TOKEN = "test-internal-token-0123456789abcdef";
@@ -47,6 +55,7 @@ beforeEach(() => {
   revalidatePath.mockReset();
   allowAccountAction.mockReset(); allowAccountAction.mockReturnValue(true);
   recordAudit.mockReset(); recordAudit.mockResolvedValue(true);
+  deniedAudit.now = 0; deniedAudit.limits = createLimits(() => deniedAudit.now);
   fetchMock = vi.fn().mockResolvedValue(ok({ review: "ok", batchStatus: "approved" }, 201));
   vi.stubGlobal("fetch", fetchMock);
 });
@@ -329,10 +338,12 @@ describe("decision_denied audit (§5.15, §9.3)", () => {
     for (const bad of [{ batchId: "0001 pilot" }, { batchId: "<script>alert(1)</script>" }, { conceptId: "N-1 call me 01711" },
       { conceptId: "../x" }, { batchId: "a/b" }, { conceptId: "\u09a8\u09be\u09aa\u09be" }, { batchId: "x".repeat(100) }]) {
       recordAudit.mockClear();
+      deniedAudit.now += 60_000;                                 // one denied row per minute per actor and outcome
       expect(await submitReview(review(bad))).toEqual({ status: 403, code: "forbidden" });
       expect(recordAudit).toHaveBeenCalledWith({ ...denied("forbidden", "someone@gmail.com", "user"), targetType: null, targetId: null });
     }
     recordAudit.mockClear();
+    deniedAudit.now += 60_000;
     await submitReview(review({ batchId: "0001-pilot", conceptId: "186-0030-006--napa" }));
     expect(recordAudit).toHaveBeenCalledWith({ ...denied("forbidden", "someone@gmail.com", "user"),
       targetId: "0001-pilot/186-0030-006--napa" });
@@ -346,6 +357,30 @@ describe("decision_denied audit (§5.15, §9.3)", () => {
     await submitReview(review());
     await submitReview(review({ decision: "maybe" }));
     expect(recordAudit).not.toHaveBeenCalled();
+  });
+  it("repeated denials from one actor and outcome write one row per minute; the answer never changes", async () => {
+    getSession.mockResolvedValue(null);
+    for (let i = 0; i < 5; i++) expect(await submitReview(review())).toEqual({ status: 403, code: "forbidden" });
+    expect(recordAudit).toHaveBeenCalledTimes(1);
+    getSession.mockResolvedValue(PHARMACIST);
+    allowAccountAction.mockReturnValue(false);
+    for (let i = 0; i < 5; i++) expect(await submitReview(review())).toEqual({ status: 429, code: "rate_limited" });
+    expect(recordAudit).toHaveBeenCalledTimes(2);
+    allowAccountAction.mockReturnValue(true);
+    verifyTurnstile.mockResolvedValue(false);
+    for (let i = 0; i < 3; i++) expect(await submitReview(review())).toEqual({ status: 403, code: "captcha" });
+    expect(recordAudit).toHaveBeenCalledTimes(3);                 // another outcome, its own window
+    getSession.mockResolvedValue(ENGINEER);
+    await submitReview(review());
+    expect(recordAudit).toHaveBeenCalledTimes(4);                 // another account behind the same IP
+    deniedAudit.now = 59_999;
+    getSession.mockResolvedValue(null);
+    await submitReview(review());
+    expect(recordAudit).toHaveBeenCalledTimes(4);
+    deniedAudit.now = 60_000;                                    // a new window writes again
+    await submitReview(review());
+    expect(recordAudit).toHaveBeenCalledTimes(5);
+    expect(recordAudit).toHaveBeenLastCalledWith({ ...denied("unauthenticated", null, null), targetType: null, targetId: null });
   });
   it("an audit outage never changes the answer", async () => {
     getSession.mockResolvedValue(PHARMACIST);

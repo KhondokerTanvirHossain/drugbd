@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { createFlag, postDecision, resolveFlag, type FlagTarget } from "./api";
 import { recordAudit } from "./audit";
-import { allowAccountAction } from "./limits";
+import { allowAccountAction, allowDeniedAudit } from "./limits";
 import { clientIp } from "./rate-limit";
 import type { ReviewerRole } from "./reviewers";
 import { getSession, type Session } from "./session";
@@ -63,9 +63,12 @@ type DeniedOutcome = "unauthenticated" | "forbidden" | "rate_limited" | "captcha
 /**
  * §5.15 decision_denied: a decision stopped here, before any API call. The target is the batch item only for a
  * signed-in caller and only when both ids match AUDIT_ID_RE (never other form text; an anonymous caller's ids are
- * unverified form text, so its row has no target). Best effort: an audit outage never changes the action's answer.
+ * unverified form text, so its row has no target). Throttled to one row per minute per actor and outcome
+ * (allowDeniedAudit), so repeated denials cannot fill the append-only table. Best effort: a skipped write or an audit
+ * outage never changes the action's answer.
  */
 async function denyDecision(outcome: DeniedOutcome, session: Session | null, fd: FormData): Promise<void> {
+  if (!allowDeniedAudit(outcome, session?.email ?? null, clientIp(await headers()))) return;
   const batchId = field(fd, "batchId"), conceptId = field(fd, "conceptId");
   const targetId = outcome !== "unauthenticated" && AUDIT_ID_RE.test(batchId) && AUDIT_ID_RE.test(conceptId)
     ? `${batchId}/${conceptId}` : null;

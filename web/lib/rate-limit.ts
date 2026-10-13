@@ -58,7 +58,7 @@ export function createWindowLimiter({ limit, windowMs, now = Date.now, maxKeys =
     while (hits.size > maxKeys) hits.delete(hits.keys().next().value as string);
     return true;
   }
-  return { allow, size: () => hits.size };
+  return { allow, size: () => hits.size, keys: () => hits.keys() };
 }
 
 const DAY_MS = 86_400_000;
