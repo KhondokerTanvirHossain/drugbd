@@ -8,7 +8,9 @@ const lint = (code: string) => stylelint.lint({ code, config, codeFilename: `${W
 
 describe("stylelint colour-literal ban (§3.1)", () => {
   it.each([".a{color:#fff}", ".a{color:#1F5BB8}", ".a{color:red}", ".a{background:rgb(0 0 0)}",
-    ".a{background:rgba(0,0,0,.5)}", ".a{color:hsl(0 0% 0%)}"])("rejects %s", async (code) => {
+    ".a{background:rgba(0,0,0,.5)}", ".a{color:hsl(0 0% 0%)}",
+    ".a{background:hsla(0,0%,0%,.5)}", ".a{color:hwb(0 0% 0%)}", ".a{color:oklch(0.5 0.1 20)}",
+    ".a{background:RGB(0 0 0)}"])("rejects %s", async (code) => {
     expect((await lint(code)).errored).toBe(true);
   });
 

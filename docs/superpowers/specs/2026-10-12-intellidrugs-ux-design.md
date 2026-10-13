@@ -245,6 +245,7 @@ Stored emails ("Emails of anyone else") are never rendered by any route. The tea
 - **`$WEB/styles/tokens.css` is a byte-identical copy of `docs/design/intellidrugs/tokens.css`.** A unit test compares SHA-256 hashes. To change a token, change the docs copy first, then copy it.
 - `$WEB/styles/fonts.css` holds only `@font-face` rules (§3.2).
 - Page and component layout lives in CSS Modules (`*.module.css`). Modules use tokens only, never raw colour values. A Stylelint rule (`color-no-hex`, `color-named: never`, and `function-disallowed-list: rgb, rgba, hsl`) fails the build on any colour literal outside `tokens.css`.
+  - *Amendment (P1A Task 1 review):* the three names `rgb, rgba, hsl` are the minimum, not the limit. The rule is `function-disallowed-list: ["/^(rgb|rgba|hsl|hsla|hwb|lab|lch|oklab|oklch|color)$/i"]`, which bans every colour function, case-insensitively, so `hsla()`, `hwb()`, `oklch()` and `RGB(` also fail the build.
 - Layout rules that the boards define in their second `<style>` block (`.pg`, `.app`, `.panes`, `.d-…`, `.s-…`, `.d-shell`, and so on) are ported into modules with the same values.
 - Remove every inline `style={{…}}` object in `$WEB`. The only allowed inline styles are CSS custom properties: a measured value (for example `--w: 40%` on progress meters), and `--dur-commit` on the desk toast, set to the reviewer's undo window (§5.8.4).
 - Root layout: `<html lang="en">`, `<body>` with no inline style. Global imports, in order: `tokens.css`, `fonts.css`.

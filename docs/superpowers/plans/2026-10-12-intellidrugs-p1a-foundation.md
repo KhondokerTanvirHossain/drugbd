@@ -22,6 +22,7 @@ Copied from the spec. Every task's requirements include this section.
 
 - `$WEB/styles/tokens.css` is a byte-identical copy of `docs/design/intellidrugs/tokens.css`. A unit test compares SHA-256 hashes. To change a token, change the docs copy first, then copy it. (§3.1)
 - Page and component layout lives in CSS Modules (`*.module.css`). Modules use tokens only, never raw colour values. A Stylelint rule (`color-no-hex`, `color-named: never`, and `function-disallowed-list: rgb, rgba, hsl`) fails the build on any colour literal outside `tokens.css`. (§3.1)
+  - *Amendment (P1A Task 1 review):* the three names `rgb, rgba, hsl` are the minimum, not the limit. The rule is `function-disallowed-list: ["/^(rgb|rgba|hsl|hsla|hwb|lab|lch|oklab|oklch|color)$/i"]`, which bans every colour function, case-insensitively, so `hsla()`, `hwb()`, `oklch()` and `RGB(` also fail the build.
 - Remove every inline `style={{…}}` object in `$WEB`. The only allowed inline styles are CSS custom properties: a measured value (for example `--w: 40%` on progress meters), and `--dur-commit` on the desk toast, set to the reviewer's undo window (§5.8.4). (§3.1)
 - Root layout: `<html lang="en">`, `<body>` with no inline style. Global imports, in order: `tokens.css`, `fonts.css`. (§3.1)
 - Self-host the fonts. Do not load from Google Fonts at runtime. `fonts.css` declares `font-family: "Onest"` and `font-family: "IBM Plex Mono"`. Use `font-display: swap`. The root layout preloads Onest only. (§3.2)
@@ -371,7 +372,7 @@ export default {
   rules: {
     "color-no-hex": true,
     "color-named": "never",
-    "function-disallowed-list": ["rgb", "rgba", "hsl"],
+    "function-disallowed-list": ["/^(rgb|rgba|hsl|hsla|hwb|lab|lch|oklab|oklch|color)$/i"],
   },
   ignoreFiles: ["styles/tokens.css", "node_modules/**", ".next/**", "public/**", "playwright-report/**", "test-results/**"],
 };
