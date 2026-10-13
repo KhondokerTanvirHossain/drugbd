@@ -105,20 +105,20 @@ class CheckApiIntegrationTest {
     }
 
     @Test void chloramphenicolEyeDropsUseTheOphthalmicEntry() {
-        // Review Focus 3: the seed has a warfarin pair only on DDInter352 (ophthalmic).
+        // §1.5, §8.2: DDInter lists warfarin against DDInter351 (systemic) only. The eye drop uses DDInter352: no alert.
         check("C-EYE", "W-1").expectStatus().isOk()
-            .expectBody()
-            .jsonPath("$.data.alerts.length()").isEqualTo(1)
-            .jsonPath("$.data.alerts[0].severity").isEqualTo("moderate")
-            .jsonPath("$.data.alerts[0].a.conceptId").isEqualTo("C-EYE")
-            .jsonPath("$.data.alerts[0].a.bdsId").isEqualTo("BDS-000003")
-            .jsonPath("$.data.alerts[0].interaction").isEqualTo("Chloramphenicol may increase the serum concentration of warfarin.")
-            .jsonPath("$.data.alerts[0].routeAssumed").isEqualTo(false);
-        // the systemic capsule uses DDInter351, which has no warfarin pair in the seed
-        check("C-CAP", "W-1").expectStatus().isOk()
             .expectBody()
             .jsonPath("$.data.alerts.length()").isEqualTo(0)
             .jsonPath("$.data.noData.length()").isEqualTo(0);
+        // the systemic capsule uses DDInter351 and gets the moderate alert
+        check("C-CAP", "W-1").expectStatus().isOk()
+            .expectBody()
+            .jsonPath("$.data.alerts.length()").isEqualTo(1)
+            .jsonPath("$.data.alerts[0].severity").isEqualTo("moderate")
+            .jsonPath("$.data.alerts[0].a.conceptId").isEqualTo("C-CAP")
+            .jsonPath("$.data.alerts[0].a.bdsId").isEqualTo("BDS-000003")
+            .jsonPath("$.data.alerts[0].interaction").isEqualTo("Chloramphenicol may increase the serum concentration of warfarin.")
+            .jsonPath("$.data.alerts[0].routeAssumed").isEqualTo(false);
     }
 
     @Test void productWithoutClinicalDrugRouteIsAssumed() {

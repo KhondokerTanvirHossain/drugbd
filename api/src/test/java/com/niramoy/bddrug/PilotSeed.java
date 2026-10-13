@@ -90,7 +90,7 @@ final class PilotSeed {
          ('DDInter14','Acetaminophen','{N02BE01}','DB00316','systemic');
         INSERT INTO curated.ddinter_pair (ddinter_a, ddinter_b, severity, actions, partner_name_a, partner_name_b, interaction_id) VALUES
          ('DDInter1951','DDInter20','major','{Monitor,Avoid}','Warfarin','Acetylsalicylic acid','IA-1'),
-         ('DDInter1951','DDInter352','moderate','{Monitor}','Warfarin','Chloramphenicol (ophthalmic)','IA-2'),
+         ('DDInter1951','DDInter351','moderate','{Monitor}','Warfarin','Chloramphenicol','IA-2'),
          ('DDInter14','DDInter1951','moderate','{}','Acetaminophen','Warfarin',NULL),
          ('DDInter1951','DDInter999','minor','{}','Warfarin','Some Herb',NULL),
          ('DDInter1951','DDInter5','unknown','{}','Warfarin','Alpha Unknown',NULL);

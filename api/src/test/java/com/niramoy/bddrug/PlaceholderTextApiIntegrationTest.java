@@ -45,7 +45,7 @@ class PlaceholderTextApiIntegrationTest {
     }
 
     @Test void placeholderInteractionAndManagementAreNullOnTheChecker() {
-        check("C-EYE", "W-1").expectStatus().isOk()
+        check("C-CAP", "W-1").expectStatus().isOk()
             .expectBody()
             .jsonPath("$.data.alerts.length()").isEqualTo(1)
             .jsonPath("$.data.alerts[0].severity").isEqualTo("moderate")
