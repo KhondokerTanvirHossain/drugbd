@@ -1,0 +1,2 @@
+.root { display: flex; flex-direction: column; gap: var(--s3); max-width: 420px; }
+.hint { font-size: 13.5px; color: var(--fg-2); }
