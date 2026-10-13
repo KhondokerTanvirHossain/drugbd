@@ -1,0 +1,1806 @@
+<title>IntelliDrugs Public Site</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* =====================================================================
+   IntelliDrugs design system v1.0  ·  tokens + base + components
+   Direction A "Clinical Calm". Apple HIG restraint, Material 3 structure.
+
+   Fonts (put this in the page <head> before this stylesheet):
+   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+   Rules this file enforces:
+   - Every colour is a token. Light on :root, dark in two blocks
+     (system preference unless data-theme="light", and data-theme="dark").
+   - Every text token passes 4.5:1 on every surface token, both themes.
+     Control boundaries (--line-ctl) and focus rings pass 3:1.
+   - Translucent material is for chrome only: toolbar, sidebar, decision bar.
+   - Hatch (.hatch) means "no interaction data" and nothing else.
+   - Green (--ok) means "approved by a pharmacist" and nothing else.
+   - Square-cornered chips are severity. Rounded pills are review status.
+   ===================================================================== */
+
+:root{
+  /* Type */
+  --font-ui:"Onest",-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+
+  /* Neutrals, biased very slightly toward the cobalt accent */
+  --bg:#F5F6F8;          /* page ground */
+  --canvas:#FFFFFF;      /* content panes */
+  --surface:#FFFFFF;     /* cards, plates */
+  --surface-2:#F2F4F7;   /* tonal container, source column */
+  --surface-3:#E8EBF0;   /* tonal button, pressed tint */
+  --line:#E2E5EA;        /* decorative dividers only */
+  --line-strong:#CBD0D8; /* decorative outlines only */
+  --line-ctl:#737A86;    /* boundary of inputs and controls, 3:1+ */
+  --fg:#15181D;          /* primary text */
+  --fg-2:#474E59;        /* secondary text */
+  --fg-3:#59606B;        /* tertiary text, still 4.5:1+ everywhere */
+
+  /* The one accent: selection, primary action, focus */
+  --accent:#1F5BB8;
+  --accent-hover:#174A99;
+  --on-accent:#FFFFFF;
+  --accent-soft:#E8EFFA;
+  --accent-line:#BACDEC;
+
+  /* Semantic roles (never decorative) */
+  --crit:#B42318;  --crit-soft:#FDEDEB; --crit-line:#F2BBB4; --on-crit:#FFFFFF;
+  --warn:#855000;  --warn-soft:#FFF4DF; --warn-line:#EED29C;
+  --ok:#1A7044;    --ok-soft:#E6F4EC;   --ok-line:#ADDAC1;   /* pharmacist approval only */
+  --info:#215E7C;  --info-soft:#E6F1F7; --info-line:#B5D5E6;
+  --nodata:#4F5661; --nodata-soft:#F3F4F6; --nodata-hatch:#DFE2E7; /* hatch material only */
+
+  /* Material (chrome only) */
+  --material:rgba(246,247,249,.82);
+  --material-solid:#F4F5F8;            /* reduced-transparency fallback */
+  --material-edge:rgba(255,255,255,.7);
+  --scrim:rgba(21,24,29,.32);
+
+  /* Toast (inverted surface) */
+  --toast-bg:#20242B; --toast-fg:#F2F4F7; --toast-action:#9DBEF5; --toast-track:#3A404A;
+
+  /* Brand mark (fixed in both themes) */
+  --brand-mark:#1F5BB8; --on-brand-mark:#FFFFFF;
+
+  /* Google sign-in glyph colours (Google's own) */
+  --g-blue:#4285F4; --g-red:#EA4335; --g-yellow:#FBBC05; --g-green:#34A853;
+
+  /* Elevation */
+  --shadow-1:0 1px 2px rgba(21,24,29,.06),0 0 0 1px rgba(21,24,29,.04);
+  --shadow-2:0 10px 28px -8px rgba(21,24,29,.18),0 0 0 1px rgba(21,24,29,.06);
+  --shadow-win:0 40px 80px -30px rgba(21,24,29,.28),0 0 0 1px rgba(21,24,29,.07);
+  --focus:#1F5BB8;
+
+  /* M3 state-layer opacities */
+  --sl-hover:.08; --sl-focus:.10; --sl-press:.12;
+
+  /* Spacing, 4-point */
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px; --s7:48px; --s8:72px;
+
+  /* Radius by role */
+  --r-sev:2px;     /* severity chips: square */
+  --r-chip:6px;    /* code chips, kbd */
+  --r-ctl:10px;    /* buttons, inputs, segmented track */
+  --r-ctl-sm:8px;  /* small buttons, filters, search, segments, toast undo */
+  --r-card:12px;   /* stage cards, banners, rows */
+  --r-panel:14px;  /* panels, tables */
+  --r-win:20px;    /* windows, sheets */
+  --r-pill:999px;  /* review-status pills only */
+
+  /* No-data hatch: one pitch everywhere (.hatch, .sev--nodata, swatches) */
+  --hatch:repeating-linear-gradient(135deg,var(--nodata-hatch) 0 2px,transparent 2px 7px);
+
+  /* Review desk pane widths (reviewer workspace and the board's live desk) */
+  --pane-side:232px; --pane-list:336px;
+
+  /* Motion (critically damped; nothing moves unless a person caused it) */
+  --dur-press:100ms; --dur-state:200ms; --dur-pane:320ms; --dur-exit:200ms; --dur-commit:8000ms;
+  --ease-std:cubic-bezier(.2,0,0,1);      /* M3 standard */
+  --ease-dec:cubic-bezier(.05,.7,.1,1);   /* M3 emphasized decelerate: enter */
+  --ease-acc:cubic-bezier(.3,0,.8,.15);   /* M3 emphasized accelerate: exit */
+
+  /* Type scale: size / line-height / weight / tracking */
+  --t-display:600 48px/1.08 var(--font-ui);  --tr-display:-.034em;
+  --t-title1:600 28px/1.2 var(--font-ui);    --tr-title1:-.02em;
+  --t-title2:600 20px/1.3 var(--font-ui);    --tr-title2:-.015em;
+  --t-title3:600 15px/1.35 var(--font-ui);   --tr-title3:-.008em;
+  --t-body:400 15px/1.47 var(--font-ui);     --tr-body:-.003em;
+  --t-callout:400 13.5px/1.45 var(--font-ui);--tr-callout:0;
+  --t-label:500 12.5px/1.3 var(--font-ui);   --tr-label:.005em;
+  --t-mono:400 12.5px/1.45 var(--font-mono);
+
+  /* Icon masks (stroke icons, drawn in currentColor via mask) */
+  --i-clock:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7v5l3.2 2'/%3E%3C/svg%3E");
+  --i-seal:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 2L14.2 3.9L17 3.3L17.9 6.1L20.7 7L20.1 9.8L22 12L20.1 14.2L20.7 17L17.9 17.9L17 20.7L14.2 20.1L12 22L9.8 20.1L7 20.7L6.1 17.9L3.3 17L3.9 14.2L2 12L3.9 9.8L3.3 7L6.1 6.1L7 3.3L9.8 3.9Z'/%3E%3Cpath d='M8.4 12.2l2.5 2.5 4.7-4.9'/%3E%3C/svg%3E");
+  --i-wrench:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14.5 5.2a4.3 4.3 0 0 0-5.3 5.3L3.8 15.9a1.9 1.9 0 0 0 2.7 2.7l5.4-5.4a4.3 4.3 0 0 0 5.3-5.3l-2.7 2.7-2.3-.6-.6-2.3z'/%3E%3C/svg%3E");
+  --i-flag:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 21V4h12l-2.5 4.5L17 13H5'/%3E%3C/svg%3E");
+  --i-refresh:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 11a8 8 0 0 0-14.6-4.5M4 3v4h4M4 13a8 8 0 0 0 14.6 4.5M20 21v-4h-4'/%3E%3C/svg%3E");
+  --i-check:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4.5 12.5l4.8 4.8L19.5 7'/%3E%3C/svg%3E");
+  --i-warn:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7.5v5.5'/%3E%3Cpath d='M12 16.6v.1' stroke-width='2.6'/%3E%3C/svg%3E");
+  --i-fail:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8.2 3h7.6L21 8.2v7.6L15.8 21H8.2L3 15.8V8.2z'/%3E%3Cpath d='M9.2 9.2l5.6 5.6M14.8 9.2l-5.6 5.6'/%3E%3C/svg%3E");
+  --i-info:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 11v6'/%3E%3Cpath d='M12 7.4v.1' stroke-width='2.6'/%3E%3C/svg%3E");
+  --i-shield:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3l7 2.8v5.4c0 4.4-2.9 8-7 9.8-4.1-1.8-7-5.4-7-9.8V5.8z'/%3E%3C/svg%3E");
+  --i-undo:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 14L4 9l5-5'/%3E%3Cpath d='M4 9h10.5a5.5 5.5 0 0 1 0 11H11'/%3E%3C/svg%3E");
+  --i-search:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='6.5'/%3E%3Cpath d='M16 16l4.5 4.5'/%3E%3C/svg%3E");
+  --i-external:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5'/%3E%3C/svg%3E");
+  --i-code:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 7l-5 5 5 5M15 7l5 5-5 5'/%3E%3C/svg%3E");
+  --i-up:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 15l6-6 6 6'/%3E%3C/svg%3E");
+  --i-down:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  --i-stack:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3.5' y='5' width='17' height='14' rx='2.5'/%3E%3Cpath d='M3.5 10h17'/%3E%3C/svg%3E");
+}
+
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0B0D10; --canvas:#111317; --surface:#16191E; --surface-2:#1C2026; --surface-3:#252A31;
+    --line:#2A2F37; --line-strong:#3A414B; --line-ctl:#747C89;
+    --fg:#ECEEF2; --fg-2:#B9BFC8; --fg-3:#9AA1AC;
+    --accent:#8AB2F5; --accent-hover:#A3C3F7; --on-accent:#0A1830; --accent-soft:#16233A; --accent-line:#2D4672;
+    --crit:#FF9488; --crit-soft:#3A1714; --crit-line:#6B2A24; --on-crit:#2A0A07;
+    --warn:#F0BA5C; --warn-soft:#30220A; --warn-line:#5C4314;
+    --ok:#6FD09E; --ok-soft:#0F291C; --ok-line:#1E5137;
+    --info:#8CC6E8; --info-soft:#112532; --info-line:#23465A;
+    --nodata:#B0B6C0; --nodata-soft:#1B1E23; --nodata-hatch:#2A2F36;
+    --hatch:repeating-linear-gradient(135deg,var(--nodata-hatch) 0 2px,transparent 2px 7px);
+    --material:rgba(22,25,30,.82); --material-solid:#181B20; --material-edge:rgba(255,255,255,.06); --scrim:rgba(0,0,0,.5);
+    --toast-bg:#E6E9EE; --toast-fg:#15181D; --toast-action:#1A4FA3; --toast-track:#C3C9D2;
+    --shadow-1:0 1px 2px rgba(0,0,0,.4),0 0 0 1px rgba(255,255,255,.05);
+    --shadow-2:0 12px 30px -8px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.07);
+    --shadow-win:0 40px 80px -30px rgba(0,0,0,.8),0 0 0 1px rgba(255,255,255,.08);
+    --focus:#8AB2F5;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0B0D10; --canvas:#111317; --surface:#16191E; --surface-2:#1C2026; --surface-3:#252A31;
+  --line:#2A2F37; --line-strong:#3A414B; --line-ctl:#747C89;
+  --fg:#ECEEF2; --fg-2:#B9BFC8; --fg-3:#9AA1AC;
+  --accent:#8AB2F5; --accent-hover:#A3C3F7; --on-accent:#0A1830; --accent-soft:#16233A; --accent-line:#2D4672;
+  --crit:#FF9488; --crit-soft:#3A1714; --crit-line:#6B2A24; --on-crit:#2A0A07;
+  --warn:#F0BA5C; --warn-soft:#30220A; --warn-line:#5C4314;
+  --ok:#6FD09E; --ok-soft:#0F291C; --ok-line:#1E5137;
+  --info:#8CC6E8; --info-soft:#112532; --info-line:#23465A;
+  --nodata:#B0B6C0; --nodata-soft:#1B1E23; --nodata-hatch:#2A2F36;
+  --hatch:repeating-linear-gradient(135deg,var(--nodata-hatch) 0 2px,transparent 2px 7px);
+  --material:rgba(22,25,30,.82); --material-solid:#181B20; --material-edge:rgba(255,255,255,.06); --scrim:rgba(0,0,0,.5);
+  --toast-bg:#E6E9EE; --toast-fg:#15181D; --toast-action:#1A4FA3; --toast-track:#C3C9D2;
+  --shadow-1:0 1px 2px rgba(0,0,0,.4),0 0 0 1px rgba(255,255,255,.05);
+  --shadow-2:0 12px 30px -8px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.07);
+  --shadow-win:0 40px 80px -30px rgba(0,0,0,.8),0 0 0 1px rgba(255,255,255,.08);
+  --focus:#8AB2F5;
+  color-scheme:dark;
+}
+
+/* ---------- Base elements ---------- */
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:var(--t-body);letter-spacing:var(--tr-body);-webkit-font-smoothing:antialiased}
+h1,h2,h3,h4,h5,p,ul,ol,dl,dd,figure,blockquote{margin:0}
+h1,h2,h3{text-wrap:balance}
+ul,ol{padding:0;list-style:none}
+button,input,textarea,select{font:inherit;color:inherit;letter-spacing:inherit}
+button{cursor:pointer}
+table{border-collapse:collapse}
+a{color:var(--accent);text-underline-offset:2px}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+::selection{background:var(--accent-soft);color:var(--fg)}
+[hidden]{display:none!important}
+.sr-only{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.mono{font-family:var(--font-mono);font-size:.86em;letter-spacing:0;font-variant-numeric:tabular-nums}
+.num{font-variant-numeric:tabular-nums}
+
+/* Type roles */
+.t-display{font:var(--t-display);letter-spacing:var(--tr-display)}
+.t-title1{font:var(--t-title1);letter-spacing:var(--tr-title1)}
+.t-title2{font:var(--t-title2);letter-spacing:var(--tr-title2)}
+.t-title3{font:var(--t-title3);letter-spacing:var(--tr-title3)}
+.t-body{font:var(--t-body);letter-spacing:var(--tr-body)}
+.t-callout{font:var(--t-callout);color:var(--fg-2)}
+.t-label{font:var(--t-label);letter-spacing:var(--tr-label);color:var(--fg-3)}
+.t-mono{font:var(--t-mono)}
+
+/* Shared icon atom: any element with .ico and a --ico mask draws a 16px stroke icon in currentColor */
+.ico{display:inline-block;width:16px;height:16px;flex:none;background:currentColor;-webkit-mask:var(--ico) center/contain no-repeat;mask:var(--ico) center/contain no-repeat}
+
+/* Example marker: anything not from real data (names, future timestamps) carries this */
+.example{display:inline-flex;align-items:center;height:18px;padding:0 6px;border-radius:var(--r-chip);font:500 11px/1 var(--font-ui);letter-spacing:.01em;color:var(--fg-2);box-shadow:inset 0 0 0 1px var(--line-ctl);background:transparent;vertical-align:middle;white-space:nowrap}
+
+/* ---------- Wordmark ---------- */
+/* IntelliDrugs wordmark: Onest 600, tight tracking, cobalt full stop (aria-hidden). Size with font-size only. */
+.wordmark{font-family:var(--font-ui);font-weight:600;letter-spacing:-.04em;line-height:1;color:var(--fg);white-space:nowrap;font-feature-settings:"kern"}
+.wordmark-dot{color:var(--accent);margin-left:.01em}
+.wordmark-sub{font-weight:500;letter-spacing:-.01em;color:var(--fg-3);font-size:.76em;margin-left:.35em}
+
+/* ---------- Buttons ---------- */
+/* .btn + one of --primary / --tonal / --plain / --destructive. M3 state layer drawn by ::before in currentColor.
+   Forced states for documentation: .is-hover .is-focus .is-pressed. Loading: aria-busy="true" + .btn-spinner. */
+.btn{position:relative;isolation:isolate;overflow:hidden;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:36px;padding:0 16px;border-radius:var(--r-ctl);border:0;font:600 14px/1 var(--font-ui);letter-spacing:-.005em;white-space:nowrap;text-decoration:none;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:background-color var(--dur-state) var(--ease-std),transform var(--dur-press) var(--ease-std)}
+.btn::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;background:currentColor;opacity:0;transition:opacity var(--dur-state) var(--ease-std);pointer-events:none}
+.btn:hover::before,.btn.is-hover::before{opacity:var(--sl-hover)}
+.btn:focus-visible::before,.btn.is-focus::before{opacity:var(--sl-focus)}
+.btn:active::before,.btn.is-pressed::before{opacity:var(--sl-press)}
+.btn:active,.btn.is-pressed{transform:scale(.97)}
+.btn:focus-visible,.btn.is-focus{outline:2px solid var(--focus);outline-offset:2px}
+.btn--primary{background:var(--accent);color:var(--on-accent)}
+.btn--tonal{background:var(--surface-3);color:var(--fg);box-shadow:inset 0 0 0 1px var(--line-ctl)}
+.btn--plain{background:transparent;color:var(--accent);padding:0 10px}
+.btn--plain:hover,.btn--plain.is-hover{text-decoration:underline;text-decoration-thickness:1px}
+.btn--destructive{background:var(--crit);color:var(--on-crit)}
+.btn--lg{min-height:44px;padding:0 20px;font-size:15px;border-radius:var(--r-ctl)}
+.btn--sm{min-height:28px;padding:0 10px;font-size:13px;border-radius:var(--r-ctl-sm);gap:6px}
+.btn--icon{width:32px;min-height:32px;padding:0}
+.btn .ico{width:15px;height:15px}
+.btn[disabled],.btn[aria-disabled="true"]{background:var(--surface-2);color:var(--fg-3);box-shadow:none;cursor:not-allowed;transform:none}
+.btn[disabled]::before,.btn[aria-disabled="true"]::before{opacity:0}
+.btn[aria-busy="true"]{cursor:progress}
+.btn-spinner{width:14px;height:14px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:id-spin .8s linear infinite;flex:none}
+@keyframes id-spin{to{transform:rotate(360deg)}}
+
+/* ---------- Keyboard key ---------- */
+/* .kbd prints the shortcut on the control it triggers. Inside a primary button it switches to an outline. */
+.kbd{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 5px;border-radius:var(--r-chip);font:600 11px/1 var(--font-ui);letter-spacing:0;background:var(--surface);color:var(--fg-2);box-shadow:inset 0 0 0 1px var(--line-ctl);white-space:nowrap}
+.btn--primary .kbd,.btn--destructive .kbd{background:transparent;color:inherit;box-shadow:inset 0 0 0 1px currentColor;opacity:1}
+.btn--tonal .kbd{background:var(--canvas)}
+.toast .kbd{background:transparent;color:inherit;box-shadow:inset 0 0 0 1px currentColor}
+
+/* ---------- Severity chips (square corners, shape glyph) ---------- */
+/* .sev + --major (triangle) / --moderate (diamond) / --minor (circle) / --unclassified (dashed ? circle) / --nodata (hatch + void square).
+   Always pair with words. Optional count: <b class="sev-n">138</b>. */
+.sev{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 8px 0 7px;border-radius:var(--r-sev);font:600 12.5px/1 var(--font-ui);letter-spacing:0;white-space:nowrap;border:1px solid transparent}
+.sev::before{content:"";flex:none;width:10px;height:10px;background:currentColor}
+.sev-n{font-weight:600;font-variant-numeric:tabular-nums;margin-left:2px}
+.sev--major{background:var(--crit-soft);color:var(--crit);border-color:var(--crit-line)}
+.sev--major::before{clip-path:polygon(50% 4%,100% 96%,0 96%)}
+.sev--moderate{background:var(--warn-soft);color:var(--warn);border-color:var(--warn-line)}
+.sev--moderate::before{clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%)}
+.sev--minor{background:var(--info-soft);color:var(--info);border-color:var(--info-line)}
+.sev--minor::before{width:9px;height:9px;border-radius:50%}
+.sev--unclassified{background:transparent;color:var(--fg);border:1px dashed var(--line-ctl)}
+.sev--unclassified::before{content:"?";width:13px;height:13px;border-radius:50%;background:transparent;border:1.25px dashed currentColor;display:grid;place-items:center;font:700 8.5px/1 var(--font-ui)}
+.sev--nodata{color:var(--fg);border-color:var(--line-ctl);background-color:var(--nodata-soft);background-image:var(--hatch)}
+.sev--nodata::before{width:10px;height:10px;background:var(--surface);box-shadow:inset 0 0 0 1.5px currentColor}
+
+/* ---------- Review-status pills (rounded, distinct icon) ---------- */
+/* .rv + --pending (hollow clock) / --approved (seal-check, the only green) / --engineer (wrench) / --issue (flag) / --back (refresh).
+   Use the exact wording. .rv--compact is for the reviewer record list only; it keeps the icon and colour and puts the rest
+   of the wording in sr-only text, never aria-label: <span class="rv rv--pending rv--compact">Not yet reviewed<span class="sr-only"> by a pharmacist</span></span>.
+   Public views always use the full pill. */
+.rv{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px 0 8px;border-radius:var(--r-pill);font:600 12.5px/1 var(--font-ui);letter-spacing:0;white-space:nowrap;border:1px solid transparent}
+.rv::before{content:"";flex:none;width:14px;height:14px;background:currentColor;-webkit-mask:var(--rv-ico) center/contain no-repeat;mask:var(--rv-ico) center/contain no-repeat}
+.rv--pending{--rv-ico:var(--i-clock);background:transparent;color:var(--fg-2);border-color:var(--line-ctl)}
+.rv--approved{--rv-ico:var(--i-seal);background:var(--ok-soft);color:var(--ok);border-color:var(--ok-line)}
+.rv--engineer{--rv-ico:var(--i-wrench);background:var(--surface-3);color:var(--fg);border-color:var(--line-strong)}
+.rv--issue{--rv-ico:var(--i-flag);background:transparent;color:var(--crit);border:1.5px solid var(--crit)}
+.rv--back{--rv-ico:var(--i-refresh);background:transparent;color:var(--accent);border:1.5px solid var(--accent)}
+.rv--compact{height:22px;padding:0 8px 0 6px;font-size:11.5px;gap:4px}
+.rv--compact::before{width:12px;height:12px}
+
+/* ---------- Stage-check cards ---------- */
+/* .stage + --ok / --warn / --fail. Icon and word always together in .stage-status. Note text is the pipeline's exact note. */
+.stage{display:flex;flex-direction:column;gap:6px;padding:12px 14px;border-radius:var(--r-card);background:var(--canvas);box-shadow:inset 0 0 0 1px var(--line-strong);min-width:0;font-size:13px;color:var(--fg-2)}
+.stage-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.stage-name{font:600 13.5px/1.3 var(--font-ui);color:var(--fg);letter-spacing:-.005em}
+.stage-status{display:inline-flex;align-items:center;gap:5px;font:600 12.5px/1 var(--font-ui);white-space:nowrap}
+.stage-status::before{content:"";width:14px;height:14px;flex:none;background:currentColor;-webkit-mask:var(--st-ico) center/contain no-repeat;mask:var(--st-ico) center/contain no-repeat}
+.stage-note{color:var(--fg);overflow-wrap:anywhere}
+.stage--ok{--st-ico:var(--i-check)}
+.stage--ok .stage-status{color:var(--fg-2)}
+.stage--warn{--st-ico:var(--i-warn);background:var(--warn-soft);box-shadow:inset 0 0 0 1px var(--warn-line)}
+.stage--warn .stage-status{color:var(--warn)}
+.stage--fail{--st-ico:var(--i-fail);background:var(--crit-soft);box-shadow:inset 0 0 0 1px var(--crit-line)}
+.stage--fail .stage-status{color:var(--crit)}
+.stage-pairs{display:flex;flex-direction:column;gap:6px;margin-top:2px}
+.stage-pair{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;color:var(--fg)}
+.stage-pair .mono{color:var(--fg-2)}
+
+/* ---------- Code chips ---------- */
+/* .code shows one crosswalk code: system label + value. Add .code-meta for method and confidence. Mono for the value only. */
+.code{display:inline-flex;align-items:baseline;gap:6px;padding:3px 8px;border-radius:var(--r-chip);background:var(--surface-2);color:var(--fg);box-shadow:inset 0 0 0 1px var(--line-strong);font:400 12.5px/1.35 var(--font-mono);white-space:nowrap;font-variant-numeric:tabular-nums}
+.code-sys{font:500 11.5px/1.35 var(--font-ui);color:var(--fg-2)}
+.code-meta{font:400 11.5px/1.35 var(--font-ui);color:var(--fg-3)}
+.codes{display:flex;flex-wrap:wrap;gap:6px}
+.raw{font:400 12.5px/1.4 var(--font-mono);background:var(--surface);padding:1px 6px;border-radius:var(--r-chip);box-shadow:inset 0 0 0 1px var(--line-strong);overflow-wrap:anywhere}
+
+/* ---------- Comparison table (DGDA source vs extracted) ---------- */
+/* A real <table class="cmp">: <th scope="col"> headers, <th scope="row"> field names, .cmp-src source column,
+   .match cell with a text label: --same Matches, --norm Normalised, --salt Salt removed, --added Added, --differs Differs. */
+.cmp-wrap{border-radius:var(--r-panel);box-shadow:inset 0 0 0 1px var(--line-strong);overflow-x:auto;background:var(--canvas)}
+.cmp{width:100%;min-width:560px;font-size:13.5px}
+.cmp caption{text-align:left;padding:12px 14px 4px;font:600 13.5px/1.3 var(--font-ui);color:var(--fg)}
+.cmp th,.cmp td{padding:10px 14px;text-align:left;vertical-align:top;border-top:1px solid var(--line)}
+.cmp thead th{font:600 12px/1.3 var(--font-ui);color:var(--fg-2);border-top:0;padding-block:10px 8px}
+.cmp tbody th{font:500 12.5px/1.4 var(--font-ui);color:var(--fg-2);width:140px}
+.cmp .cmp-src{background:var(--surface-2)}
+.cmp-sub{display:block;font-size:12px;color:var(--fg-2);margin-top:2px}
+.match{display:inline-flex;align-items:center;gap:6px;font:600 12.5px/1.2 var(--font-ui);color:var(--fg-2);white-space:nowrap}
+.match::before{width:16px;height:16px;border-radius:var(--r-chip);display:inline-grid;place-items:center;font:700 12px/1 var(--font-ui);box-shadow:inset 0 0 0 1px currentColor}
+.match--same::before{content:"="}
+.match--norm::before{content:"\2248"}
+.match--salt::before{content:"\2212"}
+.match--added::before{content:"+"}
+.match--differs{color:var(--warn)}
+.match--differs::before{content:"\2260"}
+
+/* ---------- Record list ---------- */
+/* .rec-list is role="listbox"; each .rec is role="option" with aria-selected. Row hints (.rec-hint--warn / --nodata) carry the triage note. */
+.rec-list{display:flex;flex-direction:column;gap:2px;padding:6px 8px;margin:0;list-style:none}
+.rec-list:focus-visible{outline-offset:-2px;border-radius:var(--r-card)}
+.rec{position:relative;isolation:isolate;display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:2px 10px;align-items:center;min-height:52px;padding:8px 10px;border-radius:var(--r-card);cursor:pointer;color:var(--fg);text-align:left;width:100%;border:0;background:transparent}
+.rec::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;background:var(--fg);opacity:0;transition:opacity var(--dur-state) var(--ease-std)}
+.rec:hover::before,.rec.is-hover::before{opacity:var(--sl-hover)}
+.rec.is-focus,.rec:focus-visible{outline:2px solid var(--focus);outline-offset:-2px}
+.rec-ix{grid-row:span 2;align-self:start;padding-top:2px;font-size:12px;color:var(--fg-3);font-variant-numeric:tabular-nums}
+.rec-name{font:600 13.5px/1.3 var(--font-ui);letter-spacing:-.008em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rec-sub{grid-column:2/4;font-size:12px;color:var(--fg-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rec-status{grid-row:1;grid-column:3;align-self:center}
+.rec-hint{grid-column:2/4;display:inline-flex;align-items:center;gap:5px;font:500 12px/1.3 var(--font-ui);color:var(--fg-2)}
+.rec-hint::before{content:"";width:12px;height:12px;flex:none}
+.rec-hint--warn{color:var(--warn)}
+.rec-hint--warn::before{background:currentColor;-webkit-mask:var(--i-warn) center/contain no-repeat;mask:var(--i-warn) center/contain no-repeat}
+.rec-hint--nodata{color:var(--fg)}
+.rec-hint--nodata::before{width:10px;height:10px;box-shadow:inset 0 0 0 1.5px currentColor}
+.rec[aria-selected="true"],.rec.is-selected{background:var(--accent);color:var(--on-accent)}
+.rec[aria-selected="true"]::before{background:var(--on-accent)}
+.rec[aria-selected="true"] .rec-ix,.rec[aria-selected="true"] .rec-sub,.rec[aria-selected="true"] .rec-hint,
+.rec.is-selected .rec-ix,.rec.is-selected .rec-sub,.rec.is-selected .rec-hint{color:var(--on-accent)}
+.rec[aria-selected="true"] .rv,.rec.is-selected .rv{background:transparent;color:var(--on-accent);border-color:var(--on-accent)}
+/* Focus on a selected (accent-filled) row: ring in --on-accent inside, accent halo outside, so it stays 3:1+ */
+.rec[aria-selected="true"]:focus-visible,.rec[aria-selected="true"].is-focus,.rec.is-selected.is-focus{outline-color:var(--on-accent);box-shadow:0 0 0 2px var(--accent)}
+
+/* ---------- Filters ---------- */
+/* .filter buttons in the sidebar; the active one has aria-current="true". Count sits right in tabular figures. */
+.filters{display:flex;flex-direction:column;gap:2px}
+.filter{position:relative;isolation:isolate;display:flex;align-items:center;gap:10px;width:100%;min-height:32px;padding:6px 10px;border:0;border-radius:var(--r-ctl-sm);background:transparent;color:var(--fg);font:400 13.5px/1.2 var(--font-ui);text-align:left;cursor:pointer}
+.filter::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;background:var(--fg);opacity:0;transition:opacity var(--dur-state) var(--ease-std)}
+.filter:hover::before,.filter.is-hover::before{opacity:var(--sl-hover)}
+.filter .ico{width:14px;height:14px;color:var(--fg-2)}
+.filter-n{margin-left:auto;font-size:12px;color:var(--fg-2);font-variant-numeric:tabular-nums}
+/* Selected states carry a 3:1 indicator: the accent bar (5.92:1 light, 7.94:1 dark on material) and the --line-ctl ring (3.88:1 or more against the track). */
+.filter[aria-current="true"]{background:var(--surface);box-shadow:inset 3px 0 0 var(--accent),var(--shadow-1);font-weight:600}
+.filter:focus-visible,.filter.is-focus{outline:2px solid var(--focus);outline-offset:-2px}
+.search{display:flex;align-items:center;gap:8px;height:32px;padding:0 10px;border-radius:var(--r-ctl-sm);background:var(--canvas);box-shadow:inset 0 0 0 1px var(--line-ctl)}
+.search::before{content:"";width:14px;height:14px;flex:none;background:var(--fg-2);-webkit-mask:var(--i-search) center/contain no-repeat;mask:var(--i-search) center/contain no-repeat}
+.search input{border:0;background:transparent;outline:none;flex:1;min-width:0;font-size:13px}
+.search input::placeholder{color:var(--fg-3);opacity:1}
+.search:focus-within{box-shadow:inset 0 0 0 2px var(--focus);outline:2px solid transparent;outline-offset:-2px}
+
+/* ---------- Decision bar ---------- */
+/* .decision-bar is chrome: translucent material, pinned to the bottom of the detail pane, never scrolls away.
+   .decision-promise states what the action does for this role. data-state="paused" when the record is stale. */
+.decision-bar{position:sticky;bottom:0;z-index:2;display:flex;flex-direction:column;gap:10px;padding:14px 24px 12px;background:var(--material);-webkit-backdrop-filter:blur(20px) saturate(170%);backdrop-filter:blur(20px) saturate(170%);border-top:1px solid var(--line);box-shadow:inset 0 1px 0 var(--material-edge)}
+.decision-main{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.decision-promise{font-size:13px;color:var(--fg-2);max-width:46ch}
+.decision-promise b{color:var(--fg);font-weight:600}
+.decision-actions{margin-left:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.botcheck{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--fg-2)}
+.botcheck::before{content:"";width:13px;height:13px;background:currentColor;-webkit-mask:var(--i-shield) center/contain no-repeat;mask:var(--i-shield) center/contain no-repeat}
+.decision-keys{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--fg-2)}
+.decision-keys span{display:inline-flex;align-items:center;gap:5px}
+.decision-hint{font-size:12.5px;color:var(--fg)}
+.decision-bar[data-state="paused"] .decision-promise b{color:var(--warn)}
+
+/* ---------- Banners ---------- */
+/* .banner + --info / --warn / --crit. Icon, a bold first sentence, what was or was not saved, one action. Stale page uses --warn. */
+.banner{display:grid;grid-template-columns:20px minmax(0,1fr) auto;gap:4px 12px;align-items:start;padding:14px 16px;border-radius:var(--r-card)}
+.banner::before{content:"";grid-row:span 2;width:20px;height:20px;margin-top:1px;background:currentColor;-webkit-mask:var(--bn-ico) center/contain no-repeat;mask:var(--bn-ico) center/contain no-repeat}
+.banner-title{font:600 14px/1.4 var(--font-ui);color:var(--fg)}
+.banner-body{grid-column:2;font-size:13px;color:var(--fg)}
+.banner-action{grid-column:3;grid-row:1/span 2;align-self:center}
+.banner--info{--bn-ico:var(--i-info);background:var(--info-soft);color:var(--info);box-shadow:inset 0 0 0 1px var(--info-line)}
+.banner--warn{--bn-ico:var(--i-warn);background:var(--warn-soft);color:var(--warn);box-shadow:inset 0 0 0 1px var(--warn-line)}
+.banner--crit{--bn-ico:var(--i-fail);background:var(--crit-soft);color:var(--crit);box-shadow:inset 0 0 0 1px var(--crit)}
+@media (max-width:560px){.banner{grid-template-columns:20px minmax(0,1fr)}.banner-action{grid-column:2;grid-row:auto;justify-self:start;margin-top:6px}}
+
+/* ---------- Toast with undo + countdown ---------- */
+/* .toast holds a commit-delayed action. .toast-bar > i shrinks over --dur-commit. Undo carries kbd U.
+   The toast never takes focus; announce once through a separate polite live region. */
+.toast{--focus:var(--toast-action);position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 12px;align-items:center;max-width:380px;padding:12px 12px 14px 16px;border-radius:var(--r-card);background:var(--toast-bg);color:var(--toast-fg);box-shadow:var(--shadow-2);overflow:hidden;font-size:13.5px}
+.toast-msg b{font-weight:600}
+.toast-sub{display:block;font-size:12px;opacity:1;color:var(--toast-fg)}
+.toast-undo{display:inline-flex;align-items:center;gap:6px;min-height:30px;padding:0 10px;border:0;border-radius:var(--r-ctl-sm);background:transparent;color:var(--toast-action);font:600 13px/1 var(--font-ui);cursor:pointer;position:relative;isolation:isolate}
+.toast-undo::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;background:currentColor;opacity:0;transition:opacity var(--dur-state) var(--ease-std)}
+.toast-undo:hover::before{opacity:var(--sl-hover)}
+.toast-undo:active::before{opacity:var(--sl-press)}
+.toast-undo .ico{--ico:var(--i-undo);width:14px;height:14px}
+.toast-bar{position:absolute;left:0;right:0;bottom:0;height:3px;background:var(--toast-track)}
+.toast-bar i{display:block;height:100%;background:var(--toast-action);transform-origin:left center;transform:scaleX(1)}
+.toast.is-running .toast-bar i{animation:id-countdown var(--dur-commit) linear forwards}
+@keyframes id-countdown{from{transform:scaleX(1)}to{transform:scaleX(0)}}
+
+/* ---------- Inputs ---------- */
+/* .field wraps label, control and .field-meta (help or error + counter). Error = aria-invalid="true" on the control. */
+.field{display:flex;flex-direction:column;gap:6px;min-width:0}
+.field-label{font:500 13px/1.3 var(--font-ui);color:var(--fg)}
+.input,.textarea{width:100%;border:0;border-radius:var(--r-ctl);background:var(--canvas);color:var(--fg);box-shadow:inset 0 0 0 1px var(--line-ctl);padding:9px 12px;font:400 14px/1.45 var(--font-ui);transition:box-shadow var(--dur-state) var(--ease-std)}
+.input{min-height:38px}
+.textarea{min-height:72px;resize:vertical}
+.input::placeholder,.textarea::placeholder{color:var(--fg-3);opacity:1}
+.input:hover,.textarea:hover,.input.is-hover,.textarea.is-hover{box-shadow:inset 0 0 0 1px var(--fg-2)}
+.input:focus-visible,.textarea:focus-visible,.input.is-focus,.textarea.is-focus{outline:2px solid transparent;outline-offset:-2px;box-shadow:inset 0 0 0 2px var(--focus)}
+.input[aria-invalid="true"],.textarea[aria-invalid="true"]{box-shadow:inset 0 0 0 2px var(--crit)}
+.input:disabled,.textarea:disabled{background:var(--surface-2);color:var(--fg-3);box-shadow:inset 0 0 0 1px var(--line-strong);cursor:not-allowed}
+.field-meta{display:flex;align-items:flex-start;gap:12px;font-size:12px;color:var(--fg-2)}
+.field-error{color:var(--crit);font-weight:500;display:inline-flex;gap:6px;align-items:flex-start}
+.field-error::before{content:"";width:13px;height:13px;margin-top:1px;flex:none;background:currentColor;-webkit-mask:var(--i-fail) center/contain no-repeat;mask:var(--i-fail) center/contain no-repeat}
+.field-count{margin-left:auto;font-variant-numeric:tabular-nums;white-space:nowrap}
+
+/* ---------- Segmented control ---------- */
+/* .seg is a role="group" of buttons with aria-pressed. One choice at a time (theme, reviewer role). */
+.seg{display:inline-flex;gap:2px;padding:2px;border-radius:var(--r-ctl);background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--line-ctl)}
+.seg button{position:relative;isolation:isolate;min-height:28px;padding:0 12px;border:0;border-radius:var(--r-ctl-sm);background:transparent;color:var(--fg-2);font:500 12.5px/1 var(--font-ui);cursor:pointer;transition:background-color var(--dur-state) var(--ease-std),color var(--dur-state) var(--ease-std)}
+.seg button::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;background:currentColor;opacity:0}
+.seg button:hover::before{opacity:var(--sl-hover)}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--fg);font-weight:600;box-shadow:inset 0 0 0 1.5px var(--line-ctl),var(--shadow-1)}
+.seg button:focus-visible{outline:2px solid var(--focus);outline-offset:1px}
+
+/* ---------- Frames and mockup chrome ---------- */
+/* .frame holds a desktop mockup that may be wider than the screen: keyboard-scrollable (give it tabindex="0" and aria-label). */
+.frame{background:var(--surface-2);border-radius:var(--r-win);padding:clamp(12px,3vw,36px);overflow-x:auto;box-shadow:inset 0 0 0 1px var(--line);-webkit-overflow-scrolling:touch}
+.frame:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.window{background:var(--canvas);border-radius:var(--r-win);box-shadow:var(--shadow-win);overflow:hidden;position:relative}
+.window-bar{display:flex;align-items:center;gap:8px;height:40px;padding:0 16px;background:var(--surface-2);border-bottom:1px solid var(--line)}
+.window-dot{width:10px;height:10px;border-radius:50%;box-shadow:inset 0 0 0 1.5px var(--line-ctl)}
+
+/* ---------- Material (chrome only) ---------- */
+/* .material for toolbar, sidebar, decision bar. Never on content, never stacked on another material. */
+.material{background:var(--material);-webkit-backdrop-filter:blur(20px) saturate(170%);backdrop-filter:blur(20px) saturate(170%);box-shadow:inset 0 1px 0 var(--material-edge)}
+.chrome-toolbar{display:flex;align-items:center;gap:14px;height:52px;padding:0 16px;border-bottom:1px solid var(--line)}
+.chrome-sidebar{display:flex;flex-direction:column;gap:18px;padding:14px 10px;border-right:1px solid var(--line)}
+.chrome-heading{font:600 11.5px/1.2 var(--font-ui);color:var(--fg-2);padding:0 10px 6px;letter-spacing:.01em}
+.role-badge{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:var(--r-chip);font:600 12.5px/1 var(--font-ui);background:var(--accent-soft);color:var(--accent)}
+
+/* ---------- Hatch (no interaction data, and only that) ---------- */
+/* .hatch is the no-data material. .nodata-block is the full statement: never collapsed, never green, exact wording. */
+.hatch{background-color:var(--nodata-soft);background-image:var(--hatch)}
+.nodata-block{display:grid;grid-template-columns:36px minmax(0,1fr);gap:12px;padding:12px;border-radius:var(--r-panel);box-shadow:inset 0 0 0 1px var(--line-ctl)}
+.nodata-glyph{width:36px;height:36px;border-radius:var(--r-ctl);background:var(--surface);display:grid;place-items:center;box-shadow:var(--shadow-1)}
+.nodata-glyph::before{content:"";width:14px;height:14px;box-shadow:inset 0 0 0 2px var(--nodata)}
+.nodata-plate{background:var(--surface);border-radius:var(--r-ctl);padding:12px 14px;box-shadow:var(--shadow-1);min-width:0}
+.nodata-title{font:600 14.5px/1.35 var(--font-ui);color:var(--fg)}
+.nodata-text{font-size:14px;color:var(--fg);margin-top:4px}
+.nodata-pairs{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px;font-size:12.5px;color:var(--fg-2)}
+
+/* ---------- Interaction pair ---------- */
+/* .pair shows one DDInter pair: severity chip, the two substances, action, management text truncated with a source line. */
+.pair{display:grid;grid-template-columns:minmax(0,1fr);gap:8px;padding:14px 16px;border-radius:var(--r-panel);background:var(--canvas);box-shadow:inset 0 0 0 1px var(--line-strong)}
+.pair-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
+.pair-names{font:600 15px/1.3 var(--font-ui);letter-spacing:-.01em}
+.pair-meta{font-size:12.5px;color:var(--fg-2)}
+.pair-text{font-size:13.5px;color:var(--fg);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;max-width:72ch}
+.pair-source{font-size:12px;color:var(--fg-2)}
+
+/* ---------- Review desk shared pieces ---------- */
+/* .prog: batch progress meter (role="img" with a worded aria-label). .p-ok approved, .p-issue issue reported. */
+.prog{width:160px;height:6px;border-radius:3px;background:var(--surface-3);overflow:hidden;display:flex;flex:none}
+.prog i{display:block;height:100%;transition:width var(--dur-pane) var(--ease-std)}
+.prog .p-ok{background:var(--ok)}
+.prog .p-issue{background:var(--crit)}
+.prog--wide{width:100%}
+/* .drawer: evidence drawer over the detail pane. Solid surface: it is content, not chrome. */
+.drawer{position:absolute;top:0;right:0;bottom:0;width:min(460px,100%);background:var(--surface);box-shadow:var(--shadow-2);display:flex;flex-direction:column;z-index:3;animation:dr-in var(--dur-pane) var(--ease-dec)}
+@keyframes dr-in{from{transform:translateX(24px);opacity:0}}
+.drawer-h{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line)}
+.drawer-h h4{font:var(--t-title3);letter-spacing:var(--tr-title3)}
+.drawer-h p{font-size:12.5px;color:var(--fg-2)}
+.drawer-b{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
+.drawer-b h5{font:600 13.5px/1.3 var(--font-ui);margin-top:4px}
+.drawer-b pre{margin:0;font:400 12px/1.5 var(--font-mono);white-space:pre-wrap;overflow-wrap:anywhere;background:var(--surface-2);padding:10px 12px;border-radius:var(--r-ctl-sm);box-shadow:inset 0 0 0 1px var(--line);color:var(--fg)}
+.dr-note{font-size:12.5px;color:var(--fg-2)}
+.dr-dl{display:grid;grid-template-columns:120px minmax(0,1fr);gap:8px 12px;font-size:13px}
+.dr-dl dt{color:var(--fg-2)}
+.dr-dl dd{display:flex;flex-direction:column;gap:4px;align-items:flex-start;min-width:0}
+/* .sheet-scrim + .sheet: the modal shortcuts sheet (role="dialog" aria-modal="true", background inert, Tab trapped). */
+.sheet-scrim{position:absolute;inset:0;z-index:8;background:var(--scrim);display:grid;place-items:center;padding:24px}
+.sheet{width:460px;max-width:100%;max-height:100%;overflow:auto;background:var(--surface);border-radius:var(--r-panel);box-shadow:var(--shadow-2);padding:18px 20px 20px;display:flex;flex-direction:column;gap:12px}
+.sheet-h{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.sheet-h h3,.sheet-h h4{font:var(--t-title3);letter-spacing:var(--tr-title3)}
+.sheet-note{font-size:13px;color:var(--fg-2)}
+.sheet dl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:9px 14px;font-size:13.5px;align-items:center}
+.sheet dt{display:flex;gap:4px}
+.sheet dd{color:var(--fg)}
+
+/* ---------- Accessibility and preference overrides ---------- */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{transition-duration:1ms!important;animation-duration:1ms!important;animation-iteration-count:1!important}
+  .btn:active,.btn.is-pressed{transform:none}
+  .btn-spinner{animation:none;border-right-color:currentColor;border-style:dotted}
+  .toast.is-running .toast-bar i{animation:none;transform:scaleX(1)}
+}
+@media (prefers-reduced-transparency: reduce){
+  .material,.decision-bar{background:var(--material-solid);-webkit-backdrop-filter:none;backdrop-filter:none}
+}
+@media (prefers-contrast: more){
+  :root{--line:var(--line-ctl);--line-strong:var(--line-ctl)}
+  .material,.decision-bar{background:var(--material-solid);-webkit-backdrop-filter:none;backdrop-filter:none}
+}
+@media (forced-colors: active){
+  .ico,.rv::before,.stage-status::before,.banner::before,.rec-hint::before,.botcheck::before,.search::before,.field-error::before,.sev::before{forced-color-adjust:none;background:CanvasText}
+  .sev--unclassified::before{background:transparent;color:CanvasText}
+  .sev,.rv,.stage,.banner,.code,.toast{border:1px solid CanvasText}
+  .search:focus-within,.input:focus-visible,.textarea:focus-visible,.input.is-focus,.textarea.is-focus{outline:2px solid Highlight}
+  .rec[aria-selected="true"],.rec.is-selected,.s-opt[aria-selected="true"],.filter[aria-current="true"],.seg button[aria-pressed="true"]{forced-color-adjust:none;background:Highlight;color:HighlightText}
+  .rec[aria-selected="true"] .rec-ix,.rec[aria-selected="true"] .rec-sub,.rec[aria-selected="true"] .rec-hint,.rec[aria-selected="true"] .rv,.filter[aria-current="true"] .filter-n{color:HighlightText;border-color:HighlightText}
+  .rec[aria-selected="true"] .rv::before,.rec[aria-selected="true"] .rec-hint::before,.filter[aria-current="true"] .ico{background:HighlightText}
+  .rec[aria-selected="true"]:focus-visible,.rec.is-focus{outline:2px solid HighlightText}
+}
+</style>
+<style>
+/* Page layout only. Everything in the first style block is tokens.css, verbatim.
+   Layout concept: a left-aligned design board; each public screen sits in a neutral frame, desktop mockups scroll sideways inside their own frame, the checker is a live responsive page. */
+
+/* Board shell */
+.b-wrap{max-width:1240px;margin:0 auto;padding-inline:clamp(16px,4vw,40px);padding-block:24px 96px;display:flex;flex-direction:column;gap:84px}
+.b-top{display:flex;align-items:center;justify-content:space-between;gap:12px 20px;flex-wrap:wrap;padding-bottom:18px;border-bottom:1px solid var(--line)}
+.b-top-l{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.b-top .wordmark{font-size:21px}
+.b-ver{font-size:13px;color:var(--fg-2)}
+.b-hero{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:40px;align-items:end}
+@media (max-width:860px){.b-hero{grid-template-columns:1fr;gap:28px}}
+.b-hero h1{font:600 clamp(40px,6.4vw,76px)/1 var(--font-ui);letter-spacing:-.038em}
+.b-lede{font-size:clamp(17px,1.8vw,20px);line-height:1.45;color:var(--fg-2);margin-top:18px;max-width:42ch;letter-spacing:-.01em}
+.b-toc{display:flex;flex-wrap:wrap;gap:6px;padding:16px;border-radius:var(--r-panel);background:var(--surface);box-shadow:var(--shadow-1)}
+.b-toc p{width:100%;font-size:12.5px;color:var(--fg-2);margin-bottom:4px}
+.b-toc a{display:inline-flex;align-items:center;min-height:28px;padding:0 10px;border-radius:8px;background:var(--surface-2);color:var(--fg);text-decoration:none;font-size:13px;font-weight:500}
+.b-toc a:hover{background:var(--surface-3)}
+.b-sec{display:flex;flex-direction:column;gap:26px;min-width:0;scroll-margin-top:16px}
+.b-head{display:flex;flex-direction:column;gap:8px;max-width:74ch}
+.b-head h2{font:600 28px/1.18 var(--font-ui);letter-spacing:-.02em}
+.b-head p{color:var(--fg-2)}
+.b-sub{display:flex;flex-direction:column;gap:10px;min-width:0}
+.b-sub-h{font:600 15.5px/1.3 var(--font-ui);letter-spacing:-.01em;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.b-cap{font-size:13px;color:var(--fg-2);max-width:78ch}
+.b-hint-scroll{display:none;font-size:12.5px;color:var(--fg-2)}
+@media (max-width:1000px){.b-hint-scroll{display:block}}
+.b-2up{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:28px}
+@media (max-width:1080px){.b-2up{grid-template-columns:1fr}}
+.b-gaps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 40px;border-top:1px solid var(--line)}
+@media (max-width:760px){.b-gaps{grid-template-columns:1fr}}
+.b-gaps li{padding:14px 0;border-bottom:1px solid var(--line);font-size:14px;color:var(--fg-2)}
+.b-gaps li b{display:block;color:var(--fg);font-weight:600;margin-bottom:2px}
+.b-foot{font-size:13px;color:var(--fg-2);border-top:1px solid var(--line);padding-top:20px;max-width:78ch}
+@media (max-width:640px){.b-wrap{gap:64px}.b-head h2{font-size:23px}}
+
+/* Mockup windows */
+.s-win{min-width:1180px}
+.s-win--mid{min-width:1060px}
+.s-win--sm{min-width:540px}
+.s-url{margin:0 auto;height:24px;padding:0 14px;border-radius:7px;background:var(--canvas);box-shadow:inset 0 0 0 1px var(--line);display:inline-flex;align-items:center;font-size:12px;color:var(--fg-2);max-width:60%;overflow:hidden;white-space:nowrap}
+.s-site{background:var(--canvas);color:var(--fg)}
+
+/* Site navigation */
+.s-nav{display:flex;align-items:center;gap:28px;padding:16px 56px;border-bottom:1px solid var(--line)}
+.s-nav .wordmark{font-size:21px}
+.s-nav-links{display:flex;gap:2px}
+.s-nav-links a{display:inline-flex;align-items:center;min-height:34px;padding:0 10px;border-radius:8px;color:var(--fg-2);text-decoration:none;font:500 14px/1 var(--font-ui)}
+.s-nav-links a:hover{background:var(--surface-2);color:var(--fg)}
+.s-nav-links a[aria-current="page"]{color:var(--fg);font-weight:600}
+.s-nav-r{margin-left:auto;display:flex;gap:10px;align-items:center}
+.s-bar{display:flex;align-items:center;gap:22px;height:60px;padding:0 32px;border-bottom:1px solid var(--line)}
+.s-bar .wordmark{font-size:19px}
+.s-bar .search{width:320px;height:36px}
+.s-bar .s-nav-links a{font-size:13.5px}
+
+/* Landing hero */
+.s-hero{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:56px;padding:64px 56px 56px;align-items:center}
+.s-pilot{display:inline-flex;align-items:center;gap:9px;font:500 13.5px/1.3 var(--font-ui);color:var(--fg-2)}
+.s-pilot::before{content:"";width:7px;height:7px;background:var(--accent);flex:none}
+.s-hero h3{font:var(--t-display);letter-spacing:var(--tr-display);margin-top:20px;max-width:21ch;text-wrap:balance}
+.s-lede{font-size:17.5px;line-height:1.5;color:var(--fg-2);margin-top:20px;max-width:52ch;letter-spacing:-.006em}
+.s-ctas{display:flex;gap:12px;margin-top:30px;flex-wrap:wrap}
+.s-fine{font-size:13px;color:var(--fg-2);margin-top:16px}
+
+/* Lookup card */
+.s-look{background:var(--surface);border-radius:18px;box-shadow:var(--shadow-2);padding:10px;min-width:0}
+.s-look-field{display:flex;align-items:center;gap:10px;height:48px;padding:0 14px;border-radius:12px;background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--line-ctl);font-size:16px}
+.s-look-field .ico{--ico:var(--i-search);color:var(--fg-2)}
+.s-caret{width:1.5px;height:20px;background:var(--accent);margin-left:-8px}
+.s-look-body{padding:18px 12px 12px;display:flex;flex-direction:column;gap:14px}
+.s-chain{display:grid;grid-template-columns:12px minmax(0,1fr);column-gap:14px}
+.s-rail{display:flex;flex-direction:column;align-items:center}
+.s-rail i{width:9px;height:9px;background:var(--surface);box-shadow:inset 0 0 0 2px var(--accent);margin-top:5px;flex:none}
+.s-rail b{flex:1;width:1.5px;background:var(--accent-line);margin:3px 0}
+.s-step{padding-bottom:16px;min-width:0;display:flex;flex-direction:column;gap:2px}
+.s-step:last-child{padding-bottom:0}
+.s-k{font-size:12px;color:var(--fg-2)}
+.s-v{font:600 15.5px/1.3 var(--font-ui);letter-spacing:-.01em}
+.s-x{font-size:13px;color:var(--fg-2)}
+.s-step .codes,.s-step .s-sevrow{margin-top:6px}
+.s-sevrow{display:flex;flex-wrap:wrap;gap:6px}
+.s-look-foot{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:12px;border-top:1px solid var(--line);font-size:12.5px;color:var(--fg-2)}
+
+/* Numbers band */
+.s-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));margin:0 56px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.s-stat{padding:22px 20px 24px 0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.s-stat + .s-stat{padding-left:20px;border-left:1px solid var(--line)}
+.s-stat b{font:600 30px/1.1 var(--font-ui);letter-spacing:-.025em;font-variant-numeric:tabular-nums}
+.s-stat span{font-size:13px;color:var(--fg-2);max-width:28ch}
+
+/* Bands */
+.s-band{padding:72px 56px}
+.s-band--tint{background:var(--surface-2)}
+.s-h2{font:600 34px/1.12 var(--font-ui);letter-spacing:-.025em;max-width:26ch;text-wrap:balance}
+.s-sub{color:var(--fg-2);font-size:16px;margin-top:12px;max-width:62ch}
+
+/* Audiences */
+.s-aud{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:40px;margin-top:36px}
+.s-aud article{border-top:2px solid var(--fg);padding-top:18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.s-aud h5{font:600 18px/1.3 var(--font-ui);letter-spacing:-.012em}
+.s-who{font-size:13px;color:var(--fg-2)}
+.s-ticks{display:flex;flex-direction:column;gap:10px}
+.s-ticks li{display:grid;grid-template-columns:6px minmax(0,1fr);gap:12px;font-size:14.5px;color:var(--fg-2)}
+.s-ticks li::before{content:"";width:6px;height:6px;margin-top:9px;background:var(--accent)}
+.s-ticks li b{color:var(--fg);font-weight:600}
+
+/* Process */
+.s-steps{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px;margin-top:36px}
+.s-st{background:var(--surface);border-radius:var(--r-panel);padding:18px;display:flex;flex-direction:column;gap:8px;box-shadow:var(--shadow-1);position:relative;min-width:0}
+.s-st:not(:last-child)::after{content:"";position:absolute;top:24px;right:-11px;width:8px;height:8px;border-top:1.5px solid var(--line-ctl);border-right:1.5px solid var(--line-ctl);transform:rotate(45deg)}
+.s-st-no{font:600 13px/1 var(--font-ui);color:var(--accent);font-variant-numeric:tabular-nums}
+.s-st h5{font:600 15.5px/1.3 var(--font-ui);letter-spacing:-.01em}
+.s-st p{font-size:13.5px;color:var(--fg-2)}
+.s-st-eg{margin-top:auto;padding-top:10px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12.5px;color:var(--fg-2)}
+.s-st--final{background:var(--accent-soft);box-shadow:inset 0 0 0 1px var(--accent-line)}
+.s-st--final .s-st-eg{border-top-color:var(--accent-line)}
+.s-loop-row{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px}
+.s-loop{grid-column:2/6;margin-inline:calc((100% - 42px) / 8);height:26px;border:1.5px dashed var(--accent);border-top:0;border-radius:0 0 14px 14px;position:relative}
+.s-loop::before{content:"";position:absolute;left:-4.75px;top:-1px;width:8px;height:8px;border-left:1.5px solid var(--accent);border-top:1.5px solid var(--accent);transform:rotate(45deg)}
+.s-loop-label{grid-column:2/6;display:flex;justify-content:center;align-items:center;flex-wrap:wrap;gap:8px 10px;font-size:14px;color:var(--fg-2);margin-top:12px;text-align:center}
+.s-loop-label b{color:var(--fg);font-weight:600}
+
+/* Promises */
+.s-prom{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px;margin-top:36px}
+.s-prom article{display:flex;flex-direction:column;gap:14px;min-width:0;padding:22px;border-radius:var(--r-panel);box-shadow:inset 0 0 0 1px var(--line-strong);background:var(--canvas)}
+.s-prom h5{font:600 17px/1.3 var(--font-ui);letter-spacing:-.012em}
+.s-prom p{font-size:14px;color:var(--fg-2)}
+.s-prom .nodata-text{font-size:13.5px}
+.s-prom-row{display:flex;flex-wrap:wrap;gap:8px}
+
+/* Partner API */
+.s-api{display:grid;grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr);gap:48px;align-items:start}
+.s-api-l{display:flex;flex-direction:column;gap:18px;min-width:0}
+.s-code{display:flex;flex-direction:column;gap:12px;min-width:0}
+.s-code figure{border-radius:var(--r-panel);background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--line-strong);overflow:hidden;min-width:0}
+.s-code figcaption{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 14px;border-bottom:1px solid var(--line);font:500 12.5px/1.3 var(--font-ui);color:var(--fg-2)}
+.s-code figcaption .mono{color:var(--fg)}
+.s-code pre{margin:0;padding:14px;font:400 12.5px/1.55 var(--font-mono);color:var(--fg);overflow-x:auto;white-space:pre}
+.s-code pre:focus-visible{outline-offset:-2px}
+.tk-k{color:var(--fg-2)}
+
+/* Footer */
+.s-foot{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,.7fr) minmax(0,1.8fr);gap:40px;padding:48px 56px 36px;border-top:1px solid var(--line);background:var(--surface-2);font-size:13px;color:var(--fg-2)}
+.s-foot h5{font:600 13px/1.3 var(--font-ui);color:var(--fg);margin-bottom:10px}
+.s-foot ul{display:flex;flex-direction:column;gap:8px}
+.s-foot li b{color:var(--fg);font-weight:600}
+.s-foot a{color:var(--fg-2)}
+.s-foot-legal{grid-column:1/-1;padding-top:18px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+
+/* Phone */
+.s-phone-frame{display:block}
+.s-phone{width:400px;margin-inline:auto;border-radius:34px;background:var(--canvas);box-shadow:var(--shadow-win);overflow:hidden}
+.s-phone .s-nav{padding:14px 16px;gap:10px}
+.s-phone .s-nav .wordmark{font-size:19px}
+.s-phone-hero{padding:22px 16px 28px;display:flex;flex-direction:column;gap:0}
+.s-phone h4{font:var(--t-title1);letter-spacing:var(--tr-title1);margin-top:16px;text-wrap:balance}
+.s-phone .s-lede{font-size:15.5px;margin-top:14px}
+.s-phone .s-ctas{margin-top:22px;flex-direction:column}
+.s-phone .s-ctas .btn{width:100%}
+.s-phone .s-look{margin-top:24px}
+.s-phone .s-look-body{padding:14px 8px 8px}
+
+/* Sign in */
+.s-auth-grid{display:grid;grid-template-columns:minmax(0,440px) minmax(0,1fr);gap:28px;align-items:start}
+@media (max-width:1000px){.s-auth-grid{grid-template-columns:1fr}}
+.s-auth-stage{background:var(--surface-2);border-radius:var(--r-win);padding:clamp(16px,3vw,32px);box-shadow:inset 0 0 0 1px var(--line);display:flex;justify-content:center}
+.s-auth{width:100%;max-width:400px;background:var(--surface);border-radius:var(--r-win);box-shadow:var(--shadow-2);padding:30px 26px 22px;display:flex;flex-direction:column;gap:18px}
+@media (max-width:440px){.s-auth{padding:24px 18px 18px}}
+.s-auth-brand{display:flex;align-items:center;gap:10px}
+.s-auth-brand .wordmark{font-size:19px}
+.s-auth h3{font:600 24px/1.15 var(--font-ui);letter-spacing:-.022em}
+.s-auth-sub{color:var(--fg-2);font-size:14.5px;margin-top:6px}
+.s-gbtn{position:relative;isolation:isolate;overflow:hidden;display:flex;align-items:center;justify-content:center;gap:12px;width:100%;min-height:44px;padding:0 12px;border:0;border-radius:var(--r-ctl);background:var(--surface);color:var(--fg);box-shadow:inset 0 0 0 1px var(--line-ctl);font:600 14px/1 var(--font-ui);letter-spacing:-.005em;cursor:pointer;transition:transform var(--dur-press) var(--ease-std)}
+.s-gbtn::before{content:"";position:absolute;inset:0;z-index:-1;background:currentColor;opacity:0;transition:opacity var(--dur-state) var(--ease-std)}
+.s-gbtn:hover::before{opacity:var(--sl-hover)}
+.s-gbtn:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.s-gbtn:focus-visible::before{opacity:var(--sl-focus)}
+.s-gbtn:active::before{opacity:var(--sl-press)}
+.s-gbtn:active{transform:scale(.97)}
+.s-gbtn[aria-busy="true"]{cursor:progress}
+.s-gbtn svg{width:20px;height:20px;flex:none}
+.s-turn{display:flex;align-items:center;gap:6px 10px;flex-wrap:wrap;padding:10px 12px;border-radius:10px;background:var(--surface-2);font-size:12.5px;color:var(--fg-2)}
+.s-turn .s-turn-by{margin-left:auto;font-size:11.5px}
+.s-invite{display:grid;grid-template-columns:16px minmax(0,1fr);gap:10px;padding:14px;border-radius:12px;box-shadow:inset 0 0 0 1px var(--line-strong);font-size:13.5px;color:var(--fg-2)}
+.s-invite .ico{--ico:var(--i-info);color:var(--accent);margin-top:2px}
+.s-invite b{color:var(--fg);font-weight:600}
+.s-privacy{font-size:12.5px;color:var(--fg-2)}
+.s-states{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+@media (max-width:720px){.s-states{grid-template-columns:1fr}}
+.s-state{background:var(--surface);border-radius:var(--r-panel);box-shadow:var(--shadow-1);padding:18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.s-state--wide{grid-column:1/-1}
+.s-state-lab{font:500 12px/1.3 var(--font-ui);color:var(--fg-2)}
+.s-state h3{font:600 16px/1.3 var(--font-ui);letter-spacing:-.01em}
+.s-state p{font-size:13.5px;color:var(--fg-2)}
+.s-state .banner p{color:var(--fg)}
+.s-row{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center}
+.s-next{display:flex;flex-direction:column;gap:8px;counter-reset:nx}
+.s-next li{display:grid;grid-template-columns:22px minmax(0,1fr);gap:10px;font-size:13.5px;color:var(--fg)}
+.s-next li::before{counter-increment:nx;content:counter(nx);width:20px;height:20px;border-radius:6px;display:grid;place-items:center;font:600 11.5px/1 var(--font-ui);color:var(--accent);box-shadow:inset 0 0 0 1.5px var(--accent-line)}
+.s-acct{display:flex;align-items:center;gap:12px;min-width:0}
+.s-acct-txt{display:flex;flex-direction:column;gap:2px;min-width:0;font-size:13px;color:var(--fg-2)}
+.s-acct-txt b{color:var(--fg);font-weight:600;font-size:14px}
+.s-avatar{width:36px;height:36px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font:600 13px/1 var(--font-ui);flex:none}
+.s-menu-wrap{display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+.s-avatar-btn{display:inline-flex;border:0;padding:2px;border-radius:50%;background:transparent;cursor:pointer;box-shadow:0 0 0 2px var(--accent)}
+.s-menu{width:100%;max-width:320px;border-radius:var(--r-panel);background:var(--surface);box-shadow:var(--shadow-2);padding:6px;display:flex;flex-direction:column}
+.s-menu-h{display:flex;flex-direction:column;gap:10px;padding:12px;border-bottom:1px solid var(--line);margin-bottom:4px}
+.s-mi{position:relative;isolation:isolate;display:flex;align-items:center;gap:10px;width:100%;min-height:36px;padding:0 12px;border:0;border-radius:8px;background:transparent;color:var(--fg);font:500 13.5px/1 var(--font-ui);text-align:left;cursor:pointer}
+.s-mi::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;background:currentColor;opacity:0;transition:opacity var(--dur-state) var(--ease-std)}
+.s-mi:hover::before{opacity:var(--sl-hover)}
+.s-mi:focus-visible{outline:2px solid var(--focus);outline-offset:-2px}
+.s-mi .ico{color:var(--fg-2)}
+
+/* Search and product pages */
+.s-page{padding:32px 40px 48px;display:flex;flex-direction:column;gap:24px}
+.s-crumb{font-size:13px;color:var(--fg-2);display:flex;flex-wrap:wrap;gap:6px}
+.s-crumb a{color:var(--fg-2)}
+.s-results-h{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.s-results-h h4{font:var(--t-title1);letter-spacing:var(--tr-title1)}
+.s-results-h span{font-size:14px;color:var(--fg-2)}
+.s-rgroup{display:flex;flex-direction:column;gap:10px}
+.s-rgroup > h5{font:600 13px/1.3 var(--font-ui);color:var(--fg-2)}
+.s-res{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 24px;padding:16px 18px;border-radius:var(--r-panel);box-shadow:inset 0 0 0 1px var(--line-strong);background:var(--canvas)}
+.s-res-main{display:flex;flex-direction:column;gap:5px;min-width:0}
+.s-res-name{font:600 17px/1.3 var(--font-ui);letter-spacing:-.012em;color:var(--fg);text-decoration:none;width:fit-content}
+.s-res-name:hover{text-decoration:underline}
+.s-res-meta{font-size:13.5px;color:var(--fg-2);display:flex;flex-wrap:wrap;gap:4px 14px}
+.s-res-side{display:flex;flex-direction:column;align-items:flex-end;gap:8px;text-align:right}
+.s-hit{font-size:13px;color:var(--fg)}
+.s-hit mark{background:var(--accent-soft);color:var(--fg);padding:0 3px;border-radius:3px}
+.s-res--stub{background:var(--surface-2)}
+.s-res--stub .s-res-meta{color:var(--fg)}
+.s-empty{display:flex;flex-direction:column;gap:12px;max-width:60ch;padding:8px 0}
+.s-empty h4{font:var(--t-title1);letter-spacing:var(--tr-title1)}
+.s-empty p{color:var(--fg-2)}
+.s-proj{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 40px;background:var(--surface-2);border-bottom:1px solid var(--line);font-size:12.5px;color:var(--fg-2)}
+
+.s-prod{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:40px;padding:28px 40px 48px}
+.s-prod-main{display:flex;flex-direction:column;gap:36px;min-width:0}
+.s-prod-h h4{font:var(--t-title1);letter-spacing:var(--tr-title1);margin-top:8px}
+.s-prod-meta{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:14.5px;color:var(--fg-2);margin-top:10px}
+.s-prod-meta .mono{color:var(--fg)}
+.s-verline{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;margin-top:16px;font-size:13px;color:var(--fg-2)}
+.s-psec{display:flex;flex-direction:column;gap:14px;min-width:0}
+.s-psec-h{display:flex;align-items:baseline;gap:6px 12px;flex-wrap:wrap}
+.s-psec-h h5{font:var(--t-title2);letter-spacing:var(--tr-title2)}
+.s-psec-h span{font-size:13px;color:var(--fg-2)}
+.s-psec h6{font:600 14px/1.3 var(--font-ui);color:var(--fg)}
+.s-trace{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-radius:var(--r-panel);box-shadow:inset 0 0 0 1px var(--line-strong);overflow:hidden}
+.s-trace > div{padding:16px 18px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.s-trace > div + div{border-left:1px solid var(--line)}
+.s-trace > div:first-child{background:var(--surface-2)}
+.s-trace .cmp-sub{margin-top:0}
+.s-tw{border-radius:var(--r-panel);box-shadow:inset 0 0 0 1px var(--line-strong);overflow-x:auto;background:var(--canvas)}
+.s-tw:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.s-table{width:100%;font-size:13.5px;min-width:620px}
+.s-table caption{text-align:left;padding:12px 14px 4px;font:600 13.5px/1.3 var(--font-ui);color:var(--fg)}
+.s-table th,.s-table td{padding:10px 14px;text-align:left;vertical-align:top;border-top:1px solid var(--line)}
+.s-table thead th{font:600 12px/1.3 var(--font-ui);color:var(--fg-2);border-top:0;padding-block:10px 8px}
+.s-table tbody th{font:600 13px/1.4 var(--font-ui);color:var(--fg);white-space:nowrap}
+.s-table td.s-what{color:var(--fg-2)}
+.s-table .codes{gap:4px}
+.s-kv{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.s-kv > div{padding:14px 16px;border-radius:var(--r-card);background:var(--surface-2);display:flex;flex-direction:column;gap:2px;font-size:13px;color:var(--fg-2)}
+.s-kv b{font:600 22px/1.2 var(--font-ui);color:var(--fg);letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.s-panel{padding:14px 16px;border-radius:var(--r-panel);box-shadow:inset 0 0 0 1px var(--line-strong);display:flex;flex-direction:column;gap:10px;background:var(--canvas);min-width:0}
+.s-panel p{font-size:13.5px;color:var(--fg-2)}
+.s-names{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13.5px;color:var(--fg)}
+.s-names li{display:inline-flex;gap:6px;align-items:baseline}
+.s-names li span{color:var(--fg-2);font-size:12.5px}
+.s-stages{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.s-stages .stage--warn{grid-column:1/-1}
+.s-aside{display:flex;flex-direction:column;gap:16px;min-width:0}
+.s-card{border-radius:var(--r-panel);box-shadow:inset 0 0 0 1px var(--line-strong);padding:16px;display:flex;flex-direction:column;gap:10px;background:var(--canvas)}
+.s-card h5{font:600 14.5px/1.3 var(--font-ui)}
+.s-card p{font-size:13.5px;color:var(--fg-2)}
+.s-card dl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px 12px;font-size:13px}
+.s-card dt{color:var(--fg-2)}
+.s-card dd{color:var(--fg);overflow-wrap:anywhere}
+.s-card .btn{width:100%}
+.s-stub{padding:36px 40px 44px;display:flex;flex-direction:column;gap:16px;max-width:680px}
+.s-stub h4{font:600 40px/1.06 var(--font-ui);letter-spacing:-.03em}
+.s-stub p{color:var(--fg-2);max-width:58ch}
+.pair-text.is-open{display:block;-webkit-line-clamp:unset;overflow:visible}
+
+/* Interaction checker (live) */
+.s-chk{display:grid;grid-template-columns:minmax(0,340px) minmax(0,1fr);min-height:640px}
+@media (max-width:920px){.s-chk{grid-template-columns:1fr}}
+.s-chk-side{padding:24px;background:var(--surface-2);border-right:1px solid var(--line);display:flex;flex-direction:column;gap:20px;min-width:0}
+@media (max-width:920px){.s-chk-side{border-right:0;border-bottom:1px solid var(--line)}}
+.s-chk-main{padding:24px 28px 28px;display:flex;flex-direction:column;gap:20px;min-width:0}
+@media (max-width:520px){.s-chk-side,.s-chk-main{padding:18px 16px}}
+.s-chk-side h3{font:var(--t-title2);letter-spacing:var(--tr-title2)}
+.s-chk-note{font-size:12.5px;color:var(--fg-2)}
+.s-cbx{position:relative}
+.s-cbx .search{height:40px;border-radius:var(--r-ctl)}
+.s-cbx .search input{font-size:14px}
+.s-cbx-list{position:absolute;left:0;right:0;top:calc(100% + 6px);z-index:5;max-height:330px;overflow:auto;padding:6px;border-radius:var(--r-card);background:var(--surface);box-shadow:var(--shadow-2);display:flex;flex-direction:column;gap:2px}
+.s-opt{display:flex;flex-direction:column;gap:2px;padding:9px 10px;border-radius:8px;cursor:pointer;color:var(--fg)}
+.s-opt:hover{background:var(--surface-2)}
+.s-opt[aria-selected="true"]{background:var(--accent);color:var(--on-accent)}
+.s-opt-name{font:600 14px/1.3 var(--font-ui)}
+.s-opt-sub{font-size:12.5px;color:var(--fg-2)}
+.s-opt[aria-selected="true"] .s-opt-sub{color:var(--on-accent)}
+.s-opt-empty{padding:10px;font-size:13px;color:var(--fg-2)}
+.s-sel-h{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.s-sel-h p{font:600 13px/1.3 var(--font-ui);color:var(--fg)}
+.s-sel{display:flex;flex-direction:column;gap:8px}
+.s-med{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;padding:10px 8px 10px 14px;border-radius:var(--r-card);background:var(--surface);box-shadow:var(--shadow-1)}
+.s-med b{font:600 14px/1.3 var(--font-ui);overflow-wrap:anywhere}
+.s-med span{font-size:12.5px;color:var(--fg-2);grid-column:1}
+.s-med .btn{grid-column:2;grid-row:1/span 2}
+.s-med-empty{font-size:13px;color:var(--fg-2);padding:12px 14px;border-radius:var(--r-card);box-shadow:inset 0 0 0 1px var(--line-strong)}
+.s-presets{display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.s-presets .btn{white-space:normal;text-align:left;line-height:1.25;padding-block:6px;height:auto}
+.s-sum{font:var(--t-title2);letter-spacing:var(--tr-title2);text-wrap:pretty}
+.s-group{display:flex;flex-direction:column;gap:10px}
+.s-group-h{font:600 13px/1.3 var(--font-ui);color:var(--fg-2)}
+.s-quiet{padding:14px 16px;border-radius:var(--r-panel);box-shadow:inset 0 0 0 1px var(--line-strong);display:flex;flex-direction:column;gap:8px;font-size:13.5px;color:var(--fg-2)}
+.s-quiet h5,.s-quiet h6{font:600 14px/1.3 var(--font-ui);color:var(--fg)}
+.s-quiet ul{display:flex;flex-direction:column;gap:4px;color:var(--fg)}
+.s-legend{display:flex;flex-direction:column;gap:10px;padding-top:18px;border-top:1px solid var(--line)}
+.s-legend h4{font:600 13px/1.3 var(--font-ui);color:var(--fg-2)}
+.s-legend dl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px 14px;align-items:center;font-size:13px;color:var(--fg-2)}
+.s-legend dd{min-width:0}
+@media (max-width:560px){.s-legend dl{grid-template-columns:minmax(0,1fr)}}
+/* Mockup specimens render as spans so they never take focus or act like dead controls */
+span.btn,span.s-gbtn,span.s-mi,span.s-avatar-btn{cursor:default}
+.s-qv{flex:1;min-width:0;font-size:13px;color:var(--fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.s-qv--ph{color:var(--fg-3)}
+.s-st-eg .rv{white-space:normal;height:auto;min-height:24px;padding-block:4px;line-height:1.25}
+.s-disc{font-size:13px;color:var(--fg);padding:12px 14px;border-radius:var(--r-card);box-shadow:inset 0 0 0 1px var(--line-strong)}
+.s-chk-empty{padding:18px;border-radius:var(--r-panel);box-shadow:inset 0 0 0 1px var(--line-strong);color:var(--fg-2);font-size:14px}
+.s-route{font-size:12px;color:var(--fg-2)}
+
+@media (prefers-reduced-motion: reduce){.s-gbtn:active{transform:none}}
+</style>
+
+<div class="b-wrap">
+
+<header class="b-top">
+  <div class="b-top-l">
+    <span class="wordmark" aria-label="IntelliDrugs">IntelliDrugs<span class="wordmark-dot" aria-hidden="true">.</span></span>
+    <span class="b-ver">Public site, built on design system 1.0</span>
+  </div>
+  <div class="seg" role="group" aria-label="Colour theme">
+    <button type="button" id="th-system" data-t="system" aria-pressed="true">System</button>
+    <button type="button" id="th-light" data-t="light" aria-pressed="false">Light</button>
+    <button type="button" id="th-dark" data-t="dark" aria-pressed="false">Dark</button>
+  </div>
+</header>
+
+<section class="b-hero" aria-labelledby="h-top">
+  <div>
+    <h1 id="h-top">IntelliDrugs public site</h1>
+    <p class="b-lede">What doctors, pharmacists and partner companies see at drugdb.eliooo.org: the landing page, sign-in, medicine search and product pages, and a working interaction checker on the real 0001-pilot data.</p>
+  </div>
+  <nav class="b-toc" aria-label="Sections">
+    <p>On this board</p>
+    <a href="#landing">Landing page</a><a href="#signin">Sign in</a><a href="#search">Search and product pages</a><a href="#checker">Interaction checker</a><a href="#gaps">What is marked Example</a>
+  </nav>
+</section>
+
+<div class="banner banner--info" role="note">
+  <p class="banner-title">All 10 records in batch 0001-pilot are Not yet reviewed by a pharmacist today.</p>
+  <p class="banner-body">Screens that show a record as approved carry an <span class="example">Example</span> marker for the approval only. Every brand, code, count and DDInter text on this board comes from the live pilot data.</p>
+</div>
+
+<!-- ============ 1. LANDING ============ -->
+<section class="b-sec" id="landing" aria-labelledby="h-land">
+  <div class="b-head"><h2 id="h-land">Landing page</h2><p>The hero shows the product doing its one job: a brand from the strip resolving into its clinical drug, active substance, codes and interactions. The pilot size sits in the first line, and the safety wording appears as fixed chips, not prose.</p></div>
+  <div class="b-sub">
+    <p class="b-hint-scroll">The desktop mockup scrolls sideways inside its frame.</p>
+    <div class="frame" tabindex="0" role="region" aria-label="Landing page, desktop mockup">
+      <div class="window s-win">
+        <div class="window-bar"><span class="window-dot"></span><span class="window-dot"></span><span class="window-dot"></span><span class="s-url">drugdb.eliooo.org</span></div>
+        <div class="s-site">
+          <div class="s-nav">
+            <span class="wordmark" aria-label="IntelliDrugs">IntelliDrugs<span class="wordmark-dot" aria-hidden="true">.</span></span>
+            <nav class="s-nav-links" aria-label="Main, mockup"><a href="#search">Medicines</a><a href="#checker">Interaction checker</a><a href="#landing-how">Learn</a><a href="#landing-api">For partners</a></nav>
+            <div class="s-nav-r"><a class="btn btn--tonal" href="#signin">Sign in</a></div>
+          </div>
+
+          <div class="s-hero">
+            <div>
+              <p class="s-pilot">Pilot: 10 medicines being reviewed by pharmacists</p>
+              <h3>Bangladesh's medicines, traced from brand to substance and checked by a pharmacist.</h3>
+              <p class="s-lede">IntelliDrugs maps every DGDA-registered brand to its clinical drug and active substances, with ICD-11, RxNorm, ATC, DrugBank and SNOMED CT codes and DDInter 2.0 interactions. A record goes public only after a pharmacist approves it.</p>
+              <div class="s-ctas"><a class="btn btn--primary btn--lg" href="#checker">Check interactions</a><a class="btn btn--tonal btn--lg" href="#search">Search medicines</a></div>
+              <p class="s-fine">Free to search. Continue with Google to sign in or create an account.</p>
+            </div>
+            <div class="s-look" role="group" aria-label="Example: lookup for Napa 500 as it will look after a pharmacist approves it">
+              <div class="s-look-field"><span class="ico" aria-hidden="true"></span><span>Napa 500</span><span class="s-caret" aria-hidden="true"></span></div>
+              <div class="s-look-body">
+                <div class="s-chain">
+                  <div class="s-rail" aria-hidden="true"><i></i><b></b></div>
+                  <div class="s-step"><span class="s-k">Brand in the DGDA register</span><span class="s-v">Napa</span><span class="s-x">Tablet, Beximco Pharmaceuticals Ltd., <span class="mono">DAR 186-0030-006</span></span><span class="s-x">Filed as <span class="raw">Paracetamol 500 mg</span></span></div>
+                  <div class="s-rail" aria-hidden="true"><i></i><b></b></div>
+                  <div class="s-step"><span class="s-k">Clinical drug</span><span class="s-v">Acetaminophen 500 mg tablet</span><span class="s-x"><span class="mono">BDC-000001</span>, systemic route</span></div>
+                  <div class="s-rail" aria-hidden="true"><i></i><b></b></div>
+                  <div class="s-step"><span class="s-k">Active substance</span><span class="s-v">Acetaminophen, 500 mg</span><span class="s-x"><span class="mono">BDS-000001</span>, also listed as Paracetamol</span>
+                    <div class="codes"><span class="code"><span class="code-sys">ICD-11</span>XM5DJ7</span><span class="code"><span class="code-sys">RxCUI</span>161</span><span class="code"><span class="code-sys">ATC</span>N02BE01</span><span class="code"><span class="code-sys">DrugBank</span>DB00316</span><span class="code"><span class="code-sys">SNOMED CT</span>387517004</span></div></div>
+                  <div class="s-rail" aria-hidden="true"><i></i></div>
+                  <div class="s-step"><span class="s-k">Drug interactions in DDInter 2.0, 645 pairs</span>
+                    <div class="s-sevrow"><span class="sev sev--major">Major <b class="sev-n">10</b></span><span class="sev sev--moderate">Moderate <b class="sev-n">85</b></span><span class="sev sev--minor">Minor <b class="sev-n">38</b></span><span class="sev sev--unclassified">Severity not classified by DDInter <b class="sev-n">512</b></span></div></div>
+                </div>
+              </div>
+              <div class="s-look-foot"><span class="rv rv--approved">Approved by a pharmacist</span><span class="example">Example</span><span>Shown as it will look after approval. Today Napa is Not yet reviewed by a pharmacist, so the public sees only its name and status.</span></div>
+            </div>
+          </div>
+
+          <div class="s-stats">
+            <div class="s-stat"><b>39,196</b><span>products in the official DGDA register</span></div>
+            <div class="s-stat"><b>5</b><span>code systems: ICD-11, RxNorm, ATC, DrugBank, SNOMED CT</span></div>
+            <div class="s-stat"><b>3</b><span>interaction kinds from DDInter 2.0: drug–drug, drug–disease, drug–food</span></div>
+            <div class="s-stat"><b>10</b><span>medicines in pilot batch <span class="mono">0001-pilot</span>, under pharmacist review now</span></div>
+          </div>
+
+          <div class="s-band">
+            <h4 class="s-h2">One record, three kinds of work</h4>
+            <p class="s-sub">The same pharmacist-approved record serves the prescriber at the desk, the pharmacist at the counter and the systems that move prescriptions around.</p>
+            <div class="s-aud">
+              <article>
+                <h5>Doctors and prescribers</h5>
+                <p class="s-who">Prescribing and checking a patient's medicines</p>
+                <ul class="s-ticks">
+                  <li><span>Find a brand by the name on the strip and see its <b>substance and strength</b>.</span></li>
+                  <li><span>Check a patient's medicines against each other, <b>Major first</b>.</span></li>
+                  <li><span>Read DDInter 2.0's own management text, truncated, <b>never paraphrased</b>.</span></li>
+                </ul>
+              </article>
+              <article>
+                <h5>Pharmacists</h5>
+                <p class="s-who">Dispensing, substitution and review</p>
+                <ul class="s-ticks">
+                  <li><span>See the brands that share a <b>clinical drug</b>, for substitution.</span></li>
+                  <li><span>Trace every record to its <b>DGDA register entry</b> and the checks it passed.</span></li>
+                  <li><span>Invited pharmacists review records. <b>Their approval publishes them.</b></span></li>
+                </ul>
+              </article>
+              <article>
+                <h5>Partner companies</h5>
+                <p class="s-who">EMR, pharmacy and pharma systems</p>
+                <ul class="s-ticks">
+                  <li><span>Permanent <b>BDS</b> substance ids and <b>BDC</b> clinical drug ids.</span></li>
+                  <li><span>Crosswalk codes to <b>ICD-11, RxNorm, ATC, DrugBank and SNOMED CT</b>.</span></li>
+                  <li><span>An interaction check that returns <b>pharmacist-approved data only</b>.</span></li>
+                </ul>
+              </article>
+            </div>
+          </div>
+
+          <div class="s-band s-band--tint" id="landing-how">
+            <h4 class="s-h2">How a record becomes trustworthy</h4>
+            <p class="s-sub">Every product follows the same path. The last step before public is a person, and a re-run sends the record back to that person.</p>
+            <ol class="s-steps">
+              <li class="s-st"><span class="s-st-no">1</span><h5>DGDA register</h5><p>Trade name, company, dosage form and generic text, read from the DGDA register exactly as filed.</p><span class="s-st-eg"><span class="raw">Paracetamol 500 mg</span></span></li>
+              <li class="s-st"><span class="s-st-no">2</span><h5>Extraction</h5><p>Substances and strengths become a clinical drug, with codes for each substance.</p><span class="s-st-eg">Acetaminophen 500 mg tablet <span class="mono">BDC-000001</span></span></li>
+              <li class="s-st"><span class="s-st-no">3</span><h5>4 automated checks</h5><p>DGDA load, substances, clinical drug and DDInter. Each ends OK, Warning or Failed with the pipeline's own note.</p><span class="s-st-eg"><span class="stage-status" style="--st-ico:var(--i-check);color:var(--fg-2)">OK</span><span class="stage-status" style="--st-ico:var(--i-warn);color:var(--warn)">Warning</span><span class="stage-status" style="--st-ico:var(--i-fail);color:var(--crit)">Failed</span></span></li>
+              <li class="s-st"><span class="s-st-no">4</span><h5>Pharmacist approval</h5><p>A pharmacist compares the register with the result. An engineer's check is recorded but never publishes.</p><span class="s-st-eg"><span class="rv rv--pending">Not yet reviewed by a pharmacist</span></span></li>
+              <li class="s-st s-st--final"><span class="s-st-no">5</span><h5>Public</h5><p>Search, product pages, the checker and the partner API show the record.</p><span class="s-st-eg"><span class="rv rv--approved">Approved by a pharmacist</span></span></li>
+            </ol>
+            <div class="s-loop-row" aria-hidden="true"><span class="s-loop"></span></div>
+            <div class="s-loop-row"><p class="s-loop-label"><b>Re-run after approval</b><span class="rv rv--back">Back in review</span>The record leaves public view until a pharmacist approves it again.</p></div>
+          </div>
+
+          <div class="s-band">
+            <h4 class="s-h2">Three promises</h4>
+            <p class="s-sub">Fixed wording, the same on every screen and in the API. Silence is never shown as safety.</p>
+            <div class="s-prom">
+              <article>
+                <h5>Missing data is never shown as safe</h5>
+                <div class="nodata-block hatch" role="note">
+                  <span class="nodata-glyph" aria-hidden="true"></span>
+                  <div class="nodata-plate"><p class="nodata-title">Domperidone <span class="mono" style="color:var(--fg-2)">BDS-000010</span></p><p class="nodata-text">No interaction data in DDInter for this substance. This does not mean it is safe to combine.</p></div>
+                </div>
+                <p>Pairs with Domperidone are counted as not checked, never as checked.</p>
+              </article>
+              <article>
+                <h5>Nothing is public until a pharmacist approves it</h5>
+                <div class="s-prom-row"><span class="rv rv--pending">Not yet reviewed by a pharmacist</span><span class="rv rv--approved">Approved by a pharmacist</span><span class="rv rv--back">Back in review</span></div>
+                <p>An engineer's check is recorded but does not publish. A record re-run after approval goes back to review.</p>
+              </article>
+              <article>
+                <h5>Unknown severity is never called low risk</h5>
+                <div class="s-prom-row"><span class="sev sev--unclassified">Severity not classified by DDInter</span><span class="sev sev--minor">Minor</span></div>
+                <p>DDInter lists 512 of Acetaminophen's 645 drug pairs without a severity. They keep their own group and are never merged with Minor.</p>
+              </article>
+            </div>
+          </div>
+
+          <div class="s-band s-band--tint" id="landing-api">
+            <div class="s-api">
+              <div class="s-api-l">
+                <h4 class="s-h2">For partners: the same records, by API</h4>
+                <p class="s-sub" style="margin-top:0">EMR, pharmacy and pharma systems get what the site shows: pharmacist-approved records, permanent ids and crosswalk codes, in one response envelope.</p>
+                <ul class="s-ticks">
+                  <li><span>Check several products in one call. Alerts come sorted by severity, Major first.</span></li>
+                  <li><span>No-data substances and unreviewed products are listed by name, <b>never dropped</b>.</span></li>
+                  <li><span>Every response uses <span class="mono">{success, data, message, errors, metadata}</span>.</span></li>
+                </ul>
+                <div class="s-row"><a class="btn btn--primary" href="#signin">Request partner access</a><span class="s-who">Sign in first. Access is granted by the IntelliDrugs team.</span></div>
+              </div>
+              <div class="s-code">
+                <figure>
+                  <figcaption><span class="mono">POST /v1/interactions/check</span><span class="example">Example</span>Field names illustrative</figcaption>
+<pre tabindex="0" aria-label="Request example">{
+  <span class="tk-k">"conceptIds"</span>: [
+    "185-0138-012--g-warfarin",
+    "076-0028-006--aspirin",
+    "127-0263-018--domperidone"
+  ]
+}</pre>
+                </figure>
+                <figure>
+                  <figcaption>Public response today. None of the three is approved by a pharmacist, so all three are in notReviewed and nothing is checked. An empty alerts list does not mean they are safe together.</figcaption>
+<pre tabindex="0" aria-label="Public response example">{
+  <span class="tk-k">"success"</span>: true,
+  <span class="tk-k">"data"</span>: {
+    <span class="tk-k">"products"</span>: [],
+    <span class="tk-k">"alerts"</span>: [],
+    <span class="tk-k">"duplicates"</span>: [],
+    <span class="tk-k">"noData"</span>: [],
+    <span class="tk-k">"notReviewed"</span>: [
+      { <span class="tk-k">"conceptId"</span>: "185-0138-012--g-warfarin" },
+      { <span class="tk-k">"conceptId"</span>: "076-0028-006--aspirin" },
+      { <span class="tk-k">"conceptId"</span>: "127-0263-018--domperidone" }
+    ]
+  },
+  <span class="tk-k">"message"</span>: "OK",
+  <span class="tk-k">"errors"</span>: [],
+  <span class="tk-k">"metadata"</span>: { <span class="tk-k">"timestamp"</span>: "…", <span class="tk-k">"requestId"</span>: "…" }
+}</pre>
+                </figure>
+              </div>
+            </div>
+          </div>
+
+          <footer class="s-foot">
+            <div>
+              <span class="wordmark" style="font-size:19px" aria-label="IntelliDrugs">IntelliDrugs<span class="wordmark-dot" aria-hidden="true">.</span></span>
+              <p style="margin-top:12px;max-width:30ch">A drug knowledge base for Bangladesh. Decision support, not a substitute for clinical judgement.</p>
+            </div>
+            <div>
+              <h5>IntelliDrugs</h5>
+              <ul><li><a href="#search">Medicines</a></li><li><a href="#checker">Interaction checker</a></li><li><a href="#landing-how">Learn</a></li><li><a href="#landing-api">For partners</a></li><li><a href="#signin">Privacy</a></li></ul>
+            </div>
+            <div>
+              <h5>Data sources and licences</h5>
+              <ul>
+                <li><b>DGDA register</b>, the official register of DGDA-registered products.</li>
+                <li><b>DDInter 2.0</b>, drug–drug, drug–disease and drug–food interactions. <span class="example">Licence line to confirm</span></li>
+                <li><b>RxNav and RxNorm</b>. This product uses publicly available data from the U.S. National Library of Medicine (NLM). NLM is not responsible for the product and does not endorse it.</li>
+                <li><b>ICD-11</b> medicament codes, © World Health Organization, CC BY-ND 3.0 IGO.</li>
+                <li><b>ATC, DrugBank and SNOMED CT</b> codes, mapped through RxNav. <span class="example">Licence lines to confirm</span></li>
+              </ul>
+            </div>
+            <div class="s-foot-legal"><span>drugdb.eliooo.org</span><span>Severity levels and management text are DDInter 2.0's, shown truncated, never rewritten.</span></div>
+          </footer>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="b-sub">
+    <h3 class="b-sub-h">The hero at 400 pixels</h3>
+    <p class="b-cap">Navigation folds into a menu button, buttons stack at full width, and the lookup card keeps the brand, clinical drug, substance and codes. The four severity counts move to the product page. Like the desktop hero, the card shows Napa after approval and is marked Example.</p>
+    <div class="frame s-phone-frame" tabindex="0" role="region" aria-label="Landing hero, 400 pixel mockup">
+      <div class="s-phone s-site">
+        <div class="s-nav">
+          <span class="wordmark" aria-label="IntelliDrugs">IntelliDrugs<span class="wordmark-dot" aria-hidden="true">.</span></span>
+          <div class="s-nav-r"><a class="btn btn--plain btn--sm" href="#signin">Sign in</a><span class="btn btn--tonal btn--icon"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/></svg><span class="sr-only">Menu</span></span></div>
+        </div>
+        <div class="s-phone-hero">
+          <p class="s-pilot">Pilot: 10 medicines being reviewed by pharmacists</p>
+          <h4>Bangladesh's medicines, traced from brand to substance and checked by a pharmacist.</h4>
+          <p class="s-lede">Every DGDA-registered brand mapped to its clinical drug, active substances, international codes and DDInter 2.0 interactions. Public only after a pharmacist approves it.</p>
+          <div class="s-ctas"><a class="btn btn--primary btn--lg" href="#checker">Check interactions</a><a class="btn btn--tonal btn--lg" href="#search">Search medicines</a></div>
+          <div class="s-look" role="group" aria-label="Example: lookup for Napa 500 as it will look after approval, phone width">
+            <div class="s-look-field"><span class="ico" aria-hidden="true"></span><span>Napa 500</span><span class="s-caret" aria-hidden="true"></span></div>
+            <div class="s-look-body">
+              <div class="s-chain">
+                <div class="s-rail" aria-hidden="true"><i></i><b></b></div>
+                <div class="s-step"><span class="s-k">Brand</span><span class="s-v">Napa</span><span class="s-x">Tablet, Beximco, <span class="mono">DAR 186-0030-006</span></span></div>
+                <div class="s-rail" aria-hidden="true"><i></i><b></b></div>
+                <div class="s-step"><span class="s-k">Clinical drug</span><span class="s-v">Acetaminophen 500 mg tablet</span><span class="s-x mono">BDC-000001</span></div>
+                <div class="s-rail" aria-hidden="true"><i></i></div>
+                <div class="s-step"><span class="s-k">Active substance</span><span class="s-v">Acetaminophen</span><span class="s-x"><span class="mono">BDS-000001</span>, also Paracetamol</span>
+                  <div class="codes"><span class="code"><span class="code-sys">ICD-11</span>XM5DJ7</span><span class="code"><span class="code-sys">RxCUI</span>161</span><span class="code"><span class="code-sys">ATC</span>N02BE01</span></div></div>
+              </div>
+            </div>
+            <div class="s-look-foot"><span class="rv rv--approved">Approved by a pharmacist</span><span class="example">Example</span><span>Today Napa is Not yet reviewed by a pharmacist.</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 2. SIGN IN ============ -->
+<section class="b-sec" id="signin" aria-labelledby="h-auth">
+  <div class="b-head"><h2 id="h-auth">Sign in and sign up</h2><p>One button: Continue with Google signs you in or creates your account. Reviewer roles come only from an invite. The bot check runs on the action, and the card says what the Google identity is used for.</p></div>
+  <div class="s-auth-grid">
+    <div class="s-auth-stage">
+      <div class="s-auth">
+        <div class="s-auth-brand">
+          <svg width="32" height="32" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="var(--brand-mark)"/><path fill="var(--on-brand-mark)" fill-rule="evenodd" d="M14 26h7v23h-7zM14 15h7v7h-7zM26 15h9a17 17 0 0 1 0 34h-9zM33 22h2a10 10 0 0 1 0 20h-2z"/></svg>
+          <span class="wordmark" aria-label="IntelliDrugs">IntelliDrugs<span class="wordmark-dot" aria-hidden="true">.</span></span>
+        </div>
+        <div><h3>Sign in to IntelliDrugs</h3><p class="s-auth-sub">New here? The same button creates your account.</p></div>
+        <span class="s-gbtn">
+          <svg viewBox="0 0 48 48" aria-hidden="true"><path fill="var(--g-red)" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="var(--g-blue)" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="var(--g-yellow)" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="var(--g-green)" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+          <span>Continue with Google</span>
+        </span>
+        <div class="s-turn"><span class="botcheck">Bot check passed</span><span class="s-turn-by">Cloudflare Turnstile</span></div>
+        <div class="s-invite"><span class="ico" aria-hidden="true"></span><p><b>Reviewing for the pilot?</b> Pharmacists and engineers join by invite. Continue with the Google account your invite was sent to, and your reviewer tools appear.</p></div>
+        <p class="s-privacy">We use your Google name and email address only to sign you in and, for reviewers, to record each decision. Public decision history shows roles, never emails. We never post to your Google account. <a href="#signin">Privacy</a></p>
+      </div>
+    </div>
+
+    <div class="s-states">
+      <div class="s-state">
+        <p class="s-state-lab">Loading, waiting for Google</p>
+        <span class="s-gbtn" aria-busy="true"><span class="btn-spinner" aria-hidden="true"></span><span>Opening Google</span></span>
+        <p>Finish signing in in the Google window. This page updates when you're done. The button keeps its size so nothing jumps.</p>
+      </div>
+
+      <div class="s-state">
+        <p class="s-state-lab">Signed in, no reviewer role</p>
+        <div class="s-acct"><span class="s-avatar" aria-hidden="true">NJ</span><span class="s-acct-txt"><b>Nusrat Jahan <span class="example">Example</span></b>nusrat@example.com</span></div>
+        <h3>You're signed in as a reader</h3>
+        <p>You can search medicines and check interactions. Reviewing needs an invite. If you were invited, sign out and continue with the invited Google account.</p>
+        <div class="s-row"><a class="btn btn--primary btn--sm" href="#search">Search medicines</a><span class="btn btn--plain btn--sm">Sign out</span></div>
+      </div>
+
+      <div class="s-state s-state--wide">
+        <p class="s-state-lab">Invited reviewer, first sign-in</p>
+        <div class="s-row"><span class="role-badge"><span class="ico" style="--ico:var(--i-shield);width:13px;height:13px" aria-hidden="true"></span>Pharmacist</span><span class="s-who">Signed in as Farhana Islam <span class="example">Example</span></span></div>
+        <h3>You're a pharmacist reviewer for batch 0001-pilot</h3>
+        <ol class="s-next">
+          <li><span>10 records are waiting. Each shows <span class="rv rv--pending">Not yet reviewed by a pharmacist</span> until a pharmacist approves it.</span></li>
+          <li><span>Compare the DGDA register with the extraction, then press <span class="kbd">A</span> or choose Looks correct. You have 8 seconds to undo with <span class="kbd">U</span>.</span></li>
+          <li><span>Your approval publishes the record. If the pipeline re-runs it later, it comes back to you as <span class="rv rv--back">Back in review</span>.</span></li>
+        </ol>
+        <div class="s-row"><a class="btn btn--primary" href="#signin">Open the review desk</a><span class="s-who">Shortcuts work inside the desk only, and pause while you type.</span></div>
+      </div>
+
+      <div class="s-state">
+        <p class="s-state-lab">Invite sent to another Google account</p>
+        <div class="banner banner--warn" role="note"><p class="banner-title">This Google account isn't on the reviewer list.</p><p class="banner-body">You're signed in as nusrat@example.com <span class="example">Example</span>. Reviewer tools need the account your invite was sent to. You can still search and check interactions.</p></div>
+        <div class="s-row"><span class="btn btn--tonal btn--sm">Use another Google account</span></div>
+      </div>
+
+      <div class="s-state">
+        <p class="s-state-lab">Bot check failed</p>
+        <div class="banner banner--crit" role="note"><p class="banner-title">We couldn't confirm you're a person.</p><p class="banner-body">You weren't signed in. Retry the check. If it fails again, turn off extensions that block scripts on this page.</p></div>
+        <div class="s-row"><span class="btn btn--tonal btn--sm">Retry check</span></div>
+      </div>
+
+      <div class="s-state">
+        <p class="s-state-lab">Sign-in cancelled</p>
+        <div class="banner banner--info" role="note"><p class="banner-title">Sign-in cancelled.</p><p class="banner-body">You closed the Google window before finishing. Nothing changed. Continue with Google to try again.</p></div>
+      </div>
+
+      <div class="s-state">
+        <p class="s-state-lab">Pop-up blocked</p>
+        <div class="banner banner--warn" role="note"><p class="banner-title">Your browser blocked the Google window.</p><p class="banner-body">Allow pop-ups for drugdb.eliooo.org, or continue in this tab instead.</p></div>
+        <div class="s-row"><span class="btn btn--primary btn--sm">Continue in this tab</span></div>
+      </div>
+
+      <div class="s-state s-state--wide">
+        <p class="s-state-lab">Account menu</p>
+        <div class="s-menu-wrap">
+          <span class="s-avatar-btn"><span class="s-avatar" aria-hidden="true">FI</span><span class="sr-only">Account menu for Farhana Islam, open</span></span>
+          <div class="s-menu" id="acct-menu" aria-label="Account">
+            <div class="s-menu-h">
+              <div class="s-acct"><span class="s-avatar" aria-hidden="true">FI</span><span class="s-acct-txt"><b>Farhana Islam <span class="example">Example</span></b>farhana@example.com</span></div>
+              <div class="s-row"><span class="role-badge"><span class="ico" style="--ico:var(--i-shield);width:13px;height:13px" aria-hidden="true"></span>Pharmacist</span><span class="s-who">Batch 0001-pilot</span></div>
+            </div>
+            <span class="s-mi"><span class="ico" style="--ico:var(--i-stack)" aria-hidden="true"></span>Review desk</span>
+            <span class="s-mi"><span class="ico" style="--ico:var(--i-undo)" aria-hidden="true"></span>Sign out</span>
+          </div>
+        </div>
+        <p>A reader sees the same menu without the role badge and without Review desk.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 3. SEARCH AND PRODUCT ============ -->
+<section class="b-sec" id="search" aria-labelledby="h-search">
+  <div class="b-head"><h2 id="h-search">Medicine search and product pages</h2><p>Search matches brands, substances and the names DGDA uses, so "paracetamol" finds Napa through Acetaminophen. A record a pharmacist hasn't approved is never shown as "not found" or "no data": it appears as a stub with its name and status, and nothing else.</p></div>
+
+  <div class="b-sub">
+    <h3 class="b-sub-h">Search for "warfarin", as it is today</h3>
+    <p class="b-hint-scroll">The desktop mockup scrolls sideways inside its frame.</p>
+    <div class="frame" tabindex="0" role="region" aria-label="Search results for warfarin, desktop mockup">
+      <div class="window s-win--mid">
+        <div class="window-bar"><span class="window-dot"></span><span class="window-dot"></span><span class="window-dot"></span><span class="s-url">drugdb.eliooo.org/search?q=warfarin</span></div>
+        <div class="s-site">
+          <div class="s-bar material">
+            <span class="wordmark" aria-label="IntelliDrugs">IntelliDrugs<span class="wordmark-dot" aria-hidden="true">.</span></span>
+            <span class="search"><span class="sr-only">Search medicines: </span><span class="s-qv">warfarin</span></span>
+            <nav class="s-nav-links" aria-label="Main, mockup"><a href="#search" aria-current="page">Medicines</a><a href="#checker">Interaction checker</a><a href="#landing-how">Learn</a><a href="#landing-api">For partners</a></nav>
+            <div class="s-nav-r"><a class="btn btn--tonal btn--sm" href="#signin">Sign in</a></div>
+          </div>
+          <div class="s-page">
+            <div class="s-results-h"><h4>Results for "warfarin"</h4><span>1 product</span></div>
+            <div class="s-rgroup">
+              <h5>Products</h5>
+              <article class="s-res s-res--stub">
+                <div class="s-res-main">
+                  <a class="s-res-name" href="#stub">G Warfarin</a>
+                  <p class="s-res-meta"><span class="mono">185-0138-012--g-warfarin</span></p>
+                  <p class="s-res-meta">A pharmacist hasn't approved this record yet, so its substance, codes and interactions are hidden.</p>
+                </div>
+                <div class="s-res-side"><span class="rv rv--pending">Not yet reviewed by a pharmacist</span></div>
+              </article>
+            </div>
+            <p class="b-cap">Substances appear in search once one of their products is approved. This page shows only what the public API returns for an unapproved product: its id, trade name and review status.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="b-sub">
+    <h3 class="b-sub-h">Search for "paracetamol", after a pharmacist approves Napa <span class="example">Example</span></h3>
+    <div class="frame" tabindex="0" role="region" aria-label="Search results for paracetamol, desktop mockup">
+      <div class="window s-win--mid">
+        <div class="window-bar"><span class="window-dot"></span><span class="window-dot"></span><span class="window-dot"></span><span class="s-url">drugdb.eliooo.org/search?q=paracetamol</span></div>
+        <div class="s-site">
+          <div class="s-bar material">
+            <span class="wordmark" aria-label="IntelliDrugs">IntelliDrugs<span class="wordmark-dot" aria-hidden="true">.</span></span>
+            <span class="search"><span class="sr-only">Search medicines: </span><span class="s-qv">paracetamol</span></span>
+            <nav class="s-nav-links" aria-label="Main, mockup"><a href="#search" aria-current="page">Medicines</a><a href="#checker">Interaction checker</a><a href="#landing-how">Learn</a><a href="#landing-api">For partners</a></nav>
+            <div class="s-nav-r"><a class="btn btn--tonal btn--sm" href="#signin">Sign in</a></div>
+          </div>
+          <p class="s-proj"><span class="example">Example</span>Shown as it will look once a pharmacist approves Napa. Today Napa is Not yet reviewed by a pharmacist.</p>
+          <div class="s-page">
+            <div class="s-results-h"><h4>Results for "paracetamol"</h4><span>1 substance, 1 product</span></div>
+            <div class="s-rgroup">
+              <h5>Substance</h5>
+              <article class="s-res">
+                <div class="s-res-main">
+                  <a class="s-res-name" href="#product">Acetaminophen</a>
+                  <p class="s-hit">Matched <mark>Paracetamol</mark>, the name in the DGDA register. RxNorm, ICD-11 and DDInter call it Acetaminophen.</p>
+                  <p class="s-res-meta"><span class="mono">BDS-000001</span><span>Interaction data found in DDInter 2.0, <span class="mono">DDInter14</span></span><span>1 product in the pilot</span></p>
+                </div>
+                <div class="s-res-side"><div class="codes"><span class="code"><span class="code-sys">ATC</span>N02BE01</span><span class="code"><span class="code-sys">RxCUI</span>161</span></div></div>
+              </article>
+            </div>
+            <div class="s-rgroup">
+              <h5>Products</h5>
+              <article class="s-res">
+                <div class="s-res-main">
+                  <a class="s-res-name" href="#product">Napa</a>
+                  <p class="s-res-meta"><span>Tablet</span><span>Beximco Pharmaceuticals Ltd.</span><span class="mono">DAR 186-0030-006</span></p>
+                  <p class="s-hit">Filed as <mark>Paracetamol</mark> 500 mg. Clinical drug Acetaminophen 500 mg tablet, <span class="mono">BDC-000001</span>.</p>
+                </div>
+                <div class="s-res-side"><span class="rv rv--approved">Approved by a pharmacist</span><span class="example">Example</span></div>
+              </article>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="b-sub" id="product">
+    <h3 class="b-sub-h">Napa product page, after approval <span class="example">Example</span></h3>
+    <p class="b-cap">Brand, clinical drug and substance read left to right, the way a pharmacist reasons. Every code says what its system is. The verification badge carries a role and a date, never a name. The approval and its date are the only Example values on this page.</p>
+    <div class="frame" tabindex="0" role="region" aria-label="Napa product page, desktop mockup">
+      <div class="window s-win">
+        <div class="window-bar"><span class="window-dot"></span><span class="window-dot"></span><span class="window-dot"></span><span class="s-url">drugdb.eliooo.org/products/186-0030-006--napa</span></div>
+        <div class="s-site">
+          <div class="s-bar material">
+            <span class="wordmark" aria-label="IntelliDrugs">IntelliDrugs<span class="wordmark-dot" aria-hidden="true">.</span></span>
+            <span class="search"><span class="sr-only">Search medicines, empty: </span><span class="s-qv s-qv--ph">Brand, substance or DAR number</span></span>
+            <nav class="s-nav-links" aria-label="Main, mockup"><a href="#search" aria-current="page">Medicines</a><a href="#checker">Interaction checker</a><a href="#landing-how">Learn</a><a href="#landing-api">For partners</a></nav>
+            <div class="s-nav-r"><a class="btn btn--tonal btn--sm" href="#signin">Sign in</a></div>
+          </div>
+          <div class="s-prod">
+            <div class="s-prod-main">
+              <div class="s-prod-h">
+                <p class="s-crumb"><a href="#search">Medicines</a><span aria-hidden="true">/</span><a href="#search">Acetaminophen</a><span aria-hidden="true">/</span><span>Napa</span></p>
+                <h4>Napa</h4>
+                <p class="s-prod-meta"><span>Tablet</span><span>Beximco Pharmaceuticals Ltd.</span><span class="mono">DAR 186-0030-006</span></p>
+                <p class="s-verline"><span class="rv rv--approved">Approved by a pharmacist</span><span>on 14/10/2026, 11:20 Dhaka time</span><span class="example">Example</span></p>
+              </div>
+
+              <div class="s-psec">
+                <div class="s-psec-h"><h5>What's in it</h5><span>From the register to the substance</span></div>
+                <div class="s-trace">
+                  <div><span class="s-k">Brand, as filed with DGDA</span><span class="s-v">Napa</span><span class="s-x"><span class="raw">Paracetamol 500 mg</span></span><span class="s-x">Tablet</span></div>
+                  <div><span class="s-k">Clinical drug</span><span class="s-v">Acetaminophen 500 mg tablet</span><span class="s-x mono">BDC-000001</span><span class="s-x">Tablet, systemic route</span></div>
+                  <div><span class="s-k">Active substance</span><span class="s-v">Acetaminophen, 500 mg</span><span class="s-x mono">BDS-000001</span><span class="s-x">Also listed as Paracetamol</span></div>
+                </div>
+                <ul class="s-names" aria-label="Names for this substance"><li>Paracetamol <span>DGDA register</span></li><li>acetaminophen <span>RxNorm</span></li><li>Acetaminophen <span>ICD-11, DDInter</span></li></ul>
+              </div>
+
+              <div class="s-psec">
+                <div class="s-psec-h"><h5>Codes</h5><span>5 code systems and the DDInter entry, for Acetaminophen <span class="mono">BDS-000001</span></span></div>
+                <div class="s-tw" tabindex="0" role="region" aria-label="Codes for Acetaminophen">
+                  <table class="s-table">
+                    <caption class="sr-only">Crosswalk codes for Acetaminophen</caption>
+                    <thead><tr><th scope="col">System</th><th scope="col">Code</th><th scope="col">What the system is</th><th scope="col">How it was matched</th></tr></thead>
+                    <tbody>
+                      <tr><th scope="row">ICD-11</th><td><span class="code">XM5DJ7</span></td><td class="s-what">WHO's ICD-11 medicament code. The DGDA register lists ingredients with it.</td><td class="s-what">xm, confidence 1.0</td></tr>
+                      <tr><th scope="row">RxNorm</th><td><span class="code"><span class="code-sys">RxCUI</span>161</span></td><td class="s-what">Normalised drug names from the U.S. National Library of Medicine.</td><td class="s-what">rxnav-exact, 1.0</td></tr>
+                      <tr><th scope="row">ATC</th><td><span class="code">N02BE01</span></td><td class="s-what">WHO Anatomical Therapeutic Chemical classification.</td><td class="s-what">rxnav-exact, 1.0</td></tr>
+                      <tr><th scope="row">DrugBank</th><td><span class="code">DB00316</span></td><td class="s-what">DrugBank's record for the substance.</td><td class="s-what">rxnav-exact, 1.0</td></tr>
+                      <tr><th scope="row">SNOMED CT</th><td><div class="codes"><span class="code">387517004</span><span class="code">90332006</span></div></td><td class="s-what">Clinical terminology used in health records.</td><td class="s-what">rxnav-exact, 1.0</td></tr>
+                      <tr><th scope="row">DDInter</th><td><span class="code">DDInter14</span></td><td class="s-what">The DDInter 2.0 entry the interactions below come from.</td><td class="s-what">drugbank, 1.0, systemic</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="s-psec">
+                <div class="s-psec-h"><h5>Interactions</h5><span>From DDInter 2.0, for Acetaminophen</span></div>
+                <h6>645 drug–drug pairs</h6>
+                <div class="s-sevrow"><span class="sev sev--major">Major <b class="sev-n">10</b></span><span class="sev sev--moderate">Moderate <b class="sev-n">85</b></span><span class="sev sev--minor">Minor <b class="sev-n">38</b></span><span class="sev sev--unclassified">Severity not classified by DDInter <b class="sev-n">512</b></span></div>
+                <div class="s-kv"><div><b>3</b>drug–disease interactions</div><div><b>1</b>drug–food interaction</div></div>
+                <h6 style="margin-top:8px">With the other pilot medicines</h6>
+                <article class="pair">
+                  <div class="pair-head"><span class="sev sev--moderate">Moderate</span><span class="pair-names">Napa + G Warfarin</span></div>
+                  <p class="pair-meta">Acetaminophen + Warfarin. Action: synergy</p>
+                  <p class="pair-text" id="napa-pt">Due to the lack of safer alternatives, acetaminophen is considered the analgesic and antipyretic drug of choice for patients receiving warfarin and similar anticoagulants. However, caution is recommended during concomitant therapy, particularly if high dosages of APAP are used continuously for more than a few days, or in patients with risk factors such as ethanol consumption, old age, and malnutrition. Closer monitoring of INR may be advisable. Patients should be advised to promptly report any signs of bleeding to their physician, including pain, swelling, headache, dizziness, weakness, prolonged bleeding from cuts, increased menstrual flow, vaginal bleeding, nosebleeds, bleeding of gums from brushing, unusual bleeding or bruising, red or brown urine, or red or black stools.</p>
+                  <p class="pair-source">Management, truncated. Full text from DDInter 2.0. <button class="btn btn--plain btn--sm" type="button" data-fulltext aria-controls="napa-pt" aria-expanded="false">Show full text</button></p>
+                  <p class="pair-source">Source: DDInter 2.0, <span class="mono">DDInter14</span> + <span class="mono">DDInter1951</span></p>
+                </article>
+                <div class="s-panel">
+                  <div class="s-row"><span class="sev sev--unclassified">Severity not classified by DDInter <b class="sev-n">7</b></span></div>
+                  <p style="color:var(--fg)">Napa with Amlodipine-5, Aspirin, Clarith, Simvastatin, Chloramphenicol, G-Metformin, and the Amoxicillin in Amoxycillin Clavulanic Acid.</p>
+                  <p>DDInter 2.0 lists these pairs with action "unknown" and no text. They are not treated as low risk.</p>
+                </div>
+                <div class="nodata-block hatch" role="note">
+                  <span class="nodata-glyph" aria-hidden="true"></span>
+                  <div class="nodata-plate">
+                    <p class="nodata-title">Domperidone <span class="mono" style="color:var(--fg-2)">BDS-000010</span></p>
+                    <p class="nodata-text">No interaction data in DDInter for this substance. This does not mean it is safe to combine.</p>
+                    <p class="nodata-pairs">Not checked: <span class="sev sev--nodata">Napa + Domperidone</span></p>
+                  </div>
+                </div>
+                <div class="s-quiet"><h6>Not in the pilot pair list</h6><p>Napa with the Clavulanic acid in Amoxycillin Clavulanic Acid. Not in the pilot's DDInter 2.0 pair list. This is not a guarantee that they are safe to combine.</p></div>
+              </div>
+
+              <div class="s-psec">
+                <div class="s-psec-h"><h5>Automated checks</h5><span>3 OK, 1 Warning. Notes are the pipeline's own.</span></div>
+                <div class="s-stages">
+                  <div class="stage stage--ok"><p class="stage-head"><span class="stage-name">DGDA load</span><span class="stage-status">OK</span></p><p class="stage-note">No pipeline note.</p></div>
+                  <div class="stage stage--ok"><p class="stage-head"><span class="stage-name">Substances</span><span class="stage-status">OK</span></p><p class="stage-note">No pipeline note.</p></div>
+                  <div class="stage stage--ok"><p class="stage-head"><span class="stage-name">Clinical drug</span><span class="stage-status">OK</span></p><p class="stage-note">No pipeline note.</p></div>
+                  <div class="stage stage--warn"><p class="stage-head"><span class="stage-name">DDInter</span><span class="stage-status">Warning</span></p><p class="stage-note">DDInter text not found for 7 pairs:</p>
+                    <ul class="stage-pairs">
+                      <li class="stage-pair">Metformin + Acetaminophen <span class="mono">DDInter1164/DDInter14</span></li>
+                      <li class="stage-pair">Acetaminophen + Simvastatin <span class="mono">DDInter14/DDInter1675</span></li>
+                      <li class="stage-pair">Acetaminophen + Acetylsalicylic acid <span class="mono">DDInter14/DDInter20</span></li>
+                      <li class="stage-pair">Acetaminophen + Chloramphenicol <span class="mono">DDInter14/DDInter351</span></li>
+                      <li class="stage-pair">Acetaminophen + Clarithromycin <span class="mono">DDInter14/DDInter393</span></li>
+                      <li class="stage-pair">Acetaminophen + Amlodipine <span class="mono">DDInter14/DDInter79</span></li>
+                      <li class="stage-pair">Acetaminophen + Amoxicillin <span class="mono">DDInter14/DDInter83</span></li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <aside class="s-aside" aria-label="About this record">
+              <div class="s-card">
+                <h5>Verification</h5>
+                <span class="rv rv--approved" style="width:fit-content">Approved by a pharmacist</span>
+                <p>A pharmacist compared this record with the DGDA register on 14/10/2026 <span class="example">Example</span>. Decision history shows roles, not names.</p>
+                <p>If the pipeline re-runs Napa, the record goes back to review and leaves public view until it is approved again.</p>
+              </div>
+              <div class="s-card">
+                <h5>Other brands of Acetaminophen 500 mg tablet</h5>
+                <p>No other pilot brand maps to <span class="mono">BDC-000001</span> yet. Other DGDA brands of this clinical drug appear here as pharmacists approve them.</p>
+              </div>
+              <div class="s-card">
+                <h5>Where this record comes from</h5>
+                <dl>
+                  <dt>Source</dt><dd>DGDA register</dd>
+                  <dt>Concept</dt><dd class="mono">186-0030-006--napa</dd>
+                  <dt>Extracted</dt><dd>12/10/2026 03:28 Dhaka time</dd>
+                  <dt>Batch</dt><dd class="mono">0001-pilot</dd>
+                  <dt>Checks</dt><dd>3 OK, 1 Warning</dd>
+                </dl>
+              </div>
+              <a class="btn btn--primary" href="#checker">Check Napa with other medicines</a>
+              <span class="btn btn--plain">Report a problem with this record</span>
+            </aside>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="b-2up">
+    <div class="b-sub" id="stub">
+      <h3 class="b-sub-h">Napa today: the hidden-record stub</h3>
+      <p class="b-cap">What the public sees for any of the 10 pilot records right now. Only the id, trade name and status, exactly what the API returns for an unapproved product.</p>
+      <div class="frame" tabindex="0" role="region" aria-label="Napa hidden-record stub, mockup">
+        <div class="window s-win--sm">
+          <div class="window-bar"><span class="window-dot"></span><span class="window-dot"></span><span class="window-dot"></span><span class="s-url">drugdb.eliooo.org/products/186-0030-006--napa</span></div>
+          <div class="s-site">
+            <div class="s-stub">
+              <p class="s-crumb"><a href="#search">Medicines</a><span aria-hidden="true">/</span><span>Napa</span></p>
+              <h4>Napa</h4>
+              <p class="mono" style="color:var(--fg)">186-0030-006--napa</p>
+              <span class="rv rv--pending" style="width:fit-content">Not yet reviewed by a pharmacist</span>
+              <p>A pharmacist hasn't approved this record yet. Until then IntelliDrugs hides its clinical drug, codes and interactions, so nobody relies on data that hasn't been checked.</p>
+              <p>This is not the same as "not found" or "no data". The record exists and is in review in batch <span class="mono">0001-pilot</span>.</p>
+              <div class="s-row"><a class="btn btn--tonal" href="#search">Search other medicines</a></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="b-sub">
+      <h3 class="b-sub-h">No results</h3>
+      <p class="b-cap">An empty result says what to try next and offers the nearest pilot spelling. It never says a medicine doesn't exist in Bangladesh, only that no reviewed record matches.</p>
+      <div class="frame" tabindex="0" role="region" aria-label="Search with no results, mockup">
+        <div class="window s-win--sm">
+          <div class="window-bar"><span class="window-dot"></span><span class="window-dot"></span><span class="window-dot"></span><span class="s-url">drugdb.eliooo.org/search?q=warfrin</span></div>
+          <div class="s-site">
+            <div class="s-stub">
+              <span class="search" style="height:38px"><span class="sr-only">Search medicines: </span><span class="s-qv">warfrin</span></span>
+              <div class="s-empty">
+                <h4>No medicines match "warfrin"</h4>
+                <p>Check the spelling, or search by brand, substance or DAR number.</p>
+                <div class="s-row"><span class="btn btn--tonal">Search for warfarin</span></div>
+                <p>IntelliDrugs is in its pilot. 10 medicines are in review now, and more follow in later batches.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 4. CHECKER ============ -->
+<section class="b-sec" id="checker" aria-labelledby="h-chk">
+  <div class="b-head"><h2 id="h-chk">Interaction checker</h2><p>A working checker on the real pilot data: 10 medicines and the 35 DDInter 2.0 pairs among their substances. Add medicines with the field, remove them, or start from a scenario. Results run Major, Moderate, Minor, not classified, then no data, and the summary counts only pairs that were actually checked.</p></div>
+  <div class="window" id="chk-app">
+    <div class="window-bar"><span class="window-dot"></span><span class="window-dot"></span><span class="window-dot"></span><span class="s-url">drugdb.eliooo.org/check</span></div>
+    <div class="s-site s-chk">
+      <div class="s-chk-side">
+        <h3>Check interactions</h3>
+        <div class="banner banner--info" role="note"><p class="banner-title">Shown as it will work after approval. <span class="example">Example</span></p><p class="banner-body">Today all 10 are Not yet reviewed by a pharmacist, and the public checker lists them as not yet reviewed instead of checking them.</p></div>
+
+        <div class="field">
+          <label class="field-label" for="cx-input" id="cx-label">Add a medicine</label>
+          <div class="s-cbx">
+            <div class="search"><input type="text" id="cx-input" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="cx-list" aria-describedby="cx-help" autocomplete="off" placeholder="Brand or substance, such as Napa or paracetamol"></div>
+            <ul class="s-cbx-list" id="cx-list" role="listbox" aria-labelledby="cx-label" hidden></ul>
+          </div>
+          <div class="field-meta"><span id="cx-help">Up and down arrows to move, Enter to add, Esc to close. 2 to 20 medicines.</span></div>
+        </div>
+
+        <div class="b-sub" style="gap:10px">
+          <div class="s-sel-h"><p id="sel-h">Selected</p><button class="btn btn--plain btn--sm" type="button" id="sel-clear">Clear all</button></div>
+          <ul class="s-sel" id="sel-list" aria-labelledby="sel-h"></ul>
+        </div>
+
+        <div class="b-sub" style="gap:10px">
+          <p class="s-group-h" id="pre-h">Start from a scenario</p>
+          <div class="s-presets" role="group" aria-labelledby="pre-h">
+            <button class="btn btn--tonal btn--sm" type="button" data-preset="wad">G Warfarin + Aspirin + Domperidone</button>
+            <button class="btn btn--tonal btn--sm" type="button" data-preset="cs">Clarith + Simvastatin</button>
+            <button class="btn btn--tonal btn--sm" type="button" data-preset="sa">Simvastatin + Amlodipine-5</button>
+            <button class="btn btn--tonal btn--sm" type="button" data-preset="nw">Napa + G Warfarin</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="s-chk-main">
+        <h4 class="s-sum" id="chk-sum">Add at least 2 medicines to check them against each other.</h4>
+        <div class="s-sevrow" id="chk-counts"></div>
+        <div id="chk-results" class="b-sub" style="gap:20px"></div>
+
+        <div class="s-legend">
+          <h4>Severity legend, from DDInter 2.0</h4>
+          <dl>
+            <dt><span class="sev sev--major">Major</span></dt><dd>Major</dd>
+            <dt><span class="sev sev--moderate">Moderate</span></dt><dd>Moderate</dd>
+            <dt><span class="sev sev--minor">Minor</span></dt><dd>Minor</dd>
+            <dt><span class="sev sev--unclassified">Severity not classified by DDInter</span></dt><dd>Never treated as low risk, never merged with Minor.</dd>
+            <dt><span class="sev sev--nodata">No data</span></dt><dd>No interaction data in DDInter for this substance. This does not mean it is safe to combine.</dd>
+          </dl>
+        </div>
+        <p class="s-disc">IntelliDrugs is decision support. It is not a substitute for clinical judgement. Severity levels and management text come from DDInter 2.0 and are shown truncated, never rewritten.</p>
+      </div>
+    </div>
+    <p class="sr-only" id="chk-live" aria-live="polite" aria-atomic="true"></p>
+  </div>
+  <p class="b-cap">Chloramphenicol here is the pilot's eye drops. The pilot pairs use DDInter351, the systemic entry, so its cards say so. Pairs missing from the pilot pair list, all of Clavulanic acid's and Chloramphenicol with Metformin, are not counted as checked. They get their own count and the line "Not in the pilot's DDInter 2.0 pair list", never shown as safe.</p>
+</section>
+
+<!-- ============ GAPS ============ -->
+<section class="b-sec" id="gaps" aria-labelledby="h-gaps">
+  <div class="b-head"><h2 id="h-gaps">What is marked Example, and why</h2><p>Everything else on this board is live pilot data. These are the places where the data doesn't exist yet.</p></div>
+  <ul class="b-gaps">
+    <li><b>Any approval</b>No pilot record is approved. The landing hero, Napa's approved product page, the "paracetamol" results and the checker's framing show a future state, and the approval date 14/10/2026 is invented.</li>
+    <li><b>People</b>Nusrat Jahan, Farhana Islam, their initials and their example.com addresses stand in for real readers and reviewers.</li>
+    <li><b>Other brands of a clinical drug</b>No other pilot brand shares BDC-000001, so the product page says so instead of listing brands.</li>
+    <li><b>Disease and food interactions</b>The pilot carries counts only (Acetaminophen: 3 disease, 1 food), so the page shows counts and no detail.</li>
+    <li><b>Partner API fields</b>The endpoint and envelope come from the system design; the request and response field names are illustrative. Values are pilot data.</li>
+    <li><b>Licences</b>Licence lines for DDInter 2.0, ATC, DrugBank and SNOMED CT need confirming before launch.</li>
+    <li><b>Chloramphenicol route</b>The pilot pairs use the systemic entry DDInter351 for an eye-drop product. DDInter352 (ophthalmic) pairs are not in the pilot data.</li>
+    <li><b>Pairs not in the pilot data</b>Clavulanic acid with all 9 other substances, and Chloramphenicol with Metformin, have no pilot pair. They are counted apart from checked pairs and shown as "Not in the pilot's DDInter 2.0 pair list", with the caveat.</li>
+  </ul>
+</section>
+
+<p class="b-foot">IntelliDrugs public site board, built on design system 1.0. Product facts come from the DGDA register, DDInter 2.0 and batch 0001-pilot (10 records, run 11/10/2026 21:27 UTC, which is 12/10/2026 03:27 in Dhaka, all Not yet reviewed by a pharmacist). Anything marked Example is illustrative and carries no clinical meaning.</p>
+</div>
+
+<script>
+(function(){
+  'use strict';
+  function store(k,v){try{if(v===undefined){return localStorage.getItem(k);}localStorage.setItem(k,v);}catch(e){return null;}return null;}
+
+  /* Theme switch */
+  var root=document.documentElement;
+  var tbtns=document.querySelectorAll('.b-top .seg button');
+  function applyTheme(t){
+    if(t==='system'){root.removeAttribute('data-theme');}else{root.setAttribute('data-theme',t);}
+    for(var i=0;i<tbtns.length;i++){tbtns[i].setAttribute('aria-pressed',String(tbtns[i].getAttribute('data-t')===t));}
+  }
+  var saved=store('intellidrugs-theme');
+  if(saved==='light'||saved==='dark'||saved==='system'){applyTheme(saved);}
+  for(var ti=0;ti<tbtns.length;ti++){tbtns[ti].addEventListener('click',function(){var t=this.getAttribute('data-t');applyTheme(t);store('intellidrugs-theme',t);});}
+
+  /* Full-text toggles (product page and checker cards) */
+  document.addEventListener('click',function(e){
+    var b=e.target.closest?e.target.closest('[data-fulltext]'):null;
+    if(!b){return;}
+    var t=document.getElementById(b.getAttribute('aria-controls'));
+    if(!t){return;}
+    var open=b.getAttribute('aria-expanded')!=='true';
+    t.classList.toggle('is-open',open);
+    b.setAttribute('aria-expanded',String(open));
+    b.textContent=open?'Show less':'Show full text';
+  });
+
+  /* Interaction checker */
+  var D={"products":[{"id":"071-0098-022--amlodipine-5","brand":"Amlodipine-5","form":"Tablet","company":"Premier Pharmaceuticals Ltd.","dar":"071-0098-022","raw":"Amlodipine 5 mg","clinical":"Amlodipine 5 mg tablet","bdc":"BDC-000002","route":"systemic","review":"pending","subs":[{"name":"Amlodipine","bds":"BDS-000002","dd":"DDInter79","syn":["Amlodipine"],"raw":"Amlodipine 5 mg"}]},{"id":"420-0026-023--amoxycillin-clavulanic-acid","brand":"Amoxycillin Clavulanic Acid","form":"Tablet","company":"JR Pharmaceuticals Ltd.","dar":"420-0026-023","raw":"Amoxicillin + Clavulanic Acid 500 mg + 125 mg","clinical":"Amoxicillin 500 mg + Clavulanic acid 125 mg tablet","bdc":"BDC-000007","route":"systemic","review":"pending","subs":[{"name":"Clavulanic acid","bds":"BDS-000007","dd":"DDInter394","syn":["Clavulanic acid","clavulanate"],"raw":"Clavulanic Acid 125 mg"},{"name":"Amoxicillin","bds":"BDS-000008","dd":"DDInter83","syn":["Amoxicillin"],"raw":"Amoxicillin 500 mg"}]},{"id":"076-0028-006--aspirin","brand":"Aspirin","form":"Tablet","company":"Apollo Pharmaceutical Laboratories Ltd.","dar":"076-0028-006","raw":"Aspirin 300 mg","clinical":"Acetylsalicylic acid 300 mg tablet","bdc":"BDC-000004","route":"systemic","review":"pending","subs":[{"name":"Acetylsalicylic acid","bds":"BDS-000004","dd":"DDInter20","syn":["Acetylsalicylic acid","aspirin"],"raw":"Aspirin 300 mg"}]},{"id":"127-0163-052--chloramphenicol","brand":"Chloramphenicol","form":"Eye Drops","company":"EDCL (Dhaka)","dar":"127-0163-052","raw":"Chloramphenicol 5 mg/ml","clinical":"Chloramphenicol 5 mg/ml eye drops","bdc":"BDC-000008","route":"ophthalmic","review":"pending","subs":[{"name":"Chloramphenicol","bds":"BDS-000009","dd":"DDInter351","syn":["Chloramphenicol","Chloramphenicol (ophthalmic)","Chloramphenicol (otic)"],"raw":"Chloramphenicol 5 mg/ml"}]},{"id":"239-0407-023--clarith","brand":"Clarith","form":"Tablet","company":"Ibn Sina Pharmaceutical Ind. Ltd.","dar":"239-0407-023","raw":"Clarithromycin 500 mg","clinical":"Clarithromycin 500 mg tablet","bdc":"BDC-000005","route":"systemic","review":"pending","subs":[{"name":"Clarithromycin","bds":"BDS-000005","dd":"DDInter393","syn":["Clarithromycin"],"raw":"Clarithromycin 500 mg"}]},{"id":"127-0263-018--domperidone","brand":"Domperidone","form":"Tablet","company":"EDCL (Dhaka)","dar":"127-0263-018","raw":"Domperidone 10 mg","clinical":"Domperidone 10 mg tablet","bdc":"BDC-000009","route":"systemic","review":"pending","subs":[{"name":"Domperidone","bds":"BDS-000010","dd":null,"syn":["Domperidone"],"raw":"Domperidone 10 mg"}]},{"id":"185-0138-012--g-warfarin","brand":"G Warfarin","form":"Tablet","company":"Gonoshasthaya Pharmaceuticals Ltd.","dar":"185-0138-012","raw":"Warfarin Sodium 5 mg","clinical":"Warfarin 5 mg tablet","bdc":"BDC-000003","route":"systemic","review":"pending","subs":[{"name":"Warfarin","bds":"BDS-000003","dd":"DDInter1951","syn":["Warfarin"],"raw":"Warfarin Sodium 5 mg"}]},{"id":"185-0241-015--g-metformin","brand":"G-Metformin","form":"Tablet","company":"Gonoshasthaya Pharmaceuticals Ltd.","dar":"185-0241-015","raw":"Metformin Hydrochloride 500 mg","clinical":"Metformin 500 mg tablet","bdc":"BDC-000010","route":"systemic","review":"pending","subs":[{"name":"Metformin","bds":"BDS-000011","dd":"DDInter1164","syn":["Metformin"],"raw":"Metformin Hydrochloride 500 mg"}]},{"id":"186-0030-006--napa","brand":"Napa","form":"Tablet","company":"Beximco Pharmaceuticals Ltd.","dar":"186-0030-006","raw":"Paracetamol 500 mg","clinical":"Acetaminophen 500 mg tablet","bdc":"BDC-000001","route":"systemic","review":"pending","subs":[{"name":"Acetaminophen","bds":"BDS-000001","dd":"DDInter14","syn":["Acetaminophen","Paracetamol"],"raw":"Paracetamol 500 mg"}]},{"id":"096-0265-061--simvastatin","brand":"Simvastatin","form":"Tablet","company":"Albion Laboratories Ltd.","dar":"096-0265-061","raw":"Simvastatin 10 mg","clinical":"Simvastatin 10 mg tablet","bdc":"BDC-000006","route":"systemic","review":"pending","subs":[{"name":"Simvastatin","bds":"BDS-000006","dd":"DDInter1675","syn":["Simvastatin"],"raw":"Simvastatin 10 mg"}]}],"pairs":[{"a":"Acetaminophen","b":"Amlodipine","ida":"DDInter14","idb":"DDInter79","actions":["unknown"],"severity":"unknown","management":null,"interaction":null},{"a":"Acetaminophen","b":"Warfarin","ida":"DDInter14","idb":"DDInter1951","actions":["synergy"],"severity":"moderate","management":"Due to the lack of safer alternatives, acetaminophen is considered the analgesic and antipyretic drug of choice for patients receiving warfarin and similar anticoagulants. However, caution is recommended during concomitant therapy, particularly if high dosages of APAP are used continuously for more than a few days, or in patients with risk factors such as ethanol consumption, old age, and malnutrition. Closer monitoring of INR may be advisable. Patients should be advised to promptly report any signs of bleeding to their physician, including pain, swelling, headache, dizziness, weakness, prolonged bleeding from cuts, increased menstrual flow, vaginal bleeding, nosebleeds, bleeding of gums from brushing, unusual bleeding or bruising, red or brown urine, or red or black stools.","interaction":"Acetaminophen (APAP) may potentiate the hypoprothrombinemic effect of warfarin and other vitamin K antagonists, although data are somewhat conflicting and the precise mechanism of interaction has not been established. A toxic metabolite of APAP is thought to be involved by interfering with vitamin K-dependent clotting factors. The interaction has generally been associated with prolonged ingestion of relatively high APAP dosages (greater than 1.3 g/day continuously for greater than 1 week) but not with brief, intermittent exposures of average doses."},{"a":"Warfarin","b":"Amlodipine","ida":"DDInter1951","idb":"DDInter79","actions":["unknown"],"severity":"unknown","management":null,"interaction":null},{"a":"Warfarin","b":"Acetylsalicylic acid","ida":"DDInter1951","idb":"DDInter20","actions":["synergy"],"severity":"major","management":"This combination, especially with analgesic/antipyretic aspirin doses, should generally be avoided unless the potential benefit outweighs the risk of bleeding. If concomitant therapy is used for additive anticoagulant effects, monitoring for excessive anticoagulation and overt and occult bleeding is recommended. The INR should be checked frequently and the dosage adjusted accordingly when aspirin is added to an anticoagulant regimen. Be cognizant that bleeding may occur without INR or prothrombin time increases. Patients should be advised to promptly report any signs of bleeding to their physician, including pain, swelling, headache, dizziness, weakness, prolonged bleeding from cuts, vaginal bleeding, nosebleeds, bleeding of gums from brushing, unusual bruising, red or brown urine, or red or black stools. Patients should also be counseled to avoid any other over-the-counter oral or topical salicylate products.","interaction":"Aspirin, even in small doses, may increase the risk of bleeding in patients on oral anticoagulants by inhibiting platelet aggregation, prolonging bleeding time, and inducing gastrointestinal lesions. Analgesic/antipyretic doses of aspirin increase the risk of major bleeding more than low-dose aspirin; however bleeding has also occurred with low-dose aspirin."},{"a":"Acetylsalicylic acid","b":"Amlodipine","ida":"DDInter20","idb":"DDInter79","actions":["antagonism"],"severity":"moderate","management":"Monitoring for altered blood pressure control is recommended.","interaction":"Limited data indicate that some cyclooxygenase inhibitors may attenuate the antihypertensive effects of some calcium channel blockers. The mechanism appears to be related to an alteration of vascular tone, which is dependent on prostacyclins and other vasodilatory prostanoids. When a nonsteroidal anti-inflammatory drug (NSAID) is added to the regimen of a patient who is already taking a calcium channel blocker, increased blood pressure may result. Also, the clinician should be aware that the risk of hypotension is increased when NSAIDs are withdrawn from the regimen."},{"a":"Acetaminophen","b":"Acetylsalicylic acid","ida":"DDInter14","idb":"DDInter20","actions":["unknown"],"severity":"unknown","management":null,"interaction":null},{"a":"Warfarin","b":"Clarithromycin","ida":"DDInter1951","idb":"DDInter393","actions":["metabolism"],"severity":"major","management":"Given the potential for clinically significant interaction and even fatality in the occasional, susceptible patient, close monitoring is recommended if clarithromycin or erythromycin is prescribed during coumarin anticoagulant therapy. The INR should be checked frequently and coumarin dosage adjusted accordingly, particularly following initiation or discontinuation of macrolide therapy in patients who are stabilized on their anticoagulant regimen. Patients should be advised to promptly report any signs of bleeding to their physician, including pain, swelling, headache, dizziness, weakness, prolonged bleeding from cuts, increased menstrual flow, vaginal bleeding, nosebleeds, bleeding of gums from brushing, unusual bleeding or bruising, red or brown urine, or red or black stools. The same precaution may be applicable during therapy with other oral anticoagulants (e.g., indandiones) and other similar macrolides (e.g., troleandomycin), although clinical data are lacking.","interaction":"Coadministration with clarithromycin or erythromycin may infrequently but substantially enhance the hypoprothrombinemic effect of warfarin and other coumarin anticoagulants. The exact mechanism of interaction is unknown. Data from clinical studies have not supported a significant, predictable pharmacodynamic or pharmacokinetic interaction in general. Although both macrolides are potent inhibitors of CYP450 3A4 and can inhibit metabolism of the R(+) enantiomer of warfarin, the overall effect on racemic warfarin pharmacokinetics appears to be minor."},{"a":"Clarithromycin","b":"Amlodipine","ida":"DDInter393","idb":"DDInter79","actions":["metabolism"],"severity":"moderate","management":"Close monitoring of clinical response and tolerance is recommended if amlodipine is prescribed with potent or moderate CYP450 3A4 inhibitors. Dosage reduction may be required for amlodipine. Patients should be advised to seek medical attention if they experience edema or swelling of the lower extremities; sudden, unexplained weight gain; difficulty breathing; chest pain or tightness; or hypotension as indicated by dizziness, fainting, or orthostasis.","interaction":"Coadministration with CYP450 3A4 inhibitors may increase the plasma concentrations of amlodipine, which is a substrate of the isoenzyme."},{"a":"Acetaminophen","b":"Clarithromycin","ida":"DDInter14","idb":"DDInter393","actions":["unknown"],"severity":"unknown","management":null,"interaction":null},{"a":"Acetylsalicylic acid","b":"Clarithromycin","ida":"DDInter20","idb":"DDInter393","actions":["unknown"],"severity":"unknown","management":null,"interaction":null},{"a":"Simvastatin","b":"Clarithromycin","ida":"DDInter1675","idb":"DDInter393","actions":["metabolism"],"severity":"major","management":"Due to the potential for severe interaction, concomitant use of simvastatin or lovastatin with potent CYP450 3A4 inhibitors is considered contraindicated. Fluvastatin, pravastatin, pitavastatin, and rosuvastatin are probably safer alternatives, since they are not metabolized by CYP450 3A4. All patients receiving statin therapy should be advised to promptly report any unexplained muscle pain, tenderness or weakness, particularly if accompanied by fever, malaise and/or dark-colored urine. Therapy should be discontinued if creatine kinase is markedly elevated in the absence of strenuous exercise or if myopathy is otherwise suspected or diagnosed.","interaction":"Coadministration with potent inhibitors of CYP450 3A4 may significantly increase the plasma concentrations of simvastatin and lovastatin and their active acid metabolites, all of which are primarily metabolized by the isoenzyme."},{"a":"Simvastatin","b":"Amlodipine","ida":"DDInter1675","idb":"DDInter79","actions":["metabolism"],"severity":"major","management":"Simvastatin dosage should not exceed 20 mg daily when used in combination with amlodipine. The benefits of this combination should be carefully weighed against the potentially increased risk of myopathy including rhabdomyolysis. Fluvastatin, pravastatin, and rosuvastatin are probably safer alternatives in patients receiving amlodipine, since they are not metabolized by CYP450 3A4. All patients receiving statin therapy should be advised to promptly report any unexplained muscle pain, tenderness or weakness, particularly if accompanied by fever, malaise and/or dark colored urine. Therapy should be discontinued if creatine kinase is markedly elevated in the absence of strenuous exercise or if myopathy is otherwise suspected or diagnosed.","interaction":"Coadministration with amlodipine may significantly increase the plasma concentrations of simvastatin and its active metabolite, simvastatin acid, and potentiate the risk of statin-induced myopathy. The proposed mechanism is amlodipine inhibition of simvastatin metabolism via intestinal and hepatic CYP450 3A4."},{"a":"Simvastatin","b":"Warfarin","ida":"DDInter1675","idb":"DDInter1951","actions":["distribution"],"severity":"minor","management":null,"interaction":"Simvastatin may slightly increase the anticoagulant response to warfarin. The mechanism may be warfarin displacement from protein binding sites. The clinical significance of this interaction has not been established, however, clinical monitoring of patient warfarin response and tolerance is recommended. Simvastatin may interact in a similar way with other oral anticoagulants. Patients should be advised to promptly report any signs of bleeding to their physician, including pain, swelling, headache, dizziness, weakness, prolonged bleeding from cuts, increased menstrual flow, vaginal bleeding, nosebleeds, bleeding of gums from brushing, unusual bleeding or bruising, red or brown urine, or red or black stools."},{"a":"Acetaminophen","b":"Simvastatin","ida":"DDInter14","idb":"DDInter1675","actions":["unknown"],"severity":"unknown","management":null,"interaction":null},{"a":"Simvastatin","b":"Acetylsalicylic acid","ida":"DDInter1675","idb":"DDInter20","actions":["unknown"],"severity":"unknown","management":null,"interaction":null},{"a":"Warfarin","b":"Amoxicillin","ida":"DDInter1951","idb":"DDInter83","actions":["synergy"],"severity":"moderate","management":"Caution is recommended if a penicillin is prescribed during oral anticoagulant therapy, especially in the elderly and patients with uremia or hepatic impairment. The INR should be checked frequently and anticoagulant dosage adjusted accordingly, particularly following initiation or discontinuation of penicillin therapy in patients who are stabilized on their anticoagulant regimen. Patients should be advised to promptly report any signs of bleeding to their doctor, including pain, swelling, headache, dizziness, weakness, prolonged bleeding from cuts, increased menstrual flow, vaginal bleeding, nosebleeds, bleeding of gums from brushing, unusual bleeding or bruising, red or brown urine, or red or black stools.","interaction":"Penicillins may occasionally potentiate the risk of bleeding in patients treated with oral anticoagulants. The exact mechanism of interaction is unknown but may involve penicillin inhibition of platelet aggregation."},{"a":"Clarithromycin","b":"Amoxicillin","ida":"DDInter393","idb":"DDInter83","actions":["others"],"severity":"minor","management":null,"interaction":"Although some in vitro data indicate synergism between macrolide antibiotics and penicillins, other in vitro data indicate antagonism. When these drugs are given together, neither has predictable therapeutic efficacy. Data are available for erythromycin, although theoretically this interaction could occur with any macrolide. Except for monitoring of the effectiveness of antibiotic therapy, no special precautions appear to be necessary."},{"a":"Acetaminophen","b":"Amoxicillin","ida":"DDInter14","idb":"DDInter83","actions":["unknown"],"severity":"unknown","management":null,"interaction":null},{"a":"Simvastatin","b":"Amoxicillin","ida":"DDInter1675","idb":"DDInter83","actions":["unknown"],"severity":"unknown","management":null,"interaction":null},{"a":"Acetylsalicylic acid","b":"Amoxicillin","ida":"DDInter20","idb":"DDInter83","actions":["unknown"],"severity":"unknown","management":null,"interaction":null},{"a":"Amlodipine","b":"Amoxicillin","ida":"DDInter79","idb":"DDInter83","actions":["unknown"],"severity":"unknown","management":null,"interaction":null},{"a":"Simvastatin","b":"Chloramphenicol","ida":"DDInter1675","idb":"DDInter351","actions":["synergy"],"severity":"moderate","management":"Patients should be monitored closely for symptoms of neuropathy such as burning, tingling, pain, or numbness in the hands and feet. Since the development of peripheral neuropathy may be dose-related for many drugs, the recommended dosages should generally not be exceeded. Consideration should be given to dosage reduction or immediate discontinuation of these medications in patients who develop peripheral neuropathy to limit further damage.","interaction":"The risk of peripheral neuropathy may be increased during concurrent use of two or more agents that are associated with this adverse effect. Patient risk factors include diabetes and age older than 60 years."},{"a":"Warfarin","b":"Chloramphenicol","ida":"DDInter1951","idb":"DDInter351","actions":["metabolism"],"severity":"moderate","management":"These drugs should only be given concomitantly if benefit outweighs risk. If patients do receive this combination, they should be monitored for bleeding, the INR or prothrombin time should be monitored closely, and warfarin dosage should be decreased as necessary. Patients should be advised to promptly report any signs of unusual bleeding or bruising to their physician, including pain, swelling, headache, dizziness, weakness, prolonged bleeding from cuts, vaginal bleeding, nosebleeds, bleeding of gums from brushing, red or brown urine, or red or black stools.","interaction":"Chloramphenicol may significantly increase the effects of oral anticoagulants. The proposed mechanism is inhibition of hepatic metabolism. Patients with vitamin K deficiencies may have a higher risk."},{"a":"Chloramphenicol","b":"Amlodipine","ida":"DDInter351","idb":"DDInter79","actions":["metabolism"],"severity":"moderate","management":"Close monitoring of clinical response and tolerance is recommended if amlodipine is prescribed with potent or moderate CYP450 3A4 inhibitors. Dosage reduction may be required for amlodipine. Patients should be advised to seek medical attention if they experience edema or swelling of the lower extremities; sudden, unexplained weight gain; difficulty breathing; chest pain or tightness; or hypotension as indicated by dizziness, fainting, or orthostasis.","interaction":"Coadministration with CYP450 3A4 inhibitors may increase the plasma concentrations of amlodipine, which is a substrate of the isoenzyme."},{"a":"Acetaminophen","b":"Chloramphenicol","ida":"DDInter14","idb":"DDInter351","actions":["unknown"],"severity":"unknown","management":null,"interaction":null},{"a":"Acetylsalicylic acid","b":"Chloramphenicol","ida":"DDInter20","idb":"DDInter351","actions":["unknown"],"severity":"unknown","management":null,"interaction":null},{"a":"Chloramphenicol","b":"Clarithromycin","ida":"DDInter351","idb":"DDInter393","actions":["unknown"],"severity":"unknown","management":null,"interaction":null},{"a":"Chloramphenicol","b":"Amoxicillin","ida":"DDInter351","idb":"DDInter83","actions":["unknown"],"severity":"unknown","management":null,"interaction":null},{"a":"Metformin","b":"Warfarin","ida":"DDInter1164","idb":"DDInter1951","actions":["metabolism"],"severity":"moderate","management":"Until more information is available, patients receiving VKAs with metformin should be closely monitored during concomitant therapy. The INR or prothrombin time should be checked frequently and the VKA dosage adjusted accordingly, particularly following initiation, change of dosage, or discontinuation of metformin therapy. In addition, patients receiving this combination should be advised to regularly monitor their blood sugar, counseled on how to recognize and treat hypoglycemia (e.g., headache, dizziness, drowsiness, nausea, tremor, hunger, weakness, or palpitations) and to notify their physician if it occurs.","interaction":"Coadministration with metformin may decrease the anticoagulant effects of vitamin K antagonists (VKAs). The mechanism has not been delineated, but it may involve metformin-mediated increase in the elimination rate of VKAs. In addition, concomitant use of VKAs with metformin may increase the risk of severe hypoglycemia. The clinical significance of this interaction is unknown."},{"a":"Metformin","b":"Clarithromycin","ida":"DDInter1164","idb":"DDInter393","actions":["metabolism"],"severity":"moderate","management":"Caution is advised if clarithromycin is prescribed to patients receiving antidiabetic agents. Patients should be advised to regularly monitor their blood sugar and counseled on how to recognize and treat hypoglycemia, which may include symptoms such as headache, dizziness, drowsiness, nervousness, confusion, tremor, hunger, weakness, perspiration, palpitation, and tachycardia.","interaction":"Concomitant use of insulin and other antidiabetic agents with clarithromycin may cause significant hypoglycemia. There have been rare reports of hypoglycemia in patients treated with clarithromycin, some of whom were taking oral hypoglycemic agents or insulin. The exact mechanism of interaction has not been established. With certain hypoglycemic drugs such as nateglinide, pioglitazone, repaglinide and rosiglitazone, inhibition of the CYP450 3A4 isoenzyme by clarithromycin may be involved."},{"a":"Metformin","b":"Acetaminophen","ida":"DDInter1164","idb":"DDInter14","actions":["unknown"],"severity":"unknown","management":null,"interaction":null},{"a":"Metformin","b":"Simvastatin","ida":"DDInter1164","idb":"DDInter1675","actions":["unknown"],"severity":"unknown","management":null,"interaction":null},{"a":"Metformin","b":"Acetylsalicylic acid","ida":"DDInter1164","idb":"DDInter20","actions":["unknown"],"severity":"unknown","management":null,"interaction":null},{"a":"Metformin","b":"Amlodipine","ida":"DDInter1164","idb":"DDInter79","actions":["unknown"],"severity":"unknown","management":null,"interaction":null},{"a":"Metformin","b":"Amoxicillin","ida":"DDInter1164","idb":"DDInter83","actions":["unknown"],"severity":"unknown","management":null,"interaction":null}]};
+  var P=D.products,byId={},pairIdx={};
+  P.forEach(function(p){
+    byId[p.id]=p;
+    var parts=[p.brand,p.clinical,p.company,p.dar];
+    p.subs.forEach(function(s){parts.push(s.name);parts=parts.concat(s.syn);});
+    p.hay=parts.join(' ').toLowerCase();
+  });
+  function pkey(a,b){return a<b?a+'|'+b:b+'|'+a;}
+  D.pairs.forEach(function(x){pairIdx[pkey(x.ida,x.idb)]=x;});
+  var SEV=['major','moderate','minor','unknown'];
+  var SEV_LABEL={major:'Major',moderate:'Moderate',minor:'Minor',unknown:'Severity not classified by DDInter'};
+  var SEV_GROUP={major:'Major',moderate:'Moderate',minor:'Minor',unknown:'Severity not classified by DDInter'};
+  var PRESETS={
+    wad:['185-0138-012--g-warfarin','076-0028-006--aspirin','127-0263-018--domperidone'],
+    cs:['239-0407-023--clarith','096-0265-061--simvastatin'],
+    sa:['096-0265-061--simvastatin','071-0098-022--amlodipine-5'],
+    nw:['186-0030-006--napa','185-0138-012--g-warfarin']
+  };
+  var MAX=20, CHLOR='BDS-000009';
+
+  function esc(s){return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+  function plural(n,one,many){return n+' '+(n===1?one:many);}
+  function joinAnd(a){if(a.length<2){return a.join('');}return a.slice(0,-1).join(', ')+' and '+a[a.length-1];}
+
+  /* Pure: compute the result for a list of product ids */
+  function compute(ids){
+    var r={groups:{major:[],moderate:[],minor:[],unknown:[]},notListed:[],noData:[],noDataIdx:{},total:0,checked:0,noDataPairs:0};
+    for(var i=0;i<ids.length;i++){for(var j=i+1;j<ids.length;j++){
+      var A=byId[ids[i]],B=byId[ids[j]];
+      if(!A||!B){continue;}
+      A.subs.forEach(function(sa){B.subs.forEach(function(sb){
+        r.total++;
+        if(!sa.dd||!sb.dd){
+          [[sa,A,sb,B],[sb,B,sa,A]].forEach(function(q){
+            if(q[0].dd){return;}
+            var k=q[0].bds+'@'+q[1].id;
+            if(!r.noDataIdx[k]){r.noDataIdx[k]={sub:q[0],prod:q[1],pairs:[]};r.noData.push(r.noDataIdx[k]);}
+            r.noDataIdx[k].pairs.push({sub:q[2],prod:q[3]});
+          });
+          r.noDataPairs++;
+          return;
+        }
+        /* Only pairs found in the pilot pair list count as checked. A pair missing from the list was not looked up. */
+        var x=pairIdx[pkey(sa.dd,sb.dd)];
+        if(x){r.checked++;var g=r.groups[x.severity]?x.severity:'unknown';r.groups[g].push({A:A,B:B,sa:sa,sb:sb,x:x});}
+        else{r.notListed.push({A:A,B:B,sa:sa,sb:sb});}
+      });});
+    }}
+    return r;
+  }
+  function summary(ids,r){
+    if(ids.length<2){return 'Add at least 2 medicines to check them against each other.';}
+    var s=plural(ids.length,'medicine','medicines')+' · '+r.checked+' of '+plural(r.total,'pair','pairs')+' checked';
+    if(r.notListed.length){s+=' · '+plural(r.notListed.length,'pair','pairs')+' not in the pilot pair list';}
+    var nc=r.noDataPairs;
+    if(nc>0){
+      var names=[];r.noData.forEach(function(n){if(names.indexOf(n.sub.name)<0){names.push(n.sub.name);}});
+      s+=' · '+plural(nc,'pair','pairs')+' not checked because '+joinAnd(names)+(names.length===1?' has':' have')+' no interaction data';
+    }
+    return s;
+  }
+
+  var $=function(id){return document.getElementById(id);};
+  var inp=$('cx-input'),list=$('cx-list'),selList=$('sel-list'),selH=$('sel-h'),clearBtn=$('sel-clear');
+  var sumEl=$('chk-sum'),countsEl=$('chk-counts'),resEl=$('chk-results'),live=$('chk-live');
+  var sel=[],opts=[],active=-1,uid=0;
+
+  function persist(){store('intellidrugs-checker',JSON.stringify(sel));}
+  function announce(msg){live.textContent='';setTimeout(function(){live.textContent=msg;},40);}
+
+  function subLine(p){return p.clinical;}
+  function pairNames(A,B){return esc(A.brand)+' + '+esc(B.brand);}
+  function subNames(sa,sb){return esc(sa.name)+' + '+esc(sb.name);}
+  function routeNote(sa,sb){
+    if(sa.bds!==CHLOR&&sb.bds!==CHLOR){return '';}
+    return '<p class="s-route">Route: the pilot Chloramphenicol is eye drops. This pair uses <span class="mono">DDInter351</span>, the systemic entry. DDInter also lists <span class="mono">DDInter352</span> for ophthalmic use.</p>';
+  }
+  function textBlock(label,text){
+    uid++;var id='ckt-'+uid;
+    if(text.length>200){
+      return '<p class="pair-text" id="'+id+'">'+esc(text)+'</p><p class="pair-source">'+label+', truncated. Full text from DDInter 2.0. <button class="btn btn--plain btn--sm" type="button" data-fulltext aria-controls="'+id+'" aria-expanded="false">Show full text</button></p>';
+    }
+    return '<p class="pair-text" id="'+id+'">'+esc(text)+'</p><p class="pair-source">'+label+', full text from DDInter 2.0.</p>';
+  }
+  function pairCard(it,sev){
+    var x=it.x,h='<article class="pair"><div class="pair-head"><span class="sev '+(sev==='unknown'?'sev--unclassified':'sev--'+sev)+'">'+SEV_LABEL[sev]+'</span><span class="pair-names">'+pairNames(it.A,it.B)+'</span></div>';
+    if(sev==='unknown'){
+      h+='<p class="pair-meta">'+subNames(it.sa,it.sb)+'</p><p class="pair-source">DDInter 2.0 lists this pair with action "unknown" and no text. It is not treated as low risk.</p>';
+    }else{
+      h+='<p class="pair-meta">'+subNames(it.sa,it.sb)+'. Action: '+esc((x.actions||[]).join(', '))+'</p>';
+      if(x.management){h+=textBlock('Management',x.management);}
+      else if(x.interaction){h+='<p class="pair-source">DDInter 2.0 gives no management text for this pair.</p>'+textBlock('Interaction description',x.interaction);}
+      else{h+='<p class="pair-source">DDInter 2.0 gives no text for this pair.</p>';}
+    }
+    h+=routeNote(it.sa,it.sb);
+    h+='<p class="pair-source">Source: DDInter 2.0, <span class="mono">'+esc(x.ida)+'</span> + <span class="mono">'+esc(x.idb)+'</span></p></article>';
+    return h;
+  }
+  function byNames(a,b){var ka=a.A.brand+a.B.brand,kb=b.A.brand+b.B.brand;return ka<kb?-1:ka>kb?1:0;}
+
+  function renderResults(){
+    var r=compute(sel),h='',c='';
+    sumEl.textContent=summary(sel,r);
+    if(sel.length<2){
+      countsEl.innerHTML='';
+      resEl.innerHTML='<p class="s-chk-empty">Add medicines with the field on the left, or start from a scenario. Pairs appear here, Major first.</p>';
+      return r;
+    }
+    SEV.forEach(function(s){
+      var g=r.groups[s];if(!g.length){return;}
+      c+='<span class="sev '+(s==='unknown'?'sev--unclassified':'sev--'+s)+'">'+SEV_LABEL[s]+' <b class="sev-n">'+g.length+'</b></span>';
+      g.sort(byNames);
+      h+='<div class="s-group"><h5 class="s-group-h">'+SEV_GROUP[s]+', '+plural(g.length,'pair','pairs')+'</h5>';
+      g.forEach(function(it){h+=pairCard(it,s);});
+      h+='</div>';
+    });
+    if(r.notListed.length){
+      r.notListed.sort(byNames);
+      h+='<div class="s-quiet"><h5>Not in the pilot pair list, '+plural(r.notListed.length,'pair','pairs')+'</h5><ul>';
+      r.notListed.forEach(function(it){h+='<li>'+pairNames(it.A,it.B)+' <span class="s-route">('+subNames(it.sa,it.sb)+')</span></li>';});
+      h+='</ul><p>Not in the pilot’s DDInter 2.0 pair list. This is not a guarantee that they are safe to combine.</p></div>';
+    }
+    var nc=r.noDataPairs;
+    if(r.noData.length){
+      c+='<span class="sev sev--nodata">Not checked <b class="sev-n">'+nc+'</b></span>';
+      r.noData.forEach(function(n){
+        h+='<div class="nodata-block hatch" role="note"><span class="nodata-glyph" aria-hidden="true"></span><div class="nodata-plate">';
+        h+='<p class="nodata-title">'+esc(n.prod.brand)+(n.prod.brand!==n.sub.name?', '+esc(n.sub.name):'')+' <span class="mono" style="color:var(--fg-2)">'+esc(n.sub.bds)+'</span></p>';
+        h+='<p class="nodata-text">No interaction data in DDInter for this substance. This does not mean it is safe to combine.</p>';
+        h+='<p class="nodata-pairs">Not checked: ';
+        n.pairs.forEach(function(q){h+='<span class="sev sev--nodata">'+esc(n.prod.brand)+' + '+esc(q.prod.brand)+(q.prod.subs.length>1?' ('+esc(q.sub.name)+')':'')+'</span>';});
+        h+='</p></div></div>';
+      });
+    }
+    countsEl.innerHTML=c;
+    resEl.innerHTML=h;
+    return r;
+  }
+
+  function renderSel(){
+    var h='';
+    sel.forEach(function(id){var p=byId[id];
+      h+='<li class="s-med"><b>'+esc(p.brand)+'</b><span>'+esc(subLine(p))+'</span><button class="btn btn--tonal btn--icon" type="button" data-remove="'+esc(id)+'" aria-label="Remove '+esc(p.brand)+'"><svg width="14" height="14" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/></svg></button></li>';
+    });
+    if(!sel.length){h='<li class="s-med-empty">No medicines yet.</li>';}
+    selList.innerHTML=h;
+    selH.textContent='Selected, '+sel.length+' of '+MAX;
+    clearBtn.disabled=!sel.length;
+    inp.disabled=sel.length>=MAX;
+  }
+  function renderAll(){renderSel();var r=renderResults();persist();return r;}
+
+  /* Combobox */
+  function matchSyn(p,q){
+    if(!q||p.brand.toLowerCase().indexOf(q)>=0){return '';}
+    for(var i=0;i<p.subs.length;i++){var s=p.subs[i];
+      if(s.name.toLowerCase().indexOf(q)>=0){return s.name;}
+      for(var k=0;k<s.syn.length;k++){if(s.syn[k].toLowerCase().indexOf(q)>=0){return s.syn[k]+(s.syn[k].toLowerCase()!==s.name.toLowerCase()?', a name for '+s.name:'');}}
+    }
+    return '';
+  }
+  function filterOpts(){
+    var q=inp.value.trim().toLowerCase();
+    opts=P.filter(function(p){return sel.indexOf(p.id)<0&&(!q||p.hay.indexOf(q)>=0);});
+    return q;
+  }
+  function renderList(){
+    var q=filterOpts(),h='';
+    if(active>=opts.length){active=opts.length-1;}
+    if(!opts.length){h='<li class="s-opt-empty" role="presentation">'+(q?'No pilot medicine matches "'+esc(inp.value.trim())+'".':'All pilot medicines are selected.')+'</li>';active=-1;}
+    opts.forEach(function(p,i){
+      var m=matchSyn(p,q);
+      h+='<li class="s-opt" role="option" id="cx-opt-'+i+'" data-id="'+esc(p.id)+'" aria-selected="'+(i===active)+'"><span class="s-opt-name">'+esc(p.brand)+'</span><span class="s-opt-sub">'+esc(p.clinical)+(m?'. Matches '+esc(m):'')+'</span></li>';
+    });
+    list.innerHTML=h;
+    if(active>=0&&opts[active]){inp.setAttribute('aria-activedescendant','cx-opt-'+active);var el=$('cx-opt-'+active);if(el&&el.scrollIntoView){el.scrollIntoView({block:'nearest'});}}
+    else{inp.removeAttribute('aria-activedescendant');}
+  }
+  function openList(){list.hidden=false;inp.setAttribute('aria-expanded','true');renderList();}
+  function closeList(){list.hidden=true;inp.setAttribute('aria-expanded','false');inp.removeAttribute('aria-activedescendant');active=-1;}
+  function add(id){
+    if(!byId[id]||sel.indexOf(id)>=0||sel.length>=MAX){return;}
+    sel.push(id);inp.value='';closeList();
+    var r=renderAll();
+    announce(byId[id].brand+' added. '+summary(sel,r));
+  }
+  function remove(id,fromBtn){
+    var i=sel.indexOf(id);if(i<0){return;}
+    var name=byId[id].brand;
+    sel.splice(i,1);
+    var r=renderAll();
+    var btns=selList.querySelectorAll('[data-remove]');
+    if(fromBtn){if(btns.length){btns[Math.min(i,btns.length-1)].focus();}else{inp.focus();}}
+    announce(name+' removed. '+summary(sel,r));
+  }
+
+  inp.addEventListener('input',function(){active=0;openList();});
+  inp.addEventListener('click',function(){if(list.hidden){active=-1;openList();}});
+  inp.addEventListener('keydown',function(e){
+    if(e.key==='ArrowDown'){e.preventDefault();if(list.hidden){active=0;openList();return;}if(opts.length){active=Math.min(active+1,opts.length-1);renderList();}}
+    else if(e.key==='ArrowUp'){e.preventDefault();if(list.hidden){filterOpts();active=opts.length?opts.length-1:-1;openList();return;}if(opts.length){active=Math.max(active-1,0);renderList();}}
+    else if(e.key==='Enter'){if(!list.hidden&&active>=0&&opts[active]){e.preventDefault();add(opts[active].id);}}
+    else if(e.key==='Escape'){if(!list.hidden){e.preventDefault();closeList();}else if(inp.value){e.preventDefault();inp.value='';}}
+    else if(e.key==='Tab'){closeList();}
+  });
+  list.addEventListener('mousedown',function(e){e.preventDefault();});
+  list.addEventListener('click',function(e){var o=e.target.closest('[data-id]');if(o){add(o.getAttribute('data-id'));inp.focus();}});
+  inp.addEventListener('blur',function(){setTimeout(function(){if(document.activeElement!==inp){closeList();}},0);});
+  document.addEventListener('click',function(e){if(!e.target.closest('.s-cbx')){closeList();}});
+  selList.addEventListener('click',function(e){var b=e.target.closest('[data-remove]');if(b){remove(b.getAttribute('data-remove'),true);}});
+  clearBtn.addEventListener('click',function(){sel=[];renderAll();inp.focus();announce('All medicines removed.');});
+  var pres=document.querySelectorAll('[data-preset]');
+  for(var pi=0;pi<pres.length;pi++){pres[pi].addEventListener('click',function(){
+    sel=PRESETS[this.getAttribute('data-preset')].slice();
+    var r=renderAll();
+    announce('Scenario loaded: '+this.textContent+'. '+summary(sel,r));
+  });}
+
+  /* Start in a realistic working state: the last selection, or the first scenario */
+  var start=null;
+  try{start=JSON.parse(store('intellidrugs-checker')||'null');}catch(e){start=null;}
+  if(Array.isArray(start)){sel=start.filter(function(id,i){return byId[id]&&start.indexOf(id)===i;}).slice(0,MAX);}
+  if(!Array.isArray(start)||sel.length<2){sel=PRESETS.wad.slice();}
+  renderAll();
+
+})();
+</script>
