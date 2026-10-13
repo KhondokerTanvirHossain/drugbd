@@ -3,12 +3,13 @@ import Turnstile from "@/components/Turnstile";
 import { StatusPill } from "@/components/badges";
 import { ISSUE_NOTE_MIN, NOTE_MAX } from "@/lib/actions-core";
 import {
-  getBatch, getBatchReport, getDecisions, scopeFor, type BatchReport, type PublicDecision, type StageCounts, type StageResult,
+  getBatch, getBatchReport, getDecisions, type BatchReport, type PublicDecision, type StageCounts, type StageResult,
 } from "@/lib/api";
+import { BATCHES_REVIEWERS_ONLY } from "@/lib/copy";
 import { summariseSource } from "@/lib/evidence";
 import { formatUtc } from "@/lib/format";
 import { firstParam } from "@/lib/params";
-import { ROLE_LABEL, type Role } from "@/lib/reviewers";
+import { ROLE_LABEL, isReviewer, type Role } from "@/lib/reviewers";
 import { reviewAction } from "@/lib/review-actions";
 import { getSession } from "@/lib/session";
 export const dynamic = "force-dynamic";
@@ -24,6 +25,12 @@ const REVIEW_OUTCOME: Record<string, { text: string; ok: boolean }> = {
   captcha: { text: "The verification check failed. Please try again.", ok: false },
   invalid: { text: `An issue needs a note of ${ISSUE_NOTE_MIN} to ${NOTE_MAX} characters.`, ok: false },
   stale: { text: "This record was re-run after you opened the page, so your decision was not recorded. Review the new result.", ok: false },
+  decided: { text: "Another reviewer decided on this record after you opened the page, so your decision was not recorded. Review the record again.", ok: false },
+  checks: { text: "A check failed on this record. It returns to review after the fix and re-run.", ok: false },
+  issue_open: { text: "An issue is open on this record. It returns to review after the fix and re-run.", ok: false },
+  approved: { text: "This record is already approved by a pharmacist.", ok: false },
+  checked: { text: "Your check is already recorded for this record.", ok: false },
+  removed: { text: "This record was removed from the batch file.", ok: false },
   failed: { text: "The decision could not be saved. Please try again.", ok: false },
 };
 
@@ -69,7 +76,7 @@ function Report({ report }: { report: BatchReport | null }) {
   );
 }
 
-/** Decision, role and time; never the reviewer's email (the API is read without the token, so it sends none). */
+/** Decision, role and time; never the reviewer's email (getDecisions drops it). */
 function History({ decisions }: { decisions: PublicDecision[] | null }) {
   return (<>
     <h3>Review history</h3>
@@ -80,29 +87,34 @@ function History({ decisions }: { decisions: PublicDecision[] | null }) {
   </>);
 }
 
-function ItemFields({ batchId, conceptId, extractedAt, decision }:
-    { batchId: string; conceptId: string; extractedAt: string | null | undefined; decision: "ok" | "issue" }) {
+type ItemVersion = { extractedAt: string | null | undefined; lastDecisionId: number | null | undefined };
+
+/** The item, the version the page shows (spec §7.2) and a requestId rendered once per form, reused if it is resent. */
+function ItemFields({ batchId, conceptId, version, decision }:
+    { batchId: string; conceptId: string; version: ItemVersion; decision: "ok" | "issue" }) {
   return (<>
     <input type="hidden" name="batchId" value={batchId} />
     <input type="hidden" name="conceptId" value={conceptId} />
-    {/* Always present: "" stands for an item with no extractedAt (sent to the API as null). */}
-    <input type="hidden" name="extractedAt" value={extractedAt ?? ""} />
+    {/* Always present: "" stands for "none" (sent to the API as null). */}
+    <input type="hidden" name="extractedAt" value={version.extractedAt ?? ""} />
+    <input type="hidden" name="expectedLastDecisionId" value={version.lastDecisionId == null ? "" : String(version.lastDecisionId)} />
+    <input type="hidden" name="requestId" value={crypto.randomUUID()} />
     <input type="hidden" name="decision" value={decision} />
   </>);
 }
 
 /** Reviewer controls. The server action re-checks the session, the role and Turnstile before calling the API. */
-function ReviewForms({ batchId, conceptId, extractedAt, role }:
-    { batchId: string; conceptId: string; extractedAt: string | null | undefined; role: Role }) {
+function ReviewForms({ batchId, conceptId, version, role }:
+    { batchId: string; conceptId: string; version: ItemVersion; role: Role }) {
   return (
     <div>
       <form action={reviewAction}>
-        <ItemFields batchId={batchId} conceptId={conceptId} extractedAt={extractedAt} decision="ok" />
+        <ItemFields batchId={batchId} conceptId={conceptId} version={version} decision="ok" />
         <Turnstile />
         <button type="submit">Mark OK</button>
       </form>
       <form action={reviewAction}>
-        <ItemFields batchId={batchId} conceptId={conceptId} extractedAt={extractedAt} decision="issue" />
+        <ItemFields batchId={batchId} conceptId={conceptId} version={version} decision="issue" />
         <label>
           {`What is wrong? (${ISSUE_NOTE_MIN} to ${NOTE_MAX} characters)`}
           <br />
@@ -143,14 +155,16 @@ function StageTable({ stages }: { stages: StageResult[] }) {
 
 export default async function BatchPage({ params, searchParams }: {
   params: Promise<{ id: string }>; searchParams?: Promise<{ review?: string | string[]; item?: string | string[] }> }) {
+  // Batch evidence shows unreviewed records: reviewers only (spec §12.1). Checked before any API call, so an
+  // anonymous visitor learns nothing, not even whether the batch exists (status 200, never 404).
+  const session = await getSession();
+  if (!isReviewer(session)) return <><h1>Batches</h1><p role="status">{BATCHES_REVIEWERS_ONLY}</p></>;
   const { id } = await params;
   const sp = (await searchParams) ?? {};
   let decoded: string;
   try { decoded = decodeURIComponent(id); } catch { notFound(); }
   const batch = await getBatch(decoded);
   if (!batch) notFound();
-  const session = await getSession();
-  const reviewer = scopeFor(session) === "all" && session ? session : null;
   const [report, histories] = await Promise.all([
     getBatchReport(batch.batchId).catch(() => null),
     Promise.all(batch.items.map((i) => getDecisions(batch.batchId, i.conceptId).catch(() => null))),
@@ -196,8 +210,8 @@ export default async function BatchPage({ params, searchParams }: {
             </tr></tbody></table>
             <StageTable stages={item.stages ?? []} />
             <History decisions={histories[n]} />
-            {reviewer && <ReviewForms batchId={batch.batchId} conceptId={item.conceptId} extractedAt={item.extractedAt}
-              role={reviewer.role} />}
+            <ReviewForms batchId={batch.batchId} conceptId={item.conceptId}
+              version={{ extractedAt: item.extractedAt, lastDecisionId: item.lastDecisionId }} role={session.role} />
           </section>
         );
       })}

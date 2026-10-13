@@ -10,7 +10,7 @@ const base: Product = {
 const getProduct = vi.fn();
 vi.mock("@/lib/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api")>()),
-  getProduct: (id: string, scope?: string) => getProduct(id, scope),
+  getProduct: (...args: unknown[]) => getProduct(...args),
 }));
 const getSession = vi.fn();
 vi.mock("@/lib/session", () => ({ getSession: () => getSession() }));
@@ -26,12 +26,12 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllEnvs());
 
-describe("product page visibility", () => {
+describe("product page visibility (spec §2.2: public scope for every session)", () => {
   const hidden = { conceptId: "H-1", tradeName: "Secretname", reviewStatus: "pending", hidden: true };
 
-  it("asks the API with scope=public for an anonymous visitor", async () => {
+  it("asks the API with the id only, which reads public scope", async () => {
     await render("x");
-    expect(getProduct).toHaveBeenCalledWith("x", "public");
+    expect(getProduct).toHaveBeenCalledWith("x");
   });
 
   it("anonymous: a hidden product shows only 'Not yet reviewed by a pharmacist', no data", async () => {
@@ -42,32 +42,29 @@ describe("product page visibility", () => {
       expect(html).not.toContain(absent);
   });
 
-  it("a signed-in user (role user) still gets scope=public and can flag the hidden product", async () => {
+  it("a signed-in user can flag the hidden product", async () => {
     getSession.mockResolvedValue({ email: "someone@gmail.com", role: "user" });
     getProduct.mockResolvedValue(hidden);
     const html = await render("H-1");
-    expect(getProduct).toHaveBeenCalledWith("H-1", "public");
+    expect(getProduct).toHaveBeenCalledWith("H-1");
     expect(html).toContain("Not yet reviewed by a pharmacist");
     expect(html).toContain("Flag a problem");
     expect(html).not.toContain("someone@gmail.com");
   });
 
-  it("a reviewer gets scope=all and an unreviewed badge on an unapproved product", async () => {
+  it("a pharmacist sees the same stub on an unapproved product page (phase 0 exit criterion)", async () => {
     getSession.mockResolvedValue({ email: "pharm@example.org", role: "pharmacist" });
-    getProduct.mockResolvedValue({ ...base, reviewStatus: "pending" });
-    const html = await render("x");
-    expect(getProduct).toHaveBeenCalledWith("x", "all");
-    expect(html).toMatch(/<span class="badge"[^>]*>unreviewed<\/span>/);
-    expect(html).toContain("Beximco");
-    expect(html).not.toContain("pharm@example.org");
+    getProduct.mockResolvedValue(hidden);
+    const html = await render("H-1");
+    expect(getProduct).toHaveBeenCalledWith("H-1");
+    expect(html).toContain("Not yet reviewed by a pharmacist");
+    for (const absent of ["Secretname", "DAR number", "unreviewed", "pharm@example.org"]) expect(html).not.toContain(absent);
   });
 
-  it("no unreviewed badge for an approved product or for anonymous visitors", async () => {
+  it("an approved product shows no badge for any session", async () => {
     getSession.mockResolvedValue({ email: "pharm@example.org", role: "pharmacist" });
-    getProduct.mockResolvedValue({ ...base, reviewStatus: "ok" });
     expect(await render("x")).not.toContain("unreviewed");
     getSession.mockResolvedValue(null);
-    getProduct.mockResolvedValue({ ...base, reviewStatus: "ok" });
     expect(await render("x")).not.toContain("unreviewed");
   });
 

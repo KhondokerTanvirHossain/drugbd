@@ -68,7 +68,7 @@ class SubstanceApiIntegrationTest {
             .jsonPath("$.data.interactions[1].partnerBdsId").isEqualTo("BDS-000005")
             .jsonPath("$.data.interactions[1].interactionId").doesNotExist()
             .jsonPath("$.data.interactions[2].severity").isEqualTo("moderate")
-            .jsonPath("$.data.interactions[2].partnerName").isEqualTo("Chloramphenicol (ophthalmic)")
+            .jsonPath("$.data.interactions[2].partnerName").isEqualTo("Chloramphenicol")
             .jsonPath("$.data.interactions[2].partnerBdsId").isEqualTo("BDS-000003")
             .jsonPath("$.data.interactions[3].severity").isEqualTo("minor")
             .jsonPath("$.data.interactions[3].partnerName").isEqualTo("Some Herb")
@@ -78,13 +78,13 @@ class SubstanceApiIntegrationTest {
     }
 
     @Test void partnerSideIsChosenFromEitherPairColumn() {
-        // Chloramphenicol is ddinter_b of its only pair; its partner is warfarin (ddinter_a), via the ophthalmic entry.
+        // Chloramphenicol is ddinter_b of its only pair; its partner is warfarin (ddinter_a), via the systemic entry.
         all().get().uri("/v1/substances/BDS-000003?scope=all").exchange().expectStatus().isOk()
             .expectBody()
             .jsonPath("$.data.interactions.length()").isEqualTo(1)
             .jsonPath("$.data.interactions[0].partnerName").isEqualTo("Warfarin")
             .jsonPath("$.data.interactions[0].partnerBdsId").isEqualTo("BDS-000001")
-            .jsonPath("$.data.interactions[0].routeScope").isEqualTo("ophthalmic")
+            .jsonPath("$.data.interactions[0].routeScope").isEqualTo("systemic")
             // Review Focus 3: route-scoped DDInter entries
             .jsonPath("$.data.codes[?(@.code == 'DDInter351')].routeScope").isEqualTo("systemic")
             .jsonPath("$.data.codes[?(@.code == 'DDInter352')].routeScope").isEqualTo("ophthalmic")

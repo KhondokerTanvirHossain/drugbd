@@ -1,5 +1,6 @@
 package com.niramoy.bddrug;
 
+import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -15,15 +16,24 @@ import org.springframework.test.web.reactive.server.WebTestClient;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.springframework.test.web.reactive.server.EntityExchangeResult;
 import java.nio.charset.StandardCharsets;
-import com.jayway.jsonpath.JsonPath;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.util.ArrayList;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import static com.niramoy.bddrug.TestSupport.*;
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** Review decisions, the approval rule, batch status, decision history and the internal token (Review Focus 3, 4). */
+/** Review decisions (spec §7.2): guards in order, idempotent requestId, audit rows, the approval rule, A1/A2. */
 @Testcontainers
 @SpringBootTest
 @AutoConfigureWebTestClient
@@ -33,24 +43,23 @@ class ReviewApiIntegrationTest {
     @DynamicPropertySource static void props(DynamicPropertyRegistry r) { TestSupport.props(r, pg); }
 
     static final String PHARMACIST = "pharma.reviewer@example.org", ENGINEER = "eng.reviewer@example.org";
+    static final String CHECK_FAILED = "A check failed on this record. It returns to review after the fix and re-run.";
+    static final String ISSUE_OPEN = "An issue is open on this record. It returns to review after the fix and re-run.";
 
-    /** Each test owns its batch (and its products) so the tests stay independent. */
+    /** Each test owns its batch so the tests stay independent. */
     @BeforeAll static void seed() throws Exception {
         PilotSeed.migrateAndSeed(pg);
         exec(pg, """
-            INSERT INTO ops.batch (batch_id, item_count, run_at) VALUES
-             ('R-eng',1, now() - interval '1 hour'), ('R-flow',2, now() - interval '1 hour'),
-             ('R-iss',1, now() - interval '1 hour'), ('R-rerun',1, now() - interval '1 hour'),
-             ('R-val',1, now() - interval '1 hour'), ('R-hist',1, now() - interval '1 hour'),
-             ('R-rm',1, now() - interval '1 hour'), ('R-stale',1, now() - interval '1 hour'),
-             ('R-tok',1, now() - interval '1 hour'), ('R-log',1, now() - interval '1 hour'),
-             ('R-req',1, now() - interval '1 hour'), ('R-null',1, now() - interval '1 hour'),
-             ('R-race',1, now() - interval '1 hour');
+            INSERT INTO ops.batch (batch_id, item_count, run_at)
+            SELECT b, 1, now() - interval '1 hour' FROM unnest(ARRAY['R-eng','R-flow','R-iss','R-appr','R-rerun','R-val',
+              'R-hist','R-rm','R-stale','R-tok','R-log','R-req','R-null','R-race','R-other','R-chk','R-pipe','R-idem',
+              'R-conc','R-rej','R-bk','R-pend','R-back']) AS b;
             INSERT INTO ops.batch_item (batch_id, source, concept_id, extracted_at) VALUES
              ('R-eng','DGDA-Drugs','D-1', now() - interval '1 hour'),
              ('R-flow','DGDA-Drugs','W-1', now() - interval '1 hour'),
              ('R-flow','DGDA-Drugs','A-1', now() - interval '1 hour'),
              ('R-iss','DGDA-Drugs','C-EYE', now() - interval '1 hour'),
+             ('R-appr','DGDA-Drugs','A-1', now() - interval '1 hour'),
              ('R-rerun','DGDA-Drugs','N-1', now() - interval '1 hour'),
              ('R-val','DGDA-Drugs','W-2', now() - interval '1 hour'),
              ('R-hist','DGDA-Drugs','C-CAP', now() - interval '1 hour'),
@@ -60,24 +69,60 @@ class ReviewApiIntegrationTest {
              ('R-log','DGDA-Drugs','X-NOMAP', now() - interval '1 hour'),
              ('R-req','DGDA-Drugs','W-1', now() - interval '1 hour'),
              ('R-null','DGDA-Drugs','W-1', NULL),
-             ('R-race','DGDA-Drugs','C-EYE', now() - interval '1 hour');
-            -- an item that left the batch file but has history: it does not hold the batch back
+             ('R-race','DGDA-Drugs','C-EYE', now() - interval '1 hour'),
+             ('R-other','DGDA-Drugs','W-2', now() - interval '1 hour'),
+             ('R-chk','DGDA-Drugs','W-1', now() - interval '1 hour'),
+             ('R-chk','DGDA-Drugs','A-1', now() - interval '1 hour'),
+             ('R-idem','DGDA-Drugs','W-1', now() - interval '1 hour'),
+             ('R-idem','DGDA-Drugs','A-1', now() - interval '1 hour'),
+             ('R-conc','DGDA-Drugs','N-1', now() - interval '1 hour'),
+             ('R-rej','DGDA-Drugs','W-1', now() - interval '1 hour'),
+             -- R-idem, R-conc, R-rej, R-bk, R-pend and R-back are used by the tests Task 8b adds
+             ('R-bk','DGDA-Drugs','W-1', now() - interval '1 hour'),
+             ('R-pend','DGDA-Drugs','W-1', now() - interval '1 hour'),
+             ('R-back','DGDA-Drugs','W-1', now() - interval '1 hour');
+            -- an item that left the batch file but has history, and an item the pipeline could not load
             INSERT INTO ops.batch_item (batch_id, source, concept_id, review, note, extracted_at) VALUES
-             ('R-rm','DGDA-Drugs','gone-id','issue','removed from batch file', now() - interval '2 hour');
+             ('R-rm','DGDA-Drugs','gone-id','issue','removed from batch file', now() - interval '2 hour'),
+             ('R-pipe','DGDA-Drugs','typo-id','issue','not found at source', now() - interval '1 hour');
             INSERT INTO ops.review_decision (batch_id, concept_id, decision, note, reviewer_email, reviewer_role, decided_at) VALUES
              ('R-rm','gone-id','issue','wrong product listed', 'old@example.org','pharmacist', now() - interval '90 minute');
+            -- every current item ran its four checks without a failure, except the R-chk items below
+            INSERT INTO ops.stage_result (batch_id, concept_id, stage, status, note)
+            SELECT bi.batch_id, bi.concept_id, s.stage, 'ok', '' FROM ops.batch_item bi
+            CROSS JOIN (VALUES ('dgda'), ('substances'), ('clinical'), ('ddinter')) AS s(stage)
+            WHERE bi.note IS NULL AND bi.batch_id <> 'R-chk';
+            INSERT INTO ops.stage_result (batch_id, concept_id, stage, status, note) VALUES
+             ('R-chk','W-1','dgda','fail','error: RuntimeError: boom'), ('R-chk','W-1','substances','ok',''),
+             ('R-chk','W-1','clinical','ok',''), ('R-chk','W-1','ddinter','ok',''),
+             ('R-chk','A-1','dgda','ok',''), ('R-chk','A-1','substances','ok',''), ('R-chk','A-1','clinical','ok',''),
+             ('R-pipe','typo-id','dgda','fail','not found at source');
             """);
     }
 
     @Autowired WebTestClient web;
 
-    /**
-     * Posts a decision as the review form does: echoing the {@code extractedAt} the batch page shows for the item
-     * (an explicit null when the page shows none or the item does not exist), unless the body already has the key.
-     */
+    /** The version a reviewer's batch page shows for an item: its run stamp and newest decision id (nulls when none). */
+    private record Shown(String extractedAt, Long lastDecisionId) {}
+
+    private Shown shown(String batch, String concept) {
+        var res = internal(web).get().uri("/v1/batches/{b}", batch).exchange().expectBody().returnResult();
+        if (res.getStatus().value() != 200) return new Shown(null, null);
+        String json = new String(res.getResponseBody(), StandardCharsets.UTF_8);
+        String filter = "$.data.items[?(@.conceptId == '" + concept + "')].";
+        List<String> stamps = JsonPath.read(json, filter + "extractedAt");
+        List<Number> ids = JsonPath.read(json, filter + "lastDecisionId");
+        return new Shown(stamps.isEmpty() ? null : stamps.get(0),
+                         ids.isEmpty() || ids.get(0) == null ? null : ids.get(0).longValue());
+    }
+
+    /** Posts as the review form does: the shown version and a fresh requestId, unless the body already has the key. */
     private WebTestClient.ResponseSpec decide(String batch, String concept, Map<String, ?> body) {
         Map<String, Object> sent = new HashMap<>(body);
-        if (!sent.containsKey("extractedAt")) sent.put("extractedAt", shownExtractedAt(batch, concept));
+        Shown s = shown(batch, concept);
+        if (!sent.containsKey("extractedAt")) sent.put("extractedAt", s.extractedAt());
+        if (!sent.containsKey("expectedLastDecisionId")) sent.put("expectedLastDecisionId", s.lastDecisionId());
+        if (!sent.containsKey("requestId")) sent.put("requestId", UUID.randomUUID().toString());
         return decideRaw(batch, concept, sent);
     }
 
@@ -85,15 +130,6 @@ class ReviewApiIntegrationTest {
     private WebTestClient.ResponseSpec decideRaw(String batch, String concept, Object body) {
         return internal(web).post().uri("/v1/batches/{b}/items/{c}/decisions", batch, concept)
             .contentType(MediaType.APPLICATION_JSON).bodyValue(body).exchange();
-    }
-
-    /** The item's extractedAt as the (reviewer's) batch page shows it; null when there is none. */
-    private String shownExtractedAt(String batch, String concept) {
-        var res = internal(web).get().uri("/v1/batches/{b}", batch).exchange().expectBody().returnResult();
-        if (res.getStatus().value() != 200) return null;
-        List<String> stamps = JsonPath.read(new String(res.getResponseBody(), StandardCharsets.UTF_8),
-            "$.data.items[?(@.conceptId == '" + concept + "')].extractedAt");
-        return stamps.isEmpty() ? null : stamps.get(0);
     }
 
     private static Map<String, Object> body(String decision, String note, String email, String role) {
@@ -112,7 +148,15 @@ class ReviewApiIntegrationTest {
             .jsonPath("$.data.batchId").isEqualTo(batch)
             .jsonPath("$.data.conceptId").isEqualTo(concept)
             .jsonPath("$.data.review").isEqualTo(review)
-            .jsonPath("$.data.batchStatus").isEqualTo(batchStatus);
+            .jsonPath("$.data.batchStatus").isEqualTo(batchStatus)
+            .jsonPath("$.data.replayed").isEqualTo(false);
+    }
+
+    private void expectConflict(String batch, String concept, Map<String, ?> body, String field, String message) {
+        decide(batch, concept, body).expectStatus().isEqualTo(409).expectBody()
+            .jsonPath("$.errors[0].code").isEqualTo("CONFLICT")
+            .jsonPath("$.errors[0].field").isEqualTo(field)
+            .jsonPath("$.errors[0].message").isEqualTo(message);
     }
 
     private String itemReview(String batch, String concept) throws Exception {
@@ -123,42 +167,62 @@ class ReviewApiIntegrationTest {
         return count(pg, "SELECT count(*) FROM ops.review_decision WHERE batch_id = '" + batch + "'");
     }
 
-    @Test void engineerOkAloneDoesNotApprove() throws Exception {
-        expectDecision("R-eng", "D-1", body("ok", null, ENGINEER, "engineer"), "pending", "in_review");
-        assertThat(itemReview("R-eng", "D-1")).isEqualTo("pending");
-        assertThat(text(pg, "SELECT status FROM ops.batch WHERE batch_id = 'R-eng'")).isEqualTo("in_review");
+    // ---- the approval rule and the Outcome
+
+    @Test void engineerOkDoesNotApproveAndASecondEngineerCheckIsRefused() throws Exception {
+        Shown before = shown("R-eng", "D-1");
+        byte[] res = expectDecision("R-eng", "D-1", body("ok", null, ENGINEER, "engineer"), "pending", "in_review")
+            .jsonPath("$.data.displayStatus").isEqualTo("engineer_checked")
+            .returnResult().getResponseBody();
+        String json = new String(res, StandardCharsets.UTF_8);
+        assertThat((String) JsonPath.read(json, "$.data.version.extractedAt")).isEqualTo(before.extractedAt());
+        assertThat(((Number) JsonPath.read(json, "$.data.version.lastDecisionId")).longValue())
+            .isEqualTo(count(pg, "SELECT max(id) FROM ops.review_decision WHERE batch_id = 'R-eng'"));
+        expectConflict("R-eng", "D-1", body("ok", null, "other.eng@example.org", "engineer"), "review",
+            "Your check is already recorded for this record");
         assertThat(decisions("R-eng")).isEqualTo(1);
-        // the product stays hidden from anonymous visitors
+        assertThat(itemReview("R-eng", "D-1")).isEqualTo("pending");
         web.get().uri("/v1/products/D-1").exchange().expectStatus().isOk()
-            .expectBody().jsonPath("$.data.hidden").isEqualTo(true).jsonPath("$.data.reviewStatus").isEqualTo("pending");
+            .expectBody().jsonPath("$.data.hidden").isEqualTo(true);
     }
 
     @Test void batchStatusFollowsItsItems() throws Exception {
         expectDecision("R-flow", "W-1", body("ok", "", PHARMACIST, "pharmacist"), "ok", "in_review");
-        expectDecision("R-flow", "A-1", body("ok", "label matches", PHARMACIST, "pharmacist"), "ok", "approved");
-        assertThat(text(pg, "SELECT status FROM ops.batch WHERE batch_id = 'R-flow'")).isEqualTo("approved");
-        web.get().uri("/v1/batches/R-flow").exchange().expectStatus().isOk()
+        expectDecision("R-flow", "A-1", body("ok", "label matches", PHARMACIST, "pharmacist"), "ok", "approved")
+            .jsonPath("$.data.displayStatus").isEqualTo("approved");
+        internal(web).get().uri("/v1/batches/R-flow").exchange().expectStatus().isOk()
             .expectBody().jsonPath("$.data.status").isEqualTo("approved")
             .jsonPath("$.data.items[0].review").isEqualTo("ok").jsonPath("$.data.items[1].review").isEqualTo("ok");
-        // an engineer issue after the approval reopens the item and the batch
-        expectDecision("R-flow", "A-1", body("issue", "strength looks wrong", ENGINEER, "engineer"), "issue", "in_review");
-        assertThat(itemReview("R-flow", "A-1")).isEqualTo("issue");
+        // an issue is accepted on an approved record and reopens the item and the batch
+        expectDecision("R-flow", "A-1", body("issue", "strength looks wrong", ENGINEER, "engineer"), "issue", "in_review")
+            .jsonPath("$.data.displayStatus").isEqualTo("issue");
         assertThat(itemReview("R-flow", "W-1")).isEqualTo("ok");
     }
 
-    @Test void issueAfterOkIsIssueAndOnlyAPharmacistClearsIt() {
+    /** Step 6; replaces issueAfterOkIsIssueAndOnlyAPharmacistClearsIt. */
+    @Test void okWhileAnIssueIsOpenIsRefused() throws Exception {
         expectDecision("R-iss", "C-EYE", body("ok", null, PHARMACIST, "pharmacist"), "ok", "approved");
         expectDecision("R-iss", "C-EYE", body("issue", "route should be otic", PHARMACIST, "pharmacist"), "issue", "in_review");
-        expectDecision("R-iss", "C-EYE", body("ok", null, ENGINEER, "engineer"), "pending", "in_review");
-        expectDecision("R-iss", "C-EYE", body("ok", "fixed upstream", PHARMACIST, "pharmacist"), "ok", "approved");
+        expectConflict("R-iss", "C-EYE", body("ok", null, ENGINEER, "engineer"), "review", ISSUE_OPEN);
+        expectConflict("R-iss", "C-EYE", body("ok", "fixed upstream", PHARMACIST, "pharmacist"), "review", ISSUE_OPEN);
+        assertThat(decisions("R-iss")).isEqualTo(2);
+        assertThat(itemReview("R-iss", "C-EYE")).isEqualTo("issue");
+    }
+
+    /** Step 7. */
+    @Test void okOnAnApprovedRecordIsRefused() throws Exception {
+        expectDecision("R-appr", "A-1", body("ok", null, PHARMACIST, "pharmacist"), "ok", "approved");
+        expectConflict("R-appr", "A-1", body("ok", null, PHARMACIST, "pharmacist"), "review",
+            "This record is already approved by a pharmacist");
+        expectConflict("R-appr", "A-1", body("ok", null, ENGINEER, "engineer"), "review",
+            "This record is already approved by a pharmacist");
+        assertThat(decisions("R-appr")).isEqualTo(1);
     }
 
     @Test void reRunInvalidatesApprovalButKeepsHistory() throws Exception {
-        // Review Focus 3 at API level
         expectDecision("R-rerun", "N-1", body("ok", null, PHARMACIST, "pharmacist"), "ok", "approved");
         web.get().uri("/v1/products/N-1").exchange().expectStatus().isOk()
-            .expectBody().jsonPath("$.data.hidden").doesNotExist().jsonPath("$.data.tradeName").isEqualTo("Napa")
-            .jsonPath("$.data.reviewStatus").isEqualTo("ok");
+            .expectBody().jsonPath("$.data.hidden").doesNotExist().jsonPath("$.data.tradeName").isEqualTo("Napa");
 
         // what bddrug_etl.load.batches.reopen_review does when the record is re-run
         exec(pg, """
@@ -167,24 +231,117 @@ class ReviewApiIntegrationTest {
             UPDATE ops.batch SET status = 'in_review' WHERE batch_id = 'R-rerun';""");
 
         web.get().uri("/v1/products/N-1").exchange().expectStatus().isOk()
-            .expectBody().jsonPath("$.data.hidden").isEqualTo(true).jsonPath("$.data.reviewStatus").isEqualTo("pending")
-            .jsonPath("$.data.genericContentRaw").doesNotExist();
-        web.get().uri("/v1/batches/R-rerun/items/N-1/decisions").exchange().expectStatus().isOk()
+            .expectBody().jsonPath("$.data.hidden").isEqualTo(true).jsonPath("$.data.genericContentRaw").doesNotExist();
+        internal(web).get().uri("/v1/batches/R-rerun/items/N-1/decisions").exchange().expectStatus().isOk()
             .expectBody().jsonPath("$.data.length()").isEqualTo(1).jsonPath("$.data[0].decision").isEqualTo("ok");
 
-        // the pre-run pharmacist ok no longer counts: an engineer ok now leaves it pending
-        expectDecision("R-rerun", "N-1", body("ok", null, ENGINEER, "engineer"), "pending", "in_review");
-        // a pharmacist ok after the re-run approves again
+        expectDecision("R-rerun", "N-1", body("ok", null, ENGINEER, "engineer"), "pending", "in_review")
+            .jsonPath("$.data.displayStatus").isEqualTo("engineer_checked");
         expectDecision("R-rerun", "N-1", body("ok", null, PHARMACIST, "pharmacist"), "ok", "approved");
-        web.get().uri("/v1/products/N-1").exchange().expectStatus().isOk()
-            .expectBody().jsonPath("$.data.hidden").doesNotExist().jsonPath("$.data.tradeName").isEqualTo("Napa");
         assertThat(decisions("R-rerun")).isEqualTo(3);
     }
+
+    // ---- guards (steps 2 to 5)
 
     @Test void removedItemsDoNotHoldTheBatchBack() throws Exception {
         expectDecision("R-rm", "X-NOSUB", body("ok", null, PHARMACIST, "pharmacist"), "ok", "approved");
         assertThat(itemReview("R-rm", "gone-id")).isEqualTo("issue");
     }
+
+    /** Step 4. */
+    @Test void decisionsOnARemovedRecordAreRefused() throws Exception {
+        expectConflict("R-rm", "gone-id", body("ok", null, PHARMACIST, "pharmacist"), "conceptId",
+            "This record was removed from the batch file");
+        expectConflict("R-rm", "gone-id", body("issue", "still the wrong product", PHARMACIST, "pharmacist"), "conceptId",
+            "This record was removed from the batch file");
+        assertThat(count(pg, "SELECT count(*) FROM ops.review_decision WHERE concept_id = 'gone-id'")).isEqualTo(1);
+    }
+
+    /** Step 3. */
+    @Test void anotherReviewersDecisionAfterThePageLoadedIsRefused() throws Exception {
+        Shown before = shown("R-other", "W-2");
+        expectDecision("R-other", "W-2", body("ok", null, ENGINEER, "engineer"), "pending", "in_review");
+        Map<String, Object> late = body("ok", null, PHARMACIST, "pharmacist");
+        late.put("expectedLastDecisionId", before.lastDecisionId());   // the page was loaded before the engineer's check
+        expectConflict("R-other", "W-2", late, "lastDecisionId",
+            "Another reviewer decided on this record after the page was loaded; reload it and review again");
+        assertThat(decisions("R-other")).isEqualTo(1);
+        // after a reload the pharmacist's approval is accepted
+        expectDecision("R-other", "W-2", body("ok", null, PHARMACIST, "pharmacist"), "ok", "approved");
+    }
+
+    /** Step 5: a failed or missing check blocks ok but never an issue. */
+    @Test void okWithAFailedOrMissingCheckIsRefusedButAnIssueIsAccepted() throws Exception {
+        for (String concept : List.of("W-1", "A-1")) {
+            expectConflict("R-chk", concept, body("ok", null, PHARMACIST, "pharmacist"), "stages", CHECK_FAILED);
+            expectDecision("R-chk", concept, body("issue", "a check failed upstream", PHARMACIST, "pharmacist"),
+                "issue", "in_review");
+        }
+        assertThat(decisions("R-chk")).isEqualTo(2);
+    }
+
+    /** The pipeline's own issue (not found at source) is pending with a failed check: ok is a 409 on stages. */
+    @Test void aPipelineSetIssueRefusesOkOnStagesAndTakesAReviewersIssue() throws Exception {
+        expectConflict("R-pipe", "typo-id", body("ok", null, PHARMACIST, "pharmacist"), "stages", CHECK_FAILED);
+        expectDecision("R-pipe", "typo-id", body("issue", "concept id is a typo", PHARMACIST, "pharmacist"), "issue", "in_review")
+            .jsonPath("$.data.displayStatus").isEqualTo("issue");
+    }
+
+    @Test void anItemWithNoRunStampCannotBeApprovedButTakesAnIssue() throws Exception {
+        Map<String, Object> stamped = body("ok", null, PHARMACIST, "pharmacist");
+        stamped.put("extractedAt", "2026-01-01T08:00:00Z");
+        expectConflict("R-null", "W-1", stamped, "extractedAt",
+            "This record was re-run after the page was loaded; reload it and review again");
+        Map<String, Object> explicitNull = body("ok", null, PHARMACIST, "pharmacist");
+        explicitNull.put("extractedAt", null);
+        expectConflict("R-null", "W-1", explicitNull, "stages", CHECK_FAILED);
+        Map<String, Object> issue = body("issue", "no pipeline run recorded", PHARMACIST, "pharmacist");
+        issue.put("extractedAt", null);
+        decide("R-null", "W-1", issue).expectStatus().isCreated().expectBody().jsonPath("$.data.review").isEqualTo("issue");
+        assertThat(decisions("R-null")).isEqualTo(1);
+    }
+
+    @Test void staleExtractedAtIsRejectedWith409() throws Exception {
+        Map<String, Object> stale = body("ok", null, PHARMACIST, "pharmacist");
+        stale.put("extractedAt", "2026-01-01T07:00:00Z");
+        decide("R-stale", "A-NOBDC", stale).expectStatus().isEqualTo(409)
+            .expectBody().jsonPath("$.errors[0].code").isEqualTo("CONFLICT").jsonPath("$.errors[0].field").isEqualTo("extractedAt");
+        assertThat(decisions("R-stale")).isZero();
+        internal(web).get().uri("/v1/batches/R-stale").exchange().expectStatus().isOk()
+            .expectBody().jsonPath("$.data.items[0].extractedAt").isEqualTo("2026-01-01T08:00:00.123456Z");
+        Map<String, Object> current = body("ok", null, PHARMACIST, "pharmacist");
+        current.put("extractedAt", "2026-01-01T08:00:00.123456Z");
+        expectDecision("R-stale", "A-NOBDC", current, "ok", "approved");
+    }
+
+    @Test void anExplicitNullOnAStampedItemIs409() throws Exception {
+        Map<String, Object> explicitNull = body("ok", null, PHARMACIST, "pharmacist");
+        explicitNull.put("extractedAt", null);
+        decide("R-req", "W-1", explicitNull).expectStatus().isEqualTo(409)
+            .expectBody().jsonPath("$.errors[0].field").isEqualTo("extractedAt");
+        assertThat(decisions("R-req")).isZero();
+    }
+
+    /** The page is loaded, the ETL re-runs the record and commits, then the pharmacist presses ok. */
+    @Test void okOnAPageLoadedBeforeAReRunIs409AndPublishesNothing() throws Exception {
+        String onScreen = shown("R-race", "C-EYE").extractedAt();
+        assertThat(onScreen).isNotNull();
+        exec(pg, """
+            UPDATE ops.batch_item SET review = 'pending', extracted_at = clock_timestamp()
+             WHERE batch_id = 'R-race' AND concept_id = 'C-EYE';
+            UPDATE ops.batch SET status = 'in_review' WHERE batch_id = 'R-race';""");
+        Map<String, Object> stale = body("ok", null, PHARMACIST, "pharmacist");
+        stale.put("extractedAt", onScreen);
+        decide("R-race", "C-EYE", stale).expectStatus().isEqualTo(409)
+            .expectBody().jsonPath("$.errors[0].field").isEqualTo("extractedAt");
+        // leaving the field out is no way around it
+        decideRaw("R-race", "C-EYE", body("ok", null, PHARMACIST, "pharmacist")).expectStatus().isBadRequest();
+        assertThat(decisions("R-race")).isZero();
+        assertThat(text(pg, "SELECT status FROM ops.batch WHERE batch_id = 'R-race'")).isEqualTo("in_review");
+        expectDecision("R-race", "C-EYE", body("ok", null, PHARMACIST, "pharmacist"), "ok", "approved");
+    }
+
+    // ---- validation
 
     private void expectInvalid(Map<String, ?> body, String field) {
         decide("R-val", "W-2", body).expectStatus().isBadRequest().expectBody()
@@ -207,6 +364,30 @@ class ReviewApiIntegrationTest {
         decideRaw("R-val", "W-2", Map.of()).expectStatus().isBadRequest();
         internal(web).post().uri("/v1/batches/R-val/items/W-2/decisions").contentType(MediaType.APPLICATION_JSON)
             .bodyValue("{not json").exchange().expectStatus().isBadRequest();
+
+        Shown s = shown("R-val", "W-2");
+        Map<String, Object> noId = body("ok", null, PHARMACIST, "pharmacist");
+        noId.put("extractedAt", s.extractedAt());
+        noId.put("requestId", UUID.randomUUID().toString());
+        decideRaw("R-val", "W-2", noId).expectStatus().isBadRequest()
+            .expectBody().jsonPath("$.errors[0].field").isEqualTo("expectedLastDecisionId");
+        for (Object bad : new Object[]{"7", 1.5, 0, -3, true}) {
+            Map<String, Object> m = new HashMap<>(noId);
+            m.put("expectedLastDecisionId", bad);
+            decideRaw("R-val", "W-2", m).expectStatus().isBadRequest()
+                .expectBody().jsonPath("$.errors[0].field").isEqualTo("expectedLastDecisionId");
+        }
+        Map<String, Object> noRequest = body("ok", null, PHARMACIST, "pharmacist");
+        noRequest.put("extractedAt", s.extractedAt());
+        noRequest.put("expectedLastDecisionId", null);
+        decideRaw("R-val", "W-2", noRequest).expectStatus().isBadRequest()
+            .expectBody().jsonPath("$.errors[0].field").isEqualTo("requestId");
+        for (Object bad : new Object[]{"not-a-uuid", "", "1-1-1-1-1", 12345}) {
+            Map<String, Object> m = new HashMap<>(noRequest);
+            m.put("requestId", bad);
+            decideRaw("R-val", "W-2", m).expectStatus().isBadRequest()
+                .expectBody().jsonPath("$.errors[0].field").isEqualTo("requestId");
+        }
         assertThat(decisions("R-val")).isZero();
         // boundaries are accepted
         expectDecision("R-val", "W-2", body("issue", "12345", PHARMACIST, "pharmacist"), "issue", "in_review");
@@ -214,98 +395,15 @@ class ReviewApiIntegrationTest {
         assertThat(decisions("R-val")).isEqualTo(2);
     }
 
-    @Test void unknownBatchItemIs404() throws Exception {
-        decide("R-val", "nope", body("ok", null, PHARMACIST, "pharmacist")).expectStatus().isNotFound()
-            .expectBody().jsonPath("$.errors[0].code").isEqualTo("NOT_FOUND");
-        decide("nope", "W-2", body("ok", null, PHARMACIST, "pharmacist")).expectStatus().isNotFound();
-        web.get().uri("/v1/batches/R-val/items/nope/decisions").exchange().expectStatus().isNotFound();
-        assertThat(count(pg, "SELECT count(*) FROM ops.review_decision WHERE concept_id = 'nope' OR batch_id = 'nope'")).isZero();
-    }
-
-    @Test void missingOrWrongTokenIs401AndWritesNothing() throws Exception {
-        var ok = body("ok", null, PHARMACIST, "pharmacist");
-        web.post().uri("/v1/batches/R-tok/items/X-NOMAP/decisions").contentType(MediaType.APPLICATION_JSON)
-            .bodyValue(ok).exchange().expectStatus().isUnauthorized()
-            .expectBody().jsonPath("$.success").isEqualTo(false)
-            .jsonPath("$.errors[0].code").isEqualTo("UNAUTHORIZED")
-            .jsonPath("$.metadata.requestId").exists();
-        web.post().uri("/v1/batches/R-tok/items/X-NOMAP/decisions").header(HEADER, TOKEN + "x")
-            .contentType(MediaType.APPLICATION_JSON).bodyValue(ok).exchange().expectStatus().isUnauthorized();
-        web.post().uri("/v1/batches/R-tok/items/X-NOMAP/decisions").header(HEADER, TOKEN.substring(1))
-            .contentType(MediaType.APPLICATION_JSON).bodyValue(ok).exchange().expectStatus().isUnauthorized();
-        web.post().uri("/v1/batches/R-tok/items/X-NOMAP/decisions").header(HEADER, "")
-            .contentType(MediaType.APPLICATION_JSON).bodyValue(ok).exchange().expectStatus().isUnauthorized();
-        // the token is checked before validation: an invalid body without a token is still 401
-        web.post().uri("/v1/batches/R-tok/items/X-NOMAP/decisions").contentType(MediaType.APPLICATION_JSON)
-            .bodyValue(Map.of()).exchange().expectStatus().isUnauthorized();
-        web.get().uri("/v1/batches/R-tok/items/X-NOMAP/decisions").header(HEADER, "wrong")
-            .exchange().expectStatus().isUnauthorized();
-        assertThat(decisions("R-tok")).isZero();
-        assertThat(itemReview("R-tok", "X-NOMAP")).isEqualTo("pending");
-    }
-
-    @Test void decisionHistoryIsNewestFirstWithRoleOnlyUnlessTokenGiven() throws Exception {
-        decide("R-hist", "C-CAP", body("ok", null, ENGINEER, "engineer")).expectStatus().isCreated();
-        decide("R-hist", "C-CAP", body("issue", "dose form mismatch", PHARMACIST, "pharmacist")).expectStatus().isCreated();
-
-        // Review Focus 4: an anonymous request never sees reviewer emails
-        byte[] anon = web.get().uri("/v1/batches/R-hist/items/C-CAP/decisions").exchange().expectStatus().isOk()
-            .expectBody()
-            .jsonPath("$.data.length()").isEqualTo(2)
-            .jsonPath("$.data[0].decision").isEqualTo("issue")
-            .jsonPath("$.data[0].note").isEqualTo("dose form mismatch")
-            .jsonPath("$.data[0].role").isEqualTo("pharmacist")
-            .jsonPath("$.data[0].decidedAt").exists()
-            .jsonPath("$.data[0].length()").isEqualTo(4)
-            .jsonPath("$.data[0].reviewerEmail").doesNotExist()
-            .jsonPath("$.data[1].decision").isEqualTo("ok")
-            .jsonPath("$.data[1].role").isEqualTo("engineer")
-            .returnResult().getResponseBody();
-        assertThat(new String(anon, StandardCharsets.UTF_8)).doesNotContain("@");
-
-        internal(web).get().uri("/v1/batches/R-hist/items/C-CAP/decisions").exchange().expectStatus().isOk()
-            .expectBody()
-            .jsonPath("$.data[0].reviewerEmail").isEqualTo(PHARMACIST)
-            .jsonPath("$.data[0].role").isEqualTo("pharmacist")
-            .jsonPath("$.data[1].reviewerEmail").isEqualTo(ENGINEER);
-
-        // batch pages, the report and product pages never carry emails either
-        for (String uri : new String[]{"/v1/batches/R-hist", "/v1/batches/R-hist/report", "/v1/batches",
-                                       "/v1/products/C-CAP", "/v1/substances/BDS-000003"}) {
-            byte[] page = web.get().uri(uri).exchange().expectStatus().isOk().expectBody().returnResult().getResponseBody();
-            assertThat(new String(page, StandardCharsets.UTF_8)).as(uri).doesNotContain("@");
-        }
-    }
-
-    @Test void staleExtractedAtIsRejectedWith409() throws Exception {
-        Map<String, Object> stale = body("ok", null, PHARMACIST, "pharmacist");
-        stale.put("extractedAt", "2026-01-01T07:00:00Z");
-        decide("R-stale", "A-NOBDC", stale).expectStatus().isEqualTo(409)
-            .expectBody().jsonPath("$.errors[0].code").isEqualTo("CONFLICT");
-        assertThat(decisions("R-stale")).isZero();
-
-        // the batch page carries extractedAt; echoing it back is accepted
-        String shown = new String(web.get().uri("/v1/batches/R-stale").exchange().expectStatus().isOk()
-            .expectBody().jsonPath("$.data.items[0].extractedAt").isEqualTo("2026-01-01T08:00:00.123456Z")
-            .returnResult().getResponseBody(), StandardCharsets.UTF_8);
-        assertThat(shown).contains("extractedAt");
-        Map<String, Object> current = body("ok", null, PHARMACIST, "pharmacist");
-        current.put("extractedAt", "2026-01-01T08:00:00.123456Z");
-        expectDecision("R-stale", "A-NOBDC", current, "ok", "approved");
-    }
-
-    /** Fix round 1: a decision must say which run it reviewed; leaving extractedAt out fails closed. */
     @Test void missingExtractedAtIs400AndWritesNothing() throws Exception {
         for (Map<String, Object> b : List.of(body("ok", null, PHARMACIST, "pharmacist"),
                                              body("issue", "strength looks wrong", PHARMACIST, "pharmacist"))) {
             decideRaw("R-req", "W-1", b).expectStatus().isBadRequest().expectBody()
-                .jsonPath("$.success").isEqualTo(false)
                 .jsonPath("$.errors[0].code").isEqualTo("INVALID_QUERY")
                 .jsonPath("$.errors[0].field").isEqualTo("extractedAt");
         }
         assertThat(decisions("R-req")).isZero();
         assertThat(itemReview("R-req", "W-1")).isEqualTo("pending");
-        assertThat(text(pg, "SELECT status FROM ops.batch WHERE batch_id = 'R-req'")).isEqualTo("in_review");
     }
 
     @Test void malformedExtractedAtIs400() throws Exception {
@@ -313,62 +411,220 @@ class ReviewApiIntegrationTest {
             Map<String, Object> b = body("ok", null, PHARMACIST, "pharmacist");
             b.put("extractedAt", bad);
             decideRaw("R-req", "W-1", b).expectStatus().isBadRequest().expectBody()
-                .jsonPath("$.errors[0].code").isEqualTo("INVALID_QUERY")
                 .jsonPath("$.errors[0].field").isEqualTo("extractedAt");
         }
         assertThat(decisions("R-req")).isZero();
     }
 
-    @Test void anItemWithNoRunStampAcceptsOnlyAnExplicitNull() throws Exception {
-        Map<String, Object> stamped = body("ok", null, PHARMACIST, "pharmacist");
-        stamped.put("extractedAt", "2026-01-01T08:00:00Z");
-        decideRaw("R-null", "W-1", stamped).expectStatus().isEqualTo(409)
-            .expectBody().jsonPath("$.errors[0].code").isEqualTo("CONFLICT").jsonPath("$.errors[0].field").isEqualTo("extractedAt");
-        decideRaw("R-null", "W-1", body("ok", null, PHARMACIST, "pharmacist")).expectStatus().isBadRequest();
-        assertThat(decisions("R-null")).isZero();
-
-        Map<String, Object> explicitNull = body("ok", null, PHARMACIST, "pharmacist");
-        explicitNull.put("extractedAt", null);
-        decideRaw("R-null", "W-1", explicitNull).expectStatus().isCreated()
-            .expectBody().jsonPath("$.data.review").isEqualTo("ok").jsonPath("$.data.batchStatus").isEqualTo("approved");
-        assertThat(decisions("R-null")).isEqualTo(1);
+    @Test void unknownBatchItemIs404() throws Exception {
+        decide("R-val", "nope", body("ok", null, PHARMACIST, "pharmacist")).expectStatus().isNotFound()
+            .expectBody().jsonPath("$.errors[0].code").isEqualTo("NOT_FOUND");
+        decide("nope", "W-2", body("ok", null, PHARMACIST, "pharmacist")).expectStatus().isNotFound();
+        internal(web).get().uri("/v1/batches/R-val/items/nope/decisions").exchange().expectStatus().isNotFound();
+        assertThat(count(pg, "SELECT count(*) FROM ops.review_decision WHERE concept_id = 'nope' OR batch_id = 'nope'")).isZero();
     }
 
-    @Test void anExplicitNullOnAStampedItemIs409() throws Exception {
-        Map<String, Object> explicitNull = body("ok", null, PHARMACIST, "pharmacist");
-        explicitNull.put("extractedAt", null);
-        decideRaw("R-req", "W-1", explicitNull).expectStatus().isEqualTo(409)
-            .expectBody().jsonPath("$.errors[0].code").isEqualTo("CONFLICT");
-        assertThat(decisions("R-req")).isZero();
-        assertThat(itemReview("R-req", "W-1")).isEqualTo("pending");
+    // ---- step 1: idempotency, and the audit rows
+
+    @Test void aRepeatedRequestIdIsAnsweredOnceAndBelongsToItsDecision() throws Exception {
+        String rid = UUID.randomUUID().toString();
+        Shown s = shown("R-idem", "W-1");
+        Map<String, Object> ok = body("ok", null, PHARMACIST, "pharmacist");
+        ok.put("extractedAt", s.extractedAt());
+        ok.put("expectedLastDecisionId", s.lastDecisionId());
+        ok.put("requestId", rid);
+        decideRaw("R-idem", "W-1", ok).expectStatus().isCreated().expectBody().jsonPath("$.data.replayed").isEqualTo(false);
+        // a retry after a lost response: 200, the current outcome, nothing written
+        decideRaw("R-idem", "W-1", ok).expectStatus().isOk().expectBody()
+            .jsonPath("$.data.replayed").isEqualTo(true)
+            .jsonPath("$.data.review").isEqualTo("ok")
+            .jsonPath("$.data.displayStatus").isEqualTo("approved");
+        // the same id in upper case is the same UUID
+        Map<String, Object> upper = new HashMap<>(ok);
+        upper.put("requestId", rid.toUpperCase());
+        decideRaw("R-idem", "W-1", upper).expectStatus().isOk().expectBody().jsonPath("$.data.replayed").isEqualTo(true);
+        assertThat(count(pg, "SELECT count(*) FROM ops.review_decision WHERE batch_id = 'R-idem' AND concept_id = 'W-1'"))
+            .isEqualTo(1);
+        assertThat(count(pg, "SELECT count(*) FROM ops.audit_event WHERE event = 'decision' AND request_id = '" + rid + "'"))
+            .isEqualTo(1);
+        assertThat(text(pg, "SELECT actor_email || '|' || actor_role || '|' || target_type || '|' || target_id || '|' || outcome"
+                            + " FROM ops.audit_event WHERE event = 'decision' AND request_id = '" + rid + "'"))
+            .isEqualTo(PHARMACIST + "|pharmacist|batch_item|R-idem/W-1|ok");
+        // the id belongs to that decision: another item or another decision is a 400
+        Map<String, Object> otherItem = body("ok", null, PHARMACIST, "pharmacist");
+        otherItem.put("requestId", rid);
+        decide("R-idem", "A-1", otherItem).expectStatus().isBadRequest()
+            .expectBody().jsonPath("$.errors[0].field").isEqualTo("requestId");
+        Map<String, Object> otherDecision = body("issue", "another decision", PHARMACIST, "pharmacist");
+        otherDecision.put("requestId", rid);
+        decide("R-idem", "W-1", otherDecision).expectStatus().isBadRequest()
+            .expectBody().jsonPath("$.errors[0].field").isEqualTo("requestId");
+        assertThat(decisions("R-idem")).isEqualTo(1);
     }
 
-    /** The finding's scenario: the page is loaded, the ETL re-runs the record and commits, then the pharmacist clicks ok. */
-    @Test void okOnAPageLoadedBeforeAReRunIs409AndPublishesNothing() throws Exception {
-        String onScreen = shownExtractedAt("R-race", "C-EYE");
-        assertThat(onScreen).isNotNull();
+    /** Review Focus 1: two sends of one decision race; they serialise on the item lock and step 1 answers the second. */
+    @Test void concurrentSendsOfOneRequestIdWriteOneDecision() throws Exception {
+        Shown s = shown("R-conc", "N-1");
+        Map<String, Object> ok = body("ok", null, PHARMACIST, "pharmacist");
+        ok.put("extractedAt", s.extractedAt());
+        ok.put("expectedLastDecisionId", s.lastDecisionId());
+        ok.put("requestId", UUID.randomUUID().toString());
+        Callable<Integer> send = () -> decideRaw("R-conc", "N-1", ok).expectBody().returnResult().getStatus().value();
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            List<Integer> statuses = new ArrayList<>();
+            for (Future<Integer> f : pool.invokeAll(List.of(send, send))) statuses.add(f.get());
+            assertThat(statuses).containsExactlyInAnyOrder(200, 201);
+        } finally {
+            pool.shutdownNow();
+        }
+        assertThat(decisions("R-conc")).isEqualTo(1);
+        assertThat(count(pg, "SELECT count(*) FROM ops.audit_event WHERE event = 'decision' AND target_id = 'R-conc/N-1'"))
+            .isEqualTo(1);
+    }
+
+    @Test void a409AndA400EachLeaveExactlyOneDecisionRejectedRow() throws Exception {
+        String r409 = UUID.randomUUID().toString(), r400 = UUID.randomUUID().toString();
+        Map<String, Object> stale = body("ok", null, PHARMACIST, "pharmacist");
+        stale.put("extractedAt", "2020-01-01T00:00:00Z");
+        stale.put("requestId", r409);
+        decide("R-rej", "W-1", stale).expectStatus().isEqualTo(409);
+        Map<String, Object> badNote = body("issue", "bad", PHARMACIST, "pharmacist");
+        badNote.put("requestId", r400);
+        decide("R-rej", "W-1", badNote).expectStatus().isBadRequest();
+        String row = "SELECT actor_email || '|' || actor_role || '|' || target_id || '|' || outcome FROM ops.audit_event"
+                     + " WHERE event = 'decision_rejected' AND request_id = '%s'";
+        assertThat(count(pg, "SELECT count(*) FROM ops.audit_event WHERE event = 'decision_rejected' AND request_id = '" + r409 + "'"))
+            .isEqualTo(1);
+        assertThat(text(pg, row.formatted(r409))).isEqualTo(PHARMACIST + "|pharmacist|R-rej/W-1|CONFLICT");
+        assertThat(count(pg, "SELECT count(*) FROM ops.audit_event WHERE event = 'decision_rejected' AND request_id = '" + r400 + "'"))
+            .isEqualTo(1);
+        assertThat(text(pg, row.formatted(r400))).isEqualTo(PHARMACIST + "|pharmacist|R-rej/W-1|INVALID_QUERY");
+        assertThat(count(pg, "SELECT count(*) FROM ops.audit_event WHERE event = 'decision' AND target_id = 'R-rej/W-1'")).isZero();
+        assertThat(decisions("R-rej")).isZero();
+    }
+
+    /** §7.2 backstop: a send whose step-1 read missed a concurrent commit hits the unique request index and is answered
+     *  as a replay in a fresh transaction. The racing row is an audit row alone: a review_decision row would lock the
+     *  item through its foreign key and send this request down the step-1 path instead. */
+    @Test void aUniqueIndexHitIsAnsweredAsAReplay() throws Exception {
+        String rid = UUID.randomUUID().toString();
+        Shown s = shown("R-bk", "W-1");
+        Map<String, Object> ok = body("ok", null, PHARMACIST, "pharmacist");
+        ok.put("extractedAt", s.extractedAt());
+        ok.put("expectedLastDecisionId", s.lastDecisionId());
+        ok.put("requestId", rid);
+        ExecutorService pool = Executors.newSingleThreadExecutor();
+        try (Connection c = DriverManager.getConnection(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword())) {
+            c.setAutoCommit(false);
+            try (var st = c.createStatement()) {
+                st.execute("INSERT INTO ops.audit_event (event, actor_email, actor_role, target_type, target_id, outcome,"
+                    + " request_id) VALUES ('decision', 'p@example.org', 'pharmacist', 'batch_item', 'R-bk/W-1', 'ok', '"
+                    + rid + "')");
+            }
+            Future<EntityExchangeResult<byte[]>> sent =
+                pool.submit(() -> decideRaw("R-bk", "W-1", ok).expectBody().returnResult());
+            Thread.sleep(500);   // the request now waits on the uncommitted index entry
+            assertThat(sent.isDone()).isFalse();
+            c.commit();
+            EntityExchangeResult<byte[]> res = sent.get(30, TimeUnit.SECONDS);
+            assertThat(res.getStatus().value()).isEqualTo(200);
+            String json = new String(res.getResponseBody(), StandardCharsets.UTF_8);
+            assertThat((Boolean) JsonPath.read(json, "$.data.replayed")).isTrue();
+        } finally {
+            pool.shutdownNow();
+        }
+        // the request's own decision rolled back with its transaction; the index holds one decision row for the id
+        assertThat(decisions("R-bk")).isZero();
+        assertThat(count(pg, "SELECT count(*) FROM ops.audit_event WHERE event = 'decision' AND request_id = '" + rid + "'"))
+            .isEqualTo(1);
+    }
+
+    /** A retry of an approval sent before a re-run reports the current state: back in review, nothing written. */
+    @Test void aRetryOfAnApprovalAfterAReRunReportsBackInReview() throws Exception {
+        Shown s = shown("R-back", "W-1");
+        Map<String, Object> approval = body("ok", null, PHARMACIST, "pharmacist");
+        approval.put("extractedAt", s.extractedAt());
+        approval.put("expectedLastDecisionId", s.lastDecisionId());
+        approval.put("requestId", UUID.randomUUID().toString());
+        decideRaw("R-back", "W-1", approval).expectStatus().isCreated();
+        // what bddrug_etl.load.batches.reopen_review does when the record is re-run
         exec(pg, """
             UPDATE ops.batch_item SET review = 'pending', extracted_at = clock_timestamp()
-             WHERE batch_id = 'R-race' AND concept_id = 'C-EYE';
-            UPDATE ops.batch SET status = 'in_review' WHERE batch_id = 'R-race';""");
+             WHERE batch_id = 'R-back' AND concept_id = 'W-1';
+            UPDATE ops.batch SET status = 'in_review' WHERE batch_id = 'R-back';""");
+        decideRaw("R-back", "W-1", approval).expectStatus().isOk().expectBody()
+            .jsonPath("$.data.replayed").isEqualTo(true)
+            .jsonPath("$.data.review").isEqualTo("pending")
+            .jsonPath("$.data.displayStatus").isEqualTo("back_in_review");
+        assertThat(decisions("R-back")).isEqualTo(1);
+    }
 
-        Map<String, Object> stale = body("ok", null, PHARMACIST, "pharmacist");
-        stale.put("extractedAt", onScreen);
-        decideRaw("R-race", "C-EYE", stale).expectStatus().isEqualTo(409)
-            .expectBody().jsonPath("$.errors[0].code").isEqualTo("CONFLICT");
-        // leaving the field out is no way around it
-        decideRaw("R-race", "C-EYE", body("ok", null, PHARMACIST, "pharmacist")).expectStatus().isBadRequest();
-        assertThat(decisions("R-race")).isZero();
-        assertThat(itemReview("R-race", "C-EYE")).isEqualTo("pending");
-        assertThat(text(pg, "SELECT status FROM ops.batch WHERE batch_id = 'R-race'")).isEqualTo("in_review");
+    /** §5.2: an issue fixed and re-run is pending; a retry of the issue reports that and writes nothing. */
+    @Test void anIssueFixedAndReRunIsPending() throws Exception {
+        Shown s = shown("R-pend", "W-1");
+        Map<String, Object> issue = body("issue", "strength looks wrong", PHARMACIST, "pharmacist");
+        issue.put("extractedAt", s.extractedAt());
+        issue.put("expectedLastDecisionId", s.lastDecisionId());
+        issue.put("requestId", UUID.randomUUID().toString());
+        decideRaw("R-pend", "W-1", issue).expectStatus().isCreated().expectBody()
+            .jsonPath("$.data.displayStatus").isEqualTo("issue");
+        exec(pg, """
+            UPDATE ops.batch_item SET review = 'pending', extracted_at = clock_timestamp()
+             WHERE batch_id = 'R-pend' AND concept_id = 'W-1';
+            UPDATE ops.batch SET status = 'in_review' WHERE batch_id = 'R-pend';""");
+        decideRaw("R-pend", "W-1", issue).expectStatus().isOk().expectBody()
+            .jsonPath("$.data.replayed").isEqualTo(true)
+            .jsonPath("$.data.review").isEqualTo("pending")
+            .jsonPath("$.data.displayStatus").isEqualTo("pending");
+        assertThat(decisions("R-pend")).isEqualTo(1);
+    }
 
-        // after a reload (the new stamp) the decision is accepted
-        expectDecision("R-race", "C-EYE", body("ok", null, PHARMACIST, "pharmacist"), "ok", "approved");
+    // ---- token and privacy
+
+    @Test void missingOrWrongTokenIs401AndWritesNothing() throws Exception {
+        var ok = body("ok", null, PHARMACIST, "pharmacist");
+        web.post().uri("/v1/batches/R-tok/items/X-NOMAP/decisions").contentType(MediaType.APPLICATION_JSON)
+            .bodyValue(ok).exchange().expectStatus().isUnauthorized()
+            .expectBody().jsonPath("$.errors[0].code").isEqualTo("UNAUTHORIZED").jsonPath("$.metadata.requestId").exists();
+        for (String wrong : new String[]{TOKEN + "x", TOKEN.substring(1), ""})
+            web.post().uri("/v1/batches/R-tok/items/X-NOMAP/decisions").header(HEADER, wrong)
+                .contentType(MediaType.APPLICATION_JSON).bodyValue(ok).exchange().expectStatus().isUnauthorized();
+        // the token is checked before validation: an invalid body without a token is still 401
+        web.post().uri("/v1/batches/R-tok/items/X-NOMAP/decisions").contentType(MediaType.APPLICATION_JSON)
+            .bodyValue(Map.of()).exchange().expectStatus().isUnauthorized();
+        web.get().uri("/v1/batches/R-tok/items/X-NOMAP/decisions").header(HEADER, "wrong")
+            .exchange().expectStatus().isUnauthorized();
+        web.get().uri("/v1/batches/R-tok/items/X-NOMAP/decisions").exchange().expectStatus().isUnauthorized();
+        assertThat(decisions("R-tok")).isZero();
+        assertThat(count(pg, "SELECT count(*) FROM ops.audit_event WHERE target_id = 'R-tok/X-NOMAP'")).isZero();
+    }
+
+    @Test void decisionHistoryNeedsTheTokenAndIsNewestFirst() throws Exception {
+        decide("R-hist", "C-CAP", body("ok", null, ENGINEER, "engineer")).expectStatus().isCreated();
+        decide("R-hist", "C-CAP", body("issue", "dose form mismatch", PHARMACIST, "pharmacist")).expectStatus().isCreated();
+        for (String uri : new String[]{"/v1/batches/R-hist/items/C-CAP/decisions", "/v1/batches/R-hist",
+                                       "/v1/batches/R-hist/report", "/v1/batches"})
+            web.get().uri(uri).exchange().expectStatus().isUnauthorized()
+                .expectBody().jsonPath("$.errors[0].code").isEqualTo("UNAUTHORIZED");
+        internal(web).get().uri("/v1/batches/R-hist/items/C-CAP/decisions").exchange().expectStatus().isOk()
+            .expectBody()
+            .jsonPath("$.data.length()").isEqualTo(2)
+            .jsonPath("$.data[0].decision").isEqualTo("issue")
+            .jsonPath("$.data[0].note").isEqualTo("dose form mismatch")
+            .jsonPath("$.data[0].role").isEqualTo("pharmacist")
+            .jsonPath("$.data[0].reviewerEmail").isEqualTo(PHARMACIST)
+            .jsonPath("$.data[1].reviewerEmail").isEqualTo(ENGINEER);
+        for (String uri : new String[]{"/v1/products/C-CAP", "/v1/substances/BDS-000003"}) {
+            byte[] page = web.get().uri(uri).exchange().expectStatus().isOk().expectBody().returnResult().getResponseBody();
+            assertThat(new String(page, StandardCharsets.UTF_8)).as(uri).doesNotContain("@");
+        }
     }
 
     @Test void reviewerEmailsNeverReachTheLogs(CapturedOutput output) throws Exception {
         String email = "log.canary.reviewer@example.org";
         decide("R-log", "X-NOMAP", body("ok", null, email, "pharmacist")).expectStatus().isCreated();
+        decide("R-log", "X-NOMAP", body("ok", null, email, "pharmacist")).expectStatus().isEqualTo(409);
         decide("R-log", "unknown-item", body("ok", null, email, "pharmacist")).expectStatus().isNotFound();
         decide("R-log", "X-NOMAP", body("issue", "abc", email, "pharmacist")).expectStatus().isBadRequest();
         decide("R-log", "X-NOMAP", body("ok", null, email, "admin")).expectStatus().isBadRequest();

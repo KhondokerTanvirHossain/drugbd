@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { parseReviewers, roleFor } from "../lib/reviewers";
+import { isReviewer, parseReviewers, roleFor } from "../lib/reviewers";
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -49,5 +49,15 @@ describe("roleFor", () => {
   it("gives role user when REVIEWERS is unset", () => {
     vi.stubEnv("REVIEWERS", undefined as unknown as string);
     expect(roleFor("eng@example.org")).toBe("user");
+  });
+});
+
+describe("isReviewer", () => {
+  it("is true for pharmacists and engineers only", () => {
+    expect(isReviewer({ role: "pharmacist" })).toBe(true);
+    expect(isReviewer({ role: "engineer" })).toBe(true);
+    expect(isReviewer({ role: "user" })).toBe(false);
+    expect(isReviewer(null)).toBe(false);
+    expect(isReviewer(undefined)).toBe(false);
   });
 });

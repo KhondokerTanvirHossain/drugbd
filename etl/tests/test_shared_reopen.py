@@ -15,7 +15,7 @@ import psycopg
 import pytest
 from testcontainers.postgres import PostgresContainer
 
-from bddrug_etl.ddinter.client import DDInterPairRow
+from bddrug_etl.ddinter.client import DDInterPairRow, InteractWithList, InteractWithRow
 from bddrug_etl.ddinter.html import DDInterDrug, InteractionText
 from bddrug_etl.jobs import run_pipeline
 from bddrug_etl.load.batches import reopen_review
@@ -87,6 +87,10 @@ class FakeDDInter:
                 rows.append(DDInterPairRow(other, self.drugs.get(other, other), sev, ()))
         return rows
 
+    def interact_with(self, ddinter_id):
+        return InteractWithList(tuple(InteractWithRow(r.partner_id, r.partner_name, "0", r.severity)
+                                      for r in self.graph(ddinter_id)), True)
+
     def diseases(self, ddinter_id):
         return []
 
@@ -134,6 +138,11 @@ def url():
 def clean(url):
     """Every test starts from an empty database (decisions included: they are test data here)."""
     with psycopg.connect(url) as c:
+        # V6 snapshots are append-only and hold a foreign key to ops.batch_item. Only this throwaway test database
+        # switches the trigger off to start each test empty; no application code ever does.
+        c.execute("ALTER TABLE ops.item_snapshot DISABLE TRIGGER item_snapshot_append_only")
+        c.execute("DELETE FROM ops.item_snapshot")
+        c.execute("ALTER TABLE ops.item_snapshot ENABLE TRIGGER item_snapshot_append_only")
         for t in ("ops.review_decision", "ops.stage_result", "ops.batch_run", "ops.batch_item", "ops.batch",
                   "curated.ddinter_pair", "curated.ddinter_interaction_text", "curated.ddinter_disease",
                   "curated.ddinter_food", "curated.ddinter_drug", "curated.interaction_coverage",
@@ -327,3 +336,16 @@ def test_reopen_review_with_changes_reopens_dependents_and_returns_them(url, tmp
     assert batch_status(url, "0308-a") == "in_review"
     review_y, stamp_y = item(url, "0308-b", Y)
     assert review_y == "pending" and stamp_y > before_y
+
+
+def test_a_shared_change_writes_a_shared_change_snapshot_with_the_run_id_of_the_run_that_caused_it(url, tmp_path):
+    dd = FakeDDInter(BOTH)
+    assert run(Harness(url, dd), tmp_path, "0310-a", [X]) == 0
+    approve(url, "0310-a", X)
+    h = Harness(url, dd, concepts(y_content="Shared-alias 5 mg"))   # a new dgda_content name for the shared substance
+    assert run(h, tmp_path, "0310-b", [Y], "--stages", "dgda,substances") == 0
+    reason, run_id = q(url, """SELECT reason, run_id FROM ops.item_snapshot WHERE batch_id = '0310-a' AND concept_id = %s
+                               ORDER BY extracted_at DESC LIMIT 1""", (X,))[0]
+    y_runs = {r for (r,) in q(url, "SELECT run_id FROM ops.item_snapshot WHERE batch_id = '0310-b' AND concept_id = %s", (Y,))}
+    assert reason == "shared_change"
+    assert y_runs == {run_id}

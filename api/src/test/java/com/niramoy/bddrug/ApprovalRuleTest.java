@@ -34,13 +34,6 @@ class ApprovalRuleTest {
         assertThat(ApprovalRule.review(List.of(d("ok", "pharmacist", 1), d("issue", "engineer", 2)), RUN)).contains("issue");
     }
 
-    @Test void okAfterIssueNeedsAPharmacist() {
-        assertThat(ApprovalRule.review(List.of(d("ok", "pharmacist", 1), d("issue", "engineer", 2), d("ok", "engineer", 3)), RUN))
-            .contains("pending");
-        assertThat(ApprovalRule.review(List.of(d("ok", "pharmacist", 1), d("issue", "engineer", 2), d("ok", "pharmacist", 3)), RUN))
-            .contains("ok");
-    }
-
     @Test void decisionsBeforeTheRunDoNotCount() {
         // Review Focus 3: a pharmacist ok before the latest run no longer approves; an engineer ok after it doesn't either.
         assertThat(ApprovalRule.review(List.of(d("ok", "pharmacist", -10), d("ok", "engineer", 1)), RUN)).contains("pending");
@@ -62,5 +55,38 @@ class ApprovalRuleTest {
     @Test void itemWithoutExtractedAtCountsEveryDecision() {
         assertThat(ApprovalRule.review(List.of(d("ok", "pharmacist", -100)), null)).contains("ok");
         assertThat(ApprovalRule.review(List.of(), null)).isEqualTo(Optional.empty());
+    }
+
+    // ---- displayStatus (spec §5.2): five states, in this order of precedence
+
+    @Test void displayStatusIsPendingWithoutDecisions() {
+        assertThat(ApprovalRule.displayStatus(List.of(), RUN, "pending")).isEqualTo("pending");
+    }
+
+    @Test void displayStatusIsApprovedWhenTheItemIsOk() {
+        assertThat(ApprovalRule.displayStatus(List.of(d("ok", "pharmacist", 1)), RUN, "ok")).isEqualTo("approved");
+    }
+
+    @Test void displayStatusIsEngineerCheckedForACountedEngineerOkWithNoIssueAfterIt() {
+        assertThat(ApprovalRule.displayStatus(List.of(d("ok", "engineer", 1)), RUN, "pending")).isEqualTo("engineer_checked");
+        // an engineer ok before the run does not count
+        assertThat(ApprovalRule.displayStatus(List.of(d("ok", "engineer", -1)), RUN, "pending")).isEqualTo("pending");
+    }
+
+    @Test void displayStatusIsIssueOnlyForACountedIssueDecision() {
+        assertThat(ApprovalRule.displayStatus(List.of(d("ok", "engineer", 1), d("issue", "pharmacist", 2)), RUN, "issue"))
+            .isEqualTo("issue");
+        // the pipeline's own issue ("not found at source") has no decision: it is pending, with its failed check
+        assertThat(ApprovalRule.displayStatus(List.of(), RUN, "issue")).isEqualTo("pending");
+    }
+
+    @Test void displayStatusIsBackInReviewWhenTheRecordWasApprovedBeforeItsLatestExtraction() {
+        assertThat(ApprovalRule.displayStatus(List.of(d("ok", "pharmacist", -5)), RUN, "pending")).isEqualTo("back_in_review");
+        // an engineer check before the run is not an approval; an issue fixed and re-run returns to pending
+        assertThat(ApprovalRule.displayStatus(List.of(d("ok", "engineer", -5)), RUN, "pending")).isEqualTo("pending");
+        assertThat(ApprovalRule.displayStatus(List.of(d("ok", "pharmacist", -9), d("issue", "pharmacist", -5)), RUN, "pending"))
+            .isEqualTo("pending");
+        // without a run stamp nothing is "before" it
+        assertThat(ApprovalRule.displayStatus(List.of(d("ok", "pharmacist", -5)), null, "pending")).isEqualTo("pending");
     }
 }

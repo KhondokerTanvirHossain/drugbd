@@ -1,0 +1,1951 @@
+<title>IntelliDrugs Reviewer Workspace</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* =====================================================================
+   IntelliDrugs design system v1.0  ·  tokens + base + components
+   Direction A "Clinical Calm". Apple HIG restraint, Material 3 structure.
+
+   Fonts (put this in the page <head> before this stylesheet):
+   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+   Rules this file enforces:
+   - Every colour is a token. Light on :root, dark in two blocks
+     (system preference unless data-theme="light", and data-theme="dark").
+   - Every text token passes 4.5:1 on every surface token, both themes.
+     Control boundaries (--line-ctl) and focus rings pass 3:1.
+   - Translucent material is for chrome only: toolbar, sidebar, decision bar.
+   - Hatch (.hatch) means "no interaction data" and nothing else.
+   - Green (--ok) means "approved by a pharmacist" and nothing else.
+   - Square-cornered chips are severity. Rounded pills are review status.
+   ===================================================================== */
+
+:root{
+  /* Type */
+  --font-ui:"Onest",-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+
+  /* Neutrals, biased very slightly toward the cobalt accent */
+  --bg:#F5F6F8;          /* page ground */
+  --canvas:#FFFFFF;      /* content panes */
+  --surface:#FFFFFF;     /* cards, plates */
+  --surface-2:#F2F4F7;   /* tonal container, source column */
+  --surface-3:#E8EBF0;   /* tonal button, pressed tint */
+  --line:#E2E5EA;        /* decorative dividers only */
+  --line-strong:#CBD0D8; /* decorative outlines only */
+  --line-ctl:#737A86;    /* boundary of inputs and controls, 3:1+ */
+  --fg:#15181D;          /* primary text */
+  --fg-2:#474E59;        /* secondary text */
+  --fg-3:#59606B;        /* tertiary text, still 4.5:1+ everywhere */
+
+  /* The one accent: selection, primary action, focus */
+  --accent:#1F5BB8;
+  --accent-hover:#174A99;
+  --on-accent:#FFFFFF;
+  --accent-soft:#E8EFFA;
+  --accent-line:#BACDEC;
+
+  /* Semantic roles (never decorative) */
+  --crit:#B42318;  --crit-soft:#FDEDEB; --crit-line:#F2BBB4; --on-crit:#FFFFFF;
+  --warn:#855000;  --warn-soft:#FFF4DF; --warn-line:#EED29C;
+  --ok:#1A7044;    --ok-soft:#E6F4EC;   --ok-line:#ADDAC1;   /* pharmacist approval only */
+  --info:#215E7C;  --info-soft:#E6F1F7; --info-line:#B5D5E6;
+  --nodata:#4F5661; --nodata-soft:#F3F4F6; --nodata-hatch:#DFE2E7; /* hatch material only */
+
+  /* Material (chrome only) */
+  --material:rgba(246,247,249,.82);
+  --material-solid:#F4F5F8;            /* reduced-transparency fallback */
+  --material-edge:rgba(255,255,255,.7);
+  --scrim:rgba(21,24,29,.32);
+
+  /* Toast (inverted surface) */
+  --toast-bg:#20242B; --toast-fg:#F2F4F7; --toast-action:#9DBEF5; --toast-track:#3A404A;
+
+  /* Brand mark (fixed in both themes) */
+  --brand-mark:#1F5BB8; --on-brand-mark:#FFFFFF;
+
+  /* Google sign-in glyph colours (Google's own) */
+  --g-blue:#4285F4; --g-red:#EA4335; --g-yellow:#FBBC05; --g-green:#34A853;
+
+  /* Elevation */
+  --shadow-1:0 1px 2px rgba(21,24,29,.06),0 0 0 1px rgba(21,24,29,.04);
+  --shadow-2:0 10px 28px -8px rgba(21,24,29,.18),0 0 0 1px rgba(21,24,29,.06);
+  --shadow-win:0 40px 80px -30px rgba(21,24,29,.28),0 0 0 1px rgba(21,24,29,.07);
+  --focus:#1F5BB8;
+
+  /* M3 state-layer opacities */
+  --sl-hover:.08; --sl-focus:.10; --sl-press:.12;
+
+  /* Spacing, 4-point */
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px; --s7:48px; --s8:72px;
+
+  /* Radius by role */
+  --r-sev:2px;     /* severity chips: square */
+  --r-chip:6px;    /* code chips, kbd */
+  --r-ctl:10px;    /* buttons, inputs, segmented track */
+  --r-ctl-sm:8px;  /* small buttons, filters, search, segments, toast undo */
+  --r-card:12px;   /* stage cards, banners, rows */
+  --r-panel:14px;  /* panels, tables */
+  --r-win:20px;    /* windows, sheets */
+  --r-pill:999px;  /* review-status pills only */
+
+  /* No-data hatch: one pitch everywhere (.hatch, .sev--nodata, swatches) */
+  --hatch:repeating-linear-gradient(135deg,var(--nodata-hatch) 0 2px,transparent 2px 7px);
+
+  /* Review desk pane widths (reviewer workspace and the board's live desk) */
+  --pane-side:232px; --pane-list:336px;
+
+  /* Motion (critically damped; nothing moves unless a person caused it) */
+  --dur-press:100ms; --dur-state:200ms; --dur-pane:320ms; --dur-exit:200ms; --dur-commit:8000ms;
+  --ease-std:cubic-bezier(.2,0,0,1);      /* M3 standard */
+  --ease-dec:cubic-bezier(.05,.7,.1,1);   /* M3 emphasized decelerate: enter */
+  --ease-acc:cubic-bezier(.3,0,.8,.15);   /* M3 emphasized accelerate: exit */
+
+  /* Type scale: size / line-height / weight / tracking */
+  --t-display:600 48px/1.08 var(--font-ui);  --tr-display:-.034em;
+  --t-title1:600 28px/1.2 var(--font-ui);    --tr-title1:-.02em;
+  --t-title2:600 20px/1.3 var(--font-ui);    --tr-title2:-.015em;
+  --t-title3:600 15px/1.35 var(--font-ui);   --tr-title3:-.008em;
+  --t-body:400 15px/1.47 var(--font-ui);     --tr-body:-.003em;
+  --t-callout:400 13.5px/1.45 var(--font-ui);--tr-callout:0;
+  --t-label:500 12.5px/1.3 var(--font-ui);   --tr-label:.005em;
+  --t-mono:400 12.5px/1.45 var(--font-mono);
+
+  /* Icon masks (stroke icons, drawn in currentColor via mask) */
+  --i-clock:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7v5l3.2 2'/%3E%3C/svg%3E");
+  --i-seal:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 2L14.2 3.9L17 3.3L17.9 6.1L20.7 7L20.1 9.8L22 12L20.1 14.2L20.7 17L17.9 17.9L17 20.7L14.2 20.1L12 22L9.8 20.1L7 20.7L6.1 17.9L3.3 17L3.9 14.2L2 12L3.9 9.8L3.3 7L6.1 6.1L7 3.3L9.8 3.9Z'/%3E%3Cpath d='M8.4 12.2l2.5 2.5 4.7-4.9'/%3E%3C/svg%3E");
+  --i-wrench:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14.5 5.2a4.3 4.3 0 0 0-5.3 5.3L3.8 15.9a1.9 1.9 0 0 0 2.7 2.7l5.4-5.4a4.3 4.3 0 0 0 5.3-5.3l-2.7 2.7-2.3-.6-.6-2.3z'/%3E%3C/svg%3E");
+  --i-flag:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 21V4h12l-2.5 4.5L17 13H5'/%3E%3C/svg%3E");
+  --i-refresh:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 11a8 8 0 0 0-14.6-4.5M4 3v4h4M4 13a8 8 0 0 0 14.6 4.5M20 21v-4h-4'/%3E%3C/svg%3E");
+  --i-check:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4.5 12.5l4.8 4.8L19.5 7'/%3E%3C/svg%3E");
+  --i-warn:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7.5v5.5'/%3E%3Cpath d='M12 16.6v.1' stroke-width='2.6'/%3E%3C/svg%3E");
+  --i-fail:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8.2 3h7.6L21 8.2v7.6L15.8 21H8.2L3 15.8V8.2z'/%3E%3Cpath d='M9.2 9.2l5.6 5.6M14.8 9.2l-5.6 5.6'/%3E%3C/svg%3E");
+  --i-info:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 11v6'/%3E%3Cpath d='M12 7.4v.1' stroke-width='2.6'/%3E%3C/svg%3E");
+  --i-shield:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3l7 2.8v5.4c0 4.4-2.9 8-7 9.8-4.1-1.8-7-5.4-7-9.8V5.8z'/%3E%3C/svg%3E");
+  --i-undo:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 14L4 9l5-5'/%3E%3Cpath d='M4 9h10.5a5.5 5.5 0 0 1 0 11H11'/%3E%3C/svg%3E");
+  --i-search:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='6.5'/%3E%3Cpath d='M16 16l4.5 4.5'/%3E%3C/svg%3E");
+  --i-external:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5'/%3E%3C/svg%3E");
+  --i-code:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 7l-5 5 5 5M15 7l5 5-5 5'/%3E%3C/svg%3E");
+  --i-up:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 15l6-6 6 6'/%3E%3C/svg%3E");
+  --i-down:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  --i-stack:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3.5' y='5' width='17' height='14' rx='2.5'/%3E%3Cpath d='M3.5 10h17'/%3E%3C/svg%3E");
+}
+
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0B0D10; --canvas:#111317; --surface:#16191E; --surface-2:#1C2026; --surface-3:#252A31;
+    --line:#2A2F37; --line-strong:#3A414B; --line-ctl:#747C89;
+    --fg:#ECEEF2; --fg-2:#B9BFC8; --fg-3:#9AA1AC;
+    --accent:#8AB2F5; --accent-hover:#A3C3F7; --on-accent:#0A1830; --accent-soft:#16233A; --accent-line:#2D4672;
+    --crit:#FF9488; --crit-soft:#3A1714; --crit-line:#6B2A24; --on-crit:#2A0A07;
+    --warn:#F0BA5C; --warn-soft:#30220A; --warn-line:#5C4314;
+    --ok:#6FD09E; --ok-soft:#0F291C; --ok-line:#1E5137;
+    --info:#8CC6E8; --info-soft:#112532; --info-line:#23465A;
+    --nodata:#B0B6C0; --nodata-soft:#1B1E23; --nodata-hatch:#2A2F36;
+    --hatch:repeating-linear-gradient(135deg,var(--nodata-hatch) 0 2px,transparent 2px 7px);
+    --material:rgba(22,25,30,.82); --material-solid:#181B20; --material-edge:rgba(255,255,255,.06); --scrim:rgba(0,0,0,.5);
+    --toast-bg:#E6E9EE; --toast-fg:#15181D; --toast-action:#1A4FA3; --toast-track:#C3C9D2;
+    --shadow-1:0 1px 2px rgba(0,0,0,.4),0 0 0 1px rgba(255,255,255,.05);
+    --shadow-2:0 12px 30px -8px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.07);
+    --shadow-win:0 40px 80px -30px rgba(0,0,0,.8),0 0 0 1px rgba(255,255,255,.08);
+    --focus:#8AB2F5;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0B0D10; --canvas:#111317; --surface:#16191E; --surface-2:#1C2026; --surface-3:#252A31;
+  --line:#2A2F37; --line-strong:#3A414B; --line-ctl:#747C89;
+  --fg:#ECEEF2; --fg-2:#B9BFC8; --fg-3:#9AA1AC;
+  --accent:#8AB2F5; --accent-hover:#A3C3F7; --on-accent:#0A1830; --accent-soft:#16233A; --accent-line:#2D4672;
+  --crit:#FF9488; --crit-soft:#3A1714; --crit-line:#6B2A24; --on-crit:#2A0A07;
+  --warn:#F0BA5C; --warn-soft:#30220A; --warn-line:#5C4314;
+  --ok:#6FD09E; --ok-soft:#0F291C; --ok-line:#1E5137;
+  --info:#8CC6E8; --info-soft:#112532; --info-line:#23465A;
+  --nodata:#B0B6C0; --nodata-soft:#1B1E23; --nodata-hatch:#2A2F36;
+  --hatch:repeating-linear-gradient(135deg,var(--nodata-hatch) 0 2px,transparent 2px 7px);
+  --material:rgba(22,25,30,.82); --material-solid:#181B20; --material-edge:rgba(255,255,255,.06); --scrim:rgba(0,0,0,.5);
+  --toast-bg:#E6E9EE; --toast-fg:#15181D; --toast-action:#1A4FA3; --toast-track:#C3C9D2;
+  --shadow-1:0 1px 2px rgba(0,0,0,.4),0 0 0 1px rgba(255,255,255,.05);
+  --shadow-2:0 12px 30px -8px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.07);
+  --shadow-win:0 40px 80px -30px rgba(0,0,0,.8),0 0 0 1px rgba(255,255,255,.08);
+  --focus:#8AB2F5;
+  color-scheme:dark;
+}
+
+/* ---------- Base elements ---------- */
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:var(--t-body);letter-spacing:var(--tr-body);-webkit-font-smoothing:antialiased}
+h1,h2,h3,h4,h5,p,ul,ol,dl,dd,figure,blockquote{margin:0}
+h1,h2,h3{text-wrap:balance}
+ul,ol{padding:0;list-style:none}
+button,input,textarea,select{font:inherit;color:inherit;letter-spacing:inherit}
+button{cursor:pointer}
+table{border-collapse:collapse}
+a{color:var(--accent);text-underline-offset:2px}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+::selection{background:var(--accent-soft);color:var(--fg)}
+[hidden]{display:none!important}
+.sr-only{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.mono{font-family:var(--font-mono);font-size:.86em;letter-spacing:0;font-variant-numeric:tabular-nums}
+.num{font-variant-numeric:tabular-nums}
+
+/* Type roles */
+.t-display{font:var(--t-display);letter-spacing:var(--tr-display)}
+.t-title1{font:var(--t-title1);letter-spacing:var(--tr-title1)}
+.t-title2{font:var(--t-title2);letter-spacing:var(--tr-title2)}
+.t-title3{font:var(--t-title3);letter-spacing:var(--tr-title3)}
+.t-body{font:var(--t-body);letter-spacing:var(--tr-body)}
+.t-callout{font:var(--t-callout);color:var(--fg-2)}
+.t-label{font:var(--t-label);letter-spacing:var(--tr-label);color:var(--fg-3)}
+.t-mono{font:var(--t-mono)}
+
+/* Shared icon atom: any element with .ico and a --ico mask draws a 16px stroke icon in currentColor */
+.ico{display:inline-block;width:16px;height:16px;flex:none;background:currentColor;-webkit-mask:var(--ico) center/contain no-repeat;mask:var(--ico) center/contain no-repeat}
+
+/* Example marker: anything not from real data (names, future timestamps) carries this */
+.example{display:inline-flex;align-items:center;height:18px;padding:0 6px;border-radius:var(--r-chip);font:500 11px/1 var(--font-ui);letter-spacing:.01em;color:var(--fg-2);box-shadow:inset 0 0 0 1px var(--line-ctl);background:transparent;vertical-align:middle;white-space:nowrap}
+
+/* ---------- Wordmark ---------- */
+/* IntelliDrugs wordmark: Onest 600, tight tracking, cobalt full stop (aria-hidden). Size with font-size only. */
+.wordmark{font-family:var(--font-ui);font-weight:600;letter-spacing:-.04em;line-height:1;color:var(--fg);white-space:nowrap;font-feature-settings:"kern"}
+.wordmark-dot{color:var(--accent);margin-left:.01em}
+.wordmark-sub{font-weight:500;letter-spacing:-.01em;color:var(--fg-3);font-size:.76em;margin-left:.35em}
+
+/* ---------- Buttons ---------- */
+/* .btn + one of --primary / --tonal / --plain / --destructive. M3 state layer drawn by ::before in currentColor.
+   Forced states for documentation: .is-hover .is-focus .is-pressed. Loading: aria-busy="true" + .btn-spinner. */
+.btn{position:relative;isolation:isolate;overflow:hidden;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:36px;padding:0 16px;border-radius:var(--r-ctl);border:0;font:600 14px/1 var(--font-ui);letter-spacing:-.005em;white-space:nowrap;text-decoration:none;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:background-color var(--dur-state) var(--ease-std),transform var(--dur-press) var(--ease-std)}
+.btn::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;background:currentColor;opacity:0;transition:opacity var(--dur-state) var(--ease-std);pointer-events:none}
+.btn:hover::before,.btn.is-hover::before{opacity:var(--sl-hover)}
+.btn:focus-visible::before,.btn.is-focus::before{opacity:var(--sl-focus)}
+.btn:active::before,.btn.is-pressed::before{opacity:var(--sl-press)}
+.btn:active,.btn.is-pressed{transform:scale(.97)}
+.btn:focus-visible,.btn.is-focus{outline:2px solid var(--focus);outline-offset:2px}
+.btn--primary{background:var(--accent);color:var(--on-accent)}
+.btn--tonal{background:var(--surface-3);color:var(--fg);box-shadow:inset 0 0 0 1px var(--line-ctl)}
+.btn--plain{background:transparent;color:var(--accent);padding:0 10px}
+.btn--plain:hover,.btn--plain.is-hover{text-decoration:underline;text-decoration-thickness:1px}
+.btn--destructive{background:var(--crit);color:var(--on-crit)}
+.btn--lg{min-height:44px;padding:0 20px;font-size:15px;border-radius:var(--r-ctl)}
+.btn--sm{min-height:28px;padding:0 10px;font-size:13px;border-radius:var(--r-ctl-sm);gap:6px}
+.btn--icon{width:32px;min-height:32px;padding:0}
+.btn .ico{width:15px;height:15px}
+.btn[disabled],.btn[aria-disabled="true"]{background:var(--surface-2);color:var(--fg-3);box-shadow:none;cursor:not-allowed;transform:none}
+.btn[disabled]::before,.btn[aria-disabled="true"]::before{opacity:0}
+.btn[aria-busy="true"]{cursor:progress}
+.btn-spinner{width:14px;height:14px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:id-spin .8s linear infinite;flex:none}
+@keyframes id-spin{to{transform:rotate(360deg)}}
+
+/* ---------- Keyboard key ---------- */
+/* .kbd prints the shortcut on the control it triggers. Inside a primary button it switches to an outline. */
+.kbd{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 5px;border-radius:var(--r-chip);font:600 11px/1 var(--font-ui);letter-spacing:0;background:var(--surface);color:var(--fg-2);box-shadow:inset 0 0 0 1px var(--line-ctl);white-space:nowrap}
+.btn--primary .kbd,.btn--destructive .kbd{background:transparent;color:inherit;box-shadow:inset 0 0 0 1px currentColor;opacity:1}
+.btn--tonal .kbd{background:var(--canvas)}
+.toast .kbd{background:transparent;color:inherit;box-shadow:inset 0 0 0 1px currentColor}
+
+/* ---------- Severity chips (square corners, shape glyph) ---------- */
+/* .sev + --major (triangle) / --moderate (diamond) / --minor (circle) / --unclassified (dashed ? circle) / --nodata (hatch + void square).
+   Always pair with words. Optional count: <b class="sev-n">138</b>. */
+.sev{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 8px 0 7px;border-radius:var(--r-sev);font:600 12.5px/1 var(--font-ui);letter-spacing:0;white-space:nowrap;border:1px solid transparent}
+.sev::before{content:"";flex:none;width:10px;height:10px;background:currentColor}
+.sev-n{font-weight:600;font-variant-numeric:tabular-nums;margin-left:2px}
+.sev--major{background:var(--crit-soft);color:var(--crit);border-color:var(--crit-line)}
+.sev--major::before{clip-path:polygon(50% 4%,100% 96%,0 96%)}
+.sev--moderate{background:var(--warn-soft);color:var(--warn);border-color:var(--warn-line)}
+.sev--moderate::before{clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%)}
+.sev--minor{background:var(--info-soft);color:var(--info);border-color:var(--info-line)}
+.sev--minor::before{width:9px;height:9px;border-radius:50%}
+.sev--unclassified{background:transparent;color:var(--fg);border:1px dashed var(--line-ctl)}
+.sev--unclassified::before{content:"?";width:13px;height:13px;border-radius:50%;background:transparent;border:1.25px dashed currentColor;display:grid;place-items:center;font:700 8.5px/1 var(--font-ui)}
+.sev--nodata{color:var(--fg);border-color:var(--line-ctl);background-color:var(--nodata-soft);background-image:var(--hatch)}
+.sev--nodata::before{width:10px;height:10px;background:var(--surface);box-shadow:inset 0 0 0 1.5px currentColor}
+
+/* ---------- Review-status pills (rounded, distinct icon) ---------- */
+/* .rv + --pending (hollow clock) / --approved (seal-check, the only green) / --engineer (wrench) / --issue (flag) / --back (refresh).
+   Use the exact wording. .rv--compact is for the reviewer record list only; it keeps the icon and colour and puts the rest
+   of the wording in sr-only text, never aria-label: <span class="rv rv--pending rv--compact">Not yet reviewed<span class="sr-only"> by a pharmacist</span></span>.
+   Public views always use the full pill. */
+.rv{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px 0 8px;border-radius:var(--r-pill);font:600 12.5px/1 var(--font-ui);letter-spacing:0;white-space:nowrap;border:1px solid transparent}
+.rv::before{content:"";flex:none;width:14px;height:14px;background:currentColor;-webkit-mask:var(--rv-ico) center/contain no-repeat;mask:var(--rv-ico) center/contain no-repeat}
+.rv--pending{--rv-ico:var(--i-clock);background:transparent;color:var(--fg-2);border-color:var(--line-ctl)}
+.rv--approved{--rv-ico:var(--i-seal);background:var(--ok-soft);color:var(--ok);border-color:var(--ok-line)}
+.rv--engineer{--rv-ico:var(--i-wrench);background:var(--surface-3);color:var(--fg);border-color:var(--line-strong)}
+.rv--issue{--rv-ico:var(--i-flag);background:transparent;color:var(--crit);border:1.5px solid var(--crit)}
+.rv--back{--rv-ico:var(--i-refresh);background:transparent;color:var(--accent);border:1.5px solid var(--accent)}
+.rv--compact{height:22px;padding:0 8px 0 6px;font-size:11.5px;gap:4px}
+.rv--compact::before{width:12px;height:12px}
+
+/* ---------- Stage-check cards ---------- */
+/* .stage + --ok / --warn / --fail. Icon and word always together in .stage-status. Note text is the pipeline's exact note. */
+.stage{display:flex;flex-direction:column;gap:6px;padding:12px 14px;border-radius:var(--r-card);background:var(--canvas);box-shadow:inset 0 0 0 1px var(--line-strong);min-width:0;font-size:13px;color:var(--fg-2)}
+.stage-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.stage-name{font:600 13.5px/1.3 var(--font-ui);color:var(--fg);letter-spacing:-.005em}
+.stage-status{display:inline-flex;align-items:center;gap:5px;font:600 12.5px/1 var(--font-ui);white-space:nowrap}
+.stage-status::before{content:"";width:14px;height:14px;flex:none;background:currentColor;-webkit-mask:var(--st-ico) center/contain no-repeat;mask:var(--st-ico) center/contain no-repeat}
+.stage-note{color:var(--fg);overflow-wrap:anywhere}
+.stage--ok{--st-ico:var(--i-check)}
+.stage--ok .stage-status{color:var(--fg-2)}
+.stage--warn{--st-ico:var(--i-warn);background:var(--warn-soft);box-shadow:inset 0 0 0 1px var(--warn-line)}
+.stage--warn .stage-status{color:var(--warn)}
+.stage--fail{--st-ico:var(--i-fail);background:var(--crit-soft);box-shadow:inset 0 0 0 1px var(--crit-line)}
+.stage--fail .stage-status{color:var(--crit)}
+.stage-pairs{display:flex;flex-direction:column;gap:6px;margin-top:2px}
+.stage-pair{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;color:var(--fg)}
+.stage-pair .mono{color:var(--fg-2)}
+
+/* ---------- Code chips ---------- */
+/* .code shows one crosswalk code: system label + value. Add .code-meta for method and confidence. Mono for the value only. */
+.code{display:inline-flex;align-items:baseline;gap:6px;padding:3px 8px;border-radius:var(--r-chip);background:var(--surface-2);color:var(--fg);box-shadow:inset 0 0 0 1px var(--line-strong);font:400 12.5px/1.35 var(--font-mono);white-space:nowrap;font-variant-numeric:tabular-nums}
+.code-sys{font:500 11.5px/1.35 var(--font-ui);color:var(--fg-2)}
+.code-meta{font:400 11.5px/1.35 var(--font-ui);color:var(--fg-3)}
+.codes{display:flex;flex-wrap:wrap;gap:6px}
+.raw{font:400 12.5px/1.4 var(--font-mono);background:var(--surface);padding:1px 6px;border-radius:var(--r-chip);box-shadow:inset 0 0 0 1px var(--line-strong);overflow-wrap:anywhere}
+
+/* ---------- Comparison table (DGDA source vs extracted) ---------- */
+/* A real <table class="cmp">: <th scope="col"> headers, <th scope="row"> field names, .cmp-src source column,
+   .match cell with a text label: --same Matches, --norm Normalised, --salt Salt removed, --added Added, --differs Differs. */
+.cmp-wrap{border-radius:var(--r-panel);box-shadow:inset 0 0 0 1px var(--line-strong);overflow-x:auto;background:var(--canvas)}
+.cmp{width:100%;min-width:560px;font-size:13.5px}
+.cmp caption{text-align:left;padding:12px 14px 4px;font:600 13.5px/1.3 var(--font-ui);color:var(--fg)}
+.cmp th,.cmp td{padding:10px 14px;text-align:left;vertical-align:top;border-top:1px solid var(--line)}
+.cmp thead th{font:600 12px/1.3 var(--font-ui);color:var(--fg-2);border-top:0;padding-block:10px 8px}
+.cmp tbody th{font:500 12.5px/1.4 var(--font-ui);color:var(--fg-2);width:140px}
+.cmp .cmp-src{background:var(--surface-2)}
+.cmp-sub{display:block;font-size:12px;color:var(--fg-2);margin-top:2px}
+.match{display:inline-flex;align-items:center;gap:6px;font:600 12.5px/1.2 var(--font-ui);color:var(--fg-2);white-space:nowrap}
+.match::before{width:16px;height:16px;border-radius:var(--r-chip);display:inline-grid;place-items:center;font:700 12px/1 var(--font-ui);box-shadow:inset 0 0 0 1px currentColor}
+.match--same::before{content:"="}
+.match--norm::before{content:"\2248"}
+.match--salt::before{content:"\2212"}
+.match--added::before{content:"+"}
+.match--differs{color:var(--warn)}
+.match--differs::before{content:"\2260"}
+
+/* ---------- Record list ---------- */
+/* .rec-list is role="listbox"; each .rec is role="option" with aria-selected. Row hints (.rec-hint--warn / --nodata) carry the triage note. */
+.rec-list{display:flex;flex-direction:column;gap:2px;padding:6px 8px;margin:0;list-style:none}
+.rec-list:focus-visible{outline-offset:-2px;border-radius:var(--r-card)}
+.rec{position:relative;isolation:isolate;display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:2px 10px;align-items:center;min-height:52px;padding:8px 10px;border-radius:var(--r-card);cursor:pointer;color:var(--fg);text-align:left;width:100%;border:0;background:transparent}
+.rec::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;background:var(--fg);opacity:0;transition:opacity var(--dur-state) var(--ease-std)}
+.rec:hover::before,.rec.is-hover::before{opacity:var(--sl-hover)}
+.rec.is-focus,.rec:focus-visible{outline:2px solid var(--focus);outline-offset:-2px}
+.rec-ix{grid-row:span 2;align-self:start;padding-top:2px;font-size:12px;color:var(--fg-3);font-variant-numeric:tabular-nums}
+.rec-name{font:600 13.5px/1.3 var(--font-ui);letter-spacing:-.008em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rec-sub{grid-column:2/4;font-size:12px;color:var(--fg-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rec-status{grid-row:1;grid-column:3;align-self:center}
+.rec-hint{grid-column:2/4;display:inline-flex;align-items:center;gap:5px;font:500 12px/1.3 var(--font-ui);color:var(--fg-2)}
+.rec-hint::before{content:"";width:12px;height:12px;flex:none}
+.rec-hint--warn{color:var(--warn)}
+.rec-hint--warn::before{background:currentColor;-webkit-mask:var(--i-warn) center/contain no-repeat;mask:var(--i-warn) center/contain no-repeat}
+.rec-hint--nodata{color:var(--fg)}
+.rec-hint--nodata::before{width:10px;height:10px;box-shadow:inset 0 0 0 1.5px currentColor}
+.rec[aria-selected="true"],.rec.is-selected{background:var(--accent);color:var(--on-accent)}
+.rec[aria-selected="true"]::before{background:var(--on-accent)}
+.rec[aria-selected="true"] .rec-ix,.rec[aria-selected="true"] .rec-sub,.rec[aria-selected="true"] .rec-hint,
+.rec.is-selected .rec-ix,.rec.is-selected .rec-sub,.rec.is-selected .rec-hint{color:var(--on-accent)}
+.rec[aria-selected="true"] .rv,.rec.is-selected .rv{background:transparent;color:var(--on-accent);border-color:var(--on-accent)}
+/* Focus on a selected (accent-filled) row: ring in --on-accent inside, accent halo outside, so it stays 3:1+ */
+.rec[aria-selected="true"]:focus-visible,.rec[aria-selected="true"].is-focus,.rec.is-selected.is-focus{outline-color:var(--on-accent);box-shadow:0 0 0 2px var(--accent)}
+
+/* ---------- Filters ---------- */
+/* .filter buttons in the sidebar; the active one has aria-current="true". Count sits right in tabular figures. */
+.filters{display:flex;flex-direction:column;gap:2px}
+.filter{position:relative;isolation:isolate;display:flex;align-items:center;gap:10px;width:100%;min-height:32px;padding:6px 10px;border:0;border-radius:var(--r-ctl-sm);background:transparent;color:var(--fg);font:400 13.5px/1.2 var(--font-ui);text-align:left;cursor:pointer}
+.filter::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;background:var(--fg);opacity:0;transition:opacity var(--dur-state) var(--ease-std)}
+.filter:hover::before,.filter.is-hover::before{opacity:var(--sl-hover)}
+.filter .ico{width:14px;height:14px;color:var(--fg-2)}
+.filter-n{margin-left:auto;font-size:12px;color:var(--fg-2);font-variant-numeric:tabular-nums}
+/* Selected states carry a 3:1 indicator: the accent bar (5.92:1 light, 7.94:1 dark on material) and the --line-ctl ring (3.88:1 or more against the track). */
+.filter[aria-current="true"]{background:var(--surface);box-shadow:inset 3px 0 0 var(--accent),var(--shadow-1);font-weight:600}
+.filter:focus-visible,.filter.is-focus{outline:2px solid var(--focus);outline-offset:-2px}
+.search{display:flex;align-items:center;gap:8px;height:32px;padding:0 10px;border-radius:var(--r-ctl-sm);background:var(--canvas);box-shadow:inset 0 0 0 1px var(--line-ctl)}
+.search::before{content:"";width:14px;height:14px;flex:none;background:var(--fg-2);-webkit-mask:var(--i-search) center/contain no-repeat;mask:var(--i-search) center/contain no-repeat}
+.search input{border:0;background:transparent;outline:none;flex:1;min-width:0;font-size:13px}
+.search input::placeholder{color:var(--fg-3);opacity:1}
+.search:focus-within{box-shadow:inset 0 0 0 2px var(--focus);outline:2px solid transparent;outline-offset:-2px}
+
+/* ---------- Decision bar ---------- */
+/* .decision-bar is chrome: translucent material, pinned to the bottom of the detail pane, never scrolls away.
+   .decision-promise states what the action does for this role. data-state="paused" when the record is stale. */
+.decision-bar{position:sticky;bottom:0;z-index:2;display:flex;flex-direction:column;gap:10px;padding:14px 24px 12px;background:var(--material);-webkit-backdrop-filter:blur(20px) saturate(170%);backdrop-filter:blur(20px) saturate(170%);border-top:1px solid var(--line);box-shadow:inset 0 1px 0 var(--material-edge)}
+.decision-main{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.decision-promise{font-size:13px;color:var(--fg-2);max-width:46ch}
+.decision-promise b{color:var(--fg);font-weight:600}
+.decision-actions{margin-left:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.botcheck{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--fg-2)}
+.botcheck::before{content:"";width:13px;height:13px;background:currentColor;-webkit-mask:var(--i-shield) center/contain no-repeat;mask:var(--i-shield) center/contain no-repeat}
+.decision-keys{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--fg-2)}
+.decision-keys span{display:inline-flex;align-items:center;gap:5px}
+.decision-hint{font-size:12.5px;color:var(--fg)}
+.decision-bar[data-state="paused"] .decision-promise b{color:var(--warn)}
+
+/* ---------- Banners ---------- */
+/* .banner + --info / --warn / --crit. Icon, a bold first sentence, what was or was not saved, one action. Stale page uses --warn. */
+.banner{display:grid;grid-template-columns:20px minmax(0,1fr) auto;gap:4px 12px;align-items:start;padding:14px 16px;border-radius:var(--r-card)}
+.banner::before{content:"";grid-row:span 2;width:20px;height:20px;margin-top:1px;background:currentColor;-webkit-mask:var(--bn-ico) center/contain no-repeat;mask:var(--bn-ico) center/contain no-repeat}
+.banner-title{font:600 14px/1.4 var(--font-ui);color:var(--fg)}
+.banner-body{grid-column:2;font-size:13px;color:var(--fg)}
+.banner-action{grid-column:3;grid-row:1/span 2;align-self:center}
+.banner--info{--bn-ico:var(--i-info);background:var(--info-soft);color:var(--info);box-shadow:inset 0 0 0 1px var(--info-line)}
+.banner--warn{--bn-ico:var(--i-warn);background:var(--warn-soft);color:var(--warn);box-shadow:inset 0 0 0 1px var(--warn-line)}
+.banner--crit{--bn-ico:var(--i-fail);background:var(--crit-soft);color:var(--crit);box-shadow:inset 0 0 0 1px var(--crit)}
+@media (max-width:560px){.banner{grid-template-columns:20px minmax(0,1fr)}.banner-action{grid-column:2;grid-row:auto;justify-self:start;margin-top:6px}}
+
+/* ---------- Toast with undo + countdown ---------- */
+/* .toast holds a commit-delayed action. .toast-bar > i shrinks over --dur-commit. Undo carries kbd U.
+   The toast never takes focus; announce once through a separate polite live region. */
+.toast{--focus:var(--toast-action);position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 12px;align-items:center;max-width:380px;padding:12px 12px 14px 16px;border-radius:var(--r-card);background:var(--toast-bg);color:var(--toast-fg);box-shadow:var(--shadow-2);overflow:hidden;font-size:13.5px}
+.toast-msg b{font-weight:600}
+.toast-sub{display:block;font-size:12px;opacity:1;color:var(--toast-fg)}
+.toast-undo{display:inline-flex;align-items:center;gap:6px;min-height:30px;padding:0 10px;border:0;border-radius:var(--r-ctl-sm);background:transparent;color:var(--toast-action);font:600 13px/1 var(--font-ui);cursor:pointer;position:relative;isolation:isolate}
+.toast-undo::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;background:currentColor;opacity:0;transition:opacity var(--dur-state) var(--ease-std)}
+.toast-undo:hover::before{opacity:var(--sl-hover)}
+.toast-undo:active::before{opacity:var(--sl-press)}
+.toast-undo .ico{--ico:var(--i-undo);width:14px;height:14px}
+.toast-bar{position:absolute;left:0;right:0;bottom:0;height:3px;background:var(--toast-track)}
+.toast-bar i{display:block;height:100%;background:var(--toast-action);transform-origin:left center;transform:scaleX(1)}
+.toast.is-running .toast-bar i{animation:id-countdown var(--dur-commit) linear forwards}
+@keyframes id-countdown{from{transform:scaleX(1)}to{transform:scaleX(0)}}
+
+/* ---------- Inputs ---------- */
+/* .field wraps label, control and .field-meta (help or error + counter). Error = aria-invalid="true" on the control. */
+.field{display:flex;flex-direction:column;gap:6px;min-width:0}
+.field-label{font:500 13px/1.3 var(--font-ui);color:var(--fg)}
+.input,.textarea{width:100%;border:0;border-radius:var(--r-ctl);background:var(--canvas);color:var(--fg);box-shadow:inset 0 0 0 1px var(--line-ctl);padding:9px 12px;font:400 14px/1.45 var(--font-ui);transition:box-shadow var(--dur-state) var(--ease-std)}
+.input{min-height:38px}
+.textarea{min-height:72px;resize:vertical}
+.input::placeholder,.textarea::placeholder{color:var(--fg-3);opacity:1}
+.input:hover,.textarea:hover,.input.is-hover,.textarea.is-hover{box-shadow:inset 0 0 0 1px var(--fg-2)}
+.input:focus-visible,.textarea:focus-visible,.input.is-focus,.textarea.is-focus{outline:2px solid transparent;outline-offset:-2px;box-shadow:inset 0 0 0 2px var(--focus)}
+.input[aria-invalid="true"],.textarea[aria-invalid="true"]{box-shadow:inset 0 0 0 2px var(--crit)}
+.input:disabled,.textarea:disabled{background:var(--surface-2);color:var(--fg-3);box-shadow:inset 0 0 0 1px var(--line-strong);cursor:not-allowed}
+.field-meta{display:flex;align-items:flex-start;gap:12px;font-size:12px;color:var(--fg-2)}
+.field-error{color:var(--crit);font-weight:500;display:inline-flex;gap:6px;align-items:flex-start}
+.field-error::before{content:"";width:13px;height:13px;margin-top:1px;flex:none;background:currentColor;-webkit-mask:var(--i-fail) center/contain no-repeat;mask:var(--i-fail) center/contain no-repeat}
+.field-count{margin-left:auto;font-variant-numeric:tabular-nums;white-space:nowrap}
+
+/* ---------- Segmented control ---------- */
+/* .seg is a role="group" of buttons with aria-pressed. One choice at a time (theme, reviewer role). */
+.seg{display:inline-flex;gap:2px;padding:2px;border-radius:var(--r-ctl);background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--line-ctl)}
+.seg button{position:relative;isolation:isolate;min-height:28px;padding:0 12px;border:0;border-radius:var(--r-ctl-sm);background:transparent;color:var(--fg-2);font:500 12.5px/1 var(--font-ui);cursor:pointer;transition:background-color var(--dur-state) var(--ease-std),color var(--dur-state) var(--ease-std)}
+.seg button::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;background:currentColor;opacity:0}
+.seg button:hover::before{opacity:var(--sl-hover)}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--fg);font-weight:600;box-shadow:inset 0 0 0 1.5px var(--line-ctl),var(--shadow-1)}
+.seg button:focus-visible{outline:2px solid var(--focus);outline-offset:1px}
+
+/* ---------- Frames and mockup chrome ---------- */
+/* .frame holds a desktop mockup that may be wider than the screen: keyboard-scrollable (give it tabindex="0" and aria-label). */
+.frame{background:var(--surface-2);border-radius:var(--r-win);padding:clamp(12px,3vw,36px);overflow-x:auto;box-shadow:inset 0 0 0 1px var(--line);-webkit-overflow-scrolling:touch}
+.frame:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.window{background:var(--canvas);border-radius:var(--r-win);box-shadow:var(--shadow-win);overflow:hidden;position:relative}
+.window-bar{display:flex;align-items:center;gap:8px;height:40px;padding:0 16px;background:var(--surface-2);border-bottom:1px solid var(--line)}
+.window-dot{width:10px;height:10px;border-radius:50%;box-shadow:inset 0 0 0 1.5px var(--line-ctl)}
+
+/* ---------- Material (chrome only) ---------- */
+/* .material for toolbar, sidebar, decision bar. Never on content, never stacked on another material. */
+.material{background:var(--material);-webkit-backdrop-filter:blur(20px) saturate(170%);backdrop-filter:blur(20px) saturate(170%);box-shadow:inset 0 1px 0 var(--material-edge)}
+.chrome-toolbar{display:flex;align-items:center;gap:14px;height:52px;padding:0 16px;border-bottom:1px solid var(--line)}
+.chrome-sidebar{display:flex;flex-direction:column;gap:18px;padding:14px 10px;border-right:1px solid var(--line)}
+.chrome-heading{font:600 11.5px/1.2 var(--font-ui);color:var(--fg-2);padding:0 10px 6px;letter-spacing:.01em}
+.role-badge{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:var(--r-chip);font:600 12.5px/1 var(--font-ui);background:var(--accent-soft);color:var(--accent)}
+
+/* ---------- Hatch (no interaction data, and only that) ---------- */
+/* .hatch is the no-data material. .nodata-block is the full statement: never collapsed, never green, exact wording. */
+.hatch{background-color:var(--nodata-soft);background-image:var(--hatch)}
+.nodata-block{display:grid;grid-template-columns:36px minmax(0,1fr);gap:12px;padding:12px;border-radius:var(--r-panel);box-shadow:inset 0 0 0 1px var(--line-ctl)}
+.nodata-glyph{width:36px;height:36px;border-radius:var(--r-ctl);background:var(--surface);display:grid;place-items:center;box-shadow:var(--shadow-1)}
+.nodata-glyph::before{content:"";width:14px;height:14px;box-shadow:inset 0 0 0 2px var(--nodata)}
+.nodata-plate{background:var(--surface);border-radius:var(--r-ctl);padding:12px 14px;box-shadow:var(--shadow-1);min-width:0}
+.nodata-title{font:600 14.5px/1.35 var(--font-ui);color:var(--fg)}
+.nodata-text{font-size:14px;color:var(--fg);margin-top:4px}
+.nodata-pairs{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px;font-size:12.5px;color:var(--fg-2)}
+
+/* ---------- Interaction pair ---------- */
+/* .pair shows one DDInter pair: severity chip, the two substances, action, management text truncated with a source line. */
+.pair{display:grid;grid-template-columns:minmax(0,1fr);gap:8px;padding:14px 16px;border-radius:var(--r-panel);background:var(--canvas);box-shadow:inset 0 0 0 1px var(--line-strong)}
+.pair-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
+.pair-names{font:600 15px/1.3 var(--font-ui);letter-spacing:-.01em}
+.pair-meta{font-size:12.5px;color:var(--fg-2)}
+.pair-text{font-size:13.5px;color:var(--fg);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;max-width:72ch}
+.pair-source{font-size:12px;color:var(--fg-2)}
+
+/* ---------- Review desk shared pieces ---------- */
+/* .prog: batch progress meter (role="img" with a worded aria-label). .p-ok approved, .p-issue issue reported. */
+.prog{width:160px;height:6px;border-radius:3px;background:var(--surface-3);overflow:hidden;display:flex;flex:none}
+.prog i{display:block;height:100%;transition:width var(--dur-pane) var(--ease-std)}
+.prog .p-ok{background:var(--ok)}
+.prog .p-issue{background:var(--crit)}
+.prog--wide{width:100%}
+/* .drawer: evidence drawer over the detail pane. Solid surface: it is content, not chrome. */
+.drawer{position:absolute;top:0;right:0;bottom:0;width:min(460px,100%);background:var(--surface);box-shadow:var(--shadow-2);display:flex;flex-direction:column;z-index:3;animation:dr-in var(--dur-pane) var(--ease-dec)}
+@keyframes dr-in{from{transform:translateX(24px);opacity:0}}
+.drawer-h{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line)}
+.drawer-h h4{font:var(--t-title3);letter-spacing:var(--tr-title3)}
+.drawer-h p{font-size:12.5px;color:var(--fg-2)}
+.drawer-b{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
+.drawer-b h5{font:600 13.5px/1.3 var(--font-ui);margin-top:4px}
+.drawer-b pre{margin:0;font:400 12px/1.5 var(--font-mono);white-space:pre-wrap;overflow-wrap:anywhere;background:var(--surface-2);padding:10px 12px;border-radius:var(--r-ctl-sm);box-shadow:inset 0 0 0 1px var(--line);color:var(--fg)}
+.dr-note{font-size:12.5px;color:var(--fg-2)}
+.dr-dl{display:grid;grid-template-columns:120px minmax(0,1fr);gap:8px 12px;font-size:13px}
+.dr-dl dt{color:var(--fg-2)}
+.dr-dl dd{display:flex;flex-direction:column;gap:4px;align-items:flex-start;min-width:0}
+/* .sheet-scrim + .sheet: the modal shortcuts sheet (role="dialog" aria-modal="true", background inert, Tab trapped). */
+.sheet-scrim{position:absolute;inset:0;z-index:8;background:var(--scrim);display:grid;place-items:center;padding:24px}
+.sheet{width:460px;max-width:100%;max-height:100%;overflow:auto;background:var(--surface);border-radius:var(--r-panel);box-shadow:var(--shadow-2);padding:18px 20px 20px;display:flex;flex-direction:column;gap:12px}
+.sheet-h{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.sheet-h h3,.sheet-h h4{font:var(--t-title3);letter-spacing:var(--tr-title3)}
+.sheet-note{font-size:13px;color:var(--fg-2)}
+.sheet dl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:9px 14px;font-size:13.5px;align-items:center}
+.sheet dt{display:flex;gap:4px}
+.sheet dd{color:var(--fg)}
+
+/* ---------- Accessibility and preference overrides ---------- */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{transition-duration:1ms!important;animation-duration:1ms!important;animation-iteration-count:1!important}
+  .btn:active,.btn.is-pressed{transform:none}
+  .btn-spinner{animation:none;border-right-color:currentColor;border-style:dotted}
+  .toast.is-running .toast-bar i{animation:none;transform:scaleX(1)}
+}
+@media (prefers-reduced-transparency: reduce){
+  .material,.decision-bar{background:var(--material-solid);-webkit-backdrop-filter:none;backdrop-filter:none}
+}
+@media (prefers-contrast: more){
+  :root{--line:var(--line-ctl);--line-strong:var(--line-ctl)}
+  .material,.decision-bar{background:var(--material-solid);-webkit-backdrop-filter:none;backdrop-filter:none}
+}
+@media (forced-colors: active){
+  .ico,.rv::before,.stage-status::before,.banner::before,.rec-hint::before,.botcheck::before,.search::before,.field-error::before,.sev::before{forced-color-adjust:none;background:CanvasText}
+  .sev--unclassified::before{background:transparent;color:CanvasText}
+  .sev,.rv,.stage,.banner,.code,.toast{border:1px solid CanvasText}
+  .search:focus-within,.input:focus-visible,.textarea:focus-visible,.input.is-focus,.textarea.is-focus{outline:2px solid Highlight}
+  .rec[aria-selected="true"],.rec.is-selected,.s-opt[aria-selected="true"],.filter[aria-current="true"],.seg button[aria-pressed="true"]{forced-color-adjust:none;background:Highlight;color:HighlightText}
+  .rec[aria-selected="true"] .rec-ix,.rec[aria-selected="true"] .rec-sub,.rec[aria-selected="true"] .rec-hint,.rec[aria-selected="true"] .rv,.filter[aria-current="true"] .filter-n{color:HighlightText;border-color:HighlightText}
+  .rec[aria-selected="true"] .rv::before,.rec[aria-selected="true"] .rec-hint::before,.filter[aria-current="true"] .ico{background:HighlightText}
+  .rec[aria-selected="true"]:focus-visible,.rec.is-focus{outline:2px solid HighlightText}
+}
+</style>
+<style>
+/* Page layout only. Everything in the block above is tokens.css, verbatim.
+   Layout concept: a left-aligned prototype board. The desk app sits in a keyboard-scrollable frame; the journey storyboard and the decision matrix follow. */
+.pg{max-width:1440px;margin:0 auto;padding-inline:clamp(16px,2.5vw,40px);padding-block:24px 96px;display:flex;flex-direction:column;gap:72px}
+.pg-top{display:flex;align-items:center;justify-content:space-between;gap:12px 20px;flex-wrap:wrap;padding-bottom:18px;border-bottom:1px solid var(--line)}
+.pg-top-l{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.pg-top .wordmark{font-size:21px}
+.pg-ver{font-size:13px;color:var(--fg-2)}
+.pg-sec{display:flex;flex-direction:column;gap:22px;min-width:0}
+.pg-head{display:flex;flex-direction:column;gap:8px;max-width:76ch}
+.pg-head h2{font:var(--t-title1);letter-spacing:var(--tr-title1)}
+.pg-head p{color:var(--fg-2)}
+@media (max-width:640px){.pg{gap:56px}.pg-head h2{font-size:23px}}
+
+/* Intro and prototype controls */
+.intro{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);gap:40px;align-items:start}
+@media (max-width:980px){.intro{grid-template-columns:1fr;gap:28px}}
+.intro h1{font:600 clamp(34px,4.6vw,54px)/1.05 var(--font-ui);letter-spacing:-.034em}
+.lede{font-size:clamp(16px,1.5vw,18px);line-height:1.5;color:var(--fg-2);margin-top:16px;max-width:54ch;letter-spacing:-.006em}
+.howto{display:flex;flex-direction:column;gap:12px;margin-top:24px;font-size:14px;max-width:60ch}
+.howto li{display:grid;grid-template-columns:24px minmax(0,1fr);gap:10px;align-items:baseline}
+.howto-n{font:600 12.5px/1 var(--font-ui);color:var(--accent);font-variant-numeric:tabular-nums}
+.howto .kbd{margin-inline:1px}
+.ctl{background:var(--surface);border-radius:var(--r-panel);box-shadow:var(--shadow-1);padding:20px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.ctl-h{display:flex;flex-direction:column;gap:4px}
+.ctl-h h2{font:var(--t-title3);letter-spacing:var(--tr-title3)}
+.ctl-h p{font-size:13px;color:var(--fg-2)}
+.ctl-g{display:flex;flex-direction:column;gap:8px;min-width:0}
+.ctl-g h3{font:500 12.5px/1.3 var(--font-ui);color:var(--fg-2)}
+.ctl-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.ctl-note{font-size:12.5px;color:var(--fg-2)}
+.sim[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent);box-shadow:inset 0 0 0 1.5px var(--accent)}
+.sim[aria-pressed="true"] .kbd{background:transparent}
+
+/* Frame for the app */
+.app-frame{padding:12px}
+.scroll-hint{display:none;font-size:12.5px;color:var(--fg-2)}
+@media (max-width:1320px){.scroll-hint{display:block}}
+
+/* App shell */
+.app{min-width:1264px;height:832px;display:grid;grid-template-rows:52px minmax(0,1fr);background:var(--canvas);border-radius:var(--r-win);box-shadow:var(--shadow-win);overflow:hidden;position:relative;color:var(--fg)}
+.app:focus-visible{outline:2px solid var(--focus);outline-offset:3px}
+.app .chrome-toolbar{position:relative;z-index:2}
+.app .chrome-toolbar .wordmark{font-size:17px}
+.tb-center{margin:0 auto;display:flex;align-items:center;gap:12px;font-size:13px;color:var(--fg-2)}
+.tb-center b{color:var(--fg);font-weight:600}
+.tb-sep{width:1px;height:16px;background:var(--line-strong)}
+.tb-right{display:flex;align-items:center;gap:12px}
+.acct{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--fg-2)}
+.avatar{width:28px;height:28px;border-radius:50%;background:var(--surface-3);display:grid;place-items:center;font:600 11.5px/1 var(--font-ui);color:var(--fg);box-shadow:inset 0 0 0 1px var(--line-strong)}
+.panes{display:grid;grid-template-columns:var(--pane-side) var(--pane-list) minmax(0,1fr);min-height:0}
+
+/* Sidebar */
+.side{min-height:0;overflow:auto}
+.side .filter .nd-ico{width:12px;height:12px;flex:none;margin-inline:1px;box-shadow:inset 0 0 0 1.5px var(--fg-2)}
+.batch-card{margin-top:auto;padding:12px;border-radius:var(--r-card);background:var(--surface);box-shadow:var(--shadow-1);display:flex;flex-direction:column;gap:10px;font-size:12.5px;color:var(--fg-2)}
+.batch-card b{color:var(--fg);font-weight:600}
+.bc-t{font-size:13px}
+.bc-dl{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 10px}
+.bc-dl dd{color:var(--fg);font-weight:600;font-variant-numeric:tabular-nums;text-align:right}
+
+/* Record list */
+.list{display:flex;flex-direction:column;min-height:0;border-right:1px solid var(--line);background:var(--canvas)}
+.list-h{padding:12px 14px 10px;display:flex;flex-direction:column;gap:10px;border-bottom:1px solid var(--line)}
+.list-t{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.list-t b{font:var(--t-title3);letter-spacing:var(--tr-title3)}
+.list-t span{font-size:12px;color:var(--fg-2)}
+.list-body{flex:1;min-height:0;overflow:auto;padding-bottom:96px}
+.empty{padding:20px 18px;display:flex;flex-direction:column;gap:10px;align-items:flex-start;font-size:13.5px;color:var(--fg-2)}
+.empty b{color:var(--fg);font-weight:600}
+.sk-row{display:grid;grid-template-columns:22px minmax(0,1fr) 70px;gap:8px 10px;padding:12px 18px;align-items:center}
+.sk{display:block;height:11px;border-radius:5px;background:var(--surface-3);animation:sk-pulse 1.4s var(--ease-std) infinite}
+@keyframes sk-pulse{50%{opacity:.45}}
+
+/* Detail */
+.detail{position:relative;display:flex;flex-direction:column;min-height:0;min-width:0;background:var(--canvas)}
+.d-body{position:relative;flex:1;min-height:0}
+.d-scroll{position:absolute;inset:0;overflow:auto;padding:20px 28px 32px;display:flex;flex-direction:column;gap:24px}
+.d-scroll:focus-visible{outline-offset:-3px}
+.d-hd{display:flex;align-items:flex-start;gap:16px}
+.d-hd-main{min-width:0}
+.d-crumb{font-size:12.5px;color:var(--fg-2)}
+.d-hd h3{font:var(--t-title1);letter-spacing:var(--tr-title1);margin-top:2px}
+.d-meta{font-size:13px;color:var(--fg-2);margin-top:4px}
+.d-chips{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
+.d-vis{font-size:12.5px;color:var(--fg-2)}
+.d-tools{margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex:none}
+.d-row{display:flex;gap:6px;flex-wrap:wrap}
+.d-sec{display:flex;flex-direction:column;gap:12px;min-width:0}
+.d-sec-t{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.d-sec-t h4{font:var(--t-title3);letter-spacing:var(--tr-title3)}
+.d-sec-t span{font-size:12.5px;color:var(--fg-2)}
+.stages{display:grid;grid-template-columns:minmax(0,1fr);gap:10px}
+.stage-head{margin:0}
+.stage-none{color:var(--fg-2)}
+.stage .btn--plain{align-self:flex-start;margin-left:-10px}
+.cmp td{overflow-wrap:break-word}
+.d-sec .cmp thead th.cmp-src{width:27%}
+.nowrap{white-space:nowrap}
+.cmp td.cmp-rel{width:150px}
+.cmp-copy{font-size:12.5px;color:var(--fg-2)}
+.cmp .codes{margin-top:2px}
+.cmp-names{display:block;font-size:12px;color:var(--fg-2);margin-top:4px}
+.chg{background:var(--warn-soft)}
+.ing{display:flex;flex-direction:column;gap:10px;padding:14px 16px;border-radius:var(--r-panel);box-shadow:inset 0 0 0 1px var(--line-strong);min-width:0}
+.ing-h{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 12px}
+.ing-h h5{font:600 15px/1.3 var(--font-ui);letter-spacing:-.008em}
+.ing-h span{font-size:12.5px;color:var(--fg-2)}
+.ing-p{font-size:13.5px;color:var(--fg)}
+.ing-q{font-size:13px;color:var(--fg-2)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.sub-h{font:600 13.5px/1.3 var(--font-ui);color:var(--fg)}
+.pairs{display:flex;flex-direction:column;gap:10px}
+.pair h5.pair-names{margin:0}
+.pair-text.is-open{display:block;-webkit-line-clamp:unset;overflow:visible}
+.pair-foot{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px}
+.pair-foot .btn--plain{margin-left:-10px}
+.ntx{display:flex;flex-direction:column;gap:10px;padding:14px 16px;border-radius:var(--r-panel);box-shadow:inset 0 0 0 1px var(--line-strong);background:var(--canvas)}
+.ntx-g{display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.ntx-list{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--fg)}
+.ntx-list b{font-weight:600}
+.ntx-with,.ntx-list .mono{color:var(--fg-2)}
+.nc{display:flex;flex-direction:column;gap:8px;padding:12px 14px;border-radius:var(--r-panel);box-shadow:inset 0 0 0 1px var(--line-ctl);font-size:13.5px}
+.note-card{display:flex;flex-direction:column;gap:10px;padding:14px 16px;border-radius:var(--r-card);box-shadow:inset 0 0 0 1.5px var(--accent);background:var(--canvas)}
+.note-card p{font-size:13.5px}
+.hist{display:flex;flex-direction:column;border-radius:var(--r-panel);box-shadow:inset 0 0 0 1px var(--line-strong);overflow:hidden}
+.hist li{display:grid;grid-template-columns:200px minmax(0,1fr);gap:4px 16px;padding:10px 14px;border-top:1px solid var(--line);font-size:13.5px}
+.hist li:first-child{border-top:0}
+.hist-t{font-size:12.5px;color:var(--fg-2);font-variant-numeric:tabular-nums}
+.hist-t span{display:block}
+.banner-action{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.done{max-width:560px;margin:72px auto 0;display:flex;flex-direction:column;gap:14px;align-items:flex-start}
+.done-t{font:var(--t-title2);letter-spacing:var(--tr-title2)}
+.done p{font-size:14px;color:var(--fg-2)}
+
+/* Evidence drawer (.drawer), progress meter (.prog) and shortcuts sheet (.sheet) live in tokens.css */
+
+/* Decision bar parts */
+.bar-report{display:flex;flex-direction:column;gap:10px;padding:12px;border-radius:var(--r-card);background:var(--surface);box-shadow:var(--shadow-1)}
+.bar-report-acts{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;align-items:center}
+.bar-report-paused{font-size:12.5px;color:var(--warn);font-weight:500;margin-right:auto}
+.bar-noauth{display:grid;grid-template-columns:20px minmax(0,1fr);gap:4px 12px;padding:2px 0}
+.bar-noauth .ico{width:20px;height:20px;color:var(--fg-2);grid-row:span 2}
+.bar-noauth-t{font:600 14px/1.4 var(--font-ui)}
+.bar-noauth-b{font-size:13px;color:var(--fg-2);max-width:72ch}
+.bar-bot{display:flex;align-items:center;gap:10px 14px;flex-wrap:wrap}
+.botcheck.is-failed{color:var(--crit);font-weight:600}
+.decision-bar .banner{padding:10px 14px}
+
+/* Toast, sheet */
+.toast-wrap{position:absolute;left:244px;bottom:16px;z-index:5;width:312px}
+.toast-wrap .toast{animation:t-in var(--dur-state) var(--ease-dec)}
+@keyframes t-in{from{transform:translateY(8px);opacity:0}}
+
+/* Journey storyboard */
+.jr{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+@media (max-width:1180px){.jr{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:640px){.jr{grid-template-columns:1fr}}
+.jr > li{background:var(--surface);border-radius:var(--r-panel);box-shadow:var(--shadow-1);padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.jr-k{display:flex;align-items:center;gap:8px}
+.jr-n{width:22px;height:22px;border-radius:50%;box-shadow:inset 0 0 0 1.5px var(--accent);color:var(--accent);font:600 11.5px/1 var(--font-ui);display:grid;place-items:center;flex:none;font-variant-numeric:tabular-nums}
+.jr-k h3{font:var(--t-title3);letter-spacing:var(--tr-title3)}
+.jr-vis{border-radius:var(--r-card);background:var(--surface-2);padding:12px;min-height:168px;display:flex;flex-direction:column;gap:8px;justify-content:center;min-width:0;overflow:hidden}
+.jr > li > p{font-size:13.5px;color:var(--fg-2)}
+.mail{background:var(--canvas);border-radius:10px;box-shadow:inset 0 0 0 1px var(--line-strong);padding:10px 12px;font-size:12.5px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.mail-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;color:var(--fg-2)}
+.mail-row b{color:var(--fg);font-weight:500}
+.mail-s{font-weight:600;font-size:13px}
+.mail-b{color:var(--fg)}
+.auth-mini{background:var(--canvas);border-radius:12px;box-shadow:inset 0 0 0 1px var(--line-strong);padding:14px;display:flex;flex-direction:column;gap:10px}
+.auth-mini .wordmark{font-size:15px}
+.auth-mini p{font-size:12.5px;color:var(--fg-2)}
+.gbtn{display:flex;align-items:center;justify-content:center;gap:10px;min-height:38px;border-radius:var(--r-ctl);background:var(--surface);box-shadow:inset 0 0 0 1px var(--line-ctl);font:600 13.5px/1 var(--font-ui);color:var(--fg)}
+.mini-side{display:flex;flex-direction:column;gap:2px}
+.mini-side .filter{cursor:default}
+.mini-rec{background:var(--canvas);border-radius:var(--r-card);padding:4px}
+.mini-rec .rec{cursor:default}
+.jr .cmp{min-width:0;font-size:12.5px}
+.jr .cmp th,.jr .cmp td{padding:7px 8px}
+.jr .cmp tbody th{width:auto;color:var(--fg);font-weight:400}
+.jr .cmp-wrap{overflow-x:auto}
+.mini-bar{background:var(--material-solid);border-radius:var(--r-card);box-shadow:inset 0 0 0 1px var(--line);padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.mini-bar .decision-promise{font-size:12.5px}
+.mini-bar .btn{pointer-events:none}
+.jr .toast{max-width:100%}
+.jr .toast-bar i{transform:scaleX(.55)}
+.jr-next{font-size:12.5px;color:var(--fg-2)}
+.jr-next b{color:var(--fg);font-weight:600}
+.done-mini{display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.done-mini p{font:600 14.5px/1.35 var(--font-ui);color:var(--fg)}
+
+/* Decision matrix */
+.mx-wrap{overflow-x:auto;border-radius:var(--r-panel);box-shadow:inset 0 0 0 1px var(--line-strong);background:var(--canvas)}
+.mx-wrap:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.mx{width:100%;min-width:1120px;font-size:13.5px}
+.mx caption{text-align:left;padding:14px 16px 6px;font:600 14px/1.3 var(--font-ui);color:var(--fg)}
+.mx th,.mx td{padding:11px 16px;text-align:left;vertical-align:top;border-top:1px solid var(--line)}
+.mx thead th{font:600 12px/1.3 var(--font-ui);color:var(--fg-2);border-top:0}
+.mx tbody th{font-weight:600;width:200px}
+.mx td{color:var(--fg)}
+.mx .copy{font-weight:500}
+.mx .copy q{quotes:"\201C" "\201D"}
+.mx-way{color:var(--fg)}
+.mx-saved{color:var(--fg-2)}
+.foot{font-size:13px;color:var(--fg-2);border-top:1px solid var(--line);padding-top:20px;max-width:80ch}
+</style>
+
+<div class="pg">
+
+<header class="pg-top">
+  <div class="pg-top-l">
+    <span class="wordmark" aria-label="IntelliDrugs">IntelliDrugs<span class="wordmark-dot" aria-hidden="true">.</span></span>
+    <span class="pg-ver">Reviewer workspace prototype, built on design system 1.0</span>
+  </div>
+  <div class="seg" role="group" aria-label="Colour theme" id="theme">
+    <button type="button" data-t="system" aria-pressed="true">System</button>
+    <button type="button" data-t="light" aria-pressed="false">Light</button>
+    <button type="button" data-t="dark" aria-pressed="false">Dark</button>
+  </div>
+</header>
+
+<section class="intro" aria-labelledby="h-top">
+  <div>
+    <h1 id="h-top">IntelliDrugs Reviewer Workspace</h1>
+    <p class="lede">The desk where a pharmacist checks each record in batch 0001-pilot against the DGDA register before it goes public. Every record, check note, code, count and interaction pair below is the live pilot data.</p>
+    <ol class="howto">
+      <li><span class="howto-n">1</span><span>Click a record, or click anywhere in the workspace and move with <span class="kbd">J</span> and <span class="kbd">K</span>.</span></li>
+      <li><span class="howto-n">2</span><span>Press <span class="kbd">A</span> for Looks correct. You then have 8 seconds to press <span class="kbd">U</span> before it saves. Enter never approves.</span></li>
+      <li><span class="howto-n">3</span><span>Press <span class="kbd">R</span> to report an issue, <span class="kbd">E</span> for evidence, <span class="kbd">?</span> for every shortcut.</span></li>
+      <li><span class="howto-n">4</span><span>Use the controls to switch role and to trigger each failure. Decisions stay in this page and are never sent anywhere.</span></li>
+    </ol>
+  </div>
+  <div class="ctl" role="region" aria-labelledby="h-ctl">
+    <div class="ctl-h"><h2 id="h-ctl">Prototype controls</h2><p>These sit outside the workspace, so they never take a shortcut key. Each one acts on the open record.</p></div>
+    <div class="ctl-g">
+      <h3 id="h-role">Reviewing as</h3>
+      <div class="seg" role="group" aria-labelledby="h-role" id="role-seg">
+        <button type="button" data-role="pharmacist" aria-pressed="true">Pharmacist</button>
+        <button type="button" data-role="engineer" aria-pressed="false">Engineer</button>
+      </div>
+    </div>
+    <div class="ctl-g">
+      <h3>Next decision</h3>
+      <div class="ctl-row">
+        <button class="btn btn--tonal btn--sm sim" type="button" id="sim-net" aria-pressed="false">Network fails on next save</button>
+        <button class="btn btn--tonal btn--sm sim" type="button" id="sim-bot" aria-pressed="false">Bot check fails on next decision</button>
+        <button class="btn btn--tonal btn--sm sim" type="button" id="sim-auth" aria-pressed="false">Account not authorised</button>
+      </div>
+    </div>
+    <div class="ctl-g">
+      <h3>Open record</h3>
+      <div class="ctl-row">
+        <button class="btn btn--tonal btn--sm" type="button" id="sim-stale">Record changes while open</button>
+        <button class="btn btn--tonal btn--sm" type="button" id="sim-rerun">Re-run after approval</button>
+      </div>
+    </div>
+    <div class="ctl-g">
+      <h3>Whole view</h3>
+      <div class="ctl-row">
+        <button class="btn btn--tonal btn--sm" type="button" id="sim-done">Batch complete</button>
+        <button class="btn btn--tonal btn--sm" type="button" id="sim-empty">Empty filter</button>
+        <button class="btn btn--tonal btn--sm" type="button" id="sim-load">Loading</button>
+        <button class="btn btn--plain btn--sm" type="button" id="sim-reset">Reset prototype</button>
+      </div>
+    </div>
+    <p class="ctl-note">Simulated states write Example entries into the record's history. The live pilot itself is unchanged: all 10 records are not yet reviewed by a pharmacist.</p>
+  </div>
+</section>
+
+<section class="pg-sec" aria-labelledby="h-ws">
+  <div class="pg-head"><h2 id="h-ws">The workspace</h2><p>Batches, records, the record. The decision bar is chrome and never scrolls away. On a narrow screen the frame scrolls sideways.</p></div>
+  <p class="scroll-hint">Scroll the frame sideways to see all three panes.</p>
+  <div class="frame app-frame" tabindex="0" aria-label="Reviewer workspace, scrollable frame">
+    <div class="app" id="app" tabindex="0" role="region" aria-label="IntelliDrugs review workspace. Shortcuts work while focus is inside. Press question mark for the list.">
+
+      <div class="chrome-toolbar material" id="tb">
+        <span class="wordmark">IntelliDrugs<span class="wordmark-dot" aria-hidden="true">.</span><span class="sr-only"> </span><span class="wordmark-sub">Review</span></span>
+        <div class="tb-center">
+          <span>Batch <b class="mono">0001-pilot</b></span>
+          <span class="prog" id="tb-prog" role="img" aria-label="0 of 10 approved by a pharmacist"><i class="p-ok" style="width:0%"></i><i class="p-issue" style="width:0%"></i></span>
+          <span class="num" id="tb-prog-t">0 of 10 approved</span>
+          <span class="tb-sep" aria-hidden="true"></span>
+          <span class="num" id="tb-rec">Record 1 of 10</span>
+        </div>
+        <div class="tb-right">
+          <span class="role-badge" id="tb-role">Pharmacist</span>
+          <span class="acct"><span class="avatar" aria-hidden="true">ER</span>Example reviewer <span class="example">Example</span></span>
+        </div>
+      </div>
+
+      <div class="panes" id="panes">
+        <aside class="side chrome-sidebar material" aria-label="Batches and filters">
+          <div>
+            <p class="chrome-heading" id="h-batches">Batches</p>
+            <div class="filters" role="group" aria-labelledby="h-batches">
+              <button class="filter" type="button" id="batch-btn" aria-current="true"><span class="ico" style="--ico:var(--i-stack)"></span><span class="mono">0001-pilot</span><span class="filter-n">10</span></button>
+            </div>
+          </div>
+          <div>
+            <p class="chrome-heading" id="h-show">Show</p>
+            <div class="filters" id="filters" role="group" aria-labelledby="h-show"></div>
+          </div>
+          <div class="batch-card" id="batch-card"></div>
+        </aside>
+
+        <section class="list" aria-label="Records">
+          <div class="list-h">
+            <div class="list-t"><b>0001-pilot</b><span id="list-count">10 records, by DAR number</span></div>
+            <label class="search"><span class="sr-only">Filter records by name, substance or DAR number</span><input type="search" id="q" placeholder="Filter by name, substance or DAR" autocomplete="off"></label>
+          </div>
+          <div class="list-body" id="list-body">
+            <ul class="rec-list" id="list" role="listbox" tabindex="0" aria-label="Records in 0001-pilot"></ul>
+            <div class="empty" id="list-empty" hidden></div>
+            <div id="list-sk" hidden aria-hidden="true"></div>
+          </div>
+        </section>
+
+        <section class="detail" aria-label="Record">
+          <div class="d-body">
+            <div class="d-scroll" id="detail" tabindex="-1"></div>
+            <aside class="drawer" id="drawer" aria-labelledby="drawer-h" hidden>
+              <div class="drawer-h"><div><h4 id="drawer-h">Evidence</h4><p id="drawer-sub"></p></div><button class="btn btn--plain btn--sm" type="button" id="drawer-close">Close <span class="kbd">Esc</span></button></div>
+              <div class="drawer-b" id="drawer-b"></div>
+            </aside>
+          </div>
+
+          <div class="decision-bar" id="bar" data-state="ready">
+            <div class="banner banner--crit" id="bar-net" hidden>
+              <p class="banner-title">Couldn't save your decision.</p>
+              <p class="banner-body">Nothing was published. Check your connection and try again. <span id="bar-net-rec"></span></p>
+              <span class="banner-action"><button class="btn btn--tonal btn--sm" type="button" id="btn-net">Try again</button></span>
+            </div>
+            <div class="bar-report" id="bar-report" hidden>
+              <div class="field">
+                <label class="field-label" for="note">What's wrong with this record? An engineer reads this note.</label>
+                <textarea class="textarea" id="note" maxlength="1000" aria-describedby="note-meta" placeholder="For example: strength should read Warfarin Sodium 5 mg"></textarea>
+                <div class="field-meta" id="note-meta"><span id="note-help">5 to 1000 characters.</span><span class="field-error" id="note-err" hidden>Add at least 5 characters so the engineer knows what to fix.</span><span class="field-count" id="note-cnt">0 / 1000</span></div>
+              </div>
+              <div class="bar-report-acts">
+                <span class="bar-report-paused" id="report-paused" hidden>Sending is paused until you reload the record. Your note is kept.</span>
+                <button class="btn btn--tonal btn--sm" type="button" id="btn-cancel">Cancel <span class="kbd">Esc</span></button>
+                <button class="btn btn--primary btn--sm" type="button" id="btn-send">Send report <span class="kbd" id="send-kbd">Ctrl Enter</span></button>
+              </div>
+            </div>
+            <div class="bar-noauth" id="bar-noauth" hidden>
+              <span class="ico" style="--ico:var(--i-info)" aria-hidden="true"></span>
+              <p class="bar-noauth-t">Your account can't review this batch.</p>
+              <p class="bar-noauth-b">Ask the IntelliDrugs team for a reviewer invite, then sign in with the invited Google account. You can still read this record.</p>
+            </div>
+            <div class="decision-main" id="bar-main">
+              <p class="decision-promise" id="bar-promise"></p>
+              <div class="decision-actions">
+                <span class="botcheck" id="bar-botcheck">Bot check passed</span>
+                <button class="btn btn--tonal" type="button" id="btn-report" aria-expanded="false" aria-controls="bar-report" aria-keyshortcuts="R">Report issue <span class="kbd">R</span></button>
+                <button class="btn btn--primary" type="button" id="btn-approve" aria-keyshortcuts="A">Looks correct <span class="kbd">A</span></button>
+              </div>
+            </div>
+            <div class="bar-bot" id="bar-bot" hidden>
+              <p class="field-error">We couldn't confirm you're a person. Your decision is kept. Retry the check to continue.</p>
+              <button class="btn btn--tonal btn--sm" type="button" id="btn-bot">Retry check</button>
+            </div>
+            <p class="decision-hint" id="bar-hint" hidden></p>
+            <div class="decision-keys" id="bar-keys" aria-hidden="true"><span><span class="kbd">J</span><span class="kbd">K</span> next, previous</span><span><span class="kbd">A</span> looks correct</span><span><span class="kbd">U</span> undo</span><span><span class="kbd">R</span> report</span><span><span class="kbd">E</span> evidence</span><span><span class="kbd">S</span> DGDA source</span><span><span class="kbd">?</span> all keys</span></div>
+          </div>
+        </section>
+      </div>
+
+      <div class="toast-wrap" id="toast-wrap" hidden>
+        <div class="toast" id="toast">
+          <p class="toast-msg" id="toast-msg"></p>
+          <button class="toast-undo" type="button" id="btn-undo" aria-keyshortcuts="U"><span class="ico" aria-hidden="true"></span>Undo <span class="kbd">U</span></button>
+          <span class="toast-bar" aria-hidden="true"><i></i></span>
+        </div>
+      </div>
+
+      <div class="sheet-scrim" id="sheet-wrap" hidden>
+        <div class="sheet" id="sheet" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="sheet-h" aria-describedby="sheet-note">
+          <div class="sheet-h"><h3 id="sheet-h">Keyboard shortcuts</h3><button class="btn btn--plain btn--sm" type="button" id="btn-sheet-close">Close <span class="kbd">Esc</span></button></div>
+          <p class="sheet-note" id="sheet-note">Shortcuts work while focus is in the workspace. They pause while you type in a field, and ignore Ctrl, Cmd and Alt combinations.</p>
+          <dl>
+            <dt><span class="kbd">A</span></dt><dd>Looks correct, then an 8-second undo window</dd>
+            <dt><span class="kbd">U</span></dt><dd>Undo during the window</dd>
+            <dt><span class="kbd">R</span></dt><dd>Report an issue</dd>
+            <dt><span class="kbd">J</span><span class="kbd">K</span></dt><dd>Next and previous record</dd>
+            <dt><span class="kbd">E</span></dt><dd>Evidence: raw DGDA row and pipeline notes</dd>
+            <dt><span class="kbd">S</span></dt><dd>Open the DGDA source</dd>
+            <dt><span class="kbd">?</span></dt><dd>This sheet</dd>
+            <dt><span class="kbd">Esc</span></dt><dd>Close the sheet, the evidence or the note</dd>
+            <dt><span class="kbd" id="sheet-send-kbd">Ctrl Enter</span></dt><dd>Send the report, inside the note field</dd>
+            <dt><span class="kbd">Enter</span></dt><dd>Never approves</dd>
+          </dl>
+        </div>
+      </div>
+
+      <div class="sr-only" aria-live="polite" id="live"></div>
+    </div>
+  </div>
+</section>
+
+<section class="pg-sec" aria-labelledby="h-jr">
+  <div class="pg-head"><h2 id="h-jr">Reviewer journey</h2><p>From the invite to an approved batch, in the order a pharmacist meets each screen. The record names and checks are from the pilot. Approvals, the email and the completed batch are examples.</p></div>
+  <ol class="jr">
+    <li>
+      <div class="jr-k"><span class="jr-n">1</span><h3>Invite email</h3></div>
+      <div class="jr-vis">
+        <div class="mail">
+          <div class="mail-row"><span>From</span><b>IntelliDrugs team</b><span class="example">Example</span></div>
+          <div class="mail-row"><span>To</span><b>the pharmacist's Google account</b></div>
+          <p class="mail-s">You're invited to review medicines on IntelliDrugs</p>
+          <p class="mail-b">Role: Pharmacist. Batch 0001-pilot, 10 records. Sign in at drugdb.eliooo.org with this Google account.</p>
+        </div>
+      </div>
+      <p>Reviewer roles come by invite only. The email names the role, the batch and the Google account to use.</p>
+    </li>
+    <li>
+      <div class="jr-k"><span class="jr-n">2</span><h3>Sign in with the invited account</h3></div>
+      <div class="jr-vis">
+        <div class="auth-mini">
+          <span class="wordmark" aria-label="IntelliDrugs">IntelliDrugs<span class="wordmark-dot" aria-hidden="true">.</span></span>
+          <span class="gbtn"><svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true"><path fill="var(--g-yellow)" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.6-.4-3.5z"/><path fill="var(--g-red)" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="var(--g-green)" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="var(--g-blue)" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.6-.4-3.5z"/></svg>Continue with Google</span>
+          <span class="botcheck">Bot check passed</span>
+          <p>New here? The same button creates your account.</p>
+        </div>
+      </div>
+      <p>One button signs in or signs up. With the invited account, the reviewer tools appear. Any other account signs in as a reader.</p>
+    </li>
+    <li>
+      <div class="jr-k"><span class="jr-n">3</span><h3>Batch queue</h3></div>
+      <div class="jr-vis">
+        <div class="mini-side">
+          <span class="filter" aria-current="true"><span class="ico" style="--ico:var(--i-stack)"></span><span class="mono">0001-pilot</span><span class="filter-n">10</span></span>
+          <span class="filter"><span class="ico" style="--ico:var(--i-clock)"></span>Needs review<span class="filter-n">10</span></span>
+          <span class="filter"><span class="ico" style="--ico:var(--i-warn)"></span>Warnings<span class="filter-n">10</span></span>
+          <span class="filter"><span class="nd-ico" style="width:12px;height:12px;margin-inline:1px;box-shadow:inset 0 0 0 1.5px var(--fg-2)"></span>No DDInter data<span class="filter-n">1</span></span>
+        </div>
+      </div>
+      <p>The sidebar shows what needs attention. Every pilot record carries a DDInter warning, so Warnings holds all 10.</p>
+    </li>
+    <li>
+      <div class="jr-k"><span class="jr-n">4</span><h3>First record</h3></div>
+      <div class="jr-vis">
+        <div class="mini-rec"><div class="rec is-selected"><span class="rec-ix">1</span><span class="rec-name">Amlodipine-5</span><span class="rec-status"><span class="rv rv--pending rv--compact">Not yet reviewed<span class="sr-only"> by a pharmacist</span></span></span><span class="rec-sub">Amlodipine 5 mg tablet</span><span class="rec-hint rec-hint--warn">1 check warning, 4 pairs without text</span></div></div>
+      </div>
+      <p>Record 1 opens first. Its row already says why it may need a closer look.</p>
+    </li>
+    <li>
+      <div class="jr-k"><span class="jr-n">5</span><h3>Compare</h3></div>
+      <div class="jr-vis">
+        <div class="cmp-wrap">
+          <table class="cmp">
+            <thead><tr><th scope="col" class="cmp-src">DGDA source</th><th scope="col">Relation</th><th scope="col">Extracted</th></tr></thead>
+            <tbody>
+              <tr><th scope="row" class="cmp-src"><span class="raw">Paracetamol 500 mg</span><span class="cmp-sub">Napa</span></th><td><span class="match match--norm">Normalised</span></td><td>Acetaminophen</td></tr>
+              <tr><th scope="row" class="cmp-src"><span class="raw">Warfarin Sodium 5 mg</span><span class="cmp-sub">G Warfarin</span></th><td><span class="match match--salt">Salt removed</span></td><td>Warfarin</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <p>Source and extraction share a row. The relation column says in words what the pipeline changed.</p>
+    </li>
+    <li>
+      <div class="jr-k"><span class="jr-n">6</span><h3>Decide</h3></div>
+      <div class="jr-vis">
+        <div class="mini-bar">
+          <p class="decision-promise"><b>You're reviewing as a pharmacist.</b> "Looks correct" publishes this record after an 8-second undo window.</p>
+          <div class="decision-actions" style="margin-left:0"><span class="btn btn--tonal btn--sm">Report issue <span class="kbd">R</span></span><span class="btn btn--primary btn--sm">Looks correct <span class="kbd">A</span></span></div>
+        </div>
+      </div>
+      <p>A approves. R opens a note for the engineer. Enter does nothing here, so a stray press never publishes.</p>
+    </li>
+    <li>
+      <div class="jr-k"><span class="jr-n">7</span><h3>Next</h3><span class="example">Example</span></div>
+      <div class="jr-vis">
+        <div class="toast"><p class="toast-msg"><b>Amlodipine-5</b> marked correct.<span class="toast-sub">Publishes in 8 seconds.</span></p><span class="toast-undo"><span class="ico" aria-hidden="true"></span>Undo <span class="kbd">U</span></span><span class="toast-bar" aria-hidden="true"><i></i></span></div>
+        <p class="jr-next">Then record 2 opens: <b>Aspirin</b>, Acetylsalicylic acid 300 mg tablet.</p>
+      </div>
+      <p>For 8 seconds U undoes the decision. When the window closes it saves and the next record needing review opens.</p>
+    </li>
+    <li>
+      <div class="jr-k"><span class="jr-n">8</span><h3>Batch complete</h3><span class="example">Example</span></div>
+      <div class="jr-vis">
+        <div class="done-mini"><span class="rv rv--approved">Approved by a pharmacist</span><p>Batch 0001-pilot approved. 10 records are now public.</p></div>
+      </div>
+      <p>A plain statement of what is now public. The batch is approved only when a pharmacist has approved all 10 records. In the live pilot all 10 are still not yet reviewed by a pharmacist.</p>
+    </li>
+  </ol>
+</section>
+
+<section class="pg-sec" aria-labelledby="h-mx">
+  <div class="pg-head"><h2 id="h-mx">Decisions and errors</h2><p>Every situation the reviewer can meet, with the exact words on screen, the way out and what is stored. Every one of them can be triggered in the workspace above.</p></div>
+  <div class="mx-wrap" tabindex="0" role="region" aria-label="Decision and error matrix, scrollable">
+    <table class="mx">
+      <caption>Decision and error matrix</caption>
+      <thead><tr><th scope="col">Situation</th><th scope="col">What the reviewer sees</th><th scope="col">Exact copy</th><th scope="col">Way out</th><th scope="col">What is saved</th></tr></thead>
+      <tbody>
+        <tr><th scope="row">Pharmacist presses A</th><td>A toast with an 8-second countdown and Undo. Focus stays where it was. One polite announcement.</td><td class="copy"><q>Napa marked correct. Publishes in 8 seconds.</q></td><td class="mx-way"><span class="kbd">U</span> or Undo within 8 seconds</td><td class="mx-saved">After 8 seconds: Approved by a pharmacist, the record is public and the history gets an entry. The next record needing review opens.</td></tr>
+        <tr><th scope="row">Engineer presses A</th><td>The same toast. The decision bar names the limit of the role.</td><td class="copy"><q>Napa marked correct. Your check saves in 8 seconds. It does not publish.</q> <q>You're reviewing as an engineer. "Looks correct" records your check. It does not publish; a pharmacist still needs to approve.</q></td><td class="mx-way"><span class="kbd">U</span> within 8 seconds</td><td class="mx-saved">Engineer checked. Readers still see Not yet reviewed by a pharmacist.</td></tr>
+        <tr><th scope="row">Undo in the window</th><td>The toast closes. The record is as it was.</td><td class="copy"><q>Undone. Napa was not saved.</q></td><td class="mx-way">None needed</td><td class="mx-saved">Nothing.</td></tr>
+        <tr><th scope="row">A while another record is in its undo window</th><td>A hint under the actions. The open window keeps running and is never cut short.</td><td class="copy"><q>Amlodipine-5 is still in its undo window. Press U to undo it, or wait until it saves.</q></td><td class="mx-way">Wait for the save, or <span class="kbd">U</span></td><td class="mx-saved">Nothing new. The first decision saves when its own 8 seconds end, with one announcement.</td></tr>
+        <tr><th scope="row">A on a record with an issue reported</th><td>The button is unavailable and a hint explains why.</td><td class="copy"><q>An issue is open on this record. It returns to review after the fix and re-run.</q></td><td class="mx-way">The engineer fixes the data and re-runs the record</td><td class="mx-saved">Nothing. The issue stays open.</td></tr>
+        <tr><th scope="row">Window closes and the next record opens</th><td>The next record needing review opens. A is ignored for 1 second so a late press never approves an unseen record.</td><td class="copy"><q>Saved. Amlodipine-5 is approved by a pharmacist and published. Opened Aspirin, record 2 of 10.</q></td><td class="mx-way">Read the new record, then decide</td><td class="mx-saved">The approval, with one announcement.</td></tr>
+        <tr><th scope="row">Enter on Looks correct</th><td>A hint under the actions. Nothing else happens, with or without Ctrl, Cmd or Shift.</td><td class="copy"><q>Enter does not approve. Press A, or Space on this button.</q></td><td class="mx-way">Press <span class="kbd">A</span></td><td class="mx-saved">Nothing.</td></tr>
+        <tr><th scope="row">Report note too short</th><td>The field outline turns red and the message appears under it. The counter keeps counting.</td><td class="copy"><q>Add at least 5 characters so the engineer knows what to fix.</q></td><td class="mx-way">Keep typing, or <span class="kbd">Esc</span> to cancel</td><td class="mx-saved">Nothing. The draft stays in the field.</td></tr>
+        <tr><th scope="row">Report sent</th><td>The status pill changes in the list and the header.</td><td class="copy"><q>Issue reported</q></td><td class="mx-way">The engineer fixes the data and re-runs the record</td><td class="mx-saved">The note, who sent it and when. The record stays hidden from readers.</td></tr>
+        <tr><th scope="row">Record changes while open</th><td>A warning banner at the top. The decision bar pauses and says why. An open undo window is cancelled.</td><td class="copy"><q>This record changed — reload to review the latest data</q></td><td class="mx-way">Reload record, or See what changed first</td><td class="mx-saved">Nothing. Any note being written is kept.</td></tr>
+        <tr><th scope="row">Save fails on the network</th><td>A red banner inside the decision bar. The row in the list says Decision not saved.</td><td class="copy"><q>Couldn't save your decision. Nothing was published. Check your connection and try again.</q></td><td class="mx-way">Try again</td><td class="mx-saved">Nothing. The record stays unmarked.</td></tr>
+        <tr><th scope="row">Bot check fails</th><td>The shield line turns red and a message appears under the actions.</td><td class="copy"><q>We couldn't confirm you're a person. Your decision is kept. Retry the check to continue.</q></td><td class="mx-way">Retry check</td><td class="mx-saved">Nothing until the check passes. Then the kept decision continues.</td></tr>
+        <tr><th scope="row">Account has no reviewer role</th><td>The decision bar is replaced by an explanation. The record stays readable.</td><td class="copy"><q>Your account can't review this batch.</q> <q>Ask the IntelliDrugs team for a reviewer invite, then sign in with the invited Google account. You can still read this record.</q></td><td class="mx-way">Sign in with the invited Google account</td><td class="mx-saved">Nothing.</td></tr>
+        <tr><th scope="row">Re-run after approval</th><td>The pill changes to Back in review, a card lists what changed, and the stale banner pauses decisions.</td><td class="copy"><q>Back in review</q></td><td class="mx-way">Reload, compare, decide again</td><td class="mx-saved">The approval is withdrawn from public view until a pharmacist approves again.</td></tr>
+        <tr><th scope="row">Substance has no DDInter entry</th><td>A hatched block that is always open and never green. Pairs with it are listed as not checked.</td><td class="copy"><q>No interaction data in DDInter for this substance. This does not mean it is safe to combine.</q></td><td class="mx-way">Review the other fields. The pharmacist decides.</td><td class="mx-saved">Pairs with the substance are stored as not checked, never as checked.</td></tr>
+        <tr><th scope="row">Pair severity unknown</th><td>A square chip with a dashed outline and a question mark, and the full wording.</td><td class="copy"><q>Severity not classified by DDInter</q></td><td class="mx-way">None</td><td class="mx-saved">Counted on its own, never merged with Minor.</td></tr>
+        <tr><th scope="row">Filter has no records</th><td>An empty list with one way back.</td><td class="copy"><q>No records with an issue reported.</q> <q>Show all 10 records</q></td><td class="mx-way">Show all 10 records</td><td class="mx-saved">Nothing.</td></tr>
+        <tr><th scope="row">Batch loading</th><td>Skeleton rows. The decision bar is disabled.</td><td class="copy"><q>Loading batch 0001-pilot</q></td><td class="mx-way">Wait</td><td class="mx-saved">Nothing.</td></tr>
+        <tr><th scope="row">Last record approved</th><td>A calm statement in the record pane. No animation.</td><td class="copy"><q>Batch 0001-pilot approved. 10 records are now public.</q></td><td class="mx-way">Open any record to read it</td><td class="mx-saved">The batch status becomes approved.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<p class="foot">IntelliDrugs reviewer workspace prototype. Product facts come from the DGDA register, DDInter 2.0 and batch 0001-pilot (10 records, run 11/10/2026 21:27 UTC, 12/10/2026 03:27 in Dhaka). In the live data all 10 records are not yet reviewed by a pharmacist. Reviewer names, decision times and re-run changes carry the Example marker and have no clinical meaning.</p>
+</div>
+
+<script>
+(function(){
+'use strict';
+/* Live pilot data, embedded verbatim from pilot-data.json */
+var DATA={"items":[{"note":null,"brand":{"bdc_id":"BDC-000002","company":"Premier Pharmaceuticals Ltd.","concept_id":"071-0098-022--amlodipine-5","dar_number":"071-0098-022","parse_note":null,"trade_name":"Amlodipine-5","dosage_form":"Tablet","parse_status":"parsed","quality_flag":null,"generic_content_raw":"Amlodipine 5 mg"},"review":"pending","stages":{"dgda":{"note":"","status":"ok"},"ddinter":{"note":"DDInter text not found for DDInter1164/DDInter79; DDInter text not found for DDInter14/DDInter79; DDInter text not found for DDInter1951/DDInter79; DDInter text not found for DDInter79/DDInter83","status":"warn"},"clinical":{"note":"","status":"ok"},"substances":{"note":"","status":"ok"}},"clinical":{"route":"systemic","bdc_id":"BDC-000002","dose_form":"Tablet","signature":"tablet|systemic|BDS-000002:5mg/","display_name":"Amlodipine 5 mg tablet"},"conceptId":"071-0098-022--amlodipine-5","extractedAt":"2026-10-11T21:28:09.250685+00:00","ingredients":[{"bds":"BDS-000002","ddi":{"major":21,"minor":33,"total":791,"unknown":299,"moderate":438},"per":null,"raw":"Amlodipine 5 mg","food":2,"name":"Amlodipine","unit":"mg","codes":[{"code":"XM68M5","conf":1.0,"route":"any","method":"xm","system":"ICD11_XM"},{"code":"17767","conf":1.0,"route":"any","method":"rxnav-exact","system":"RXCUI"},{"code":"C08CA01","conf":1.0,"route":"any","method":"rxnav-exact","system":"ATC"},{"code":"DB00381","conf":1.0,"route":"any","method":"rxnav-exact","system":"DRUGBANK"},{"code":"108537001","conf":1.0,"route":"any","method":"rxnav-exact","system":"SNOMEDCT"},{"code":"386864001","conf":1.0,"route":"any","method":"rxnav-exact","system":"SNOMEDCT"},{"code":"DDInter79","conf":1.0,"route":"systemic","method":"drugbank","system":"DDINTER"}],"names":[{"name":"Amlodipine","type":"icd11"},{"name":"amlodipine","type":"rxnorm"},{"name":"Amlodipine","type":"dgda_content"},{"name":"Amlodipine","type":"ddinter"}],"disease":4,"perUnit":null,"coverage":{"note":"DDInter DDInter79","coverage":"full"},"strength":5}],"dgdaIngredients":[{"xm":"XM68M5","name":"Amlodipine"}]},{"note":null,"brand":{"bdc_id":"BDC-000004","company":"Apollo Pharmaceutical Laboratories Ltd.","concept_id":"076-0028-006--aspirin","dar_number":"076-0028-006","parse_note":null,"trade_name":"Aspirin","dosage_form":"Tablet","parse_status":"parsed","quality_flag":null,"generic_content_raw":"Aspirin 300 mg"},"review":"pending","stages":{"dgda":{"note":"","status":"ok"},"ddinter":{"note":"DDInter text not found for DDInter1164/DDInter20; DDInter text not found for DDInter14/DDInter20; DDInter text not found for DDInter1675/DDInter20; DDInter text not found for DDInter20/DDInter351; DDInter text not found for DDInter20/DDInter393; DDInter text not found for DDInter20/DDInter83","status":"warn"},"clinical":{"note":"","status":"ok"},"substances":{"note":"","status":"ok"}},"clinical":{"route":"systemic","bdc_id":"BDC-000004","dose_form":"Tablet","signature":"tablet|systemic|BDS-000004:300mg/","display_name":"Acetylsalicylic acid 300 mg tablet"},"conceptId":"076-0028-006--aspirin","extractedAt":"2026-10-11T21:28:09.250702+00:00","ingredients":[{"bds":"BDS-000004","ddi":{"major":53,"minor":45,"total":690,"unknown":346,"moderate":246},"per":null,"raw":"Aspirin 300 mg","food":1,"name":"Acetylsalicylic acid","unit":"mg","codes":[{"code":"XM4G06","conf":1.0,"route":"any","method":"xm","system":"ICD11_XM"},{"code":"1191","conf":1.0,"route":"any","method":"rxnav-exact","system":"RXCUI"},{"code":"A01AD05","conf":1.0,"route":"any","method":"rxnav-exact","system":"ATC"},{"code":"B01AC06","conf":1.0,"route":"any","method":"rxnav-exact","system":"ATC"},{"code":"N02BA01","conf":1.0,"route":"any","method":"rxnav-exact","system":"ATC"},{"code":"DB00945","conf":1.0,"route":"any","method":"rxnav-exact","system":"DRUGBANK"},{"code":"387458008","conf":1.0,"route":"any","method":"rxnav-exact","system":"SNOMEDCT"},{"code":"7947003","conf":1.0,"route":"any","method":"rxnav-exact","system":"SNOMEDCT"},{"code":"DDInter20","conf":1.0,"route":"systemic","method":"drugbank","system":"DDINTER"}],"names":[{"name":"Acetylsalicylic acid","type":"icd11"},{"name":"aspirin","type":"rxnorm"},{"name":"Aspirin","type":"dgda_content"},{"name":"Acetylsalicylic acid","type":"ddinter"}],"disease":9,"perUnit":null,"coverage":{"note":"DDInter DDInter20","coverage":"full"},"strength":300}],"dgdaIngredients":[{"xm":"XM4G06","name":"Acetylsalicylic acid"}]},{"note":null,"brand":{"bdc_id":"BDC-000006","company":"Albion Laboratories Ltd.","concept_id":"096-0265-061--simvastatin","dar_number":"096-0265-061","parse_note":null,"trade_name":"Simvastatin","dosage_form":"Tablet","parse_status":"parsed","quality_flag":null,"generic_content_raw":"Simvastatin 10 mg"},"review":"pending","stages":{"dgda":{"note":"","status":"ok"},"ddinter":{"note":"DDInter text not found for DDInter1164/DDInter1675; DDInter text not found for DDInter14/DDInter1675; DDInter text not found for DDInter1675/DDInter20; DDInter text not found for DDInter1675/DDInter83","status":"warn"},"clinical":{"note":"","status":"ok"},"substances":{"note":"","status":"ok"}},"clinical":{"route":"systemic","bdc_id":"BDC-000006","dose_form":"Tablet","signature":"tablet|systemic|BDS-000006:10mg/","display_name":"Simvastatin 10 mg tablet"},"conceptId":"096-0265-061--simvastatin","extractedAt":"2026-10-11T21:28:41.231682+00:00","ingredients":[{"bds":"BDS-000006","ddi":{"major":59,"minor":10,"total":732,"unknown":422,"moderate":241},"per":null,"raw":"Simvastatin 10 mg","food":2,"name":"Simvastatin","unit":"mg","codes":[{"code":"XM7AU9","conf":1.0,"route":"any","method":"xm","system":"ICD11_XM"},{"code":"36567","conf":1.0,"route":"any","method":"rxnav-exact","system":"RXCUI"},{"code":"C10AA01","conf":1.0,"route":"any","method":"rxnav-exact","system":"ATC"},{"code":"DB00641","conf":1.0,"route":"any","method":"rxnav-exact","system":"DRUGBANK"},{"code":"387584000","conf":1.0,"route":"any","method":"rxnav-exact","system":"SNOMEDCT"},{"code":"96304005","conf":1.0,"route":"any","method":"rxnav-exact","system":"SNOMEDCT"},{"code":"DDInter1675","conf":1.0,"route":"systemic","method":"drugbank","system":"DDINTER"}],"names":[{"name":"Simvastatin","type":"icd11"},{"name":"simvastatin","type":"rxnorm"},{"name":"Simvastatin","type":"dgda_content"},{"name":"Simvastatin","type":"ddinter"}],"disease":6,"perUnit":null,"coverage":{"note":"DDInter DDInter1675","coverage":"full"},"strength":10}],"dgdaIngredients":[{"xm":"XM7AU9","name":"Simvastatin"}]},{"note":null,"brand":{"bdc_id":"BDC-000008","company":"EDCL (Dhaka)","concept_id":"127-0163-052--chloramphenicol","dar_number":"127-0163-052","parse_note":null,"trade_name":"Chloramphenicol","dosage_form":"Eye Drops","parse_status":"parsed","quality_flag":null,"generic_content_raw":"Chloramphenicol 5 mg/ml"},"review":"pending","stages":{"dgda":{"note":"","status":"ok"},"ddinter":{"note":"DDInter text not found for DDInter14/DDInter351; DDInter text not found for DDInter20/DDInter351; DDInter text not found for DDInter351/DDInter393; DDInter text not found for DDInter351/DDInter83","status":"warn"},"clinical":{"note":"","status":"ok"},"substances":{"note":"","status":"ok"}},"clinical":{"route":"ophthalmic","bdc_id":"BDC-000008","dose_form":"Eye Drops","signature":"eye drops|ophthalmic|BDS-000009:5mg/1ml","display_name":"Chloramphenicol 5 mg/ml eye drops"},"conceptId":"127-0163-052--chloramphenicol","extractedAt":"2026-10-11T21:28:41.2317+00:00","ingredients":[{"bds":"BDS-000009","ddi":{"major":48,"minor":21,"total":654,"unknown":49,"moderate":536},"per":1,"raw":"Chloramphenicol 5 mg/ml","food":0,"name":"Chloramphenicol","unit":"mg","codes":[{"code":"XM2TE7","conf":1.0,"route":"any","method":"xm","system":"ICD11_XM"},{"code":"2348","conf":1.0,"route":"any","method":"rxnav-exact","system":"RXCUI"},{"code":"D06AX02","conf":1.0,"route":"any","method":"rxnav-exact","system":"ATC"},{"code":"D10AF03","conf":1.0,"route":"any","method":"rxnav-exact","system":"ATC"},{"code":"G01AA05","conf":1.0,"route":"any","method":"rxnav-exact","system":"ATC"},{"code":"J01BA01","conf":1.0,"route":"any","method":"rxnav-exact","system":"ATC"},{"code":"S01AA01","conf":1.0,"route":"any","method":"rxnav-exact","system":"ATC"},{"code":"S02AA01","conf":1.0,"route":"any","method":"rxnav-exact","system":"ATC"},{"code":"S03AA08","conf":1.0,"route":"any","method":"rxnav-exact","system":"ATC"},{"code":"DB00446","conf":1.0,"route":"any","method":"rxnav-exact","system":"DRUGBANK"},{"code":"372777009","conf":1.0,"route":"any","method":"rxnav-exact","system":"SNOMEDCT"},{"code":"57191001","conf":1.0,"route":"any","method":"rxnav-exact","system":"SNOMEDCT"},{"code":"DDInter351","conf":1.0,"route":"systemic","method":"drugbank","system":"DDINTER"},{"code":"DDInter352","conf":1.0,"route":"ophthalmic","method":"drugbank","system":"DDINTER"},{"code":"DDInter353","conf":1.0,"route":"otic","method":"drugbank","system":"DDINTER"}],"names":[{"name":"Chloramphenicol","type":"icd11"},{"name":"chloramphenicol","type":"rxnorm"},{"name":"Chloramphenicol","type":"dgda_content"},{"name":"Chloramphenicol","type":"ddinter"},{"name":"Chloramphenicol (ophthalmic)","type":"ddinter"},{"name":"Chloramphenicol (otic)","type":"ddinter"}],"disease":6,"perUnit":"ml","coverage":{"note":"DDInter DDInter351, DDInter352, DDInter353","coverage":"full"},"strength":5}],"dgdaIngredients":[{"xm":"XM2TE7","name":"Chloramphenicol"}]},{"note":null,"brand":{"bdc_id":"BDC-000009","company":"EDCL (Dhaka)","concept_id":"127-0263-018--domperidone","dar_number":"127-0263-018","parse_note":null,"trade_name":"Domperidone","dosage_form":"Tablet","parse_status":"parsed","quality_flag":null,"generic_content_raw":"Domperidone 10 mg"},"review":"pending","stages":{"dgda":{"note":"","status":"ok"},"ddinter":{"note":"No interaction data in DDInter for this substance","status":"warn"},"clinical":{"note":"","status":"ok"},"substances":{"note":"","status":"ok"}},"clinical":{"route":"systemic","bdc_id":"BDC-000009","dose_form":"Tablet","signature":"tablet|systemic|BDS-000010:10mg/","display_name":"Domperidone 10 mg tablet"},"conceptId":"127-0263-018--domperidone","extractedAt":"2026-10-11T21:28:41.231644+00:00","ingredients":[{"bds":"BDS-000010","ddi":{"major":0,"minor":0,"total":0,"unknown":0,"moderate":0},"per":null,"raw":"Domperidone 10 mg","food":0,"name":"Domperidone","unit":"mg","codes":[{"code":"XM3GF5","conf":1.0,"route":"any","method":"xm","system":"ICD11_XM"},{"code":"3626","conf":1.0,"route":"any","method":"rxnav-exact","system":"RXCUI"},{"code":"A03FA03","conf":1.0,"route":"any","method":"rxnav-exact","system":"ATC"},{"code":"DB01184","conf":1.0,"route":"any","method":"rxnav-exact","system":"DRUGBANK"},{"code":"32955006","conf":1.0,"route":"any","method":"rxnav-exact","system":"SNOMEDCT"},{"code":"387181004","conf":1.0,"route":"any","method":"rxnav-exact","system":"SNOMEDCT"}],"names":[{"name":"Domperidone","type":"icd11"},{"name":"domperidone","type":"rxnorm"},{"name":"Domperidone","type":"dgda_content"}],"disease":0,"perUnit":null,"coverage":{"note":"No interaction data in DDInter for this substance","coverage":"none"},"strength":10}],"dgdaIngredients":[{"xm":"XM3GF5","name":"Domperidone"}]},{"note":null,"brand":{"bdc_id":"BDC-000003","company":"Gonoshasthaya Pharmaceuticals Ltd.","concept_id":"185-0138-012--g-warfarin","dar_number":"185-0138-012","parse_note":null,"trade_name":"G Warfarin","dosage_form":"Tablet","parse_status":"parsed","quality_flag":null,"generic_content_raw":"Warfarin Sodium 5 mg"},"review":"pending","stages":{"dgda":{"note":"","status":"ok"},"ddinter":{"note":"DDInter text not found for DDInter1951/DDInter79","status":"warn"},"clinical":{"note":"","status":"ok"},"substances":{"note":"","status":"ok"}},"clinical":{"route":"systemic","bdc_id":"BDC-000003","dose_form":"Tablet","signature":"tablet|systemic|BDS-000003:5mg/","display_name":"Warfarin 5 mg tablet"},"conceptId":"185-0138-012--g-warfarin","extractedAt":"2026-10-11T21:28:09.250694+00:00","ingredients":[{"bds":"BDS-000003","ddi":{"major":138,"minor":71,"total":934,"unknown":298,"moderate":427},"per":null,"raw":"Warfarin Sodium 5 mg","food":2,"name":"Warfarin","unit":"mg","codes":[{"code":"XM86W0","conf":1.0,"route":"any","method":"xm","system":"ICD11_XM"},{"code":"11289","conf":1.0,"route":"any","method":"rxnav-exact","system":"RXCUI"},{"code":"B01AA03","conf":1.0,"route":"any","method":"rxnav-exact","system":"ATC"},{"code":"DB00682","conf":1.0,"route":"any","method":"rxnav-exact","system":"DRUGBANK"},{"code":"372756006","conf":1.0,"route":"any","method":"rxnav-exact","system":"SNOMEDCT"},{"code":"48603004","conf":1.0,"route":"any","method":"rxnav-exact","system":"SNOMEDCT"},{"code":"DDInter1951","conf":1.0,"route":"systemic","method":"drugbank","system":"DDINTER"}],"names":[{"name":"Warfarin","type":"icd11"},{"name":"warfarin","type":"rxnorm"},{"name":"Warfarin","type":"dgda_content"},{"name":"Warfarin","type":"ddinter"}],"disease":8,"perUnit":null,"coverage":{"note":"DDInter DDInter1951","coverage":"full"},"strength":5}],"dgdaIngredients":[{"xm":"XM86W0","name":"Warfarin"}]},{"note":null,"brand":{"bdc_id":"BDC-000010","company":"Gonoshasthaya Pharmaceuticals Ltd.","concept_id":"185-0241-015--g-metformin","dar_number":"185-0241-015","parse_note":null,"trade_name":"G-Metformin","dosage_form":"Tablet","parse_status":"parsed","quality_flag":null,"generic_content_raw":"Metformin Hydrochloride 500 mg"},"review":"pending","stages":{"dgda":{"note":"","status":"ok"},"ddinter":{"note":"DDInter text not found for DDInter1164/DDInter14; DDInter text not found for DDInter1164/DDInter1675; DDInter text not found for DDInter1164/DDInter20; DDInter text not found for DDInter1164/DDInter79; DDInter text not found for DDInter1164/DDInter83","status":"warn"},"clinical":{"note":"","status":"ok"},"substances":{"note":"","status":"ok"}},"clinical":{"route":"systemic","bdc_id":"BDC-000010","dose_form":"Tablet","signature":"tablet|systemic|BDS-000011:500mg/","display_name":"Metformin 500 mg tablet"},"conceptId":"185-0241-015--g-metformin","extractedAt":"2026-10-11T21:28:41.231708+00:00","ingredients":[{"bds":"BDS-000011","ddi":{"major":20,"minor":29,"total":687,"unknown":310,"moderate":328},"per":null,"raw":"Metformin Hydrochloride 500 mg","food":1,"name":"Metformin","unit":"mg","codes":[{"code":"XM0JN5","conf":1.0,"route":"any","method":"xm","system":"ICD11_XM"},{"code":"6809","conf":1.0,"route":"any","method":"rxnav-exact","system":"RXCUI"},{"code":"A10BA02","conf":1.0,"route":"any","method":"rxnav-exact","system":"ATC"},{"code":"DB00331","conf":1.0,"route":"any","method":"rxnav-exact","system":"DRUGBANK"},{"code":"109081006","conf":1.0,"route":"any","method":"rxnav-exact","system":"SNOMEDCT"},{"code":"372567009","conf":1.0,"route":"any","method":"rxnav-exact","system":"SNOMEDCT"},{"code":"DDInter1164","conf":1.0,"route":"systemic","method":"drugbank","system":"DDINTER"}],"names":[{"name":"Metformin","type":"icd11"},{"name":"metformin","type":"rxnorm"},{"name":"Metformin","type":"dgda_content"},{"name":"Metformin","type":"ddinter"}],"disease":4,"perUnit":null,"coverage":{"note":"DDInter DDInter1164","coverage":"full"},"strength":500}],"dgdaIngredients":[{"xm":"XM0JN5","name":"Metformin"}]},{"note":null,"brand":{"bdc_id":"BDC-000001","company":"Beximco Pharmaceuticals Ltd.","concept_id":"186-0030-006--napa","dar_number":"186-0030-006","parse_note":null,"trade_name":"Napa","dosage_form":"Tablet","parse_status":"parsed","quality_flag":null,"generic_content_raw":"Paracetamol 500 mg"},"review":"pending","stages":{"dgda":{"note":"","status":"ok"},"ddinter":{"note":"DDInter text not found for DDInter1164/DDInter14; DDInter text not found for DDInter14/DDInter1675; DDInter text not found for DDInter14/DDInter20; DDInter text not found for DDInter14/DDInter351; DDInter text not found for DDInter14/DDInter393; DDInter text not found for DDInter14/DDInter79; DDInter text not found for DDInter14/DDInter83","status":"warn"},"clinical":{"note":"","status":"ok"},"substances":{"note":"","status":"ok"}},"clinical":{"route":"systemic","bdc_id":"BDC-000001","dose_form":"Tablet","signature":"tablet|systemic|BDS-000001:500mg/","display_name":"Acetaminophen 500 mg tablet"},"conceptId":"186-0030-006--napa","extractedAt":"2026-10-11T21:28:09.250646+00:00","ingredients":[{"bds":"BDS-000001","ddi":{"major":10,"minor":38,"total":645,"unknown":512,"moderate":85},"per":null,"raw":"Paracetamol 500 mg","food":1,"name":"Acetaminophen","unit":"mg","codes":[{"code":"XM5DJ7","conf":1.0,"route":"any","method":"xm","system":"ICD11_XM"},{"code":"161","conf":1.0,"route":"any","method":"rxnav-exact","system":"RXCUI"},{"code":"N02BE01","conf":1.0,"route":"any","method":"rxnav-exact","system":"ATC"},{"code":"DB00316","conf":1.0,"route":"any","method":"rxnav-exact","system":"DRUGBANK"},{"code":"387517004","conf":1.0,"route":"any","method":"rxnav-exact","system":"SNOMEDCT"},{"code":"90332006","conf":1.0,"route":"any","method":"rxnav-exact","system":"SNOMEDCT"},{"code":"DDInter14","conf":1.0,"route":"systemic","method":"drugbank","system":"DDINTER"}],"names":[{"name":"Acetaminophen","type":"icd11"},{"name":"acetaminophen","type":"rxnorm"},{"name":"Paracetamol","type":"dgda_content"},{"name":"Acetaminophen","type":"ddinter"}],"disease":3,"perUnit":null,"coverage":{"note":"DDInter DDInter14","coverage":"full"},"strength":500}],"dgdaIngredients":[{"xm":"XM5DJ7","name":"Acetaminophen"}]},{"note":null,"brand":{"bdc_id":"BDC-000005","company":"Ibn Sina Pharmaceutical Ind. Ltd.","concept_id":"239-0407-023--clarith","dar_number":"239-0407-023","parse_note":null,"trade_name":"Clarith","dosage_form":"Tablet","parse_status":"parsed","quality_flag":null,"generic_content_raw":"Clarithromycin 500 mg"},"review":"pending","stages":{"dgda":{"note":"","status":"ok"},"ddinter":{"note":"DDInter text not found for DDInter14/DDInter393; DDInter text not found for DDInter20/DDInter393; DDInter text not found for DDInter351/DDInter393","status":"warn"},"clinical":{"note":"","status":"ok"},"substances":{"note":"","status":"ok"}},"clinical":{"route":"systemic","bdc_id":"BDC-000005","dose_form":"Tablet","signature":"tablet|systemic|BDS-000005:500mg/","display_name":"Clarithromycin 500 mg tablet"},"conceptId":"239-0407-023--clarith","extractedAt":"2026-10-11T21:28:09.250709+00:00","ingredients":[{"bds":"BDS-000005","ddi":{"major":234,"minor":51,"total":898,"unknown":210,"moderate":403},"per":null,"raw":"Clarithromycin 500 mg","food":1,"name":"Clarithromycin","unit":"mg","codes":[{"code":"XM1VG4","conf":1.0,"route":"any","method":"xm","system":"ICD11_XM"},{"code":"21212","conf":1.0,"route":"any","method":"rxnav-exact","system":"RXCUI"},{"code":"J01FA09","conf":1.0,"route":"any","method":"rxnav-exact","system":"ATC"},{"code":"DB01211","conf":1.0,"route":"any","method":"rxnav-exact","system":"DRUGBANK"},{"code":"387487009","conf":1.0,"route":"any","method":"rxnav-exact","system":"SNOMEDCT"},{"code":"83999008","conf":1.0,"route":"any","method":"rxnav-exact","system":"SNOMEDCT"},{"code":"DDInter393","conf":1.0,"route":"systemic","method":"drugbank","system":"DDINTER"}],"names":[{"name":"Clarithromycin","type":"icd11"},{"name":"clarithromycin","type":"rxnorm"},{"name":"Clarithromycin","type":"dgda_content"},{"name":"Clarithromycin","type":"ddinter"}],"disease":5,"perUnit":null,"coverage":{"note":"DDInter DDInter393","coverage":"full"},"strength":500}],"dgdaIngredients":[{"xm":"XM1VG4","name":"Clarithromycin"}]},{"note":null,"brand":{"bdc_id":"BDC-000007","company":"JR Pharmaceuticals Ltd.","concept_id":"420-0026-023--amoxycillin-clavulanic-acid","dar_number":"420-0026-023","parse_note":null,"trade_name":"Amoxycillin Clavulanic Acid","dosage_form":"Tablet","parse_status":"parsed","quality_flag":null,"generic_content_raw":"Amoxicillin + Clavulanic Acid 500 mg + 125 mg"},"review":"pending","stages":{"dgda":{"note":"","status":"ok"},"ddinter":{"note":"DDInter text not found for DDInter1164/DDInter83; DDInter text not found for DDInter14/DDInter83; DDInter text not found for DDInter1675/DDInter83; DDInter text not found for DDInter20/DDInter83; DDInter text not found for DDInter351/DDInter83; DDInter text not found for DDInter79/DDInter83","status":"warn"},"clinical":{"note":"","status":"ok"},"substances":{"note":"","status":"ok"}},"clinical":{"route":"systemic","bdc_id":"BDC-000007","dose_form":"Tablet","signature":"tablet|systemic|BDS-000007:125mg/;BDS-000008:500mg/","display_name":"Amoxicillin 500 mg + Clavulanic acid 125 mg tablet"},"conceptId":"420-0026-023--amoxycillin-clavulanic-acid","extractedAt":"2026-10-11T21:28:41.231692+00:00","ingredients":[{"bds":"BDS-000007","ddi":{"major":7,"minor":0,"total":29,"unknown":0,"moderate":22},"per":null,"raw":"Clavulanic Acid 125 mg","food":0,"name":"Clavulanic acid","unit":"mg","codes":[{"code":"XM2K88","conf":1.0,"route":"any","method":"xm","system":"ICD11_XM"},{"code":"48203","conf":1.0,"route":"any","method":"rxnav-exact","system":"RXCUI"},{"code":"DB00766","conf":1.0,"route":"any","method":"rxnav-exact","system":"DRUGBANK"},{"code":"395939008","conf":1.0,"route":"any","method":"rxnav-exact","system":"SNOMEDCT"},{"code":"DDInter394","conf":1.0,"route":"systemic","method":"drugbank","system":"DDINTER"}],"names":[{"name":"Clavulanic acid","type":"icd11"},{"name":"clavulanate","type":"rxnorm"},{"name":"Clavulanic Acid","type":"dgda_content"},{"name":"Clavulanic acid","type":"ddinter"}],"disease":0,"perUnit":null,"coverage":{"note":"DDInter DDInter394","coverage":"full"},"strength":125},{"bds":"BDS-000008","ddi":{"major":5,"minor":8,"total":280,"unknown":238,"moderate":29},"per":null,"raw":"Amoxicillin 500 mg","food":0,"name":"Amoxicillin","unit":"mg","codes":[{"code":"XM7CM1","conf":1.0,"route":"any","method":"xm","system":"ICD11_XM"},{"code":"723","conf":1.0,"route":"any","method":"rxnav-exact","system":"RXCUI"},{"code":"J01CA04","conf":1.0,"route":"any","method":"rxnav-exact","system":"ATC"},{"code":"DB01060","conf":1.0,"route":"any","method":"rxnav-exact","system":"DRUGBANK"},{"code":"27658006","conf":1.0,"route":"any","method":"rxnav-exact","system":"SNOMEDCT"},{"code":"372687004","conf":1.0,"route":"any","method":"rxnav-exact","system":"SNOMEDCT"},{"code":"DDInter83","conf":1.0,"route":"systemic","method":"drugbank","system":"DDINTER"}],"names":[{"name":"Amoxicillin","type":"icd11"},{"name":"amoxicillin","type":"rxnorm"},{"name":"Amoxicillin","type":"dgda_content"},{"name":"Amoxicillin","type":"ddinter"}],"disease":5,"perUnit":null,"coverage":{"note":"DDInter DDInter83","coverage":"full"},"strength":500}],"dgdaIngredients":[{"xm":"XM2K88","name":"Clavulanic acid"},{"xm":"XM7CM1","name":"Amoxicillin"}]}],"pilotPairs":[{"a":"Acetaminophen","b":"Amlodipine","ida":"DDInter14","idb":"DDInter79","actions":["unknown"],"severity":"unknown","management":null,"interaction":null},{"a":"Acetaminophen","b":"Warfarin","ida":"DDInter14","idb":"DDInter1951","actions":["synergy"],"severity":"moderate","management":"Due to the lack of safer alternatives, acetaminophen is considered the analgesic and antipyretic drug of choice for patients receiving warfarin and similar anticoagulants. However, caution is recommended during concomitant therapy, particularly if high dosages of APAP are used continuously for more than a few days, or in patients with risk factors such as ethanol consumption, old age, and malnutrition. Closer monitoring of INR may be advisable. Patients should be advised to promptly report any signs of bleeding to their physician, including pain, swelling, headache, dizziness, weakness, prolonged bleeding from cuts, increased menstrual flow, vaginal bleeding, nosebleeds, bleeding of gums from brushing, unusual bleeding or bruising, red or brown urine, or red or black stools.","interaction":"Acetaminophen (APAP) may potentiate the hypoprothrombinemic effect of warfarin and other vitamin K antagonists, although data are somewhat conflicting and the precise mechanism of interaction has not been established. A toxic metabolite of APAP is thought to be involved by interfering with vitamin K-dependent clotting factors. The interaction has generally been associated with prolonged ingestion of relatively high APAP dosages (greater than 1.3 g/day continuously for greater than 1 week) but not with brief, intermittent exposures of average doses."},{"a":"Warfarin","b":"Amlodipine","ida":"DDInter1951","idb":"DDInter79","actions":["unknown"],"severity":"unknown","management":null,"interaction":null},{"a":"Warfarin","b":"Acetylsalicylic acid","ida":"DDInter1951","idb":"DDInter20","actions":["synergy"],"severity":"major","management":"This combination, especially with analgesic/antipyretic aspirin doses, should generally be avoided unless the potential benefit outweighs the risk of bleeding. If concomitant therapy is used for additive anticoagulant effects, monitoring for excessive anticoagulation and overt and occult bleeding is recommended. The INR should be checked frequently and the dosage adjusted accordingly when aspirin is added to an anticoagulant regimen. Be cognizant that bleeding may occur without INR or prothrombin time increases. Patients should be advised to promptly report any signs of bleeding to their physician, including pain, swelling, headache, dizziness, weakness, prolonged bleeding from cuts, vaginal bleeding, nosebleeds, bleeding of gums from brushing, unusual bruising, red or brown urine, or red or black stools. Patients should also be counseled to avoid any other over-the-counter oral or topical salicylate products.","interaction":"Aspirin, even in small doses, may increase the risk of bleeding in patients on oral anticoagulants by inhibiting platelet aggregation, prolonging bleeding time, and inducing gastrointestinal lesions. Analgesic/antipyretic doses of aspirin increase the risk of major bleeding more than low-dose aspirin; however bleeding has also occurred with low-dose aspirin."},{"a":"Acetylsalicylic acid","b":"Amlodipine","ida":"DDInter20","idb":"DDInter79","actions":["antagonism"],"severity":"moderate","management":"Monitoring for altered blood pressure control is recommended.","interaction":"Limited data indicate that some cyclooxygenase inhibitors may attenuate the antihypertensive effects of some calcium channel blockers. The mechanism appears to be related to an alteration of vascular tone, which is dependent on prostacyclins and other vasodilatory prostanoids. When a nonsteroidal anti-inflammatory drug (NSAID) is added to the regimen of a patient who is already taking a calcium channel blocker, increased blood pressure may result. Also, the clinician should be aware that the risk of hypotension is increased when NSAIDs are withdrawn from the regimen."},{"a":"Acetaminophen","b":"Acetylsalicylic acid","ida":"DDInter14","idb":"DDInter20","actions":["unknown"],"severity":"unknown","management":null,"interaction":null},{"a":"Warfarin","b":"Clarithromycin","ida":"DDInter1951","idb":"DDInter393","actions":["metabolism"],"severity":"major","management":"Given the potential for clinically significant interaction and even fatality in the occasional, susceptible patient, close monitoring is recommended if clarithromycin or erythromycin is prescribed during coumarin anticoagulant therapy. The INR should be checked frequently and coumarin dosage adjusted accordingly, particularly following initiation or discontinuation of macrolide therapy in patients who are stabilized on their anticoagulant regimen. Patients should be advised to promptly report any signs of bleeding to their physician, including pain, swelling, headache, dizziness, weakness, prolonged bleeding from cuts, increased menstrual flow, vaginal bleeding, nosebleeds, bleeding of gums from brushing, unusual bleeding or bruising, red or brown urine, or red or black stools. The same precaution may be applicable during therapy with other oral anticoagulants (e.g., indandiones) and other similar macrolides (e.g., troleandomycin), although clinical data are lacking.","interaction":"Coadministration with clarithromycin or erythromycin may infrequently but substantially enhance the hypoprothrombinemic effect of warfarin and other coumarin anticoagulants. The exact mechanism of interaction is unknown. Data from clinical studies have not supported a significant, predictable pharmacodynamic or pharmacokinetic interaction in general. Although both macrolides are potent inhibitors of CYP450 3A4 and can inhibit metabolism of the R(+) enantiomer of warfarin, the overall effect on racemic warfarin pharmacokinetics appears to be minor."},{"a":"Clarithromycin","b":"Amlodipine","ida":"DDInter393","idb":"DDInter79","actions":["metabolism"],"severity":"moderate","management":"Close monitoring of clinical response and tolerance is recommended if amlodipine is prescribed with potent or moderate CYP450 3A4 inhibitors. Dosage reduction may be required for amlodipine. Patients should be advised to seek medical attention if they experience edema or swelling of the lower extremities; sudden, unexplained weight gain; difficulty breathing; chest pain or tightness; or hypotension as indicated by dizziness, fainting, or orthostasis.","interaction":"Coadministration with CYP450 3A4 inhibitors may increase the plasma concentrations of amlodipine, which is a substrate of the isoenzyme."},{"a":"Acetaminophen","b":"Clarithromycin","ida":"DDInter14","idb":"DDInter393","actions":["unknown"],"severity":"unknown","management":null,"interaction":null},{"a":"Acetylsalicylic acid","b":"Clarithromycin","ida":"DDInter20","idb":"DDInter393","actions":["unknown"],"severity":"unknown","management":null,"interaction":null},{"a":"Simvastatin","b":"Clarithromycin","ida":"DDInter1675","idb":"DDInter393","actions":["metabolism"],"severity":"major","management":"Due to the potential for severe interaction, concomitant use of simvastatin or lovastatin with potent CYP450 3A4 inhibitors is considered contraindicated. Fluvastatin, pravastatin, pitavastatin, and rosuvastatin are probably safer alternatives, since they are not metabolized by CYP450 3A4. All patients receiving statin therapy should be advised to promptly report any unexplained muscle pain, tenderness or weakness, particularly if accompanied by fever, malaise and/or dark-colored urine. Therapy should be discontinued if creatine kinase is markedly elevated in the absence of strenuous exercise or if myopathy is otherwise suspected or diagnosed.","interaction":"Coadministration with potent inhibitors of CYP450 3A4 may significantly increase the plasma concentrations of simvastatin and lovastatin and their active acid metabolites, all of which are primarily metabolized by the isoenzyme."},{"a":"Simvastatin","b":"Amlodipine","ida":"DDInter1675","idb":"DDInter79","actions":["metabolism"],"severity":"major","management":"Simvastatin dosage should not exceed 20 mg daily when used in combination with amlodipine. The benefits of this combination should be carefully weighed against the potentially increased risk of myopathy including rhabdomyolysis. Fluvastatin, pravastatin, and rosuvastatin are probably safer alternatives in patients receiving amlodipine, since they are not metabolized by CYP450 3A4. All patients receiving statin therapy should be advised to promptly report any unexplained muscle pain, tenderness or weakness, particularly if accompanied by fever, malaise and/or dark colored urine. Therapy should be discontinued if creatine kinase is markedly elevated in the absence of strenuous exercise or if myopathy is otherwise suspected or diagnosed.","interaction":"Coadministration with amlodipine may significantly increase the plasma concentrations of simvastatin and its active metabolite, simvastatin acid, and potentiate the risk of statin-induced myopathy. The proposed mechanism is amlodipine inhibition of simvastatin metabolism via intestinal and hepatic CYP450 3A4."},{"a":"Simvastatin","b":"Warfarin","ida":"DDInter1675","idb":"DDInter1951","actions":["distribution"],"severity":"minor","management":null,"interaction":"Simvastatin may slightly increase the anticoagulant response to warfarin. The mechanism may be warfarin displacement from protein binding sites. The clinical significance of this interaction has not been established, however, clinical monitoring of patient warfarin response and tolerance is recommended. Simvastatin may interact in a similar way with other oral anticoagulants. Patients should be advised to promptly report any signs of bleeding to their physician, including pain, swelling, headache, dizziness, weakness, prolonged bleeding from cuts, increased menstrual flow, vaginal bleeding, nosebleeds, bleeding of gums from brushing, unusual bleeding or bruising, red or brown urine, or red or black stools."},{"a":"Acetaminophen","b":"Simvastatin","ida":"DDInter14","idb":"DDInter1675","actions":["unknown"],"severity":"unknown","management":null,"interaction":null},{"a":"Simvastatin","b":"Acetylsalicylic acid","ida":"DDInter1675","idb":"DDInter20","actions":["unknown"],"severity":"unknown","management":null,"interaction":null},{"a":"Warfarin","b":"Amoxicillin","ida":"DDInter1951","idb":"DDInter83","actions":["synergy"],"severity":"moderate","management":"Caution is recommended if a penicillin is prescribed during oral anticoagulant therapy, especially in the elderly and patients with uremia or hepatic impairment. The INR should be checked frequently and anticoagulant dosage adjusted accordingly, particularly following initiation or discontinuation of penicillin therapy in patients who are stabilized on their anticoagulant regimen. Patients should be advised to promptly report any signs of bleeding to their doctor, including pain, swelling, headache, dizziness, weakness, prolonged bleeding from cuts, increased menstrual flow, vaginal bleeding, nosebleeds, bleeding of gums from brushing, unusual bleeding or bruising, red or brown urine, or red or black stools.","interaction":"Penicillins may occasionally potentiate the risk of bleeding in patients treated with oral anticoagulants. The exact mechanism of interaction is unknown but may involve penicillin inhibition of platelet aggregation."},{"a":"Clarithromycin","b":"Amoxicillin","ida":"DDInter393","idb":"DDInter83","actions":["others"],"severity":"minor","management":null,"interaction":"Although some in vitro data indicate synergism between macrolide antibiotics and penicillins, other in vitro data indicate antagonism. When these drugs are given together, neither has predictable therapeutic efficacy. Data are available for erythromycin, although theoretically this interaction could occur with any macrolide. Except for monitoring of the effectiveness of antibiotic therapy, no special precautions appear to be necessary."},{"a":"Acetaminophen","b":"Amoxicillin","ida":"DDInter14","idb":"DDInter83","actions":["unknown"],"severity":"unknown","management":null,"interaction":null},{"a":"Simvastatin","b":"Amoxicillin","ida":"DDInter1675","idb":"DDInter83","actions":["unknown"],"severity":"unknown","management":null,"interaction":null},{"a":"Acetylsalicylic acid","b":"Amoxicillin","ida":"DDInter20","idb":"DDInter83","actions":["unknown"],"severity":"unknown","management":null,"interaction":null},{"a":"Amlodipine","b":"Amoxicillin","ida":"DDInter79","idb":"DDInter83","actions":["unknown"],"severity":"unknown","management":null,"interaction":null},{"a":"Simvastatin","b":"Chloramphenicol","ida":"DDInter1675","idb":"DDInter351","actions":["synergy"],"severity":"moderate","management":"Patients should be monitored closely for symptoms of neuropathy such as burning, tingling, pain, or numbness in the hands and feet. Since the development of peripheral neuropathy may be dose-related for many drugs, the recommended dosages should generally not be exceeded. Consideration should be given to dosage reduction or immediate discontinuation of these medications in patients who develop peripheral neuropathy to limit further damage.","interaction":"The risk of peripheral neuropathy may be increased during concurrent use of two or more agents that are associated with this adverse effect. Patient risk factors include diabetes and age older than 60 years."},{"a":"Warfarin","b":"Chloramphenicol","ida":"DDInter1951","idb":"DDInter351","actions":["metabolism"],"severity":"moderate","management":"These drugs should only be given concomitantly if benefit outweighs risk. If patients do receive this combination, they should be monitored for bleeding, the INR or prothrombin time should be monitored closely, and warfarin dosage should be decreased as necessary. Patients should be advised to promptly report any signs of unusual bleeding or bruising to their physician, including pain, swelling, headache, dizziness, weakness, prolonged bleeding from cuts, vaginal bleeding, nosebleeds, bleeding of gums from brushing, red or brown urine, or red or black stools.","interaction":"Chloramphenicol may significantly increase the effects of oral anticoagulants. The proposed mechanism is inhibition of hepatic metabolism. Patients with vitamin K deficiencies may have a higher risk."},{"a":"Chloramphenicol","b":"Amlodipine","ida":"DDInter351","idb":"DDInter79","actions":["metabolism"],"severity":"moderate","management":"Close monitoring of clinical response and tolerance is recommended if amlodipine is prescribed with potent or moderate CYP450 3A4 inhibitors. Dosage reduction may be required for amlodipine. Patients should be advised to seek medical attention if they experience edema or swelling of the lower extremities; sudden, unexplained weight gain; difficulty breathing; chest pain or tightness; or hypotension as indicated by dizziness, fainting, or orthostasis.","interaction":"Coadministration with CYP450 3A4 inhibitors may increase the plasma concentrations of amlodipine, which is a substrate of the isoenzyme."},{"a":"Acetaminophen","b":"Chloramphenicol","ida":"DDInter14","idb":"DDInter351","actions":["unknown"],"severity":"unknown","management":null,"interaction":null},{"a":"Acetylsalicylic acid","b":"Chloramphenicol","ida":"DDInter20","idb":"DDInter351","actions":["unknown"],"severity":"unknown","management":null,"interaction":null},{"a":"Chloramphenicol","b":"Clarithromycin","ida":"DDInter351","idb":"DDInter393","actions":["unknown"],"severity":"unknown","management":null,"interaction":null},{"a":"Chloramphenicol","b":"Amoxicillin","ida":"DDInter351","idb":"DDInter83","actions":["unknown"],"severity":"unknown","management":null,"interaction":null},{"a":"Metformin","b":"Warfarin","ida":"DDInter1164","idb":"DDInter1951","actions":["metabolism"],"severity":"moderate","management":"Until more information is available, patients receiving VKAs with metformin should be closely monitored during concomitant therapy. The INR or prothrombin time should be checked frequently and the VKA dosage adjusted accordingly, particularly following initiation, change of dosage, or discontinuation of metformin therapy. In addition, patients receiving this combination should be advised to regularly monitor their blood sugar, counseled on how to recognize and treat hypoglycemia (e.g., headache, dizziness, drowsiness, nausea, tremor, hunger, weakness, or palpitations) and to notify their physician if it occurs.","interaction":"Coadministration with metformin may decrease the anticoagulant effects of vitamin K antagonists (VKAs). The mechanism has not been delineated, but it may involve metformin-mediated increase in the elimination rate of VKAs. In addition, concomitant use of VKAs with metformin may increase the risk of severe hypoglycemia. The clinical significance of this interaction is unknown."},{"a":"Metformin","b":"Clarithromycin","ida":"DDInter1164","idb":"DDInter393","actions":["metabolism"],"severity":"moderate","management":"Caution is advised if clarithromycin is prescribed to patients receiving antidiabetic agents. Patients should be advised to regularly monitor their blood sugar and counseled on how to recognize and treat hypoglycemia, which may include symptoms such as headache, dizziness, drowsiness, nervousness, confusion, tremor, hunger, weakness, perspiration, palpitation, and tachycardia.","interaction":"Concomitant use of insulin and other antidiabetic agents with clarithromycin may cause significant hypoglycemia. There have been rare reports of hypoglycemia in patients treated with clarithromycin, some of whom were taking oral hypoglycemic agents or insulin. The exact mechanism of interaction has not been established. With certain hypoglycemic drugs such as nateglinide, pioglitazone, repaglinide and rosiglitazone, inhibition of the CYP450 3A4 isoenzyme by clarithromycin may be involved."},{"a":"Metformin","b":"Acetaminophen","ida":"DDInter1164","idb":"DDInter14","actions":["unknown"],"severity":"unknown","management":null,"interaction":null},{"a":"Metformin","b":"Simvastatin","ida":"DDInter1164","idb":"DDInter1675","actions":["unknown"],"severity":"unknown","management":null,"interaction":null},{"a":"Metformin","b":"Acetylsalicylic acid","ida":"DDInter1164","idb":"DDInter20","actions":["unknown"],"severity":"unknown","management":null,"interaction":null},{"a":"Metformin","b":"Amlodipine","ida":"DDInter1164","idb":"DDInter79","actions":["unknown"],"severity":"unknown","management":null,"interaction":null},{"a":"Metformin","b":"Amoxicillin","ida":"DDInter1164","idb":"DDInter83","actions":["unknown"],"severity":"unknown","management":null,"interaction":null}],"batches":[{"run_at":"2026-10-11T21:27:17.629612+00:00","status":"in_review","batch_id":"0001-pilot","item_count":10}]};
+
+var root=document.documentElement;
+function $(id){return document.getElementById(id);}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function cap(s){s=String(s==null?'':s);return s.charAt(0).toUpperCase()+s.slice(1);}
+function reEsc(s){return String(s).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');}
+
+/* ---------- Theme switch ---------- */
+var tbtns=document.querySelectorAll('#theme button');
+function applyTheme(t){
+  if(t==='system'){root.removeAttribute('data-theme');}else{root.setAttribute('data-theme',t);}
+  for(var k=0;k<tbtns.length;k++){tbtns[k].setAttribute('aria-pressed',String(tbtns[k].getAttribute('data-t')===t));}
+}
+var savedTheme=null;
+try{savedTheme=localStorage.getItem('intellidrugs-theme');}catch(e){}
+if(savedTheme==='light'||savedTheme==='dark'||savedTheme==='system'){applyTheme(savedTheme);}
+Array.prototype.forEach.call(tbtns,function(b){b.addEventListener('click',function(){var t=b.getAttribute('data-t');applyTheme(t);try{localStorage.setItem('intellidrugs-theme',t);}catch(e){}});});
+
+/* ---------- Constants ---------- */
+var items=DATA.items, N=items.length, BATCH=DATA.batches[0], PAIRS=DATA.pilotPairs;
+var NODATA='No interaction data in DDInter for this substance. This does not mean it is safe to combine.';
+var UNCL='Severity not classified by DDInter';
+var STALE='This record changed — reload to review the latest data';
+var COMMIT_MS=8000;
+/* One promise string per role and state, shared verbatim with the design system board and Learn */
+var PROMISE={
+  pharmacist:'<b>You\'re reviewing as a pharmacist.</b> "Looks correct" publishes this record after an 8-second undo window.',
+  engineer:'<b>You\'re reviewing as an engineer.</b> "Looks correct" records your check. It does not publish; a pharmacist still needs to approve.',
+  paused:'<b>Decisions are paused.</b> This record changed after you opened it. Reload it to review the latest data.'
+};
+var IS_MAC=/Mac|iPhone|iPad/.test((navigator.platform||'')+' '+(navigator.userAgent||''));
+var SEND_KEYS=IS_MAC?'⌘ Enter':'Ctrl Enter';
+$('send-kbd').textContent=SEND_KEYS;$('sheet-send-kbd').textContent=SEND_KEYS;
+
+var STATUS={
+  pending:['rv--pending','Not yet reviewed by a pharmacist','Not yet reviewed',' by a pharmacist'],
+  approved:['rv--approved','Approved by a pharmacist','Approved',' by a pharmacist'],
+  engineer:['rv--engineer','Engineer checked','Engineer checked'],
+  issue:['rv--issue','Issue reported','Issue reported'],
+  back:['rv--back','Back in review','Back in review']
+};
+var STAGES=[['dgda','DGDA load'],['substances','Substances'],['clinical','Clinical drug'],['ddinter','DDInter']];
+var SYS={ICD11_XM:'ICD-11',RXCUI:'RxCUI',ATC:'ATC',DRUGBANK:'DrugBank',SNOMEDCT:'SNOMED CT',DDINTER:'DDInter'};
+var NAMETYPE={icd11:'ICD-11',rxnorm:'RxNorm',dgda_content:'DGDA',ddinter:'DDInter'};
+var SEVRANK={major:0,moderate:1,minor:2,unknown:3};
+var FILTERS=[
+  ['all','All records','--i-stack'],
+  ['needs','Needs review','--i-clock'],
+  ['warn','Warnings','--i-warn'],
+  ['issue','Issue reported','--i-flag'],
+  ['approved','Approved','--i-seal'],
+  ['nodata','No DDInter data',null]
+];
+var EMPTY_COPY={needs:'No records need review.',warn:'No records have a check warning.',issue:'No records with an issue reported.',approved:'No records are approved yet.',nodata:'No records without DDInter data.'};
+
+/* ---------- Dates: DD/MM/YYYY, 24-hour, zone named ---------- */
+function parseISO(s){if(s instanceof Date)return s;return new Date(String(s).replace(/(\.\d{3})\d+/,'$1'));}
+function p2(n){return (n<10?'0':'')+n;}
+function fmtUTC(d){d=parseISO(d);if(isNaN(d))return '';return p2(d.getUTCDate())+'/'+p2(d.getUTCMonth()+1)+'/'+d.getUTCFullYear()+' '+p2(d.getUTCHours())+':'+p2(d.getUTCMinutes())+' UTC';}
+function fmtDhaka(d){d=parseISO(d);if(isNaN(d))return '';var x=new Date(d.getTime()+6*3600000);return p2(x.getUTCDate())+'/'+p2(x.getUTCMonth()+1)+'/'+x.getUTCFullYear()+' '+p2(x.getUTCHours())+':'+p2(x.getUTCMinutes())+' Dhaka';}
+
+/* ---------- Lookups built from the data ---------- */
+var idName={};
+PAIRS.forEach(function(p){idName[p.ida]=p.a;idName[p.idb]=p.b;});
+var subRec={},subOrder=[],noDataSubs=[];
+items.forEach(function(it,i){
+  it.ingredients.forEach(function(g){
+    g.codes.forEach(function(c){if(c.system==='DDINTER'&&c.route==='systemic'&&!idName[c.code]){idName[c.code]=g.name;}});
+    if(!subRec[g.name]){subRec[g.name]=[];subOrder.push(g.name);}
+    subRec[g.name].push(i);
+    if(g.coverage&&g.coverage.coverage==='none'&&noDataSubs.indexOf(g.name)<0){noDataSubs.push(g.name);}
+  });
+});
+function findPair(x,y){for(var k=0;k<PAIRS.length;k++){var p=PAIRS[k];if((p.ida===x&&p.idb===y)||(p.ida===y&&p.idb===x))return p;}return null;}
+function notePairs(note){
+  var out=[],re=/DDInter text not found for (DDInter\d+)\/(DDInter\d+)/g,m;
+  while((m=re.exec(note||''))!==null){var p=findPair(m[1],m[2]);out.push({x:m[1],y:m[2],a:idName[m[1]]||m[1],b:idName[m[2]]||m[2],sev:p?p.severity:null});}
+  return out;
+}
+function ownNames(i){return items[i].ingredients.map(function(g){return g.name;});}
+function isNoDataSub(name){return noDataSubs.indexOf(name)>-1;}
+function isNoData(it){return it.ingredients.some(function(g){return g.coverage&&g.coverage.coverage==='none';});}
+function hasWarn(it){return STAGES.some(function(s){return it.stages[s[0]].status!=='ok';});}
+function rank(s){return SEVRANK[s]!=null?SEVRANK[s]:4;}
+function recordPairs(i){
+  var own=ownNames(i);
+  return PAIRS.filter(function(p){return own.indexOf(p.a)>-1||own.indexOf(p.b)>-1;}).map(function(p){
+    var mine=own.indexOf(p.a)>-1?p.a:p.b, other=mine===p.a?p.b:p.a;return {p:p,mine:mine,other:other};
+  }).sort(function(x,y){return (rank(x.p.severity)-rank(y.p.severity))||x.other.localeCompare(y.other);});
+}
+function notChecked(i){
+  var own=ownNames(i),out=[];
+  own.forEach(function(m){
+    if(isNoDataSub(m)){subOrder.forEach(function(o){if(own.indexOf(o)<0)out.push([m,o]);});}
+    else{noDataSubs.forEach(function(o){if(own.indexOf(o)<0)out.push([m,o]);});}
+  });
+  return out;
+}
+
+/* ---------- Atoms ---------- */
+/* Compact pills keep the full wording as text: the visible short form plus sr-only remainder, never aria-label on a span */
+function pill(st,compact){var p=STATUS[st]||STATUS.pending;return compact?'<span class="rv rv--compact '+p[0]+'">'+p[2]+(p[3]?'<span class="sr-only">'+p[3]+'</span>':'')+'</span>':'<span class="rv '+p[0]+'">'+p[1]+'</span>';}
+function sevChip(sev,n){
+  var cls,label;
+  if(sev==='major'){cls='sev--major';label='Major';}
+  else if(sev==='moderate'){cls='sev--moderate';label='Moderate';}
+  else if(sev==='minor'){cls='sev--minor';label='Minor';}
+  else{cls='sev--unclassified';label=UNCL;}
+  return '<span class="sev '+cls+'">'+label+(n!=null?' <b class="sev-n">'+n+'</b>':'')+'</span>';
+}
+function noDataChip(t){return '<span class="sev sev--nodata">'+esc(t)+'</span>';}
+function codeChip(c){return '<span class="code"><span class="code-sys">'+esc(SYS[c.system]||c.system)+'</span>'+esc(c.code)+'<span class="code-meta">'+esc(c.method)+', '+Number(c.conf).toFixed(1)+(c.system==='DDINTER'?', '+esc(c.route):'')+'</span></span>';}
+function rel(k,sub){var L={same:'Matches',norm:'Normalised',salt:'Salt removed',added:'Added',differs:'Differs'};return '<span class="match match--'+k+'">'+L[k]+'</span>'+(sub?'<span class="cmp-sub">'+esc(sub)+'</span>':'');}
+function strText(g){return g.strength+' '+g.unit+(g.per?' per '+g.per+' '+g.perUnit:'');}
+function rawName(g){return String(g.raw).replace(/\s+\d.*$/,'').trim();}
+function hasStrength(src,g){
+  var base=g.strength+' '+g.unit;
+  if(g.per){base+='/'+(g.per===1?'':g.per+' ')+g.perUnit;}
+  return new RegExp('(^|[^\\d.])'+reEsc(base)+'(?![\\d])','i').test(src);
+}
+function nameRel(g){
+  var r=rawName(g),a=r.toLowerCase(),b=String(g.name).toLowerCase();
+  if(r===g.name)return ['same',''];
+  if(a===b)return ['same','Capitalisation only'];
+  if(a.indexOf(b+' ')===0)return ['salt','Removed: '+r.slice(g.name.length).trim()];
+  var dg=g.names.filter(function(n){return n.type==='dgda_content';}).map(function(n){return String(n.name).toLowerCase();});
+  if(dg.indexOf(a)>-1)return ['norm',r+' kept as the DGDA name'];
+  return ['differs',''];
+}
+function strRel(g){
+  if(!hasStrength(g.raw,g))return ['differs',''];
+  if(g.per)return ['norm','Written as '+strText(g)];
+  return ['same',''];
+}
+
+/* ---------- State (memory only) ---------- */
+var S=null;
+function initState(){
+  var role=S?S.role:'pharmacist';
+  if(S&&S.pending)clearTimeout(S.pending.timer);
+  if(S&&S.loadTimer)clearTimeout(S.loadTimer);
+  S={role:role,sel:0,view:'record',filter:'all',q:'',
+    status:items.map(function(it){return STATUS[it.review]?it.review:'pending';}),
+    stale:items.map(function(){return false;}),
+    diff:items.map(function(){return null;}),
+    back:items.map(function(){return false;}),
+    hist:items.map(function(it){return [
+      {when:BATCH.run_at,text:'Batch 0001-pilot run started',ex:false},
+      {when:it.extractedAt,text:'Pipeline extracted this record',ex:false}];}),
+    drafts:items.map(function(){return '';}),
+    pairsOpen:{},full:{},diffOpen:false,ev:false,report:false,sheet:false,pending:null,
+    armNet:false,armBot:false,noAuth:false,netErr:null,botHold:null,loading:false,loadTimer:null,lastSel:-1,advancedAt:0,advancedTo:-1};
+}
+initState();
+
+/* ---------- Elements ---------- */
+var app=$('app'),listEl=$('list'),detail=$('detail'),drawer=$('drawer'),live=$('live');
+var approveBtn=$('btn-approve'),reportBtn=$('btn-report'),reportPanel=$('bar-report'),note=$('note');
+var noteErr=$('note-err'),noteHelp=$('note-help'),noteCnt=$('note-cnt'),sendBtn=$('btn-send');
+var hintEl=$('bar-hint'),toastWrap=$('toast-wrap'),toast=$('toast'),toastMsg=$('toast-msg');
+var sheetWrap=$('sheet-wrap'),sheet=$('sheet'),qEl=$('q');
+
+function announce(t){live.textContent='';setTimeout(function(){live.textContent=t;},60);}
+var hintTimer=null;
+function showHint(t){hintEl.textContent=t;hintEl.hidden=false;clearTimeout(hintTimer);hintTimer=setTimeout(function(){hintEl.hidden=true;},5000);announce(t);}
+function nameOf(i){return items[i].brand.trade_name;}
+function counts(){
+  var c={approved:0,issue:0,needs:0,engineer:0};
+  S.status.forEach(function(s){if(s==='approved')c.approved++;else if(s==='issue')c.issue++;else c.needs++;if(s==='engineer')c.engineer++;});
+  return c;
+}
+function inFilter(i,f){
+  var st=S.status[i],it=items[i];
+  if(f==='needs')return st==='pending'||st==='back'||st==='engineer';
+  if(f==='warn')return hasWarn(it);
+  if(f==='issue')return st==='issue';
+  if(f==='approved')return st==='approved';
+  if(f==='nodata')return isNoData(it);
+  return true;
+}
+function visible(){
+  var qq=S.q.trim().toLowerCase(),out=[];
+  for(var i=0;i<N;i++){
+    if(!inFilter(i,S.filter))continue;
+    if(qq){
+      var it=items[i];
+      var hay=[it.brand.trade_name,it.clinical.display_name,it.brand.generic_content_raw,it.brand.dar_number,it.brand.company].concat(it.ingredients.map(function(g){return g.name+' '+g.bds;})).join(' ').toLowerCase();
+      if(hay.indexOf(qq)<0)continue;
+    }
+    out.push(i);
+  }
+  return out;
+}
+
+/* Re-render helper: keep keyboard focus on the equivalent control */
+function keepFocus(container,fn){
+  var a=document.activeElement,key=null,inside=a&&container.contains(a);
+  if(inside)key=a.getAttribute('data-fk');
+  fn();
+  if(inside){
+    var n=key?container.querySelector('[data-fk="'+key+'"]'):null;
+    if(n){n.focus();}else if(!document.body.contains(a)||!container.contains(a)){app.focus();}
+  }
+}
+
+/* ---------- Toolbar and sidebar ---------- */
+function renderToolbar(){
+  var c=counts();
+  var pOk=c.approved/N*100,pIs=c.issue/N*100;
+  var bars=$('tb-prog').querySelectorAll('i');bars[0].style.width=pOk+'%';bars[1].style.width=pIs+'%';
+  $('tb-prog').setAttribute('aria-label',c.approved+' of '+N+' approved by a pharmacist, '+c.issue+' with an issue reported');
+  $('tb-prog-t').textContent=c.approved+' of '+N+' approved';
+  $('tb-rec').textContent=S.view==='complete'?'Batch approved':'Record '+(S.sel+1)+' of '+N;
+  $('tb-role').textContent=S.role==='pharmacist'?'Pharmacist':'Engineer';
+}
+function renderSidebar(){
+  var el=$('filters');
+  keepFocus(el,function(){
+    var h='';
+    FILTERS.forEach(function(f){
+      var n=0;for(var i=0;i<N;i++){if(inFilter(i,f[0]))n++;}
+      var ico=f[2]?'<span class="ico" style="--ico:var('+f[2]+')"></span>':'<span class="nd-ico" aria-hidden="true"></span>';
+      h+='<button class="filter" type="button" data-f="'+f[0]+'" data-fk="f-'+f[0]+'"'+(S.filter===f[0]?' aria-current="true"':'')+'>'+ico+esc(f[1])+'<span class="filter-n">'+n+'</span></button>';
+    });
+    el.innerHTML=h;
+  });
+  var c=counts(),done=c.approved===N;
+  $('batch-card').innerHTML=
+    '<p class="bc-t"><b>'+c.approved+' of '+N+'</b> approved by a pharmacist</p>'+
+    '<span class="prog prog--wide" role="img" aria-label="'+c.approved+' approved, '+c.issue+' with an issue, '+c.needs+' need review"><i class="p-ok" style="width:'+(c.approved/N*100)+'%"></i><i class="p-issue" style="width:'+(c.issue/N*100)+'%"></i></span>'+
+    '<dl class="bc-dl"><dt>Approved</dt><dd>'+c.approved+'</dd><dt>Issue reported</dt><dd>'+c.issue+'</dd><dt>Needs review</dt><dd>'+c.needs+'</dd></dl>'+
+    '<p>Batch status: <b>'+(done?'Approved':cap(String(BATCH.status).replace(/_/g,' ')))+'</b></p>'+
+    '<p>Approved when all '+N+' records are approved by a pharmacist.</p>'+
+    '<p>Run '+fmtUTC(BATCH.run_at)+'</p>';
+}
+
+/* ---------- Record list ---------- */
+function hintHTML(i){
+  var it=items[i];
+  if(S.netErr&&S.netErr.i===i)return '<span class="rec-hint rec-hint--warn">Decision not saved</span>';
+  if(S.stale[i])return '<span class="rec-hint rec-hint--warn">Changed since you opened it</span>';
+  if(isNoData(it))return '<span class="rec-hint rec-hint--nodata">No DDInter data</span>';
+  var w=0,f=0;STAGES.forEach(function(s){var st=it.stages[s[0]].status;if(st==='warn')w++;else if(st==='fail')f++;});
+  var np=notePairs(it.stages.ddinter.note).length;
+  if(f)return '<span class="rec-hint rec-hint--warn">'+f+' check'+(f>1?'s':'')+' failed</span>';
+  if(w)return '<span class="rec-hint rec-hint--warn">'+w+' check warning'+(w>1?'s':'')+(np?', '+np+' pair'+(np>1?'s':'')+' without text':'')+'</span>';
+  return '<span class="rec-hint">All checks OK</span>';
+}
+function renderList(){
+  var empty=$('list-empty'),sk=$('list-sk');
+  if(S.loading){
+    listEl.innerHTML='';listEl.hidden=true;empty.hidden=true;sk.hidden=false;
+    var h='';for(var k=0;k<7;k++){h+='<div class="sk-row"><span class="sk" style="width:14px"></span><span class="sk" style="width:'+(55+((k*17)%35))+'%"></span><span class="sk"></span></div>';}
+    sk.innerHTML=h;$('list-count').textContent='Loading';return;
+  }
+  sk.hidden=true;listEl.hidden=false;
+  var v=visible(),h2='';
+  v.forEach(function(i){
+    var it=items[i],sel=i===S.sel&&S.view==='record',st=S.status[i];
+    var stTxt=st==='engineer'?'<span class="rv rv--compact rv--engineer">Engineer checked<span class="sr-only">. Not yet reviewed by a pharmacist</span></span>':pill(st,true);
+    h2+='<li class="rec" role="option" id="opt-'+i+'" data-i="'+i+'" aria-selected="'+sel+'"'+(sel?' aria-current="true"':'')+'><span class="rec-ix">'+(i+1)+'</span><span class="rec-name">'+esc(it.brand.trade_name)+'</span><span class="rec-status">'+stTxt+'</span><span class="rec-sub">'+esc(it.clinical.display_name)+'</span>'+hintHTML(i)+'</li>';
+  });
+  listEl.innerHTML=h2;
+  $('list-count').textContent=(v.length===N?N+' records, by DAR number':v.length+' of '+N+' records');
+  if(!v.length){
+    var msg=S.q.trim()?'No records match “'+esc(S.q.trim())+'”.':(EMPTY_COPY[S.filter]||'No records.');
+    empty.innerHTML='<b>'+msg+'</b><button class="btn btn--tonal btn--sm" type="button" id="btn-showall">Show all '+N+' records</button>';
+    empty.hidden=false;
+  }else{empty.hidden=true;empty.innerHTML='';}
+  if(v.indexOf(S.sel)>-1&&S.view==='record'){
+    listEl.setAttribute('aria-activedescendant','opt-'+S.sel);
+    var o=$('opt-'+S.sel);if(o&&o.scrollIntoView){o.scrollIntoView({block:'nearest'});}
+  }else{listEl.removeAttribute('aria-activedescendant');}
+}
+
+/* ---------- Detail: stage checks ---------- */
+function stagesHTML(i){
+  var it=items[i],ok=0,w=0,f=0,h='',okQuiet=[];
+  STAGES.forEach(function(s){
+    var sg=it.stages[s[0]],st=sg.status;
+    if(st==='ok')ok++;else if(st==='warn')w++;else f++;
+    if(st==='ok'&&!sg.note&&!(s[0]==='ddinter'&&isNoData(it))){okQuiet.push(s[1]);return;}
+    var cls=st==='ok'?'stage--ok':(st==='warn'?'stage--warn':'stage--fail');
+    var word=st==='ok'?'OK':(st==='warn'?'Warning':'Failed');
+    var body='',pairs=s[0]==='ddinter'?notePairs(sg.note):[];
+    if(s[0]==='ddinter'&&isNoData(it)){
+      body='<p class="stage-note">'+NODATA+'</p>';
+    }else if(pairs.length){
+      var open=S.pairsOpen[i]!==false,n=pairs.length;
+      body='<p class="stage-note">DDInter text not found for '+n+' pair'+(n>1?'s':'')+' with other medicines in this batch.</p>'+
+        '<button class="btn btn--plain btn--sm" type="button" data-act="pairs" data-fk="pairs" aria-expanded="'+open+'" aria-controls="sp-'+i+'">'+(n===1?(open?'Hide the pair':'Show the pair'):(open?'Hide the '+n+' pairs':'Show the '+n+' pairs'))+'</button>'+
+        '<ul class="stage-pairs" id="sp-'+i+'"'+(open?'':' hidden')+'>'+pairs.map(function(p){
+          return '<li class="stage-pair">'+esc(p.a)+' + '+esc(p.b)+' <span class="mono">'+esc(p.x)+'/'+esc(p.y)+'</span>'+(p.sev?sevChip(p.sev):'')+'</li>';
+        }).join('')+'</ul>';
+    }else{
+      body=sg.note?'<p class="stage-note">'+esc(sg.note)+'</p>':'<p class="stage-note stage-none">No pipeline note.</p>';
+    }
+    h+='<div class="stage '+cls+'"><div class="stage-head"><span class="stage-name">'+s[1]+'</span><span class="stage-status">'+word+'</span></div>'+body+'</div>';
+  });
+  if(okQuiet.length){h+='<div class="stage stage--ok"><div class="stage-head"><span class="stage-name">'+okQuiet.join(', ')+'</span><span class="stage-status">OK</span></div></div>';}
+  var sum=[];if(ok)sum.push(ok+' OK');if(w)sum.push(w+' warning'+(w>1?'s':''));if(f)sum.push(f+' failed');
+  return '<div class="d-sec"><div class="d-sec-t"><h4>Automated checks</h4><span>'+sum.join(', ')+'. Pipeline run '+fmtUTC(BATCH.run_at)+'</span></div><div class="stages">'+h+'</div></div>';
+}
+
+/* ---------- Detail: source against extraction ---------- */
+function cmpHTML(i){
+  var it=items[i],b=it.brand,cl=it.clinical,ings=it.ingredients,multi=ings.length>1,rows='';
+  var NOTREG='<span class="cmp-sub" style="margin:0">Not in the register</span>';
+  function row(th,src,r,ext){rows+='<tr><th scope="row">'+th+'</th><td class="cmp-src">'+src+'</td><td class="cmp-rel">'+r+'</td><td>'+ext+'</td></tr>';}
+  var COPIED='<span class="cmp-copy">Copied from the register</span>';
+  row('Trade name',esc(b.trade_name),COPIED,esc(b.trade_name)+'<span class="cmp-sub mono">'+esc(b.concept_id)+'</span>');
+  row('Company',esc(b.company),COPIED,esc(b.company));
+  var fm=b.dosage_form===cl.dose_form?['same','']:(String(b.dosage_form).toLowerCase()===String(cl.dose_form).toLowerCase()?['same','Capitalisation only']:['differs','']);
+  row('Dosage form',esc(b.dosage_form),rel(fm[0],fm[1]),esc(cl.dose_form));
+  var allIn=ings.every(function(g){return b.generic_content_raw.toLowerCase().indexOf(rawName(g).toLowerCase())>-1&&hasStrength(b.generic_content_raw,g);});
+  row('Generic content',
+      '<span class="raw">'+esc(b.generic_content_raw)+'</span>',
+      rel(allIn?'same':'differs',allIn?(multi?'Both ingredients and strengths found':'Ingredient and strength found'):''),
+      ings.map(function(g){return esc(g.name)+' '+esc(strText(g));}).join('<br>')+'<span class="cmp-sub">'+ings.length+' ingredient'+(multi?'s':'')+' parsed</span>');
+  ings.forEach(function(g,k){
+    var n=multi?' '+(k+1):'';
+    var nr=nameRel(g),sr=strRel(g);
+    var srcFrag='<span class="raw">'+esc(g.raw)+'</span>'+(multi?'<span class="cmp-sub">Parser\'s part of the DGDA text</span>':'');
+    row('Substance'+n,srcFrag,rel(nr[0],nr[1]),esc(g.name)+'<span class="cmp-sub mono">'+esc(g.bds)+'</span>');
+    row('Strength'+n,srcFrag,rel(sr[0],sr[1]),esc(strText(g)));
+  });
+  it.dgdaIngredients.forEach(function(x){
+    var hit=null;ings.forEach(function(g){g.codes.forEach(function(c){if(c.system==='ICD11_XM'&&c.code===x.xm)hit=g;});});
+    var names=hit?hit.names.map(function(n){return esc(n.name)+' ('+(NAMETYPE[n.type]||esc(n.type))+')';}).join(', '):'';
+    row('DGDA ingredient code','<span class="mono">'+esc(x.xm)+'</span><span class="cmp-sub">'+esc(x.name)+'</span>',
+        hit?rel('same'):rel('differs','No substance carries this code'),
+        hit?'<span class="mono">'+esc(hit.bds)+'</span> '+esc(hit.name)+'<span class="cmp-names">Names: '+names+'</span>':'No matching substance');
+  });
+  row('Clinical drug',NOTREG,rel('added'),esc(cl.display_name)+'<span class="cmp-sub"><span class="mono">'+esc(cl.bdc_id)+'</span>, route '+esc(cl.route)+', dose form '+esc(cl.dose_form)+'</span>');
+  ings.forEach(function(g,k){
+    var n=multi?' '+(k+1):'';
+    var codes=g.codes.filter(function(c){return c.system!=='DDINTER';});
+    row('Codes'+n,NOTREG,rel('added',codes.length+' codes for '+g.name),'<div class="codes">'+codes.map(codeChip).join('')+'</div>');
+  });
+  ings.forEach(function(g,k){
+    var n=multi?' '+(k+1):'';
+    var dd=g.codes.filter(function(c){return c.system==='DDINTER';});
+    var ext;
+    if(g.coverage&&g.coverage.coverage==='none'){ext=noDataChip('No data')+'<span class="cmp-sub" style="color:var(--fg)">'+NODATA+'</span>';}
+    else{ext='<div class="codes">'+dd.map(codeChip).join('')+'</div><span class="cmp-sub">Interaction data found</span>';}
+    row('DDInter mapping'+n,NOTREG,rel('added'),ext);
+  });
+  return '<div class="d-sec"><div class="d-sec-t"><h4>DGDA source against the extraction</h4><span>Each relation compares the two values on its row. Fields copied from the register have no verdict.</span></div>'+
+    '<div class="cmp-wrap"><table class="cmp"><caption class="sr-only">'+esc(b.trade_name)+': DGDA register compared with the pipeline extraction</caption><thead><tr><th scope="col">Field</th><th scope="col" class="cmp-src">DGDA source</th><th scope="col">Relation</th><th scope="col">Extracted by the pipeline</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
+}
+
+/* ---------- Detail: interactions ---------- */
+function recsOf(name){return (subRec[name]||[]).map(function(k){return esc(nameOf(k))+' (record '+(k+1)+')';}).join(', ');}
+function hasText(x){return !!(x.p.management||x.p.interaction);}
+function noTextHTML(list){
+  var groups={},order=[],acts=[];
+  list.forEach(function(x){
+    var s=SEVRANK[x.p.severity]!=null?x.p.severity:'unknown';
+    if(!groups[s]){groups[s]=[];order.push(s);}groups[s].push(x);
+    (x.p.actions||[]).forEach(function(a){if(acts.indexOf(a)<0)acts.push(a);});
+  });
+  var n=list.length,h='<div class="ntx"><p class="sub-h">'+n+' pair'+(n===1?'':'s')+' with no text in DDInter 2.0</p>';
+  order.forEach(function(s){
+    h+='<div class="ntx-g">'+sevChip(s,groups[s].length)+'<ul class="ntx-list">'+groups[s].map(function(x){
+      return '<li><b>'+esc(x.mine)+' + '+esc(x.other)+'</b> <span class="ntx-with">with '+recsOf(x.other)+'</span> <span class="mono">'+esc(x.p.ida)+'/'+esc(x.p.idb)+'</span></li>';
+    }).join('')+'</ul></div>';
+  });
+  h+='<p class="ing-q">'+(acts.length?'Action in DDInter: '+esc(acts.join(', '))+'. ':'')+'DDInter 2.0 has no interaction or management text for '+(n===1?'this pair':'these pairs')+'.'+(groups.unknown?' A pair whose severity is not classified by DDInter is never treated as low risk.':'')+'</p></div>';
+  return h;
+}
+function pairCard(x){
+  var p=x.p,key=p.ida+'|'+p.idb,open=!!S.full[key];
+  var recs=recsOf(x.other);
+  var text='',kind='';
+  if(p.management){text=p.management;kind='Management';}
+  else if(p.interaction){text=p.interaction;kind='Interaction description';}
+  var foot;
+  if(text){
+    foot='<p class="pair-source pair-foot">'+(open?kind+', in full.':kind+', truncated.')+(kind==='Interaction description'?' DDInter has no management text for this pair.':'')+
+      ' <button class="btn btn--plain btn--sm" type="button" data-act="full" data-key="'+esc(key)+'" data-fk="full-'+esc(key)+'" aria-expanded="'+open+'">'+(open?'Show less':'Full text from DDInter 2.0')+'</button></p>';
+  }else{
+    foot='<p class="pair-source">DDInter 2.0 has no interaction or management text for this pair.</p>';
+  }
+  return '<article class="pair"><div class="pair-head">'+sevChip(p.severity)+'<h5 class="pair-names">'+esc(x.mine)+' + '+esc(x.other)+'</h5></div>'+
+    '<p class="pair-meta">With '+recs+'. Action in DDInter: '+esc((p.actions||[]).join(', '))+'. <span class="mono">'+esc(p.ida)+'/'+esc(p.idb)+'</span></p>'+
+    (text?'<p class="pair-text'+(open?' is-open':'')+'">'+esc(text)+'</p>':'')+foot+'</article>';
+}
+function ixHTML(i){
+  var it=items[i],h='';
+  it.ingredients.forEach(function(g){
+    var head='<div class="ing-h"><h5>'+esc(g.name)+'</h5><span class="mono">'+esc(g.bds)+'</span><span>'+esc(strText(g))+'</span></div>',body;
+    if(g.coverage&&g.coverage.coverage==='none'){
+      var nc=notChecked(i).filter(function(p){return p[0]===g.name;});
+      body='<div class="nodata-block hatch" role="note"><span class="nodata-glyph" aria-hidden="true"></span><div class="nodata-plate"><p class="nodata-title">'+esc(g.name)+'</p><p class="nodata-text">'+NODATA+'</p><p class="nodata-text">Drug, disease and food interactions: no data in DDInter 2.0.</p>'+
+        '<div class="nodata-pairs"><span>Not checked, '+nc.length+' pairs with this batch:</span>'+nc.map(function(p){return noDataChip(p[0]+' + '+p[1]);}).join('')+'</div></div></div>';
+    }else{
+      var d=g.ddi,ids=g.codes.filter(function(c){return c.system==='DDINTER';}).map(function(c){return c.code+' ('+c.route+')';}).join(', ');
+      body='<p class="ing-p">Interaction data found <span class="mono">'+esc(ids)+'</span></p>'+
+        '<div class="chips" role="group" aria-label="Drug pairs in DDInter 2.0 by severity">'+sevChip('major',d.major)+sevChip('moderate',d.moderate)+sevChip('minor',d.minor)+sevChip('unknown',d.unknown)+'</div>'+
+        '<p class="ing-q">'+d.total+' drug pairs in total. '+g.disease+' drug and disease interaction'+(g.disease===1?'':'s')+', '+g.food+' drug and food interaction'+(g.food===1?'':'s')+'.</p>';
+    }
+    h+='<div class="ing">'+head+body+'</div>';
+  });
+  /* Pairs with the other medicines in this batch */
+  var rp=recordPairs(i),nc=notChecked(i),own=ownNames(i);
+  if(!isNoData(it)){
+    var c={major:0,moderate:0,minor:0,unknown:0};rp.forEach(function(x){var s=x.p.severity;if(c[s]==null)s='unknown';c[s]++;});
+    h+='<div class="d-sec"><p class="sub-h">With the other medicines in this batch</p><p class="ing-q">'+rp.length+' pair'+(rp.length===1?'':'s')+' found in DDInter 2.0'+(nc.length?'. '+nc.length+' pair'+(nc.length===1?'':'s')+' not checked.':'.')+'</p>'+
+      '<div class="chips" role="group" aria-label="Batch pairs by severity">'+sevChip('major',c.major)+sevChip('moderate',c.moderate)+sevChip('minor',c.minor)+sevChip('unknown',c.unknown)+'</div>';
+    it.ingredients.forEach(function(g){
+      var sys=null,rt=null;g.codes.forEach(function(cd){if(cd.system==='DDINTER'){if(cd.route==='systemic')sys=cd;if(cd.route===it.clinical.route)rt=cd;}});
+      if(it.clinical.route!=='systemic'&&sys&&rt&&rp.length){h+='<p class="ing-q">These pairs use <span class="mono">'+esc(sys.code)+'</span>, the systemic DDInter entry. This record\'s route is '+esc(it.clinical.route)+'; its DDInter entry for that route is <span class="mono">'+esc(rt.code)+'</span>.</p>';}
+      if(!isNoDataSub(g.name)&&!rp.some(function(x){return x.mine===g.name;})){h+='<p class="ing-q">None of the '+PAIRS.length+' batch pairs from DDInter 2.0 involve '+esc(g.name)+'.</p>';}
+    });
+    var rpText=rp.filter(hasText),rpNone=rp.filter(function(x){return !hasText(x);});
+    if(rpText.length)h+='<div class="pairs">'+rpText.map(pairCard).join('')+'</div>';
+    if(rpNone.length)h+=noTextHTML(rpNone);
+    if(nc.length){
+      var who=[];nc.forEach(function(p){if(who.indexOf(p[1])<0)who.push(p[1]);});
+      h+='<div class="nc"><p><b>Not checked.</b> '+who.map(esc).join(', ')+': '+NODATA+'</p><div class="chips">'+nc.map(function(p){return noDataChip(p[0]+' + '+p[1]);}).join('')+'</div></div>';
+    }
+    h+='</div>';
+  }
+  return '<div class="d-sec"><div class="d-sec-t"><h4>Interactions</h4><span>From DDInter 2.0, by substance</span></div>'+h+'</div>';
+}
+
+/* ---------- Detail: history ---------- */
+function histHTML(i){
+  return '<div class="d-sec"><div class="d-sec-t"><h4>History</h4><span>Oldest first</span></div><ol class="hist">'+S.hist[i].map(function(e){
+    return '<li><span class="hist-t">'+fmtUTC(e.when)+'<span>'+fmtDhaka(e.when)+'</span></span><span>'+esc(e.text)+(e.quote?' <span class="raw">'+esc(e.quote)+'</span>':'')+(e.ex?' <span class="example">Example</span>':'')+'</span></li>';
+  }).join('')+'</ol></div>';
+}
+function diffHTML(i){
+  var d=S.diff[i];if(!d)return '';
+  return '<div class="cmp-wrap"><table class="cmp"><caption>Cells that changed in the re-run <span class="example">Example</span></caption><thead><tr><th scope="col">Field</th><th scope="col" class="cmp-src">You were reviewing</th><th scope="col">Now</th></tr></thead><tbody>'+
+    d.map(function(r){return '<tr><th scope="row">'+esc(r.f)+'</th><td class="cmp-src">'+r.before+'</td><td class="chg">'+r.now+' <span class="example">Example</span></td></tr>';}).join('')+
+    '</tbody></table></div><p class="ing-q">Cells that are not listed did not change. This prototype has no real re-run, so the new values are examples.</p>';
+}
+function makeDiff(i,when){
+  var it=items[i];
+  return [
+    {f:'Pipeline extracted at',before:esc(fmtUTC(it.extractedAt)),now:esc(fmtUTC(when))},
+    {f:'DDInter check note',before:'<span class="raw">'+esc(it.stages.ddinter.note)+'</span>',now:'New note from the re-run'}
+  ];
+}
+
+/* ---------- Detail render ---------- */
+function skeletonDetail(){
+  var bl=function(w,hgt){return '<span class="sk" style="width:'+w+';height:'+(hgt||12)+'px"></span>';};
+  return '<div role="status" class="d-sec"><span class="sr-only">Loading batch 0001-pilot</span><p class="d-crumb">Loading batch 0001-pilot</p>'+bl('40%',26)+bl('60%')+'</div>'+
+    '<div class="d-sec">'+bl('30%',14)+'<div class="stages">'+[0,1,2].map(function(){return '<div class="stage">'+bl('50%')+bl('80%')+'</div>';}).join('')+'</div></div>'+
+    '<div class="d-sec">'+bl('100%',180)+'</div>';
+}
+function completeDetail(){
+  return '<div class="done"><span class="rv rv--approved">Approved by a pharmacist</span><h3 class="done-t">Batch 0001-pilot approved. 10 records are now public.</h3>'+
+    '<p>Each record was approved by a pharmacist. If the pipeline re-runs a record, it goes back in review and leaves public view until a pharmacist approves it again.</p>'+
+    '<p><span class="example">Example</span> Prototype state. In the live pilot all 10 records are still not yet reviewed by a pharmacist.</p>'+
+    '<div class="d-row"><button class="btn btn--tonal" type="button" data-act="first" data-fk="first">Open record 1</button></div></div>';
+}
+function recordDetail(i){
+  var it=items[i],b=it.brand,st=S.status[i],h='';
+  if(S.stale[i]){
+    h+='<div class="banner banner--warn"><p class="banner-title">'+STALE+'</p><p class="banner-body">The pipeline re-ran '+esc(b.trade_name)+' after you opened it. Decisions are paused and nothing was saved. Any note you were writing is kept.</p>'+
+      '<span class="banner-action"><button class="btn btn--tonal btn--sm" type="button" data-act="diff" data-fk="diff" aria-expanded="'+S.diffOpen+'">'+(S.diffOpen?'Hide changes':'See what changed')+'</button><button class="btn btn--primary btn--sm" type="button" data-act="reload" data-fk="reload">Reload record</button></span></div>';
+    if(S.diffOpen&&!S.back[i])h+=diffHTML(i);
+  }
+  if(S.back[i]&&st==='back'){
+    h+='<div class="note-card"><div class="d-row">'+pill('back')+'</div><p>This record was re-run after a pharmacist approved it. Readers see “Not yet reviewed by a pharmacist” until a pharmacist approves it again.</p>'+
+      (S.stale[i]&&!S.diffOpen?'':diffHTML(i))+'</div>';
+  }
+  var chips=pill(st)+((st==='engineer'||st==='issue'||st==='back')?pill('pending'):'');
+  var vis=st==='approved'?'Published. Readers can see this record.':'Hidden from readers until a pharmacist approves it.';
+  h+='<div class="d-hd"><div class="d-hd-main"><p class="d-crumb"><span class="mono">0001-pilot</span>, record '+(i+1)+' of '+N+'</p><h3>'+esc(b.trade_name)+'</h3>'+
+     '<p class="d-meta">'+esc(b.company)+', <span class="mono nowrap">DAR '+esc(b.dar_number)+'</span>, '+esc(b.dosage_form)+'</p>'+
+     '<div class="d-chips">'+chips+'<span class="d-vis">'+vis+'</span></div></div>'+
+     '<div class="d-tools"><div class="d-row">'+
+       '<button class="btn btn--tonal btn--sm" type="button" data-act="ev" data-fk="ev" aria-expanded="'+S.ev+'" aria-controls="drawer" aria-keyshortcuts="E"><span class="ico" style="--ico:var(--i-code)"></span>Evidence <span class="kbd">E</span></button>'+
+       '<button class="btn btn--tonal btn--sm" type="button" data-act="src" data-fk="src" aria-keyshortcuts="S"><span class="ico" style="--ico:var(--i-external)"></span>DGDA source <span class="kbd">S</span></button></div>'+
+     '<div class="d-row"><button class="btn btn--tonal btn--sm" type="button" data-act="prev" data-fk="prev" aria-keyshortcuts="K"><span class="ico" style="--ico:var(--i-up)"></span>Previous <span class="kbd">K</span></button>'+
+       '<button class="btn btn--tonal btn--sm" type="button" data-act="next" data-fk="next" aria-keyshortcuts="J"><span class="ico" style="--ico:var(--i-down)"></span>Next <span class="kbd">J</span></button></div></div></div>';
+  h+=cmpHTML(i);
+  h+=stagesHTML(i);
+  h+=ixHTML(i);
+  h+=histHTML(i);
+  return h;
+}
+function renderDetail(){
+  var same=S.lastSel===S.sel&&S.view==='record'&&!S.loading;
+  var top=detail.scrollTop;
+  keepFocus(detail,function(){
+    if(S.loading)detail.innerHTML=skeletonDetail();
+    else if(S.view==='complete')detail.innerHTML=completeDetail();
+    else detail.innerHTML=recordDetail(S.sel);
+  });
+  detail.scrollTop=same?top:0;
+  S.lastSel=(S.loading||S.view!=='record')?-1:S.sel;
+}
+
+/* ---------- Evidence drawer ---------- */
+function renderDrawer(){
+  var show=S.ev&&!S.loading&&S.view==='record';
+  if(!show&&drawer.contains(document.activeElement))app.focus();
+  drawer.hidden=!show;
+  if(show)detail.setAttribute('inert','');else detail.removeAttribute('inert');
+  if(!show)return;
+  var it=items[S.sel];
+  $('drawer-sub').textContent=it.brand.trade_name+', record '+(S.sel+1)+' of '+N;
+  $('drawer-b').innerHTML=
+    '<h5>Raw brand row</h5><p class="dr-note">The DGDA register fields with the pipeline\'s parse fields, exactly as stored.</p><pre>'+esc(JSON.stringify(it.brand,null,2))+'</pre>'+
+    '<h5>DGDA ingredient codes</h5><pre>'+esc(JSON.stringify(it.dgdaIngredients,null,2))+'</pre>'+
+    '<h5>Pipeline notes</h5><dl class="dr-dl">'+STAGES.map(function(s){var sg=it.stages[s[0]];return '<dt>'+s[1]+'</dt><dd><span>'+esc(sg.status)+'</span>'+(sg.note?'<span class="raw">'+esc(sg.note)+'</span>':'<span class="dr-note">No note</span>')+'</dd>';}).join('')+'</dl>'+
+    '<h5>Pipeline</h5><dl class="dr-dl"><dt>Concept id</dt><dd><span class="mono">'+esc(it.conceptId)+'</span></dd><dt>Clinical signature</dt><dd><span class="mono">'+esc(it.clinical.signature)+'</span></dd><dt>Extracted at</dt><dd>'+fmtUTC(it.extractedAt)+'<span class="dr-note">'+fmtDhaka(it.extractedAt)+'</span></dd><dt>Batch run</dt><dd>'+fmtUTC(BATCH.run_at)+'<span class="dr-note">'+esc(BATCH.batch_id)+', '+BATCH.item_count+' items</span></dd></dl>';
+}
+var evReturn=null;
+function toggleEv(on){
+  var wasInside=drawer.contains(document.activeElement);
+  if(on&&!S.ev)evReturn=document.activeElement;
+  S.ev=on;renderDrawer();renderDetail();
+  if(on){$('drawer-close').focus();announce('Evidence shown for '+nameOf(S.sel)+'. The record behind it is paused until you close it.');return;}
+  if(wasInside||app===document.activeElement){
+    var r=evReturn;evReturn=null;
+    if(r&&r!==app&&document.body.contains(r)&&!drawer.contains(r))r.focus();
+    else{var b=detail.querySelector('[data-act="ev"]');if(b)b.focus();else app.focus();}
+  }
+}
+
+/* ---------- Decision bar ---------- */
+function renderBar(){
+  var i=S.sel,st=S.status[i],bar=$('bar');
+  var inRecord=S.view==='record'&&!S.loading;
+  var paused=inRecord&&!!S.stale[i];
+  var pend=!!(S.pending&&S.pending.i===i);
+  var netHere=!!(S.netErr&&S.netErr.i===i);
+  bar.setAttribute('data-state',paused?'paused':'ready');
+  $('bar-noauth').hidden=!S.noAuth;
+  $('bar-main').hidden=S.noAuth;
+  $('bar-keys').hidden=S.noAuth;
+  if(S.noAuth&&S.report){reportPanel.hidden=true;}
+  else{reportPanel.hidden=!S.report;}
+  var blocked=!inRecord||paused||pend||netHere||st==='approved'||st==='issue'||S.report||(S.role==='engineer'&&st==='engineer');
+  approveBtn.setAttribute('aria-disabled',String(blocked));
+  reportBtn.setAttribute('aria-disabled',String(!inRecord||paused));
+  reportBtn.setAttribute('aria-expanded',String(S.report));
+  sendBtn.setAttribute('aria-disabled',String(paused));
+  $('report-paused').hidden=!paused;
+  var pr=$('bar-promise'),ph=S.role==='pharmacist';
+  if(S.loading)pr.innerHTML='<b>Loading batch 0001-pilot.</b> Decisions open when the record loads.';
+  else if(S.view==='complete')pr.innerHTML='<b>Batch 0001-pilot is approved.</b> Open any record to read it.';
+  else if(paused)pr.innerHTML=PROMISE.paused;
+  else if(netHere)pr.innerHTML='<b>Your decision was not saved.</b> Use Try again above.';
+  else if(pend)pr.innerHTML=ph?'<b>Marked correct.</b> Publishes when the undo window closes. Press U to undo.':'<b>Marked correct.</b> Your check saves when the undo window closes. Press U to undo.';
+  else if(st==='approved')pr.innerHTML='<b>Approved by a pharmacist.</b> This record is public.';
+  else if(st==='issue')pr.innerHTML='<b>An issue is open on this record.</b> It returns to review after the fix and re-run.';
+  else if(!ph&&st==='engineer')pr.innerHTML='<b>Your check is recorded.</b> A pharmacist still needs to approve.';
+  else pr.innerHTML=ph?PROMISE.pharmacist:PROMISE.engineer;
+  var bc=$('bar-botcheck');
+  if(S.botHold){bc.textContent='Bot check failed';bc.classList.add('is-failed');}
+  else{bc.textContent='Bot check passed';bc.classList.remove('is-failed');}
+  $('bar-bot').hidden=!S.botHold||S.noAuth;
+  $('bar-net').hidden=!netHere;
+  if(netHere){$('bar-net-rec').textContent='Decision: Looks correct on '+nameOf(i)+'.';}
+}
+
+function renderSims(){
+  $('sim-net').setAttribute('aria-pressed',String(S.armNet));
+  $('sim-bot').setAttribute('aria-pressed',String(S.armBot));
+  $('sim-auth').setAttribute('aria-pressed',String(S.noAuth));
+  var rb=document.querySelectorAll('#role-seg button');
+  for(var k=0;k<rb.length;k++){rb[k].setAttribute('aria-pressed',String(rb[k].getAttribute('data-role')===S.role));}
+}
+function render(){renderToolbar();renderSidebar();renderList();renderDetail();renderDrawer();renderBar();renderSims();}
+
+/* ---------- Selection ---------- */
+function stashDraft(){if(S.report){S.drafts[S.sel]=note.value;}}
+function select(i){
+  if(i<0||i>=N)return;
+  stashDraft();
+  if(S.report){S.report=false;if(reportPanel.contains(document.activeElement))app.focus();}
+  S.sel=i;S.view='record';S.diffOpen=false;
+  render();
+}
+function move(d){
+  if(S.loading)return;
+  var v=visible();if(!v.length){showHint('No records in this view. Show all '+N+' records to move.');return;}
+  var k=v.indexOf(S.sel);
+  if(S.view!=='record'){select(v[k<0?0:k]);return;}
+  k=k<0?0:Math.min(v.length-1,Math.max(0,k+d));
+  if(v[k]===S.sel){showHint(d>0?'This is the last record in this view.':'This is the first record in this view.');return;}
+  select(v[k]);
+}
+
+/* ---------- Toast and commit-delayed approval ---------- */
+function showToast(html){
+  toastMsg.innerHTML=html;toastWrap.hidden=false;
+  toast.classList.remove('is-running');void toast.offsetWidth;toast.classList.add('is-running');
+}
+function hideToast(){
+  var had=toastWrap.contains(document.activeElement);
+  toastWrap.hidden=true;toast.classList.remove('is-running');
+  if(had)app.focus();
+}
+function needsFor(role,st){return role==='pharmacist'?(st==='pending'||st==='back'||st==='engineer'):(st==='pending'||st==='back');}
+function approve(){
+  if(S.noAuth){showHint('Your account can\'t review this batch.');return;}
+  if(S.loading)return;
+  if(S.view==='complete'){showHint('Every record is approved. Open a record to read it.');return;}
+  var i=S.sel,st=S.status[i];
+  if(S.stale[i]){showHint('Decisions are paused. Reload the record first.');return;}
+  if(S.pending&&S.pending.i===i){showHint('This record is already in its undo window. Press U to undo.');return;}
+  if(S.pending){showHint(nameOf(S.pending.i)+' is still in its undo window. Press U to undo it, or wait until it saves.');return;}
+  if(S.netErr&&S.netErr.i===i){showHint('Your last decision on this record was not saved. Use Try again.');return;}
+  if(st==='approved'){showHint('This record is already approved by a pharmacist.');return;}
+  if(st==='issue'){showHint('An issue is open on this record. It returns to review after the fix and re-run.');return;}
+  if(S.role==='engineer'&&st==='engineer'){showHint('Your check is already recorded for this record.');return;}
+  if(S.report){showHint('Send or cancel the report first.');return;}
+  if(S.advancedTo===i&&Date.now()-S.advancedAt<1000){showHint('Record changed to '+nameOf(i)+'. Press A again to approve it.');return;}
+  if(S.botHold){showHint('Retry the bot check first. Your earlier decision is kept.');return;}
+  if(S.armBot){S.botHold={i:i,kind:'approve'};renderBar();announce('Bot check failed. Your decision is kept. Retry the check to continue.');return;}
+  startWindow(i,S.role);
+}
+function startWindow(i,role){
+  /* Never cut an open window short: a second decision waits until the first window closes or is undone */
+  if(S.pending){showHint(nameOf(S.pending.i)+' is still in its undo window. Press U to undo it, or wait until it saves.');return;}
+  var name=nameOf(i);
+  S.pending={i:i,role:role,timer:setTimeout(function(){var p=S.pending;if(!p)return;S.pending=null;hideToast();finish(p,false);},COMMIT_MS)};
+  var sub=role==='pharmacist'?'Publishes in 8 seconds.':'Your check saves in 8 seconds. It does not publish.';
+  showToast('<b>'+esc(name)+'</b> marked correct.<span class="toast-sub">'+sub+'</span>');
+  announce(name+' marked correct. '+sub+' Press U to undo.');
+  render();
+}
+function finish(p,silent){
+  if(S.stale[p.i])return;
+  if(S.armNet){S.armNet=false;S.netErr={i:p.i,role:p.role};render();announce('Couldn\'t save your decision. Nothing was published. Check your connection and try again.');return;}
+  save(p.i,p.role);
+  advanceFrom(p.i,p.role,true);
+}
+function save(i,role){
+  S.status[i]=role==='pharmacist'?'approved':'engineer';
+  S.back[i]=false;S.diff[i]=null;
+  S.hist[i].push({when:new Date(),text:role==='pharmacist'?'Approved by a pharmacist (you). Published.':'Engineer checked (you). Not published.',ex:true});
+}
+function savedMsg(i,role){return role==='pharmacist'?'Saved. '+nameOf(i)+' is approved by a pharmacist and published.':'Saved. Your check on '+nameOf(i)+' is recorded. It does not publish.';}
+function advanceFrom(from,role,say){
+  var done=say?savedMsg(from,role)+' ':'';
+  if(S.status.every(function(s){return s==='approved';})){
+    if(S.sel===from){S.view='complete';if(S.ev)S.ev=false;}
+    render();announce(done+'Every record in batch 0001-pilot is approved.');return;
+  }
+  /* Never move away while a report note is open on this record: the draft must stay with its record */
+  if(S.sel!==from||S.report){render();if(say)announce(done.trim());return;}
+  var v=visible(),order=v.concat([]),k=order.indexOf(from),cand=null,j;
+  for(j=1;j<=order.length;j++){var x=order[(k+j+order.length)%order.length];if(x!==from&&needsFor(role,S.status[x])){cand=x;break;}}
+  if(cand===null){for(j=1;j<N;j++){var y=(from+j)%N;if(needsFor(role,S.status[y])){cand=y;break;}}if(cand!==null&&v.indexOf(cand)<0){S.filter='all';S.q='';qEl.value='';}}
+  if(cand!==null){S.sel=cand;S.view='record';S.diffOpen=false;S.advancedAt=Date.now();S.advancedTo=cand;}
+  render();
+  announce(done+(cand!==null?'Opened '+nameOf(cand)+', record '+(cand+1)+' of '+N+'.':'No other record needs your review.'));
+}
+function undo(){
+  if(!S.pending){showHint('Nothing to undo.');return;}
+  clearTimeout(S.pending.timer);var name=nameOf(S.pending.i);S.pending=null;hideToast();
+  announce('Undone. '+name+' was not saved.');render();
+}
+function cancelPendingFor(i){
+  if(S.pending&&S.pending.i===i){clearTimeout(S.pending.timer);S.pending=null;hideToast();return true;}
+  return false;
+}
+
+/* ---------- Report issue ---------- */
+function openReport(){
+  if(S.noAuth){showHint('Your account can\'t review this batch.');return;}
+  if(S.loading||S.view!=='record')return;
+  if(S.stale[S.sel]&&!S.report){showHint('Decisions are paused. Reload the record first.');return;}
+  S.report=true;note.value=S.drafts[S.sel]||'';updateCount();clearNoteError();renderBar();note.focus();
+}
+function closeReport(focusBack,discard){
+  if(discard){S.drafts[S.sel]='';note.value='';updateCount();}else{stashDraft();}
+  S.report=false;clearNoteError();renderBar();
+  if(focusBack)reportBtn.focus();
+}
+function clearNoteError(){noteErr.hidden=true;noteHelp.hidden=false;note.removeAttribute('aria-invalid');}
+function updateCount(){noteCnt.textContent=note.value.length+' / 1000';}
+function sendReport(){
+  var i=S.sel;
+  if(S.stale[i]){showHint('Sending is paused until you reload the record. Your note is kept.');return;}
+  var v=note.value.trim();
+  if(v.length<5){noteErr.hidden=false;noteHelp.hidden=true;note.setAttribute('aria-invalid','true');note.focus();announce('Add at least 5 characters so the engineer knows what to fix.');return;}
+  if(S.botHold){showHint('Retry the bot check first. Your earlier decision is kept.');return;}
+  if(S.armBot){S.botHold={i:i,kind:'report',text:v};renderBar();announce('Bot check failed. Your decision is kept. Retry the check to continue.');return;}
+  doReport(i,v);
+}
+function doReport(i,text){
+  cancelPendingFor(i);
+  S.status[i]='issue';
+  S.hist[i].push({when:new Date(),text:'Issue reported (you). Note:',quote:text,ex:true});
+  S.drafts[i]='';
+  if(i===S.sel){note.value='';updateCount();S.report=false;clearNoteError();}
+  announce('Issue reported for '+nameOf(i)+'. An engineer will see your note.');
+  render();
+  if(i===S.sel)reportBtn.focus();
+}
+
+/* ---------- Simulated failures ---------- */
+function busy(btn,on,label){
+  if(on){btn.setAttribute('aria-busy','true');btn.setAttribute('data-label',btn.textContent);btn.innerHTML='<span class="btn-spinner" aria-hidden="true"></span>'+label;}
+  else{btn.removeAttribute('aria-busy');btn.textContent=btn.getAttribute('data-label')||btn.textContent;}
+}
+$('btn-bot').addEventListener('click',function(){
+  var b=this;if(b.getAttribute('aria-busy')==='true')return;
+  busy(b,true,'Checking');
+  setTimeout(function(){
+    busy(b,false);S.armBot=false;var h=S.botHold;S.botHold=null;renderSims();
+    if(!h){renderBar();return;}
+    announce('Bot check passed.');
+    if(S.stale[h.i]){render();return;}
+    if(h.kind==='approve'){startWindow(h.i,S.role);}else{doReport(h.i,h.text);}
+  },900);
+});
+$('btn-net').addEventListener('click',function(){
+  var b=this;if(b.getAttribute('aria-busy')==='true'||!S.netErr)return;
+  busy(b,true,'Saving');
+  setTimeout(function(){
+    busy(b,false);var e=S.netErr;S.netErr=null;if(!e){render();return;}
+    save(e.i,e.role);
+    if(S.sel===e.i)approveBtn.focus();
+    advanceFrom(e.i,e.role,true);
+  },900);
+});
+
+/* ---------- Shortcuts sheet: focus-trapped dialog, inert background ---------- */
+var sheetReturn=null;
+function setInert(on){['tb','panes','toast-wrap'].forEach(function(id){var el=$(id);if(on){el.setAttribute('inert','');}else{el.removeAttribute('inert');}});}
+function openSheet(){
+  sheetReturn=document.activeElement;S.sheet=true;sheetWrap.hidden=false;setInert(true);$('btn-sheet-close').focus();
+}
+function closeSheet(){
+  S.sheet=false;sheetWrap.hidden=true;setInert(false);
+  if(sheetReturn&&document.body.contains(sheetReturn)&&app.contains(sheetReturn))sheetReturn.focus();else app.focus();
+}
+sheet.addEventListener('keydown',function(e){
+  e.stopPropagation();
+  if(e.key==='Escape'||e.key==='?'){e.preventDefault();closeSheet();return;}
+  if(e.key==='Tab'){
+    var f=sheet.querySelectorAll('button,[href],[tabindex]:not([tabindex="-1"])');
+    if(!f.length){e.preventDefault();return;}
+    var first=f[0],last=f[f.length-1];
+    if(Array.prototype.indexOf.call(f,document.activeElement)<0){e.preventDefault();first.focus();return;}
+    if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}
+    else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}
+  }
+});
+sheetWrap.addEventListener('mousedown',function(e){if(e.target===sheetWrap){e.preventDefault();closeSheet();}});
+$('btn-sheet-close').addEventListener('click',closeSheet);
+document.addEventListener('focusin',function(e){if(S.sheet&&!sheet.contains(e.target)){$('btn-sheet-close').focus();}});
+
+/* ---------- Keyboard model, scoped to the workspace ---------- */
+function typing(t){return !!t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.isContentEditable);}
+function openSource(){if(S.view!=='record'||S.loading)return;showHint('Opens the DGDA register entry for DAR '+items[S.sel].brand.dar_number+' in a new tab. Not connected in this prototype.');}
+app.addEventListener('keydown',function(e){
+  if(S.sheet){
+    if(e.key==='Escape'){e.preventDefault();closeSheet();}
+    else if(e.key==='Tab'){e.preventDefault();$('btn-sheet-close').focus();}
+    return;
+  }
+  var t=e.target,k=e.key;
+  if(k==='Enter'&&t===approveBtn){e.preventDefault();showHint('Enter does not approve. Press A, or Space on this button.');return;}
+  if(t===note){
+    if(k==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();sendReport();return;}
+    if(k==='Escape'){e.preventDefault();closeReport(true,false);return;}
+    return;
+  }
+  if(k==='Escape'){
+    if(S.ev){e.preventDefault();toggleEv(false);return;}
+    if(S.report){e.preventDefault();closeReport(true,false);return;}
+    if(t===qEl&&qEl.value){e.preventDefault();qEl.value='';S.q='';render();return;}
+    return;
+  }
+  if(typing(t)||e.ctrlKey||e.metaKey||e.altKey)return;
+  if(t===listEl){
+    if(k==='ArrowDown'){e.preventDefault();move(1);return;}
+    if(k==='ArrowUp'){e.preventDefault();move(-1);return;}
+    if(k==='Home'||k==='End'){e.preventDefault();var v=visible();if(v.length)select(k==='Home'?v[0]:v[v.length-1]);return;}
+  }
+  var key=k.length===1?k.toLowerCase():k;
+  if(key==='?'){e.preventDefault();openSheet();return;}
+  if(key==='a'){e.preventDefault();approve();}
+  else if(key==='u'){e.preventDefault();undo();}
+  else if(key==='r'){e.preventDefault();if(S.report){note.focus();}else{openReport();}}
+  else if(key==='j'){e.preventDefault();move(1);}
+  else if(key==='k'){e.preventDefault();move(-1);}
+  else if(key==='e'){e.preventDefault();if(S.view==='record'&&!S.loading)toggleEv(!S.ev);}
+  else if(key==='s'){e.preventDefault();openSource();}
+});
+
+/* ---------- Pointer and button wiring ---------- */
+approveBtn.addEventListener('click',approve);
+reportBtn.addEventListener('click',function(){if(S.report){closeReport(true,false);}else{openReport();}});
+$('btn-undo').addEventListener('click',undo);
+$('btn-cancel').addEventListener('click',function(){closeReport(true,true);});
+sendBtn.addEventListener('click',function(){if(sendBtn.getAttribute('aria-disabled')==='true'){showHint('Sending is paused until you reload the record. Your note is kept.');return;}sendReport();});
+note.addEventListener('input',function(){updateCount();S.drafts[S.sel]=note.value;if(note.value.trim().length>=5)clearNoteError();});
+$('drawer-close').addEventListener('click',function(){toggleEv(false);});
+qEl.addEventListener('input',function(){S.q=qEl.value;var v=visible();if(v.length&&v.indexOf(S.sel)<0){stashDraft();S.report=false;S.sel=v[0];}render();});
+listEl.addEventListener('click',function(e){var li=e.target.closest('.rec');if(!li)return;select(+li.getAttribute('data-i'));listEl.focus();});
+$('list-empty').addEventListener('click',function(e){if(e.target.closest('#btn-showall')){S.filter='all';S.q='';qEl.value='';if(S.view!=='complete')S.view='record';render();listEl.focus();}});
+$('batch-btn').addEventListener('click',function(){S.filter='all';S.q='';qEl.value='';render();});
+$('filters').addEventListener('click',function(e){
+  var b=e.target.closest('.filter');if(!b)return;
+  S.filter=b.getAttribute('data-f');var v=visible();
+  if(v.length&&v.indexOf(S.sel)<0){stashDraft();S.report=false;S.sel=v[0];}
+  render();
+  var nb=document.querySelector('#filters [data-f="'+S.filter+'"]');if(nb)nb.focus();
+});
+detail.addEventListener('click',function(e){
+  var b=e.target.closest('[data-act]');if(!b)return;var a=b.getAttribute('data-act');
+  if(a==='prev')move(-1);
+  else if(a==='next')move(1);
+  else if(a==='ev')toggleEv(!S.ev);
+  else if(a==='src')openSource();
+  else if(a==='pairs'){S.pairsOpen[S.sel]=!(S.pairsOpen[S.sel]!==false);renderDetail();}
+  else if(a==='full'){var key=b.getAttribute('data-key');S.full[key]=!S.full[key];renderDetail();}
+  else if(a==='diff'){S.diffOpen=!S.diffOpen;renderDetail();}
+  else if(a==='first'){select(0);}
+  else if(a==='reload'){
+    var i=S.sel;S.stale[i]=false;S.diffOpen=false;
+    if(S.diff[i]&&!S.back[i])S.diff[i]=null;
+    render();announce('Record reloaded. Decisions are available again.');
+    if(S.report)note.focus();else approveBtn.focus();
+  }
+});
+
+/* ---------- Prototype controls (outside the workspace) ---------- */
+Array.prototype.forEach.call(document.querySelectorAll('#role-seg button'),function(b){
+  b.addEventListener('click',function(){S.role=b.getAttribute('data-role');render();announce('Reviewing as '+(S.role==='pharmacist'?'a pharmacist':'an engineer')+'.');});
+});
+$('sim-net').addEventListener('click',function(){S.armNet=!S.armNet;renderSims();});
+$('sim-bot').addEventListener('click',function(){
+  S.armBot=!S.armBot;
+  if(!S.armBot&&S.botHold){S.botHold=null;}
+  renderSims();renderBar();
+});
+$('sim-auth').addEventListener('click',function(){
+  S.noAuth=!S.noAuth;
+  if(S.noAuth){var c=S.pending?S.pending.i:-1;if(c>-1){cancelPendingFor(c);announce('Your account can\'t review this batch. Your decision on '+nameOf(c)+' was not saved.');}if(S.report){stashDraft();S.report=false;}}
+  render();
+});
+$('sim-stale').addEventListener('click',function(){
+  if(S.loading)return;
+  if(S.view!=='record')S.view='record';
+  var i=S.sel,cancelled=cancelPendingFor(i),now=new Date();
+  S.stale[i]=true;S.diff[i]=makeDiff(i,now);S.diffOpen=false;
+  S.hist[i].push({when:now,text:'Pipeline re-ran this record while it was open',ex:true});
+  render();announce(STALE+(cancelled?'. Your decision was not saved.':''));
+});
+$('sim-rerun').addEventListener('click',function(){
+  if(S.loading)return;
+  if(S.view!=='record')S.view='record';
+  var i=S.sel,now=new Date();cancelPendingFor(i);
+  if(S.status[i]!=='approved'){S.status[i]='approved';S.hist[i].push({when:now,text:'Approved by a pharmacist. Published.',ex:true});}
+  S.status[i]='back';S.back[i]=true;S.stale[i]=true;S.diff[i]=makeDiff(i,now);S.diffOpen=false;
+  S.hist[i].push({when:now,text:'Pipeline re-ran this record after approval. Back in review and hidden from readers.',ex:true});
+  render();announce('Back in review. '+STALE);
+});
+function dropPending(){
+  if(!S.pending)return '';
+  var nm=nameOf(S.pending.i);clearTimeout(S.pending.timer);S.pending=null;hideToast();
+  return ' Your decision on '+nm+' was not saved.';
+}
+$('sim-done').addEventListener('click',function(){
+  if(S.loading)return;
+  var dropped=dropPending();
+  var now=new Date();
+  for(var i=0;i<N;i++){if(S.status[i]!=='approved'){S.status[i]='approved';S.hist[i].push({when:now,text:'Approved by a pharmacist. Published.',ex:true});}S.stale[i]=false;S.back[i]=false;S.diff[i]=null;}
+  S.netErr=null;S.botHold=null;S.report=false;S.ev=false;S.view='complete';S.filter='all';S.q='';qEl.value='';
+  render();announce('Batch 0001-pilot approved. 10 records are now public.'+dropped);
+});
+$('sim-empty').addEventListener('click',function(){
+  if(S.loading)return;
+  var pick=null;['issue','approved','needs'].forEach(function(f){if(pick)return;var n=0;for(var i=0;i<N;i++){if(inFilter(i,f))n++;}if(!n)pick=f;});
+  if(pick){S.filter=pick;S.q='';qEl.value='';}else{S.filter='all';S.q='Ibuprofen';qEl.value='Ibuprofen';}
+  if(S.view==='complete')S.view='record';
+  render();var eb=$('list-empty').querySelector('b');announce(eb?eb.textContent:'Empty view.');
+});
+$('sim-load').addEventListener('click',function(){
+  if(S.loading)return;
+  var dropped=dropPending();
+  S.loading=true;render();announce('Loading batch 0001-pilot.'+dropped);
+  S.loadTimer=setTimeout(function(){S.loading=false;render();announce('Batch 0001-pilot loaded.');},2400);
+});
+$('sim-reset').addEventListener('click',function(){
+  initState();qEl.value='';note.value='';updateCount();clearNoteError();hideToast();
+  if(S.sheet)closeSheet();
+  render();announce('Prototype reset to the live pilot data.');
+});
+
+render();
+})();
+
+</script>

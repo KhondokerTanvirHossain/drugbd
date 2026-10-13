@@ -2,7 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { checkInteractions, getBatch, getProduct, getSubstance, searchProducts } from "../lib/api";
 
 const ok = (data: unknown) => new Response(JSON.stringify({ success: true, data }), { status: 200 });
-beforeEach(() => vi.stubEnv("API_URL", "http://api:8080"));
+beforeEach(() => {
+  vi.stubEnv("API_URL", "http://api:8080");
+  vi.stubEnv("INTERNAL_API_TOKEN", "test-internal-token-0123456789abcdef");
+});
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
 describe("api client", () => {
@@ -60,6 +63,7 @@ describe("api client", () => {
     const f = vi.fn().mockResolvedValue(ok({ batchId: "a/b c", items: [] })); vi.stubGlobal("fetch", f);
     await getBatch("a/b c");
     expect(f.mock.calls[0][0]).toBe("http://api:8080/v1/batches/a%2Fb%20c");
+    expect(new Headers(f.mock.calls[0][1].headers).get("X-Internal-Token")).toBe("test-internal-token-0123456789abcdef");
     expect(f.mock.calls[0][1].cache).toBe("no-store");
     expect(f.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
   });

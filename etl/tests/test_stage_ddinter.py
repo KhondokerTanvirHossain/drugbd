@@ -5,9 +5,10 @@ import psycopg
 import pytest
 from testcontainers.postgres import PostgresContainer
 
-from bddrug_etl.ddinter.client import DDInterPairRow
+from bddrug_etl.ddinter.client import DDInterPairRow, InteractWithList, InteractWithRow, severity
 from bddrug_etl.ddinter.html import DDInterDrug, InteractionText
-from bddrug_etl.stages.ddinter import map_and_load_ddinter, plan_ddinter
+from bddrug_etl.parse.names import route_for_dosage_form
+from bddrug_etl.stages.ddinter import _mapped_chosen, map_and_load_ddinter, plan_ddinter
 from bddrug_etl.stages.results import SharedChanges, write_stage_results
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -32,6 +33,7 @@ SUBSTANCES = [
     ("BDS-000012", "Nomatchium", "XMNM1", [("Nomatchium", "icd11"), ("Warfarin", "ddinter")], []),
     # only the rxnorm name equals a DDInter entry
     ("BDS-000013", "Nomatchium two", "XMNM2", [("Nomatchium two", "icd11"), ("Simvastatin", "rxnorm")], ["DB00641"]),
+    ("BDS-000014", "Ciprofloxacin", "XMCIP1", [("Ciprofloxacin", "icd11")], ["DB00537"]),
 ]
 BDS = {s[1]: s[0] for s in SUBSTANCES}
 WARF, ASA, SIMVA, CHLOR, DOMP, CLAR, AMLO, METF, NAPA, AMOX, CLAV = (
@@ -57,7 +59,14 @@ PRODUCTS = [
     ("nm_rxnorm", "Tablet", ["XMNM2"]),
     ("noing", "Tablet", []),
     ("nosub", "Tablet", ["XMNONE"]),
+    ("chlor_nocd", "Eye Drops", ["XM2TE7"]),   # no clinical drug: the route is unknown
+    ("warf_eye", "Eye Drops", ["XM86W0"]),     # a route that has no warfarin entry of its own
+    ("cipro_eye", "Eye Drops", ["XMCIP1"]),
+    ("cipro_nocd", "Tablet", ["XMCIP1"]),      # no clinical drug
 ]
+# Every other product gets a clinical drug whose route comes from its dosage form, as the clinical stage would set it.
+NO_CLINICAL = {"chlor_nocd", "cipro_nocd"}
+CIPRO = "BDS-000014"
 
 # Real DDInter list rows (id, name); there is deliberately NO domperidone entry.
 DRUG_LIST = [
@@ -108,12 +117,17 @@ FOODS = {"DDInter1951": [{"interaction_id": "9001", "severity": "moderate", "foo
 class FakeDDInter:
     """Fake DDInterClient. Records every call; ``fail`` maps (method, key) to an exception to raise."""
 
-    def __init__(self, extra_drugs=None, fail=None, one_sided=None):
+    def __init__(self, extra_drugs=None, fail=None, one_sided=None, graph_extra=None, interact_extra=None,
+                 incomplete=None):
         self.extra = extra_drugs or {}  # id -> (name, drugbank)
         self.fail = fail or {}
         # directed (ddinter_id, partner_id) lookups that find nothing: DDInter's per-drug interact-with
         # lists are not provably symmetric (warfarin: graph 934 rows, interact-with recordsTotal 936)
         self.one_sided = set(one_sided or ())
+        self.graph_extra = graph_extra or {}  # id -> extra graph rows (partner_id, name, severity, actions)
+        self.interact_extra = interact_extra or {}  # id -> rows only interact-with lists: (partner_id, name, level)
+        self.incomplete = set(incomplete or ())     # ids whose interact-with list cannot be read in full
+        self.interact_calls = []
         self.drug_list_calls = 0
         self.detail_calls, self.graph_calls, self.disease_calls, self.food_calls = [], [], [], []
         self.pair_calls, self.text_calls = [], []
@@ -138,7 +152,18 @@ class FakeDDInter:
     def graph(self, ddinter_id):
         self.graph_calls.append(ddinter_id)
         self._boom("graph", ddinter_id)
-        return [DDInterPairRow(*r) for r in GRAPH.get(ddinter_id, [])]
+        return [DDInterPairRow(*r) for r in GRAPH.get(ddinter_id, []) + self.graph_extra.get(ddinter_id, [])]
+
+    def interact_with(self, ddinter_id):
+        """The graph's partners (same severity) plus ``interact_extra``; incomplete for ids in ``incomplete``."""
+        self.interact_calls.append(ddinter_id)
+        self._boom("interact_with", ddinter_id)
+        if ddinter_id in self.incomplete:
+            return InteractWithList((), False)
+        rows = [InteractWithRow(p, n, INTERACTION_ID.get(frozenset((ddinter_id, p)), "0"), sev)
+                for p, n, sev, _ in GRAPH.get(ddinter_id, []) + self.graph_extra.get(ddinter_id, [])]
+        rows += [InteractWithRow(p, n, "0", severity(level)) for p, n, level in self.interact_extra.get(ddinter_id, [])]
+        return InteractWithList(tuple(rows), True)
 
     def diseases(self, ddinter_id):
         self.disease_calls.append(ddinter_id)
@@ -187,6 +212,12 @@ def conn():
                        VALUES (%s, 'D', %s, 'Co', %s, 'x')""", (cid, cid, form))
                 for xm in xms:
                     c.execute("INSERT INTO curated.brand_product_ingredient VALUES (%s, %s, %s)", (cid, xm, xm))
+                if cid not in NO_CLINICAL:
+                    bdc = c.execute(
+                        """INSERT INTO curated.clinical_drug (signature, display_name, dose_form, route)
+                           VALUES (%s, %s, %s, %s) RETURNING bdc_id""",
+                        (f"test|{cid}", cid, form, route_for_dosage_form(form))).fetchone()[0]
+                    c.execute("UPDATE curated.brand_product SET bdc_id = %s WHERE concept_id = %s", (bdc, cid))
             c.commit()
             yield c
 
@@ -256,7 +287,11 @@ def test_chloramphenicol_maps_all_three_route_scopes(conn):
     assert client.drug_list_calls == 1
     for calls in (client.detail_calls, client.graph_calls, client.disease_calls, client.food_calls):
         assert sorted(calls) == ["DDInter351", "DDInter352", "DDInter353"]
-    assert res[0].evidence == res[1].evidence
+    shared = lambda ev: {k: v for k, v in ev.items() if k not in ("route", "chosen", "route_assumed")}
+    assert shared(res[0].evidence) == shared(res[1].evidence)
+    # each product is checked against the entry for its own route
+    assert [c["ddinter_id"] for c in res[0].evidence["chosen"]] == ["DDInter352"]
+    assert [c["ddinter_id"] for c in res[1].evidence["chosen"]] == ["DDInter351"]
 
 
 def test_only_icd11_rxnorm_dgda_names_are_used_for_matching(conn):
@@ -275,7 +310,8 @@ def test_domperidone_not_in_ddinter_is_none_and_warn(conn):
     assert r.status == "warn" and r.note == NONE_NOTE
     assert coverage(conn, DOMP) == ("none", NONE_NOTE)
     assert ddinter_codes(conn, DOMP) == []
-    assert r.evidence == EMPTY | {"coverage": [{"bds_id": DOMP, "coverage": "none"}]}
+    assert r.evidence == EMPTY | {"coverage": [{"bds_id": DOMP, "coverage": "none"}],
+                                  "route": "systemic", "chosen": [], "route_assumed": False}
     assert client.detail_calls == [] and client.graph_calls == []
 
 
@@ -844,3 +880,233 @@ def test_a_product_error_note_is_one_line(conn):
     boom = RuntimeError("detail exploded\nCONTEXT:  while updating tuple (0,84) in relation \"batch_item\"")
     res = map_and_load_ddinter(conn, FakeDDInter(fail={("drug_detail", "DDInter1951"): boom}), ["warf"])
     assert (res[0].status, res[0].note) == ("fail", "error: RuntimeError: detail exploded")
+
+
+# --- route-scoped selection (spec §8.1) ------------------------------------------------------------
+
+# Real DDInter: warfarin has a pair with systemic chloramphenicol (DDInter351) only, and DDInter has no text for it here.
+CHLOR_WARF = {
+    "DDInter1951": [("DDInter351", "Chloramphenicol", "moderate", (M,))],
+    "DDInter351": [("DDInter1951", "Warfarin", "moderate", (M,))],
+}
+NOTE_351 = "DDInter text not found for DDInter1951/DDInter351"
+
+
+def test_eye_drop_note_uses_ophthalmic_entry(conn):
+    r_eye, r_warf = map_and_load_ddinter(conn, FakeDDInter(graph_extra=CHLOR_WARF), ["chlor_eye", "warf"])
+    assert (r_eye.status, r_eye.note) == ("ok", ""), r_eye
+    assert r_eye.evidence["route"] == "ophthalmic" and r_eye.evidence["route_assumed"] is False
+    assert r_eye.evidence["chosen"] == [
+        {"bds_id": CHLOR, "ddinter_id": "DDInter352", "route_scope": "ophthalmic", "route_assumed": False}]
+    assert r_eye.evidence["pair_count"] == 0 and r_eye.evidence["text_missing"] == []
+    # warfarin's pair with DDInter351 has no text, but no product in scope chose DDInter351
+    assert (r_warf.status, r_warf.note) == ("ok", ""), r_warf
+    # shared facts stay complete: DDInter351 is mapped and its pair stored, for a future chloramphenicol capsule
+    assert ("DDInter351", "systemic", "drugbank", Decimal("1.00")) in ddinter_codes(conn, CHLOR)
+    assert conn.execute("SELECT severity FROM curated.ddinter_pair WHERE ddinter_a = 'DDInter1951' "
+                        "AND ddinter_b = 'DDInter351'").fetchone() == ("moderate",)
+
+
+def test_capsule_note_uses_systemic_entry(conn):
+    r_cap, r_warf = map_and_load_ddinter(conn, FakeDDInter(graph_extra=CHLOR_WARF), ["chlor_cap", "warf"])
+    assert (r_cap.status, r_cap.note) == ("warn", NOTE_351)
+    assert (r_warf.status, r_warf.note) == ("warn", NOTE_351)
+    assert r_cap.evidence["chosen"] == [
+        {"bds_id": CHLOR, "ddinter_id": "DDInter351", "route_scope": "systemic", "route_assumed": False}]
+    assert r_cap.evidence["pair_count"] == 1 and r_cap.evidence["text_missing"] == [["DDInter1951", "DDInter351"]]
+
+
+def test_no_clinical_drug_falls_back_to_systemic_assumed(conn):
+    [r] = map_and_load_ddinter(conn, FakeDDInter(), ["chlor_nocd"])
+    assert (r.status, r.note) == ("warn", "DDInter route assumed: DDInter351 (systemic) used for unknown route")
+    assert r.evidence["route"] is None and r.evidence["route_assumed"] is True
+    assert r.evidence["chosen"] == [
+        {"bds_id": CHLOR, "ddinter_id": "DDInter351", "route_scope": "systemic", "route_assumed": True}]
+
+
+def test_only_other_route_entry_notes_no_route_entry(conn):
+    client = FakeDDInter(extra_drugs={"DDInter9300": ("Ciprofloxacin (otic)", "DB00537")})
+    r_eye, r_nocd = map_and_load_ddinter(conn, client, ["cipro_eye", "cipro_nocd"])
+    assert (r_eye.status, r_eye.note) == ("warn", "No DDInter entry for route ophthalmic")
+    assert (r_nocd.status, r_nocd.note) == ("warn", "No DDInter entry for unknown route")
+    for r in (r_eye, r_nocd):
+        assert r.evidence["chosen"] == [] and r.evidence["route_assumed"] is False and r.evidence["pair_count"] == 0
+    # the otic entry is still a shared fact of the substance
+    assert coverage(conn, CIPRO) == ("full", "DDInter DDInter9300")
+
+
+def test_note_formats(conn):
+    r_warf_eye, r_chlor_nocd = map_and_load_ddinter(conn, FakeDDInter(), ["warf_eye", "chlor_nocd"])
+    assert r_warf_eye.note == "DDInter route assumed: DDInter1951 (systemic) used for ophthalmic"
+    assert r_chlor_nocd.note == "DDInter route assumed: DDInter351 (systemic) used for unknown route"
+    client = FakeDDInter(extra_drugs={"DDInter9300": ("Ciprofloxacin (otic)", "DB00537")})
+    r_eye, r_nocd = map_and_load_ddinter(conn, client, ["cipro_eye", "cipro_nocd"])
+    assert r_eye.note == "No DDInter entry for route ophthalmic"
+    assert r_nocd.note == "No DDInter entry for unknown route"
+    for r in (r_warf_eye, r_chlor_nocd, r_eye, r_nocd):
+        assert r.status == "warn" and "None" not in r.note and "; " not in r.note
+        assert not r.note.startswith("DDInter text not found for ")
+
+
+@pytest.mark.parametrize("batch, missing", [
+    (["warf", "chlor_eye"], False),   # the eye drop chose DDInter352
+    (["warf", "chlor_cap"], True),    # the capsule chose DDInter351
+], ids=["eye", "capsule"])
+def test_text_missing_requires_partner_chosen_in_scope(conn, batch, missing):
+    res = dict(zip(batch, map_and_load_ddinter(conn, FakeDDInter(graph_extra=CHLOR_WARF), batch)))
+    assert res["warf"].evidence["text_missing"] == ([["DDInter1951", "DDInter351"]] if missing else [])
+    assert (NOTE_351 in res["warf"].note) is missing
+
+
+def test_mapped_products_choose_by_their_own_route(conn):
+    """Products mapped by earlier batches count with the entries THEIR route picks (every fixture product is loaded)."""
+    map_and_load_ddinter(conn, FakeDDInter(), ["chlor_eye"])   # maps chloramphenicol's three entries
+    chosen = _mapped_chosen(conn)
+    assert {"DDInter351", "DDInter352"} <= chosen   # the capsule and the no-route product pick 351, the eye drop 352
+    assert "DDInter353" not in chosen               # no otic product: the otic entry is never chosen
+
+
+# --- pair-list reconciliation (spec §8.1 item 5) ----------------------------------------------------
+
+
+def test_graph_and_interact_with_partner_sets_reconciled(conn):
+    client = FakeDDInter(interact_extra={"DDInter1951": [("DDInter777", "Extradrug", 1), ("DDInter778", "Nolevel", None)]})
+    [r] = map_and_load_ddinter(conn, client, ["warf"])
+    assert r.status == "ok" and r.evidence["pair_count"] == 5   # 3 graph partners + 2 only in interact-with
+    assert conn.execute(
+        """SELECT ddinter_a, ddinter_b, severity, actions, partner_name_a, partner_name_b FROM curated.ddinter_pair
+            WHERE ddinter_b IN ('DDInter777', 'DDInter778') ORDER BY ddinter_b""").fetchall() == [
+        ("DDInter1951", "DDInter777", "minor", [], "Warfarin", "Extradrug"),
+        ("DDInter1951", "DDInter778", "unknown", [], "Warfarin", "Nolevel")]
+    # a partner the graph lists keeps the graph's severity and actions
+    assert conn.execute("SELECT severity, actions FROM curated.ddinter_pair WHERE ddinter_a = 'DDInter1951' "
+                        "AND ddinter_b = 'DDInter20'").fetchone() == ("major", ["synergy"])
+    # spec §11.3: an incomplete interact-with read fails the stage and writes no ddinter_drug row
+    [r_clar] = map_and_load_ddinter(conn, FakeDDInter(incomplete={"DDInter393"}), ["clar"])
+    assert (r_clar.status, r_clar.note) == ("fail", "DDInter pair list incomplete for DDInter393")
+    assert conn.execute("SELECT count(*) FROM curated.ddinter_drug WHERE ddinter_id = 'DDInter393'").fetchone()[0] == 0
+
+
+def test_an_interact_with_only_row_never_overwrites_a_graph_row(conn):
+    """Warfarin's graph lists metformin with actions; metformin's graph does not list warfarin, but its interact-with
+    does, at another level. The graph row wins whatever the order, and the extra row reports no change."""
+    one_sided = {"DDInter1951": [("DDInter1164", "Metformin", "moderate", (S,))]}
+    map_and_load_ddinter(conn, FakeDDInter(graph_extra=one_sided), ["warf"])
+    stored = "SELECT severity, actions FROM curated.ddinter_pair WHERE ddinter_a = 'DDInter1164' AND ddinter_b = 'DDInter1951'"
+    assert conn.execute(stored).fetchone() == ("moderate", ["synergy"])
+    metf_only = FakeDDInter(interact_extra={"DDInter1164": [("DDInter1951", "Warfarin", 1)]})   # level 1 = minor
+    changes = SharedChanges()
+    [r] = map_and_load_ddinter(conn, metf_only, ["metf"], changes)
+    assert r.status in ("ok", "warn")
+    assert conn.execute(stored).fetchone() == ("moderate", ["synergy"])
+    # the pair was not changed, so warfarin's products are not re-opened (no shared_change snapshot)
+    assert "DDInter1951" not in changes.ddinter_ids
+    again = SharedChanges()
+    map_and_load_ddinter(conn, metf_only, ["metf"], again)
+    assert again == SharedChanges()
+
+
+def test_an_incomplete_entry_writes_no_pair_rows_even_from_a_complete_partner(conn):
+    res = dict(zip(["warf", "asa"], map_and_load_ddinter(conn, FakeDDInter(incomplete={"DDInter1951"}), ["warf", "asa"])))
+    assert res["warf"].status == "fail"
+    # aspirin's list names warfarin, so aspirin's full list is not stored this run: no drug row, its product fails
+    assert (res["asa"].status, res["asa"].note) == ("fail", "DDInter pair list incomplete for DDInter1951")
+    assert conn.execute("SELECT count(*) FROM curated.ddinter_drug WHERE ddinter_id = 'DDInter20'").fetchone()[0] == 0
+    assert conn.execute("SELECT count(*) FROM curated.ddinter_pair "
+                        "WHERE 'DDInter1951' IN (ddinter_a, ddinter_b)").fetchone()[0] == 0
+
+
+def test_a_failing_lookup_on_an_incomplete_entry_does_not_fail_another_product(conn):
+    """The interact-with read of an incomplete entry is not memoised by the client, so a text lookup through it would
+    raise again; no product may look up a text through an entry that is incomplete in this run."""
+    client = FakeDDInter(incomplete={"DDInter1951"},
+                         fail={("pair_interaction_id", ("DDInter1951", "DDInter20")): RuntimeError("page 3 failed")})
+    r_warf, r_asa = map_and_load_ddinter(conn, client, ["warf", "asa"])
+    assert (r_warf.status, r_warf.note) == ("fail", "DDInter pair list incomplete for DDInter1951")
+    # aspirin fails for the pair it dropped, never with the failing lookup's error
+    assert (r_asa.status, r_asa.note) == ("fail", "DDInter pair list incomplete for DDInter1951"), r_asa
+    assert conn.execute("SELECT count(*) FROM curated.ddinter_drug WHERE ddinter_id = 'DDInter20'").fetchone()[0] == 0
+    assert ("DDInter1951", "DDInter20") not in client.pair_calls
+
+
+def test_incomplete_interact_with_fails_the_products_that_chose_it(conn):
+    [r] = map_and_load_ddinter(conn, FakeDDInter(incomplete={"DDInter1951"}), ["warf"])
+    assert (r.status, r.note) == ("fail", "DDInter pair list incomplete for DDInter1951")
+    assert conn.execute("SELECT count(*) FROM curated.ddinter_drug WHERE ddinter_id = 'DDInter1951'").fetchone()[0] == 0
+    assert conn.execute("SELECT count(*) FROM curated.ddinter_pair "
+                        "WHERE 'DDInter1951' IN (ddinter_a, ddinter_b)").fetchone()[0] == 0
+    # the substance mapping is still written (a shared fact); with no ddinter_drug row the API never counts it checked
+    assert ddinter_codes(conn, WARF)[0][0] == "DDInter1951"
+
+
+def test_an_earlier_complete_list_stays_when_a_later_read_is_incomplete(conn):
+    map_and_load_ddinter(conn, FakeDDInter(), ["warf"])
+    conn.commit()
+    pairs_before = conn.execute("SELECT count(*) FROM curated.ddinter_pair").fetchone()[0]
+    [r] = map_and_load_ddinter(conn, FakeDDInter(incomplete={"DDInter1951"}), ["warf"])
+    assert r.status == "fail"
+    assert conn.execute("SELECT count(*) FROM curated.ddinter_drug WHERE ddinter_id = 'DDInter1951'").fetchone()[0] == 1
+    assert conn.execute("SELECT count(*) FROM curated.ddinter_pair").fetchone()[0] == pairs_before
+
+
+def test_an_incomplete_entry_the_product_did_not_choose_does_not_fail_it(conn):
+    [r] = map_and_load_ddinter(conn, FakeDDInter(incomplete={"DDInter351"}), ["chlor_eye"])
+    assert (r.status, r.note) == ("ok", "")
+    assert conn.execute("SELECT ddinter_id FROM curated.ddinter_drug ORDER BY ddinter_id").fetchall() == [
+        ("DDInter352",), ("DDInter353",)]
+
+
+def test_an_entry_whose_list_names_an_incomplete_partner_gets_no_drug_row(conn):
+    """Reviewer's scenario (§7.4, D41): warfarin (B) has an earlier complete list without metformin (A). Metformin's
+    complete list names warfarin; warfarin's read is incomplete this run. Metformin's full list is not stored, so it
+    gets no drug row (the checker would otherwise say "No interaction listed" for A + B) and its product fails."""
+    map_and_load_ddinter(conn, FakeDDInter(), ["warf"])
+    conn.commit()
+    assert conn.execute("SELECT count(*) FROM curated.ddinter_drug WHERE ddinter_id = 'DDInter1951'").fetchone()[0] == 1
+    client = FakeDDInter(interact_extra={"DDInter1164": [("DDInter1951", "Warfarin", 3)]}, incomplete={"DDInter1951"})
+    r_metf, r_warf = map_and_load_ddinter(conn, client, ["metf", "warf"])
+    assert (r_metf.status, r_metf.note) == ("fail", "DDInter pair list incomplete for DDInter1951")
+    assert (r_warf.status, r_warf.note) == ("fail", "DDInter pair list incomplete for DDInter1951")
+    assert conn.execute("SELECT count(*) FROM curated.ddinter_drug WHERE ddinter_id = 'DDInter1164'").fetchone()[0] == 0
+    # warfarin's earlier row stays; no metformin/warfarin pair row is written
+    assert conn.execute("SELECT count(*) FROM curated.ddinter_drug WHERE ddinter_id = 'DDInter1951'").fetchone()[0] == 1
+    assert conn.execute("SELECT count(*) FROM curated.ddinter_pair WHERE ddinter_a = 'DDInter1164' "
+                        "AND ddinter_b = 'DDInter1951'").fetchone()[0] == 0
+    # the substance mapping is still written (a shared fact); with no ddinter_drug row the API never counts it checked
+    assert ddinter_codes(conn, METF)[0][0] == "DDInter1164"
+
+
+def test_dropped_partner_notes_are_one_per_partner_in_id_order(conn):
+    """Warfarin's list drops three incomplete partners: one note each, numeric id order (79 before 393)."""
+    client = FakeDDInter(graph_extra={"DDInter1951": [("DDInter79", "Amlodipine", "minor", ())]},
+                         incomplete={"DDInter20", "DDInter393", "DDInter79"})
+    [r_warf] = map_and_load_ddinter(conn, client, ["warf", "asa", "clar", "amlo"])[:1]
+    assert (r_warf.status, r_warf.note) == ("fail", "; ".join(
+        f"DDInter pair list incomplete for {i}" for i in ("DDInter20", "DDInter79", "DDInter393")))
+    assert conn.execute("SELECT count(*) FROM curated.ddinter_drug WHERE ddinter_id = 'DDInter1951'").fetchone()[0] == 0
+    # warfarin's pair with a complete partner is still stored
+    assert conn.execute("SELECT count(*) FROM curated.ddinter_pair WHERE ddinter_a = 'DDInter14' "
+                        "AND ddinter_b = 'DDInter1951'").fetchone()[0] == 1
+
+
+def test_one_note_per_dropped_partner_across_the_chosen_entries(conn):
+    """Amoxicillin and clavulanic acid both list warfarin, which is incomplete: the combination fails with one note."""
+    client = FakeDDInter(graph_extra={"DDInter83": [("DDInter1951", "Warfarin", "moderate", ())],
+                                      "DDInter394": [("DDInter1951", "Warfarin", "moderate", ())]},
+                         incomplete={"DDInter1951"})
+    r_combo, r_warf = map_and_load_ddinter(conn, client, ["combo", "warf"])
+    assert (r_combo.status, r_combo.note) == ("fail", "DDInter pair list incomplete for DDInter1951")
+    assert (r_warf.status, r_warf.note) == ("fail", "DDInter pair list incomplete for DDInter1951")
+    assert conn.execute("SELECT count(*) FROM curated.ddinter_drug").fetchone()[0] == 0
+
+
+def test_ddinter352_pair_list_is_stored_without_text_fetches(conn):
+    """Regression fixture (spec §11.3): DDInter352 has 112 pairs (1 major, 111 moderate) and no pilot partner."""
+    eye = [(f"DDInter{5000 + i}", f"Partner {i}", "major" if i == 0 else "moderate", ()) for i in range(112)]
+    client = FakeDDInter(graph_extra={"DDInter352": eye})
+    r_eye = map_and_load_ddinter(conn, client, ["chlor_eye", "warf", "asa"])[0]
+    assert (r_eye.status, r_eye.note) == ("ok", "")
+    assert r_eye.evidence["pair_count"] == 112 and r_eye.evidence["text_fetch_count"] == 0
+    assert conn.execute("""SELECT count(*), count(*) FILTER (WHERE severity = 'major') FROM curated.ddinter_pair
+                            WHERE 'DDInter352' IN (ddinter_a, ddinter_b)""").fetchone() == (112, 1)
+    assert not any("DDInter352" in call for call in client.pair_calls)

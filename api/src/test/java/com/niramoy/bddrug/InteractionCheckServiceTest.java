@@ -18,6 +18,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -33,7 +35,10 @@ class InteractionCheckServiceTest {
         new ProductRow("AMC", "Moxaclav", "Amoxicillin 500 mg + Clavulanic Acid 125 mg", "systemic", "ok"),
         new ProductRow("W2", "Coumarol", "Warfarin 5 mg", "systemic", "ok"),
         new ProductRow("HID", "Hidasprin", "Aspirin 75 mg", "systemic", "pending"),
-        new ProductRow("ISS", "Issueprin", "Aspirin 75 mg", "systemic", "issue"));
+        new ProductRow("ISS", "Issueprin", "Aspirin 75 mg", "systemic", "issue"),
+        new ProductRow("NEW", "Newentrol", "Newentol 5 mg", "systemic", "ok"),
+        new ProductRow("OFEYE", "Oflox Eye", "Ofloxacin 0.3%", "ophthalmic", "ok"),
+        new ProductRow("OFTAB", "Oflox", "Ofloxacin 200 mg", "systemic", "ok"));
     static final List<IngredientRow> INGREDIENTS = List.of(
         new IngredientRow("W", "XMW", "Warfarin", "BDS-1", "Warfarin", "full"),
         new IngredientRow("W2", "XMW", "Warfarin", "BDS-1", "Warfarin", "full"),
@@ -46,7 +51,10 @@ class InteractionCheckServiceTest {
         new IngredientRow("AMC", "XMAM", "Amoxicillin", "BDS-8", "Amoxicillin", "full"),
         new IngredientRow("AMC", "XMCL", "Clavulanic acid", "BDS-9", "Clavulanic acid", "full"),
         new IngredientRow("HID", "XMA", "Aspirin", "BDS-2", "Aspirin", "full"),
-        new IngredientRow("ISS", "XMA", "Aspirin", "BDS-2", "Aspirin", "full"));
+        new IngredientRow("ISS", "XMA", "Aspirin", "BDS-2", "Aspirin", "full"),
+        new IngredientRow("NEW", "XMNE", "Newentol", "BDS-10", "Newentol", "full"),
+        new IngredientRow("OFEYE", "XMOF", "Ofloxacin", "BDS-11", "Ofloxacin", "full"),
+        new IngredientRow("OFTAB", "XMOF", "Ofloxacin", "BDS-11", "Ofloxacin", "full"));
     static final Map<String, List<DdinterCode>> CODES = Map.of(
         "BDS-1", List.of(new DdinterCode("DDInter1951", "systemic")),
         "BDS-2", List.of(new DdinterCode("DDInter20", "systemic")),
@@ -54,13 +62,19 @@ class InteractionCheckServiceTest {
         "BDS-6", List.of(new DdinterCode("DDInter600", "systemic")),
         "BDS-7", List.of(new DdinterCode("DDInter700", "otic")),
         "BDS-8", List.of(new DdinterCode("DDInter80", "systemic")),
-        "BDS-9", List.of(new DdinterCode("DDInter90", "systemic")));
+        "BDS-9", List.of(new DdinterCode("DDInter90", "systemic")),
+        "BDS-10", List.of(new DdinterCode("DDInter1000", "systemic")),
+        "BDS-11", List.of(new DdinterCode("DDInter1100", "systemic"), new DdinterCode("DDInter1101", "ophthalmic")));
+    /** Entries whose read never completed have no ddinter_drug row (§7.4, §8.1 item 5): DDInter1000 and DDInter1101. */
+    static final Set<String> LISTED = CODES.values().stream().flatMap(List::stream).map(DdinterCode::code)
+        .filter(c -> !c.equals("DDInter1000") && !c.equals("DDInter1101")).collect(Collectors.toSet());
     static final List<PairRow> PAIRS = List.of(
         new PairRow("DDInter1951", "DDInter20", "major", List.of("Avoid"), "bleeding", "avoid it"),
         new PairRow("DDInter1951", "DDInter351", "minor", List.of(), null, null),
         new PairRow("DDInter1951", "DDInter352", "moderate", List.of("Monitor"), "eye text", "monitor INR"),
         new PairRow("DDInter1951", "DDInter700", "major", List.of(), null, null),
-        new PairRow("DDInter80", "DDInter90", "major", List.of(), null, null));
+        new PairRow("DDInter80", "DDInter90", "major", List.of(), null, null),
+        new PairRow("DDInter1100", "DDInter1951", "major", List.of("Monitor"), "qt text", "monitor"));
 
     static class FakePort implements CheckQueryPort {
         final List<List<String>> calls = new ArrayList<>();
@@ -68,7 +82,7 @@ class InteractionCheckServiceTest {
             calls.add(conceptIds);
             return Mono.just(new CheckData(
                 PRODUCTS.stream().filter(p -> conceptIds.contains(p.conceptId())).toList(),
-                INGREDIENTS.stream().filter(i -> conceptIds.contains(i.conceptId())).toList(), CODES, PAIRS));
+                INGREDIENTS.stream().filter(i -> conceptIds.contains(i.conceptId())).toList(), CODES, LISTED, PAIRS));
         }
     }
 
@@ -167,5 +181,29 @@ class InteractionCheckServiceTest {
     @Test void unknownIdIsNotFoundEvenWhenOthersAreHidden() {
         StepVerifier.create(service.check(List.of("HID", "missing"), Scope.PUBLIC))
             .expectError(NotFoundException.class).verify();
+    }
+
+    @Test void anEntryWithoutAStoredFullListIsNoDataNeverNoInteractions() {
+        // §7.4, D41: substance BDS-10 gained an entry whose interact-with read never completed (no ddinter_drug row,
+        // no pair rows). The product is not "checked": it is listed in noData, so the page never says "no interactions".
+        CheckResult r = check("NEW", "W");
+        assertThat(r.alerts()).isEmpty();
+        assertThat(r.noData()).extracting(n -> n.conceptId() + "/" + n.bdsId() + "/" + n.name())
+            .containsExactly("NEW/BDS-10/Newentol");
+        assertThat(service.check(List.of("NEW", "W"), Scope.PUBLIC).block().noData())
+            .extracting(n -> n.conceptId()).containsExactly("NEW");
+    }
+
+    @Test void anUnlistedExactEntryNeverFallsBackToTheSystemicOne() {
+        // §8.2: the exact ophthalmic entry exists, so RouteRule picks it; without its stored list the eye drop is noData,
+        // and it does not borrow the systemic entry's warfarin alert.
+        CheckResult eye = check("OFEYE", "W");
+        assertThat(eye.alerts()).isEmpty();
+        assertThat(eye.noData()).extracting(n -> n.conceptId() + "/" + n.bdsId()).containsExactly("OFEYE/BDS-11");
+        // the systemic tablet chose the listed systemic entry and alerts as usual
+        CheckResult tab = check("OFTAB", "W");
+        assertThat(tab.noData()).isEmpty();
+        assertThat(tab.alerts()).extracting(a -> a.severity()).containsExactly("major");
+        assertThat(tab.alerts().get(0).routeAssumed()).isFalse();
     }
 }

@@ -7,6 +7,12 @@ jobs:
       - uses: actions/checkout@v4
       - name: Locked migrations are unchanged and every migration is in db/migrations.lock
         run: ./db/check-migration-lock.sh
+  deploy-scripts:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: load-dgda stages validator
+        run: bash deploy/check-stages.test.sh
   etl:
     runs-on: ubuntu-24.04
     steps:

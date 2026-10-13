@@ -12,3 +12,6 @@ export const SEVERITY_NOT_CLASSIFIED = "Severity not classified by DDInter";
 
 /** Shown instead of a record no pharmacist has approved yet (public scope). Nothing else of the record is shown. */
 export const NOT_REVIEWED = "Not yet reviewed by a pharmacist";
+
+/** Phase 0 (spec §12.1): what anonymous and `user` sessions see on /batches and /batches/[id] (status 200). */
+export const BATCHES_REVIEWERS_ONLY = "Only pharmacists and engineers can see batches.";

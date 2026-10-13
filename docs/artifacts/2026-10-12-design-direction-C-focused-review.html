@@ -1,0 +1,1243 @@
+<title>Focused Review Board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Atkinson+Hyperlegible+Next:ital,wght@0,400;0,600;0,700;1,400&family=Atkinson+Hyperlegible+Mono:wght@400;600&family=Noto+Sans+Bengali:wght@600;700&display=swap">
+<style>
+/* Layout concept: a design board read top to bottom; each artefact sits in a quiet frame, wide mockups scroll inside their own frame. */
+:root{
+  /* Neutrals: cool, river-grey bias toward the kingfisher accent */
+  --bg:#F2F5F6; --surface:#FFFFFF; --surface-2:#EDF1F3; --surface-3:#E2E8EB;
+  --line:#D4DCE0; --line-strong:#B5C2C8;
+  --ink:#0F1D24; --ink-2:#43545D; --ink-3:#66767E;
+  /* Accent: kingfisher */
+  --accent:#0A6C8F; --accent-ink:#FFFFFF; --accent-soft:#DCEEF5; --accent-line:#9BCBDD;
+  /* Semantic */
+  --ok:#1E7A45; --ok-soft:#E1F2E8;
+  --warn:#975A00; --warn-soft:#FBEFD9;
+  --crit:#B3261E; --crit-soft:#FBE4E1;
+  --info:#2E5AAC; --info-soft:#E3EAF8;
+  --unknown:#5A6670; --unknown-soft:#EEF1F3;
+  --nodata:#575C70; --nodata-soft:#ECEDF2; --nodata-hatch:#CDD0DC;
+  /* Materials */
+  --glass:rgba(255,255,255,.74); --scrim:rgba(15,29,36,.34); --shadow-rgb:15 29 36;
+  --focus:#0A6C8F;
+  /* Third-party mark (same in both themes) */
+  --g-blue:#4285F4; --g-red:#EA4335; --g-yellow:#FBBC05; --g-green:#34A853;
+  --gbtn-bg:#FFFFFF; --gbtn-ink:#1F1F1F; --gbtn-line:#747775;
+
+  /* Type */
+  --f-display:"Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --f-body:"Atkinson Hyperlegible Next", "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono:"Atkinson Hyperlegible Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --f-bn:"Noto Sans Bengali", "Hind Siliguri", "Bangla Sangam MN", sans-serif;
+
+  /* Spacing (4pt) */
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px; --s7:48px; --s8:72px;
+  /* Radius by role */
+  --r-chip:6px; --r-control:10px; --r-card:14px; --r-sheet:22px; --r-pill:999px;
+  /* Motion */
+  --d1:120ms; --d2:200ms; --d3:320ms; --d4:480ms;
+  --e-standard:cubic-bezier(.2,0,0,1);
+  --e-decel:cubic-bezier(0,0,0,1);
+  --e-accel:cubic-bezier(.3,0,1,1);
+  --e-spring:cubic-bezier(.22,1,.36,1);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0B1215; --surface:#121B1F; --surface-2:#172227; --surface-3:#1E2B31;
+    --line:#25333A; --line-strong:#3A4B53;
+    --ink:#E4ECEF; --ink-2:#A8B7BE; --ink-3:#8394A0;
+    --accent:#5DBCDD; --accent-ink:#03202B; --accent-soft:#12323D; --accent-line:#2B6A80;
+    --ok:#6CCB92; --ok-soft:#12301F;
+    --warn:#F0B45C; --warn-soft:#382810;
+    --crit:#FF8A7F; --crit-soft:#3D1A17;
+    --info:#93B2F0; --info-soft:#18253F;
+    --unknown:#A9B5BC; --unknown-soft:#1A2429;
+    --nodata:#B0B5C8; --nodata-soft:#1B1E29; --nodata-hatch:#343949;
+    --glass:rgba(18,27,31,.74); --scrim:rgba(0,0,0,.52); --shadow-rgb:0 0 0;
+    --focus:#5DBCDD;
+    --gbtn-bg:#131314; --gbtn-ink:#E3E3E3; --gbtn-line:#8E918F;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+    --bg:#0B1215; --surface:#121B1F; --surface-2:#172227; --surface-3:#1E2B31;
+    --line:#25333A; --line-strong:#3A4B53;
+    --ink:#E4ECEF; --ink-2:#A8B7BE; --ink-3:#8394A0;
+    --accent:#5DBCDD; --accent-ink:#03202B; --accent-soft:#12323D; --accent-line:#2B6A80;
+    --ok:#6CCB92; --ok-soft:#12301F;
+    --warn:#F0B45C; --warn-soft:#382810;
+    --crit:#FF8A7F; --crit-soft:#3D1A17;
+    --info:#93B2F0; --info-soft:#18253F;
+    --unknown:#A9B5BC; --unknown-soft:#1A2429;
+    --nodata:#B0B5C8; --nodata-soft:#1B1E29; --nodata-hatch:#343949;
+    --glass:rgba(18,27,31,.74); --scrim:rgba(0,0,0,.52); --shadow-rgb:0 0 0;
+    --focus:#5DBCDD;
+    --gbtn-bg:#131314; --gbtn-ink:#E3E3E3; --gbtn-line:#8E918F;
+    color-scheme:dark;
+}
+
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--bg); color:var(--ink); font-family:var(--f-body); font-size:16px; line-height:1.5; margin:0}
+.board{max-width:1240px; margin:0 auto; padding-inline:clamp(16px,4vw,48px); padding-block:var(--s6) var(--s8)}
+h1,h2,h3,h4{font-family:var(--f-display); margin:0; text-wrap:balance; font-optical-sizing:auto}
+p{margin:0}
+:focus-visible{outline:2px solid var(--focus); outline-offset:2px; border-radius:4px}
+button{font:inherit; color:inherit; cursor:pointer}
+.mono{font-family:var(--f-mono); font-size:.86em; letter-spacing:0}
+.tnum{font-variant-numeric:tabular-nums}
+svg.i{width:16px; height:16px; flex:none; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round}
+.vh{position:absolute!important; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap}
+
+/* ---------- Board header ---------- */
+.mast{display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:var(--s5); padding-bottom:var(--s6); border-bottom:1px solid var(--line)}
+.mast-l{min-width:0; max-width:760px}
+.dir-tag{display:inline-flex; align-items:center; gap:var(--s2); font-weight:700; font-size:14px; color:var(--accent); margin-bottom:var(--s3)}
+.dir-tag b{display:inline-grid; place-items:center; width:26px; height:26px; border-radius:var(--r-chip); background:var(--accent); color:var(--accent-ink); font-family:var(--f-display); font-weight:800}
+.mast h1{font-size:clamp(40px,7vw,76px); line-height:1; letter-spacing:-.035em; font-weight:760; font-variation-settings:"wdth" 92}
+.mast-idea{margin-top:var(--s4); font-size:clamp(17px,2vw,20px); color:var(--ink-2); max-width:62ch}
+.theme-switch{display:inline-flex; padding:3px; border-radius:var(--r-pill); background:var(--surface-2); border:1px solid var(--line)}
+.theme-switch button{border:0; background:transparent; padding:6px 14px; border-radius:var(--r-pill); font-size:14px; font-weight:600; color:var(--ink-2); transition:background var(--d1) var(--e-standard), color var(--d1)}
+.theme-switch button[aria-pressed="true"]{background:var(--surface); color:var(--ink); box-shadow:0 1px 2px rgb(var(--shadow-rgb)/.14)}
+
+/* ---------- Sections ---------- */
+.sec{padding-top:var(--s8)}
+.sec-h{display:grid; grid-template-columns:auto 1fr; gap:var(--s2) var(--s4); align-items:baseline; margin-bottom:var(--s5)}
+.sec-n{font-family:var(--f-display); font-weight:700; font-size:15px; color:var(--ink-3); font-variant-numeric:tabular-nums; min-width:2ch}
+.sec-h h2{font-size:clamp(26px,3.4vw,36px); letter-spacing:-.02em; line-height:1.1; font-weight:700}
+.sec-h p{grid-column:2; color:var(--ink-2); max-width:68ch}
+@media (max-width:560px){ .sec-h{grid-template-columns:1fr} .sec-h p{grid-column:1} }
+
+/* ---------- 1 Identity ---------- */
+.ident{display:grid; grid-template-columns:minmax(0,1.4fr) minmax(0,1fr); gap:var(--s5)}
+@media (max-width:860px){ .ident{grid-template-columns:1fr} }
+.wm-stage{background:var(--surface); border:1px solid var(--line); border-radius:var(--r-sheet); padding:clamp(24px,5vw,56px); display:grid; gap:var(--s5); min-width:0}
+.wm{font-family:var(--f-display); font-weight:780; letter-spacing:-.045em; line-height:.9; color:var(--ink); display:inline-flex; align-items:flex-start; font-variation-settings:"wdth" 88}
+.wm sup{font-family:var(--f-bn); font-weight:700; color:var(--accent); font-size:.42em; line-height:1; margin-left:.06em; margin-top:.02em; letter-spacing:0}
+.wm.xl{font-size:clamp(84px,16vw,168px)}
+.wm.sm{font-size:22px}
+.wm.md{font-size:30px}
+.wm-note{display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:var(--s4); color:var(--ink-2); font-size:15px}
+.wm-note strong{display:block; color:var(--ink); font-size:15px; margin-bottom:2px}
+.wm-lockups{display:flex; flex-wrap:wrap; gap:var(--s3); align-items:center}
+.lock{display:inline-flex; align-items:center; gap:var(--s3); padding:var(--s3) var(--s4); border-radius:var(--r-card); border:1px solid var(--line)}
+.lock.inv{background:var(--ink); border-color:var(--ink)}
+.lock.inv .wm{color:var(--bg)}
+.lock.inv .wm sup{color:var(--accent-line)}
+.lock .tag{font-size:13px; color:var(--ink-3)}
+.names{display:grid; gap:var(--s3); align-content:start; min-width:0}
+.name-card{background:var(--surface); border:1px solid var(--line); border-radius:var(--r-card); padding:var(--s4) var(--s5)}
+.name-card.primary{border-color:var(--accent-line); background:var(--accent-soft)}
+.name-card h3{font-size:24px; letter-spacing:-.02em}
+.name-card .bn{font-family:var(--f-bn); font-weight:600; color:var(--ink-2); margin-left:var(--s2); font-size:18px}
+.name-card p{color:var(--ink-2); font-size:15px; margin-top:var(--s1)}
+.name-card .role{font-size:13px; font-weight:700; color:var(--accent); margin-bottom:var(--s1)}
+
+/* ---------- 2 Principles ---------- */
+.principles{display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:1px; background:var(--line); border:1px solid var(--line); border-radius:var(--r-sheet); overflow:hidden}
+@media (max-width:400px){ .principles{grid-template-columns:1fr} }
+.pr{background:var(--surface); padding:var(--s5); display:grid; gap:var(--s2); align-content:start}
+.pr h3{font-size:21px; letter-spacing:-.015em; line-height:1.2}
+.pr p{color:var(--ink-2); font-size:15px}
+.maps{display:flex; flex-wrap:wrap; gap:6px; margin-top:var(--s2)}
+.map{font-size:12.5px; font-weight:700; padding:3px 9px; border-radius:var(--r-chip); background:var(--surface-2); color:var(--ink-2); border:1px solid var(--line)}
+.map.apple::before{content:"HIG "; color:var(--ink-3); font-weight:600}
+.map.m3::before{content:"M3 "; color:var(--ink-3); font-weight:600}
+
+/* ---------- 3 Foundations ---------- */
+.f-grid{display:grid; gap:var(--s5)}
+.f-block{background:var(--surface); border:1px solid var(--line); border-radius:var(--r-sheet); padding:var(--s5); min-width:0}
+.f-block > h3{font-size:19px; letter-spacing:-.01em; margin-bottom:var(--s1)}
+.f-block > p.lede{color:var(--ink-2); font-size:15px; margin-bottom:var(--s4); max-width:70ch}
+.f-two{display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr)); gap:var(--s5)}
+.sw-table{width:100%; border-collapse:collapse; font-size:14px; min-width:560px}
+.sw-table th{font-weight:700; text-align:left; color:var(--ink-3); font-size:13px; padding:0 var(--s3) var(--s2) 0}
+.sw-table td{padding:var(--s2) var(--s3) var(--s2) 0; border-top:1px solid var(--line); vertical-align:middle}
+.sw{display:inline-flex; align-items:center; gap:var(--s2)}
+.chipsw{width:40px; height:28px; border-radius:var(--r-chip); border:1px solid rgb(var(--shadow-rgb)/.14); flex:none}
+.chipsw.hatch{background-image:repeating-linear-gradient(135deg, transparent 0 5px, rgba(120,125,145,.45) 5px 7px)}
+.sw code{font-family:var(--f-mono); font-size:12.5px; color:var(--ink-2)}
+.tok{font-family:var(--f-mono); font-size:13px; color:var(--ink)}
+.use{color:var(--ink-2); font-size:13.5px}
+.scroll-x{overflow-x:auto; -webkit-overflow-scrolling:touch}
+
+.sev-row{display:flex; flex-wrap:wrap; gap:var(--s2); margin-top:var(--s4)}
+.sev{display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:700; padding:4px 10px 4px 8px; border-radius:var(--r-chip); line-height:1.3}
+.sev svg{width:14px; height:14px}
+.sev.major{background:var(--crit-soft); color:var(--crit)}
+.sev.moderate{background:var(--warn-soft); color:var(--warn)}
+.sev.minor{background:var(--info-soft); color:var(--info)}
+.sev.unk{background:var(--unknown-soft); color:var(--unknown); border:1px dashed var(--unknown)}
+.sev.nodata{color:var(--nodata); background-color:var(--nodata-soft); background-image:repeating-linear-gradient(135deg, transparent 0 6px, var(--nodata-hatch) 6px 8px); border:1px solid var(--nodata-hatch)}
+.sev.ok{background:var(--ok-soft); color:var(--ok)}
+
+.type-spec{display:grid; gap:0}
+.ts{display:grid; grid-template-columns:150px minmax(0,1fr); gap:var(--s4); padding:var(--s3) 0; border-top:1px solid var(--line); align-items:baseline}
+.ts:first-child{border-top:0}
+.ts-meta{font-size:12.5px; color:var(--ink-3); line-height:1.4}
+.ts-meta b{display:block; color:var(--ink); font-size:13.5px}
+.ts-sample{min-width:0; overflow-wrap:anywhere}
+@media (max-width:560px){ .ts{grid-template-columns:1fr; gap:var(--s1)} }
+
+.spacing{display:grid; gap:6px}
+.sp{display:grid; grid-template-columns:56px 1fr; align-items:center; gap:var(--s3); font-size:13px; color:var(--ink-2)}
+.sp i{display:block; height:12px; background:var(--accent); border-radius:2px; opacity:.85}
+.radii{display:flex; flex-wrap:wrap; gap:var(--s3)}
+.rd{display:grid; gap:6px; justify-items:start; font-size:13px; color:var(--ink-2)}
+.rd i{display:block; width:64px; height:48px; border:1.5px solid var(--ink-2); border-bottom:0; border-right:0}
+.elev{display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:var(--s4); padding:var(--s4); background:var(--surface-2); border-radius:var(--r-card)}
+.ev{height:84px; border-radius:var(--r-card); background:var(--surface); display:flex; align-items:flex-end; padding:var(--s3); font-size:13px; color:var(--ink-2)}
+.ev b{color:var(--ink); display:block}
+.ev.e0{border:1px solid var(--line); box-shadow:none}
+.ev.e1{box-shadow:0 0 0 1px rgb(var(--shadow-rgb)/.08), 0 1px 3px rgb(var(--shadow-rgb)/.10)}
+.ev.e2{background:var(--glass); backdrop-filter:blur(16px) saturate(170%); -webkit-backdrop-filter:blur(16px) saturate(170%); box-shadow:0 0 0 1px rgb(var(--shadow-rgb)/.08), 0 8px 24px rgb(var(--shadow-rgb)/.14)}
+.ev.e3{box-shadow:0 0 0 1px rgb(var(--shadow-rgb)/.08), 0 24px 60px rgb(var(--shadow-rgb)/.24)}
+
+.motion{display:grid; gap:var(--s3)}
+.mo{display:grid; grid-template-columns:minmax(0,190px) minmax(0,1fr); gap:var(--s3); align-items:center; font-size:13px}
+.mo-l b{display:block; font-size:13.5px}
+.mo-l span{color:var(--ink-3); font-family:var(--f-mono); font-size:12px}
+.track{position:relative; height:28px; border-radius:var(--r-pill); background:var(--surface-2); border:1px solid var(--line)}
+.dot{position:absolute; top:3px; left:3px; width:20px; height:20px; border-radius:50%; background:var(--accent); transform:translateX(0)}
+.motion.play .dot{transform:translateX(calc(var(--w,300px) - 26px))}
+.mo[data-e="standard"] .dot{transition:transform var(--d3) var(--e-standard)}
+.mo[data-e="decel"] .dot{transition:transform var(--d3) var(--e-decel)}
+.mo[data-e="accel"] .dot{transition:transform var(--d2) var(--e-accel)}
+.mo[data-e="spring"] .dot{transition:transform var(--d4) var(--e-spring)}
+.btn-ghost{display:inline-flex; align-items:center; gap:var(--s2); border:1px solid var(--line-strong); background:var(--surface); padding:7px 14px; border-radius:var(--r-control); font-weight:600; font-size:14px}
+.btn-ghost:hover{background:var(--surface-2)}
+@media (max-width:560px){ .mo{grid-template-columns:1fr} }
+
+/* ---------- Frames (mockups) ---------- */
+.frame{border:1px solid var(--line); border-radius:var(--r-sheet); background:var(--surface-2); overflow:hidden; box-shadow:0 1px 2px rgb(var(--shadow-rgb)/.06), 0 20px 50px -24px rgb(var(--shadow-rgb)/.25)}
+.frame-bar{display:flex; align-items:center; gap:var(--s3); padding:10px var(--s4); border-bottom:1px solid var(--line); background:var(--surface-2); font-size:13px; color:var(--ink-3)}
+.frame-url{flex:1; min-width:0; max-width:420px; margin-inline:auto; text-align:center; padding:4px 12px; border-radius:var(--r-pill); background:var(--surface); border:1px solid var(--line); font-family:var(--f-mono); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.frame-scroll{overflow-x:auto; -webkit-overflow-scrolling:touch}
+.canvas{min-width:1120px; background:var(--surface)}
+.canvas.mid{min-width:760px}
+.scroll-hint{display:none; font-size:13px; color:var(--ink-3); margin-top:var(--s2)}
+@media (max-width:1000px){ .scroll-hint{display:block} }
+
+/* Shared app atoms */
+.btn{display:inline-flex; align-items:center; justify-content:center; gap:var(--s2); border-radius:var(--r-control); font-weight:700; font-size:15px; padding:10px 18px; border:1px solid transparent; position:relative; transition:background var(--d1) var(--e-standard), transform var(--d1) var(--e-standard), box-shadow var(--d1)}
+.btn:active{transform:scale(.97)}
+.btn-primary{background:var(--accent); color:var(--accent-ink)}
+.btn-primary:hover{box-shadow:inset 0 0 0 100px rgb(255 255 255 / .08)}
+.btn-outline{border-color:var(--line-strong); background:var(--surface); color:var(--ink)}
+.btn-outline:hover{background:var(--surface-2)}
+.btn-crit{border-color:var(--crit); color:var(--crit); background:var(--surface)}
+.btn-crit:hover{background:var(--crit-soft)}
+kbd{font-family:var(--f-mono); font-size:11.5px; font-weight:600; min-width:20px; height:20px; padding:0 5px; display:inline-grid; place-items:center; border-radius:5px; border:1px solid var(--line-strong); border-bottom-width:2px; background:var(--surface); color:var(--ink-2); line-height:1}
+.btn-primary kbd{background:rgb(255 255 255 / .16); border-color:rgb(255 255 255 / .32); color:var(--accent-ink)}
+.pill{display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:700; padding:4px 11px 4px 9px; border-radius:var(--r-pill); white-space:nowrap}
+.pill-pending{background:var(--warn-soft); color:var(--warn)}
+.pill-ok{background:var(--ok-soft); color:var(--ok)}
+.pill-info{background:var(--info-soft); color:var(--info)}
+.illus{color:var(--ink-3); border-bottom:1px dotted var(--ink-3)}
+.illus::before{content:"\25E6\00a0"; color:var(--accent)}
+
+/* ---------- 4 Landing ---------- */
+.lp-nav{display:flex; align-items:center; gap:var(--s6); padding:20px 56px; border-bottom:1px solid var(--line)}
+.lp-nav nav{display:flex; gap:var(--s5); font-size:15px; color:var(--ink-2); font-weight:600}
+.lp-nav .sp-auto{margin-left:auto; display:flex; gap:var(--s3); align-items:center}
+.lp-nav a, .lp a{color:inherit; text-decoration:none}
+.lp-hero{display:grid; grid-template-columns:1.15fr .85fr; gap:56px; padding:72px 56px 64px; align-items:end}
+.lp-hero h1{font-size:76px; line-height:.98; letter-spacing:-.04em; font-weight:760; font-variation-settings:"wdth" 90; max-width:11ch}
+.lp-hero .sub{font-size:19px; color:var(--ink-2); margin-top:var(--s5); max-width:46ch; line-height:1.55}
+.lp-cta{display:flex; gap:var(--s3); margin-top:var(--s6); align-items:center}
+.lp-pilot{margin-top:var(--s6); display:flex; gap:var(--s3); align-items:center; font-size:14px; color:var(--ink-2)}
+.lp-pilot .bar{width:160px; height:6px; border-radius:3px; background:var(--surface-3); position:relative; overflow:hidden}
+.lp-pilot .bar i{position:absolute; inset:0 auto 0 0; width:3px; background:var(--accent)}
+.trace{border:1px solid var(--line); border-radius:var(--r-sheet); background:var(--surface); box-shadow:0 30px 60px -30px rgb(var(--shadow-rgb)/.35); overflow:hidden}
+.trace-head{display:flex; justify-content:space-between; align-items:center; padding:14px 20px; border-bottom:1px solid var(--line); font-size:13px; color:var(--ink-3); background:var(--surface-2)}
+.trace ol{list-style:none; margin:0; padding:8px 20px 18px; display:grid}
+.trace li{display:grid; grid-template-columns:22px 1fr; gap:14px; padding:12px 0; position:relative}
+.trace li:not(:last-child)::after{content:""; position:absolute; left:10px; top:34px; bottom:-10px; width:1.5px; background:var(--line-strong)}
+.trace .node{width:22px; height:22px; border-radius:50%; border:1.5px solid var(--accent); background:var(--surface); display:grid; place-items:center; margin-top:2px}
+.trace .node i{width:8px; height:8px; border-radius:50%; background:var(--accent)}
+.trace .k{font-size:12.5px; color:var(--ink-3); font-weight:600}
+.trace .v{font-family:var(--f-display); font-size:21px; letter-spacing:-.015em; font-weight:650; line-height:1.2}
+.trace .m{font-size:13px; color:var(--ink-2); margin-top:2px}
+.codes{display:flex; flex-wrap:wrap; gap:6px; margin-top:6px}
+.code{font-family:var(--f-mono); font-size:12px; padding:3px 7px; border-radius:var(--r-chip); background:var(--surface-2); border:1px solid var(--line); color:var(--ink); white-space:nowrap}
+.code span{color:var(--ink-3); margin-right:4px}
+
+.lp-promise{padding:64px 56px 72px; border-top:1px solid var(--line); background:var(--surface-2); display:grid; grid-template-columns:.8fr 1.2fr; gap:56px}
+.lp-promise h2{font-size:40px; letter-spacing:-.03em; line-height:1.05; font-weight:720}
+.lp-promise .lede{color:var(--ink-2); margin-top:var(--s4); font-size:17px; max-width:36ch}
+.promises{display:grid; gap:var(--s3)}
+.promise{display:grid; grid-template-columns:200px 1fr; gap:var(--s5); padding:20px 24px; border-radius:var(--r-card); background:var(--surface); border:1px solid var(--line)}
+.promise h3{font-size:18px; letter-spacing:-.01em; line-height:1.25}
+.promise .show{font-size:15px; color:var(--ink-2)}
+.promise .show .sev, .promise .show .pill{margin-bottom:8px}
+.promise blockquote{margin:6px 0 0; font-size:15px; color:var(--ink)}
+
+/* ---------- 5 Sign in ---------- */
+.auth-wrap{display:grid; grid-template-columns:minmax(0,440px) minmax(0,1fr); gap:var(--s6); align-items:start}
+@media (max-width:860px){ .auth-wrap{grid-template-columns:1fr} }
+.auth{background:var(--surface); border:1px solid var(--line); border-radius:var(--r-sheet); padding:36px 32px 28px; box-shadow:0 24px 60px -32px rgb(var(--shadow-rgb)/.35); display:grid; gap:var(--s5); min-width:0}
+.auth h3{font-size:30px; letter-spacing:-.025em; line-height:1.1; font-weight:720}
+.auth .lead{color:var(--ink-2); margin-top:var(--s2); font-size:15.5px}
+.gbtn{display:flex; align-items:center; justify-content:center; gap:12px; width:100%; height:48px; border-radius:var(--r-pill); background:var(--gbtn-bg); color:var(--gbtn-ink); border:1px solid var(--gbtn-line); font-family:"Roboto", var(--f-body); font-weight:600; font-size:15.5px; transition:box-shadow var(--d1)}
+.gbtn:hover{box-shadow:0 1px 3px rgb(var(--shadow-rgb)/.25)}
+.gbtn svg{width:20px; height:20px}
+.invite{display:grid; grid-template-columns:auto 1fr; gap:var(--s3); padding:var(--s4); border-radius:var(--r-card); background:var(--accent-soft); color:var(--ink); font-size:14.5px}
+.invite svg{color:var(--accent); margin-top:2px}
+.invite b{display:block}
+.priv{font-size:13.5px; color:var(--ink-2); border-top:1px solid var(--line); padding-top:var(--s4); display:grid; gap:var(--s2)}
+.priv .tsx{display:flex; align-items:center; gap:var(--s2); color:var(--ink-3); font-size:12.5px}
+.notes{display:grid; gap:var(--s3); min-width:0}
+.note{display:grid; grid-template-columns:28px 1fr; gap:var(--s3); padding:var(--s4) 0; border-top:1px solid var(--line)}
+.note:first-child{border-top:0; padding-top:0}
+.note .nb{font-family:var(--f-display); font-weight:700; color:var(--accent); font-size:15px}
+.note h4{font-size:16px; font-family:var(--f-body); font-weight:700}
+.note p{color:var(--ink-2); font-size:15px}
+.auth-states{display:flex; flex-wrap:wrap; gap:var(--s3); margin-top:var(--s2)}
+.mini{flex:1 1 220px; border:1px solid var(--line); border-radius:var(--r-card); padding:var(--s3) var(--s4); background:var(--surface); font-size:14px; display:grid; gap:4px}
+.mini b{font-size:13px; color:var(--ink-3)}
+
+/* ---------- 6 Reviewer ---------- */
+.rv{position:relative; display:grid; grid-template-rows:auto auto 1fr; min-height:860px; background:var(--bg)}
+.rv-top{display:flex; align-items:center; gap:var(--s5); padding:12px 28px; background:var(--surface); border-bottom:1px solid var(--line)}
+.crumb{font-size:14px; color:var(--ink-2); display:flex; gap:8px; align-items:center}
+.crumb b{color:var(--ink)}
+.crumb .sep{color:var(--ink-3)}
+.ribbon-wrap{margin-left:auto; display:flex; align-items:center; gap:var(--s3)}
+.ribbon{display:flex; gap:3px; width:260px}
+.ribbon i{flex:1; height:6px; border-radius:3px; background:var(--surface-3); position:relative; transition:background var(--d4) var(--e-decel)}
+.ribbon i.done{background:var(--ok)}
+.ribbon i.issue{background:var(--crit)}
+.ribbon i.cur{background:var(--accent-soft); box-shadow:inset 0 0 0 1.5px var(--accent)}
+.ribbon i.cur::after{content:""; position:absolute; left:50%; top:-7px; width:5px; height:5px; margin-left:-2.5px; border-radius:50%; background:var(--accent)}
+.ribbon.approved{gap:0}
+.ribbon.approved i{border-radius:0; background:var(--ok)}
+.ribbon.approved i:first-child{border-radius:3px 0 0 3px}
+.ribbon.approved i:last-child{border-radius:0 3px 3px 0}
+.count{font-size:14px; font-weight:700; font-variant-numeric:tabular-nums}
+.count span{color:var(--ink-3); font-weight:600}
+.role{font-size:13px; font-weight:700; padding:4px 10px; border-radius:var(--r-pill); background:var(--accent-soft); color:var(--accent)}
+.iconbtn{width:32px; height:32px; display:grid; place-items:center; border-radius:var(--r-control); border:1px solid var(--line); background:var(--surface); color:var(--ink-2)}
+
+.rv-head{display:flex; align-items:flex-end; justify-content:space-between; gap:var(--s5); padding:28px 28px 20px}
+.rv-head .kick{font-size:14px; color:var(--ink-3); font-weight:600; margin-bottom:6px}
+.rv-head h3{font-size:44px; letter-spacing:-.035em; line-height:1; font-weight:740; font-variation-settings:"wdth" 92}
+.rv-head .right{display:grid; gap:8px; justify-items:end}
+.rv-head .runmeta{font-size:13px; color:var(--ink-3)}
+
+.rv-body{position:relative; display:grid; grid-template-columns:1fr 360px; gap:20px; padding:0 28px 120px; align-items:start}
+.checks{grid-column:1 / -1; display:grid; grid-template-columns:repeat(4,1fr); gap:0; border:1px solid var(--line); border-radius:var(--r-card); background:var(--surface); overflow:hidden}
+.ck{display:grid; grid-template-columns:auto 1fr; gap:4px 10px; padding:14px 16px; border-left:1px solid var(--line)}
+.ck:first-child{border-left:0}
+.ck .st{width:22px; height:22px; border-radius:50%; display:grid; place-items:center; grid-row:span 2}
+.ck .st svg{width:13px; height:13px; stroke-width:2.4}
+.ck.ok .st{background:var(--ok-soft); color:var(--ok)}
+.ck.warn .st{background:var(--warn-soft); color:var(--warn)}
+.ck.fail .st{background:var(--crit-soft); color:var(--crit)}
+.ck b{font-size:14px}
+.ck b small{font-weight:600; color:var(--ink-3); margin-left:6px; font-size:12.5px}
+.ck p{font-size:13px; color:var(--ink-2); line-height:1.35}
+.ck.warn{background:linear-gradient(var(--warn-soft),var(--warn-soft)) top/100% 3px no-repeat, var(--surface)}
+
+.cmp{background:var(--surface); border:1px solid var(--line); border-radius:var(--r-card); overflow:hidden}
+.cmp-h, .cmp-r{display:grid; grid-template-columns:150px 1fr 36px 1fr}
+.cmp-h{background:var(--surface-2); border-bottom:1px solid var(--line); font-size:13px; font-weight:700; color:var(--ink-2)}
+.cmp-h > div{padding:10px 16px}
+.cmp-h .src, .cmp-h .ext{display:flex; align-items:center; gap:8px}
+.cmp-h .src i, .cmp-h .ext i{width:8px; height:8px; border-radius:2px; display:inline-block}
+.cmp-h .src i{background:var(--ink-3)}
+.cmp-h .ext i{background:var(--accent)}
+.cmp-r{border-top:1px solid var(--line)}
+.cmp-r:first-of-type{border-top:0}
+.cmp-r > div{padding:14px 16px; min-width:0}
+.cmp-r .f{font-size:13px; color:var(--ink-3); font-weight:600}
+.cmp-r .v{font-size:15px}
+.cmp-r .v .sub{display:block; font-size:12.5px; color:var(--ink-3); margin-top:2px}
+.cmp-r .eq{display:grid; place-items:center; padding:14px 0; color:var(--ok)}
+.cmp-r .eq.na{color:var(--ink-3)}
+.cmp-r .eq svg{width:18px; height:18px}
+.cmp-r .ext-col{background:linear-gradient(90deg, var(--accent-soft), transparent 60%)}
+.raw{font-family:var(--f-mono); font-size:13.5px; background:var(--surface-2); padding:2px 6px; border-radius:5px; border:1px solid var(--line)}
+.disclose{display:flex; align-items:center; gap:8px; padding:12px 16px; border-top:1px solid var(--line); font-size:14px; font-weight:600; color:var(--accent); background:var(--surface)}
+.disclose kbd{margin-left:auto}
+
+.rail{display:grid; gap:16px}
+.card{background:var(--surface); border:1px solid var(--line); border-radius:var(--r-card); padding:18px}
+.card h4{font-family:var(--f-body); font-size:15px; font-weight:700; display:flex; align-items:center; justify-content:space-between; gap:8px}
+.card h4 span{font-weight:600; font-size:12.5px; color:var(--ink-3)}
+.cov{display:flex; align-items:center; gap:8px; font-size:13.5px; color:var(--ink-2); margin-top:10px}
+.pair{margin-top:14px; padding:14px; border-radius:var(--r-control); background:var(--crit-soft); display:grid; gap:6px}
+.pair .names2{font-weight:700; font-size:15px; color:var(--ink)}
+.pair dl{display:grid; grid-template-columns:90px 1fr; gap:4px 10px; margin:0; font-size:13.5px}
+.pair dt{color:var(--ink-3); font-weight:600}
+.pair dd{margin:0; color:var(--ink)}
+.unk-row{margin-top:12px; padding:12px 14px; border-radius:var(--r-control); border:1px dashed var(--unknown); background:var(--unknown-soft); font-size:13.5px; color:var(--ink-2); display:grid; gap:4px}
+.unk-row b{color:var(--ink); font-size:14px}
+.history{font-size:13.5px; color:var(--ink-2); display:grid; gap:8px; margin-top:10px}
+.history li{display:flex; gap:8px; align-items:baseline}
+.history ul{list-style:none; margin:0; padding:0; display:grid; gap:8px}
+.history .t{font-family:var(--f-mono); font-size:12px; color:var(--ink-3); min-width:70px}
+
+.dock{position:absolute; left:28px; right:28px; bottom:20px; border-radius:18px; background:var(--glass); backdrop-filter:blur(20px) saturate(170%); -webkit-backdrop-filter:blur(20px) saturate(170%); box-shadow:0 0 0 1px rgb(var(--shadow-rgb)/.10), 0 18px 40px -12px rgb(var(--shadow-rgb)/.30); padding:12px 12px 12px 20px; display:grid; gap:12px; transition:box-shadow var(--d2)}
+.dock-row{display:flex; align-items:center; gap:16px}
+.hints{display:flex; gap:16px; font-size:13px; color:var(--ink-2); align-items:center}
+.hints span{display:inline-flex; gap:6px; align-items:center}
+.dock .why{margin-left:auto; font-size:13.5px; color:var(--ink-2); text-align:right; line-height:1.3}
+.dock .why b{color:var(--ink); display:block}
+.dock .acts{display:flex; gap:10px}
+.issue-pane{display:grid; gap:8px; padding-top:4px}
+.issue-pane label{font-weight:700; font-size:14px}
+.issue-pane textarea{width:100%; min-height:72px; resize:vertical; font:inherit; font-size:15px; color:var(--ink); background:var(--surface); border:1.5px solid var(--line-strong); border-radius:var(--r-control); padding:10px 12px}
+.issue-pane textarea:focus{outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft)}
+.issue-pane.invalid textarea{border-color:var(--crit); box-shadow:0 0 0 3px var(--crit-soft)}
+.issue-meta{display:flex; justify-content:space-between; font-size:13px; color:var(--ink-3); gap:12px}
+.issue-pane.invalid .issue-err{color:var(--crit); font-weight:700}
+.issue-err{display:flex; align-items:center; gap:6px}
+.toast{display:flex; align-items:center; gap:10px; font-size:14px; font-weight:600}
+.toast .ok-ic{width:24px; height:24px; border-radius:50%; background:var(--ok-soft); color:var(--ok); display:grid; place-items:center}
+.toast .undo{margin-left:auto}
+
+.rv-marker{position:absolute; width:22px; height:22px; border-radius:50%; background:var(--ink); color:var(--bg); font-size:12px; font-weight:800; display:grid; place-items:center; font-family:var(--f-display); box-shadow:0 0 0 3px var(--bg); z-index:3}
+
+.scrim{position:absolute; inset:0; background:var(--scrim); z-index:4}
+.sheet{position:absolute; left:50%; bottom:20px; width:min(560px, calc(100% - 40px)); transform:translateX(-50%); z-index:5; background:var(--surface); border-radius:var(--r-sheet); padding:24px; box-shadow:0 0 0 1px rgb(var(--shadow-rgb)/.1), 0 30px 70px rgb(var(--shadow-rgb)/.35); display:grid; gap:14px; transform-origin:50% 100%}
+.sheet .sh-ic{width:40px; height:40px; border-radius:12px; background:var(--info-soft); color:var(--info); display:grid; place-items:center}
+.sheet .sh-ic svg{width:22px; height:22px}
+.sheet h5{font-family:var(--f-display); font-size:22px; letter-spacing:-.02em; line-height:1.2; margin:0; font-weight:700; text-wrap:balance}
+.sheet p{font-size:15px; color:var(--ink-2)}
+.sheet .kept{display:flex; gap:10px; align-items:flex-start; padding:12px 14px; border-radius:var(--r-control); background:var(--surface-2); font-size:14px}
+.sheet .kept q{color:var(--ink); font-style:italic}
+.sheet .row{display:flex; gap:10px; justify-content:flex-end; flex-wrap:wrap}
+.anim-in{animation:sheetIn var(--d3) var(--e-spring) both}
+@keyframes sheetIn{from{opacity:0; transform:translate(-50%,16px) scale(.98)} to{opacity:1; transform:translate(-50%,0) scale(1)}}
+
+.demo-bar{display:flex; flex-wrap:wrap; gap:var(--s3); align-items:center; margin-bottom:var(--s3); font-size:14px; color:var(--ink-2)}
+.demo-bar .btn{padding:7px 12px; font-size:14px}
+
+.annot{display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr)); gap:var(--s4) var(--s5); margin-top:var(--s5)}
+.an{display:grid; grid-template-columns:26px 1fr; gap:var(--s3)}
+.an .l{width:24px; height:24px; border-radius:50%; background:var(--ink); color:var(--bg); display:grid; place-items:center; font-weight:800; font-size:12.5px; font-family:var(--f-display)}
+.an h4{font-family:var(--f-body); font-size:15.5px; font-weight:700}
+.an p{font-size:14.5px; color:var(--ink-2); margin-top:2px}
+.footnote{font-size:13px; color:var(--ink-3); margin-top:var(--s4)}
+
+.err-wrap{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:var(--s5); margin-top:var(--s7); align-items:start}
+@media (max-width:960px){ .err-wrap{grid-template-columns:1fr} }
+.err-wrap h3{font-size:22px; letter-spacing:-.015em; margin-bottom:var(--s3)}
+.stale-mock{position:relative; height:440px; background:var(--bg); overflow:hidden; min-width:560px}
+.stale-mock .ghost{padding:20px 24px; display:grid; gap:12px}
+.stale-mock .ghost h3{font-size:30px; letter-spacing:-.03em}
+.ghost .gl{height:12px; border-radius:6px; background:var(--surface-3)}
+.ghost .gc{height:68px; border-radius:var(--r-card); background:var(--surface); border:1px solid var(--line)}
+.err-table{width:100%; border-collapse:collapse; font-size:14px; min-width:520px}
+.err-table th{text-align:left; font-size:13px; color:var(--ink-3); padding:0 12px 8px 0; font-weight:700}
+.err-table td{padding:12px 12px 12px 0; border-top:1px solid var(--line); vertical-align:top}
+.err-table td:first-child{font-weight:700; white-space:nowrap}
+.err-table q{quotes:none; color:var(--ink)}
+.err-table .way{color:var(--ink-2)}
+
+.ribbon-states{display:grid; gap:10px; margin-top:var(--s5); padding:var(--s4) var(--s5); background:var(--surface); border:1px solid var(--line); border-radius:var(--r-card)}
+.rs{display:grid; grid-template-columns:150px 260px 1fr; gap:var(--s4); align-items:center; font-size:14px}
+.rs b{font-size:14px}
+.rs span{color:var(--ink-2)}
+@media (max-width:760px){ .rs{grid-template-columns:1fr; gap:6px} .rs .ribbon{width:100%; max-width:260px} }
+
+/* ---------- 7 Docs ---------- */
+.docs{display:grid; grid-template-columns:230px 1fr; min-height:620px}
+.toc{border-right:1px solid var(--line); padding:28px 20px; background:var(--surface-2); font-size:14px; display:grid; align-content:start; gap:4px}
+.toc b{font-size:13px; color:var(--ink-3); margin:14px 0 4px 10px}
+.toc b:first-child{margin-top:0}
+.toc a{padding:6px 10px; border-radius:8px; color:var(--ink-2); text-decoration:none}
+.toc a.on{background:var(--surface); color:var(--ink); font-weight:700; box-shadow:0 0 0 1px var(--line)}
+.doc-main{padding:36px 44px 44px; display:grid; gap:28px; align-content:start}
+.doc-main h3{font-size:36px; letter-spacing:-.03em; line-height:1.05; font-weight:720}
+.doc-main .lede{color:var(--ink-2); font-size:17px; max-width:62ch; margin-top:10px}
+.journey{display:grid; grid-template-columns:repeat(5, minmax(0,1fr)); gap:0; position:relative}
+.jn{position:relative; padding:0 14px 0 0}
+.jn .lvl{display:flex; align-items:center; gap:8px; font-size:13px; font-weight:700; color:var(--ink-3); margin-bottom:10px}
+.jn .lvl i{width:10px; height:10px; border-radius:50%; background:var(--surface); border:2px solid var(--accent); flex:none}
+.jn::before{content:""; position:absolute; left:12px; right:0; top:6px; height:2px; background:var(--accent-line)}
+.jn:last-child::before{display:none}
+.jn .lvl{position:relative; z-index:1; background:var(--surface); width:max-content; padding-right:8px}
+.jbox{border:1px solid var(--line); border-radius:var(--r-card); padding:14px; background:var(--surface); display:grid; gap:6px; min-height:182px; align-content:start}
+.jbox.brand{background:var(--surface-2)}
+.jbox .t{font-family:var(--f-display); font-weight:680; font-size:18px; letter-spacing:-.01em; line-height:1.2}
+.jbox .s{font-size:13px; color:var(--ink-2)}
+.jbox .id{font-family:var(--f-mono); font-size:12px; color:var(--accent); font-weight:600}
+.why-row{display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:14px}
+.why-row p{font-size:13.5px; color:var(--ink-2); padding-right:6px}
+.why-row p b{color:var(--ink); display:block; font-size:13.5px}
+.glossary{display:grid; grid-template-columns:repeat(3,1fr); gap:14px}
+.gl-item{border-top:2px solid var(--ink); padding-top:12px; display:grid; gap:6px}
+.gl-item h4{font-size:17px; letter-spacing:-.01em}
+.gl-item p{font-size:14px; color:var(--ink-2)}
+.gl-item .ex{font-size:13.5px; padding:10px 12px; border-radius:var(--r-control); background:var(--surface-2); color:var(--ink)}
+.formula{display:flex; align-items:center; gap:6px; flex-wrap:wrap; font-size:13px}
+.formula .p{padding:2px 8px; border-radius:var(--r-chip); background:var(--surface); border:1px solid var(--line)}
+
+/* ---------- 8 Checker ---------- */
+.chk{padding:32px 44px 44px; display:grid; gap:22px}
+.chk-top{display:flex; justify-content:space-between; align-items:flex-end; gap:20px}
+.chk-top h3{font-size:30px; letter-spacing:-.025em; font-weight:720}
+.chk-top p{color:var(--ink-2); font-size:14.5px; margin-top:4px}
+.selbox{display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:10px 12px; border:1.5px solid var(--accent); border-radius:var(--r-control); background:var(--surface); box-shadow:0 0 0 3px var(--accent-soft)}
+.selbox .med{display:inline-flex; align-items:center; gap:8px; padding:6px 8px 6px 12px; border-radius:var(--r-chip); background:var(--surface-2); border:1px solid var(--line); font-size:14.5px; font-weight:600}
+.selbox .med small{font-weight:600; color:var(--ink-3)}
+.selbox .med button{border:0; background:transparent; width:20px; height:20px; display:grid; place-items:center; border-radius:4px; color:var(--ink-3)}
+.selbox input{border:0; outline:none; background:transparent; font:inherit; font-size:15px; color:var(--ink); flex:1; min-width:180px; padding:6px}
+.summary{display:flex; flex-wrap:wrap; gap:10px 20px; align-items:center; font-size:15px; padding:14px 18px; border-radius:var(--r-card); background:var(--surface-2)}
+.summary b{font-family:var(--f-display); font-size:19px; letter-spacing:-.01em}
+.res{display:grid; grid-template-columns:1fr 360px; gap:20px; align-items:start}
+.ix{border-radius:var(--r-card); border:1px solid var(--line); background:var(--surface); overflow:hidden}
+.ix-h{display:flex; align-items:center; gap:12px; padding:16px 20px; background:var(--crit-soft)}
+.ix-h .who{font-family:var(--f-display); font-weight:700; font-size:20px; letter-spacing:-.015em; color:var(--ink)}
+.ix-h .who span{color:var(--ink-3); font-weight:500; margin:0 6px}
+.ix-h .sev{margin-left:auto; background:var(--surface); font-size:14px}
+.ix-b{padding:18px 20px; display:grid; grid-template-columns:120px 1fr; gap:12px 16px; font-size:15px}
+.ix-b dt{color:var(--ink-3); font-weight:600; font-size:14px}
+.ix-b dd{margin:0}
+.ix-f{display:flex; gap:16px; align-items:center; padding:12px 20px; border-top:1px solid var(--line); font-size:13px; color:var(--ink-3)}
+.nod{border-radius:var(--r-card); padding:18px 20px; border:1.5px solid var(--nodata-hatch); background-color:var(--nodata-soft); background-image:repeating-linear-gradient(135deg, transparent 0 10px, var(--nodata-hatch) 10px 11px); display:grid; gap:10px}
+.nod-in{background:var(--surface); border-radius:var(--r-control); padding:14px 16px; display:grid; gap:6px}
+.nod h4{font-family:var(--f-body); font-size:15px; font-weight:700; display:flex; gap:8px; align-items:center}
+.nod p{font-size:15px; color:var(--ink)}
+.nod p.must{font-weight:700}
+.nod .scope{font-size:13px; color:var(--ink-3)}
+.pairs-mini{display:grid; gap:6px; margin-top:4px}
+.pm{display:flex; justify-content:space-between; gap:10px; font-size:13.5px; padding:8px 10px; border-radius:8px; background:var(--surface-2)}
+.pm span:last-child{color:var(--nodata); font-weight:700}
+.trust{font-size:13px; color:var(--ink-3); display:flex; gap:8px; align-items:center}
+
+/* ---------- Footer ---------- */
+.end{margin-top:var(--s8); padding-top:var(--s5); border-top:1px solid var(--line); display:flex; flex-wrap:wrap; gap:var(--s4); justify-content:space-between; color:var(--ink-3); font-size:13.5px}
+
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{transition-duration:1ms!important; animation-duration:1ms!important}
+  .motion.play .dot{transform:none; opacity:.35}
+  .btn:active{transform:none}
+}
+@media (prefers-reduced-transparency: reduce){
+  .dock, .ev.e2{background:var(--surface); backdrop-filter:none; -webkit-backdrop-filter:none}
+}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.2 4.2L19 7"/></symbol>
+    <symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 4l9 16H3z"/><path d="M12 10v4"/><path d="M12 17.2v.1"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+    <symbol id="i-eq" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 10h8M8 14h8"/></symbol>
+    <symbol id="i-na" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></symbol>
+    <symbol id="i-key" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h.01M11 10h.01M15 10h.01M7 14h10"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4.5-3 7.6-7 9-4-1.4-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/></symbol>
+    <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3.5 6.5L12 13l8.5-6.5"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+    <symbol id="i-major" viewBox="0 0 24 24"><path d="M12 3l9.5 16.5h-19z" fill="currentColor" stroke="none"/><path d="M12 9.5v4.5M12 16.6v.1" stroke="var(--surface)" stroke-width="2.2"/></symbol>
+    <symbol id="i-mod" viewBox="0 0 24 24"><path d="M12 3l9 9-9 9-9-9z" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-minor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-unk" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke-dasharray="3 3"/><path d="M9.8 9.5a2.3 2.3 0 1 1 3.2 2.1c-.6.3-1 .8-1 1.5v.4M12 16.6v.1"/></symbol>
+    <symbol id="i-void" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M4 14l10-10M10 20L20 10"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+    <symbol id="i-flag" viewBox="0 0 24 24"><path d="M5 21V4M5 4h11l-2 4 2 4H5"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5l11 7-11 7z"/></symbol>
+    <symbol id="i-g" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="7.6" fill="none" stroke="var(--g-blue)" stroke-width="3.4" stroke-dasharray="6.0 47.75" stroke-dashoffset="0"/>
+      <circle cx="12" cy="12" r="7.6" fill="none" stroke="var(--g-green)" stroke-width="3.4" stroke-dasharray="12.6 47.75" stroke-dashoffset="-6.0"/>
+      <circle cx="12" cy="12" r="7.6" fill="none" stroke="var(--g-yellow)" stroke-width="3.4" stroke-dasharray="9.9 47.75" stroke-dashoffset="-18.6"/>
+      <circle cx="12" cy="12" r="7.6" fill="none" stroke="var(--g-red)" stroke-width="3.4" stroke-dasharray="13.3 47.75" stroke-dashoffset="-28.5"/>
+      <rect x="12" y="10.3" width="8.9" height="3.4" fill="var(--g-blue)"/>
+    </symbol>
+  </defs>
+</svg>
+
+<div class="board">
+
+<!-- ===== Masthead ===== -->
+<header class="mast">
+  <div class="mast-l">
+    <div class="dir-tag"><b>C</b> Design direction</div>
+    <h1>Focused Review</h1>
+    <p class="mast-idea">One record, one decision, full attention. A quiet editorial identity on the outside; on the inside, a keyboard-first workspace where pharmacists confirm each medicine before anyone else can see it.</p>
+  </div>
+  <div class="theme-switch" role="group" aria-label="Preview theme">
+    <button type="button" data-t="system" aria-pressed="true">System</button>
+    <button type="button" data-t="light" aria-pressed="false">Light</button>
+    <button type="button" data-t="dark" aria-pressed="false">Dark</button>
+  </div>
+</header>
+
+<!-- ===== 1 Identity ===== -->
+<section class="sec" id="identity" aria-labelledby="h-identity">
+  <div class="sec-h"><span class="sec-n">1</span><h2 id="h-identity">Name and wordmark</h2>
+    <p>A Bangla word, short enough to say across a pharmacy counter, with a meaning that matches how the data is made: one verified unit at a time.</p></div>
+  <div class="ident">
+    <div class="wm-stage">
+      <span class="wm xl" aria-label="ekok">ekok<sup>১</sup></span>
+      <div class="wm-note">
+        <div><strong>Lowercase, tight, condensed</strong>Bricolage Grotesque at 780 weight and 88 width, tracked to −0.045em. The double k gives the word a steady rhythm.</div>
+        <div><strong>The Bengali one</strong>A superscript <span style="font-family:var(--f-bn)">১</span> (one) in the accent: one record, one decision. It doubles as the app icon.</div>
+      </div>
+      <div class="wm-lockups">
+        <span class="lock"><span class="wm md">ekok<sup>১</sup></span><span class="tag">Drug knowledge base for Bangladesh</span></span>
+        <span class="lock inv"><span class="wm md">ekok<sup>১</sup></span></span>
+        <span class="lock"><span class="wm sm">ekok<sup>১</sup></span><span class="tag">Review</span></span>
+      </div>
+    </div>
+    <div class="names">
+      <div class="name-card primary">
+        <p class="role">Proposed name</p>
+        <h3>Ekok<span class="bn">একক</span></h3>
+        <p>Bangla for “unit” or “single”. Units are how medicines are dosed, and single is how records are checked.</p>
+      </div>
+      <div class="name-card">
+        <p class="role">Alternate</p>
+        <h3>Pothyo<span class="bn">পথ্য</span></h3>
+        <p>“What is good for the patient”. Warmer, more consumer-facing; suits a prescriber app later.</p>
+      </div>
+      <div class="name-card">
+        <p class="role">Alternate</p>
+        <h3>Shonakto<span class="bn">শনাক্ত</span></h3>
+        <p>“Identified”. Literal and credible for a verification product; longer to say and spell.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== 2 Principles ===== -->
+<section class="sec" id="principles" aria-labelledby="h-pr">
+  <div class="sec-h"><span class="sec-n">2</span><h2 id="h-pr">Principles</h2>
+    <p>Seven rules every screen in this direction is checked against. Each one names the Apple HIG and Material 3 ideas it borrows from.</p></div>
+  <div class="principles">
+    <article class="pr"><h3>One record holds the stage</h3><p>The reviewer sees one medicine at a time, titled large, with no list competing for attention. Context such as batch and progress sits at the edge.</p>
+      <div class="maps"><span class="map apple">Clarity</span><span class="map apple">Deference</span><span class="map m3">Hierarchy</span></div></article>
+    <article class="pr"><h3>Absence is never safety</h3><p>Missing data gets its own visual form, a hatched surface, and its own sentence. It never borrows green or the word “none”.</p>
+      <div class="maps"><span class="map apple">Responsibility</span><span class="map m3">Color roles</span><span class="map m3">Communicating state</span></div></article>
+    <article class="pr"><h3>Evidence on request</h3><p>Summary first, proof one keystroke deeper. Stage checks are one line each; source text, all pairs and raw codes open with E.</p>
+      <div class="maps"><span class="map apple">Simplicity</span><span class="map apple">Progressive disclosure</span><span class="map m3">Containment</span></div></article>
+    <article class="pr"><h3>Source beside result</h3><p>The DGDA register and the extracted data line up row by row, so a mismatch is something you see, not something you search for.</p>
+      <div class="maps"><span class="map apple">Grouping and mapping</span><span class="map m3">Harmony</span><span class="map m3">Consistency</span></div></article>
+    <article class="pr"><h3>Hands stay on the keys</h3><p>J and K move, O approves, I reports, E expands. Every key has a visible button twin and a hint, so the mouse never becomes a requirement or a trap.</p>
+      <div class="maps"><span class="map apple">Flexibility</span><span class="map apple">Familiarity</span><span class="map m3">Adaptive</span></div></article>
+    <article class="pr"><h3>Calm progress, clear exceptions</h3><p>Progress is a thin ribbon that never pulses or counts down. Warnings and failures take colour, shape and words at once.</p>
+      <div class="maps"><span class="map apple">Feedback</span><span class="map m3">Tonal surfaces</span><span class="map m3">State layers</span></div></article>
+    <article class="pr"><h3>Every state has a way out</h3><p>Each error says what happened, what was kept and the one action that fixes it. Decisions can be undone for 8 seconds.</p>
+      <div class="maps"><span class="map apple">Agency</span><span class="map apple">Wayfinding</span><span class="map m3">Snackbar actions</span></div></article>
+  </div>
+</section>
+
+<!-- ===== 3 Foundations ===== -->
+<section class="sec" id="foundations" aria-labelledby="h-fd">
+  <div class="sec-h"><span class="sec-n">3</span><h2 id="h-fd">Foundations</h2>
+    <p>Cool river-grey neutrals, a single kingfisher accent, and semantic colours that only appear when they carry meaning. Every colour below exists as a token in light and dark.</p></div>
+  <div class="f-grid">
+    <div class="f-block">
+      <h3>Colour</h3>
+      <p class="lede">The accent is for actions and focus only. Severity uses colour plus shape. No data uses a hatch that cannot be confused with any severity.</p>
+      <div class="scroll-x">
+      <table class="sw-table">
+        <thead><tr><th>Token</th><th>Light</th><th>Dark</th><th>Used for</th></tr></thead>
+        <tbody id="swatches"></tbody>
+      </table>
+      </div>
+      <div class="sev-row" aria-label="Severity and data states">
+        <span class="sev major"><svg class="i"><use href="#i-major"/></svg>Major</span>
+        <span class="sev moderate"><svg class="i"><use href="#i-mod"/></svg>Moderate</span>
+        <span class="sev minor"><svg class="i"><use href="#i-minor"/></svg>Minor</span>
+        <span class="sev unk"><svg class="i"><use href="#i-unk"/></svg>Severity not classified by DDInter</span>
+        <span class="sev nodata"><svg class="i"><use href="#i-void"/></svg>No interaction data in DDInter</span>
+      </div>
+    </div>
+
+    <div class="f-two">
+      <div class="f-block">
+        <h3>Type</h3>
+        <p class="lede">Bricolage Grotesque for display, with optical size and width axes. Atkinson Hyperlegible for everything a clinician reads, because it separates 1, l and I, and 0 and O.</p>
+        <div class="type-spec">
+          <div class="ts"><div class="ts-meta"><b>Display</b>64/66, 760, −0.04em</div><div class="ts-sample" style="font-family:var(--f-display);font-size:clamp(34px,5vw,64px);line-height:1.03;letter-spacing:-.04em;font-weight:760;font-variation-settings:'wdth' 90">Napa 500 mg</div></div>
+          <div class="ts"><div class="ts-meta"><b>Headline</b>40/44, 720, −0.03em</div><div class="ts-sample" style="font-family:var(--f-display);font-size:clamp(26px,3.4vw,40px);line-height:1.1;letter-spacing:-.03em;font-weight:720">G Warfarin 5 mg tablet</div></div>
+          <div class="ts"><div class="ts-meta"><b>Title</b>22/28, 680, −0.015em</div><div class="ts-sample" style="font-family:var(--f-display);font-size:22px;line-height:1.27;letter-spacing:-.015em;font-weight:680">Acetaminophen 500 mg tablet</div></div>
+          <div class="ts"><div class="ts-meta"><b>Body</b>16/24, 400</div><div class="ts-sample" style="font-size:16px">Mapped to one clinical drug and one active substance.</div></div>
+          <div class="ts"><div class="ts-meta"><b>Label</b>13/16, 700, +0.01em</div><div class="ts-sample" style="font-size:13px;font-weight:700;letter-spacing:.01em">Not yet reviewed by a pharmacist</div></div>
+          <div class="ts"><div class="ts-meta"><b>Mono</b>13/18, 600</div><div class="ts-sample" style="font-family:var(--f-mono);font-size:13px;font-weight:600">ATC N02BE01  RxCUI 161  DB00316  XM5DJ7</div></div>
+        </div>
+      </div>
+      <div class="f-block" style="display:grid;gap:var(--s5);align-content:start">
+        <div>
+          <h3>Spacing</h3>
+          <p class="lede">A 4-point scale. Workspace gutters use 28; landing sections use 56 and 72.</p>
+          <div class="spacing">
+            <div class="sp"><span class="mono">4</span><i style="width:4px"></i></div>
+            <div class="sp"><span class="mono">8</span><i style="width:8px"></i></div>
+            <div class="sp"><span class="mono">12</span><i style="width:12px"></i></div>
+            <div class="sp"><span class="mono">16</span><i style="width:16px"></i></div>
+            <div class="sp"><span class="mono">24</span><i style="width:24px"></i></div>
+            <div class="sp"><span class="mono">32</span><i style="width:32px"></i></div>
+            <div class="sp"><span class="mono">48</span><i style="width:48px"></i></div>
+            <div class="sp"><span class="mono">72</span><i style="width:72px"></i></div>
+          </div>
+        </div>
+        <div>
+          <h3>Radius by role</h3>
+          <p class="lede">Smaller things are sharper. Radius tells you what kind of object something is.</p>
+          <div class="radii">
+            <div class="rd"><i style="border-top-left-radius:6px"></i>6 chip</div>
+            <div class="rd"><i style="border-top-left-radius:10px"></i>10 control</div>
+            <div class="rd"><i style="border-top-left-radius:14px"></i>14 card</div>
+            <div class="rd"><i style="border-top-left-radius:22px"></i>22 sheet</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="f-two">
+      <div class="f-block">
+        <h3>Elevation</h3>
+        <p class="lede">Four levels. Only floating controls use translucency; content never does.</p>
+        <div class="elev">
+          <div class="ev e0"><div><b>0 Flat</b>Rows, tables</div></div>
+          <div class="ev e1"><div><b>1 Raised</b>Cards</div></div>
+          <div class="ev e2"><div><b>2 Glass</b>Decision dock</div></div>
+          <div class="ev e3"><div><b>3 Sheet</b>Over a scrim</div></div>
+        </div>
+      </div>
+      <div class="f-block">
+        <h3>Motion</h3>
+        <p class="lede">Motion answers an action and stops. Reduced motion swaps every move for a 150 ms cross-fade.</p>
+        <div class="motion" id="motion">
+          <div class="mo" data-e="standard"><div class="mo-l"><b>Standard, 200–320 ms</b><span>cubic-bezier(.2,0,0,1)</span></div><div class="track"><i class="dot"></i></div></div>
+          <div class="mo" data-e="decel"><div class="mo-l"><b>Enter, 320 ms</b><span>cubic-bezier(0,0,0,1)</span></div><div class="track"><i class="dot"></i></div></div>
+          <div class="mo" data-e="accel"><div class="mo-l"><b>Exit, 200 ms</b><span>cubic-bezier(.3,0,1,1)</span></div><div class="track"><i class="dot"></i></div></div>
+          <div class="mo" data-e="spring"><div class="mo-l"><b>Next record, 480 ms</b><span>critically damped spring</span></div><div class="track"><i class="dot"></i></div></div>
+          <div><button type="button" class="btn-ghost" id="playMotion"><svg class="i"><use href="#i-play"/></svg>Play curves</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== 4 Landing ===== -->
+<section class="sec" id="landing" aria-labelledby="h-lp">
+  <div class="sec-h"><span class="sec-n">4</span><h2 id="h-lp">Landing page</h2>
+    <p>Editorial and plain-spoken. The hero shows the product doing its one job, tracing a brand to the medicine inside it, and the next section states the safety promises in the product's own words.</p></div>
+  <div class="frame">
+    <div class="frame-bar"><span class="frame-url">ekok / home</span></div>
+    <div class="frame-scroll">
+      <div class="canvas lp">
+        <div class="lp-nav">
+          <span class="wm sm">ekok<sup>১</sup></span>
+          <nav aria-label="Main"><a href="#checker">Check interactions</a><a href="#learn">How it works</a><a href="#landing">For partners</a></nav>
+          <div class="sp-auto"><a class="btn btn-outline" href="#signin" style="padding:8px 16px;font-size:14px">Sign in</a></div>
+        </div>
+        <div class="lp-hero">
+          <div>
+            <h1>Every brand, traced to the medicine inside it.</h1>
+            <p class="sub">Ekok maps each DGDA-registered brand to its clinical drug, active substances and international codes, with drug, disease and food interactions from DDInter 2.0. A pharmacist checks every record before it goes public.</p>
+            <div class="lp-cta">
+              <a class="btn btn-primary" href="#checker">Check an interaction</a>
+              <a class="btn btn-outline" href="#learn">See how a record is checked</a>
+            </div>
+            <div class="lp-pilot"><span class="bar" aria-hidden="true"><i></i></span><span class="tnum">Pilot: 10 medicines. The DGDA register lists 39,196 products, and each one will be checked the same way.</span></div>
+          </div>
+          <div class="trace" aria-label="Example record from the pilot">
+            <div class="trace-head"><span>Example record from the pilot</span><span class="pill pill-info">Public after pharmacist review</span></div>
+            <ol>
+              <li><span class="node"><i></i></span><div><div class="k">Brand in the DGDA register</div><div class="v">Napa 500 mg tablet</div><div class="m">Beximco <span class="mono">DAR 186-0030-006</span></div></div></li>
+              <li><span class="node"><i></i></span><div><div class="k">Clinical drug</div><div class="v">Acetaminophen 500 mg tablet</div><div class="m"><span class="mono">BDC-000001</span></div></div></li>
+              <li><span class="node"><i></i></span><div><div class="k">Active substance</div><div class="v">Acetaminophen</div><div class="m">Also known as Paracetamol <span class="mono">BDS-000001</span></div></div></li>
+              <li><span class="node"><i></i></span><div><div class="k">Codes and interactions</div>
+                <div class="codes"><span class="code"><span>ICD-11</span>XM5DJ7</span><span class="code"><span>RxCUI</span>161</span><span class="code"><span>ATC</span>N02BE01</span><span class="code"><span>DrugBank</span>DB00316</span><span class="code"><span>DDInter</span>DDInter14</span></div></div></li>
+            </ol>
+          </div>
+        </div>
+        <div class="lp-promise">
+          <div>
+            <h2>Three things you will never see here.</h2>
+            <p class="lede">A drug database is only useful if you can trust what it leaves out. These rules are built into every screen and every API response.</p>
+          </div>
+          <div class="promises">
+            <div class="promise"><h3>Missing data shown as safe</h3>
+              <div class="show"><span class="sev nodata"><svg class="i"><use href="#i-void"/></svg>Domperidone 10 mg tablet</span>
+              <blockquote>No interaction data in DDInter for this substance. This does not mean it is safe to combine.</blockquote></div></div>
+            <div class="promise"><h3>A record no pharmacist has checked</h3>
+              <div class="show"><span class="pill pill-pending">Not yet reviewed by a pharmacist</span>
+              <blockquote>Unreviewed records stay out of search and the API. If a reviewed record is updated, it goes back to review.</blockquote></div></div>
+            <div class="promise"><h3>Unclassified severity shown as low risk</h3>
+              <div class="show"><span class="sev unk"><svg class="i"><use href="#i-unk"/></svg>Severity not classified by DDInter</span>
+              <blockquote>An interaction without a severity is listed with this label, separately from minor ones.</blockquote></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="scroll-hint">Scroll the frame sideways to see the full desktop layout.</p>
+</section>
+
+<!-- ===== 5 Sign in ===== -->
+<section class="sec" id="signin" aria-labelledby="h-si">
+  <div class="sec-h"><span class="sec-n">5</span><h2 id="h-si">Sign in and sign up</h2>
+    <p>One button covers both. Reviewer access comes from an invite and is never requested from this screen.</p></div>
+  <div class="auth-wrap">
+    <form class="auth" id="authForm" novalidate>
+      <span class="wm md">ekok<sup>১</sup></span>
+      <div>
+        <h3>Sign in to Ekok</h3>
+        <p class="lead">New here? Continuing with Google creates your account. There's no separate sign-up.</p>
+      </div>
+      <button type="submit" class="gbtn" id="gbtn"><svg aria-hidden="true"><use href="#i-g"/></svg>Continue with Google</button>
+      <div class="invite">
+        <svg class="i" aria-hidden="true"><use href="#i-mail"/></svg>
+        <div><b>Invited to review?</b>Use the Google account your invite was sent to. Pharmacist and engineer roles are added by invite only.</div>
+      </div>
+      <div class="priv">
+        <p>We use your name and email to sign you in and to record who reviewed each medicine. We never post to your Google account.</p>
+        <span class="tsx"><svg class="i" aria-hidden="true"><use href="#i-shield"/></svg>A Cloudflare Turnstile check runs in the background when you sign in and when you submit a review.</span>
+      </div>
+    </form>
+    <div class="notes">
+      <div class="note"><span class="nb">a</span><div><h4>One door, two outcomes</h4><p>“Continue with Google” is the honest label for both sign-in and sign-up, so there's no choice to get wrong.</p></div></div>
+      <div class="note"><span class="nb">b</span><div><h4>Roles are explained where they matter</h4><p>The invite note tells reviewers which account to use, which is the most common support question in invite-based tools.</p></div></div>
+      <div class="note"><span class="nb">c</span><div><h4>Privacy in one sentence</h4><p>It says what we collect and why. The reviewer's name is shown because an audit trail needs it.</p></div></div>
+      <div class="note"><span class="nb">d</span><div><h4>States designed</h4>
+        <div class="auth-states">
+          <div class="mini"><b>Invite, wrong account</b>You're signed in as a viewer. Your invite was sent to a different Google account. Sign out and use that one.</div>
+          <div class="mini"><b>Bot check failed</b>We couldn't confirm you're a person. Try again. If it keeps failing, reload the page.</div>
+        </div></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== 6 Reviewer ===== -->
+<section class="sec" id="review" aria-labelledby="h-rv">
+  <div class="sec-h"><span class="sec-n">6</span><h2 id="h-rv">Reviewer workspace</h2>
+    <p>The core of the product. A pharmacist on a laptop reviews record 3 of 10 in batch 0001-pilot. The page reads top to bottom in the order a reviewer thinks: what is this, did the pipeline run cleanly, does the result match the source, what are the interaction risks, and then the decision.</p></div>
+
+  <div class="demo-bar">
+    <svg class="i" aria-hidden="true"><use href="#i-key"/></svg>
+    <span>This mockup works. Click inside it, then press <kbd>O</kbd>, <kbd>I</kbd>, <kbd>U</kbd>, <kbd>J</kbd> or <kbd>Esc</kbd>.</span>
+    <button type="button" class="btn btn-outline" id="simStale">Show the stale-record error</button>
+    <button type="button" class="btn btn-outline" id="resetRv">Reset</button>
+  </div>
+
+  <div class="frame">
+    <div class="frame-bar"><span class="frame-url">ekok / review / 0001-pilot / 3</span></div>
+    <div class="frame-scroll">
+      <div class="canvas" style="min-width:1180px">
+        <div class="rv" id="rv" tabindex="0" aria-label="Reviewer workspace mockup. Press O for looks correct, I to report an issue.">
+          <span class="rv-marker" style="left:620px;top:6px">A</span>
+          <div class="rv-top">
+            <span class="wm sm">ekok<sup>১</sup></span>
+            <div class="crumb"><span>Review</span><span class="sep">/</span><b>Batch 0001-pilot</b></div>
+            <div class="ribbon-wrap">
+              <div class="ribbon" id="ribbon" aria-hidden="true"><i class="done"></i><i class="done"></i><i class="cur"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+              <span class="count tnum" id="count">3 <span>of 10</span></span>
+            </div>
+            <span class="role">Pharmacist</span>
+            <span class="iconbtn" title="Keyboard shortcuts (?)"><svg class="i"><use href="#i-key"/></svg></span>
+          </div>
+
+          <div class="rv-head">
+            <div>
+              <p class="kick">Record 3 in batch 0001-pilot, from the DGDA register</p>
+              <h3>G Warfarin 5 mg tablet</h3>
+            </div>
+            <div class="right">
+              <span class="pill pill-pending" id="rvStatus"><svg class="i"><use href="#i-flag"/></svg>Not yet reviewed by a pharmacist</span>
+              <span class="runmeta">Pipeline run opened at 10:42</span>
+            </div>
+          </div>
+
+          <div class="rv-body">
+            <span class="rv-marker" style="left:8px;top:-8px">B</span>
+            <div class="checks" role="list" aria-label="Automated stage checks">
+              <div class="ck ok" role="listitem"><span class="st"><svg class="i"><use href="#i-check"/></svg></span><b>DGDA load<small>OK</small></b><p>Register row loaded</p></div>
+              <div class="ck ok" role="listitem"><span class="st"><svg class="i"><use href="#i-check"/></svg></span><b>Substances<small>OK</small></b><p>1 substance with strength</p></div>
+              <div class="ck ok" role="listitem"><span class="st"><svg class="i"><use href="#i-check"/></svg></span><b>Clinical<small>OK</small></b><p>Matched to one clinical drug</p></div>
+              <div class="ck warn" role="listitem"><span class="st"><svg class="i"><use href="#i-warn"/></svg></span><b>DDInter<small>Warning</small></b><p>DDInter text not found for 20 unknown-severity pairs</p></div>
+            </div>
+
+            <div class="cmp" style="position:relative">
+              <span class="rv-marker" style="left:-11px;top:44px">C</span>
+              <div class="cmp-h"><div>Field</div><div class="src"><i></i>DGDA source</div><div></div><div class="ext"><i></i>Extracted by the pipeline</div></div>
+              <div class="cmp-r"><div class="f">Product</div><div class="v">G Warfarin 5 mg tablet<span class="sub">Trade name</span></div><div class="eq" title="Matches"><svg class="i"><use href="#i-eq"/></svg></div><div class="v ext-col">Warfarin 5 mg tablet<span class="sub">Clinical drug <span class="illus mono">BDC id</span></span></div></div>
+              <div class="cmp-r"><div class="f">Company</div><div class="v"><span class="illus">Company from register</span></div><div class="eq na" title="Source only"><svg class="i"><use href="#i-na"/></svg></div><div class="v ext-col" style="color:var(--ink-3)">Kept from source</div></div>
+              <div class="cmp-r"><div class="f">Dosage form</div><div class="v">Tablet</div><div class="eq" title="Matches"><svg class="i"><use href="#i-eq"/></svg></div><div class="v ext-col">Tablet<span class="sub">Route: oral</span></div></div>
+              <div class="cmp-r"><div class="f">Generic content</div><div class="v"><span class="raw"><span class="illus">Warfarin 5 mg</span></span><span class="sub">Raw text, as written in the register</span></div><div class="eq" title="Matches"><svg class="i"><use href="#i-eq"/></svg></div><div class="v ext-col">Warfarin <b class="tnum">5 mg</b><span class="sub">1 substance <span class="illus mono">BDS id</span></span></div></div>
+              <div class="cmp-r"><div class="f">Codes</div><div class="v"><span class="illus mono">DGDA ingredient code</span></div><div class="eq" title="Mapped"><svg class="i"><use href="#i-eq"/></svg></div><div class="v ext-col"><div class="codes" style="margin-top:0"><span class="code"><span>ATC</span>B01AA03</span><span class="code"><span>DrugBank</span>DB00682</span><span class="code"><span>RxCUI</span>11289</span><span class="code"><span>ICD-11</span><span class="illus" style="margin:0">code</span></span></div></div></div>
+              <div class="cmp-r"><div class="f">Interactions</div><div class="v" style="color:var(--ink-3)">Not in the register</div><div class="eq na"><svg class="i"><use href="#i-na"/></svg></div><div class="v ext-col">Mapped to DDInter<span class="sub"><span class="illus mono">DDInter id</span></span></div></div>
+              <div class="disclose"><svg class="i"><use href="#i-down"/></svg>Show register row, pipeline log and source text<kbd>E</kbd></div>
+            </div>
+
+            <div class="rail">
+              <div class="card" style="position:relative">
+                <span class="rv-marker" style="left:-11px;top:14px">D</span>
+                <h4>Interactions <span>from DDInter 2.0</span></h4>
+                <div class="cov"><span class="sev ok" style="padding:2px 8px"><svg class="i"><use href="#i-check"/></svg>Covered</span>Substance found in DDInter</div>
+                <div class="pair">
+                  <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span class="names2">With Aspirin 300 mg tablet</span><span class="sev major" style="background:var(--surface)"><svg class="i"><use href="#i-major"/></svg>Major</span></div>
+                  <dl><dt>Action</dt><dd>Synergy</dd><dt>Management</dt><dd>Bleeding risk. Avoid the combination, or monitor INR.</dd></dl>
+                </div>
+                <div class="unk-row"><b><span class="tnum">20</span> pairs: severity not classified by DDInter</b>DDInter has no management text for these. Prescribers will see them listed under this label, never as low risk.</div>
+                <div class="disclose" style="border-top:0;padding:12px 0 0;background:transparent"><svg class="i"><use href="#i-chev"/></svg>Open all pairs<kbd>E</kbd></div>
+              </div>
+              <div class="card">
+                <h4>History <span>this record</span></h4>
+                <div class="history"><ul>
+                  <li><span class="t">10:42</span>Pipeline run finished. All 4 stages ran.</li>
+                  <li><span class="t">10:43</span>No reviews yet. Your OK will publish it.</li>
+                </ul></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="dock" id="dock">
+            <span class="rv-marker" style="left:-11px;top:-11px">E</span>
+            <div class="issue-pane" id="issuePane" hidden>
+              <label for="issueNote">What's wrong with this record?</label>
+              <textarea id="issueNote" maxlength="1000" placeholder="For example: Strength should be 5 mg per tablet, the pipeline read 50 mg."></textarea>
+              <div class="issue-meta"><span class="issue-err" id="issueErr">An engineer will see this note. At least 5 characters.</span><span class="tnum" id="issueCount">0 / 1000</span></div>
+            </div>
+            <div class="dock-row" id="dockRow">
+              <div class="hints" aria-hidden="true">
+                <span><kbd>J</kbd>Next</span><span><kbd>K</kbd>Previous</span><span><kbd>E</kbd>Evidence</span><span><kbd>?</kbd>All shortcuts</span>
+              </div>
+              <div class="why" id="dockWhy"><b>Your OK publishes this record.</b>Signed as a pharmacist</div>
+              <div class="acts" id="dockActs">
+                <button type="button" class="btn btn-outline" id="btnIssue">Report issue <kbd>I</kbd></button>
+                <button type="button" class="btn btn-primary" id="btnOk">Looks correct <kbd>O</kbd></button>
+              </div>
+            </div>
+          </div>
+
+          <div class="scrim" id="rvScrim" hidden></div>
+          <div class="sheet" id="rvSheet" role="alertdialog" aria-labelledby="sheetT" hidden>
+            <span class="sh-ic"><svg class="i"><use href="#i-refresh"/></svg></span>
+            <h5 id="sheetT">This record changed — reload to review the latest data</h5>
+            <p>The pipeline ran G Warfarin 5 mg tablet again after you opened it. Your decision was not saved, and nothing was published.</p>
+            <div class="row"><button type="button" class="btn btn-outline" id="sheetBack">Back to batch</button><button type="button" class="btn btn-primary" id="sheetReload">Reload record <kbd>R</kbd></button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="scroll-hint">Scroll the frame sideways to see the full workspace.</p>
+
+  <div class="annot">
+    <div class="an"><span class="l">A</span><div><h4>A ribbon, not a percentage</h4><p>Ten segments for ten records. Approved records turn green, reported ones turn red, and the current one is outlined. Nothing pulses or counts down, so speed is never the goal.</p></div></div>
+    <div class="an"><span class="l">B</span><div><h4>Checks before content</h4><p>The four pipeline stages sit in one row with icon, word and note. A warning gets a tinted top edge and its note. It doesn't block the decision, it tells the reviewer where to look.</p></div></div>
+    <div class="an"><span class="l">C</span><div><h4>Aligned comparison</h4><p>Source on the left, result on the right, with a match mark between them. The extracted column is tinted with the accent so it's always clear which side is the machine's.</p></div></div>
+    <div class="an"><span class="l">D</span><div><h4>Same safety words as the public</h4><p>The reviewer sees the same labels doctors will see, so they review the actual wording, including “Severity not classified by DDInter”.</p></div></div>
+    <div class="an"><span class="l">E</span><div><h4>Decision dock</h4><p>Glass bar pinned to the bottom with the primary action on the right, as in macOS dialogs. It states the effect of OK for the current role. For an engineer it reads: “Your OK is recorded. Only a pharmacist's OK publishes.”</p></div></div>
+    <div class="an"><span class="l">F</span><div><h4>Report issue opens in place</h4><p>The note field grows up out of the dock, so the record stays in view while you write. The counter and the 5-character minimum are shown before you submit, not after.</p></div></div>
+  </div>
+  <p class="footnote"><span class="illus">Dotted values</span> are layout placeholders. Only the values listed in the product brief are real; the live screen shows register and pipeline values in these places.</p>
+
+  <div class="ribbon-states">
+    <div class="rs"><b>In progress</b><div class="ribbon"><i class="done"></i><i class="done"></i><i class="cur"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><span>Record 3 of 10. Two approved.</span></div>
+    <div class="rs"><b>With an issue</b><div class="ribbon"><i class="done"></i><i class="done"></i><i class="issue"></i><i class="done"></i><i class="cur"></i><i></i><i></i><i></i><i></i><i></i></div><span>Record 3 reported. The batch can't be approved until it is fixed and reviewed again.</span></div>
+    <div class="rs"><b>Batch approved</b><div class="ribbon approved"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><span>All 10 OK. The segments join into one line and the batch reads Approved.</span></div>
+    <div class="rs"><b>Back in review</b><div class="ribbon"><i class="done"></i><i class="done"></i><i class="cur"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i></div><span>Record 3 ran again after approval. It is unpublished until reviewed again.</span></div>
+  </div>
+
+  <div class="err-wrap">
+    <div style="min-width:0">
+      <h3>Error state: stale record</h3>
+      <div class="frame">
+        <div class="frame-bar"><span class="frame-url">ekok / review / 0001-pilot / 3</span></div>
+        <div class="frame-scroll">
+          <div class="stale-mock">
+            <div class="ghost" aria-hidden="true">
+              <h3>G Warfarin 5 mg tablet</h3>
+              <div class="gl" style="width:60%"></div>
+              <div class="gc"></div>
+              <div class="gc" style="height:120px"></div>
+            </div>
+            <div class="scrim"></div>
+            <div class="sheet" role="alertdialog" aria-labelledby="staleT2" style="bottom:16px">
+              <span class="sh-ic"><svg class="i"><use href="#i-refresh"/></svg></span>
+              <h5 id="staleT2">This record changed — reload to review the latest data</h5>
+              <p>The pipeline ran this record again after you opened it. Your decision was not saved.</p>
+              <div class="kept"><svg class="i" style="color:var(--ok);margin-top:2px"><use href="#i-check"/></svg><div>Your note is kept and will be in the field after you reload: <q>Strength looks right, checking INR wording.</q></div></div>
+              <div class="row"><button type="button" class="btn btn-primary">Reload record <kbd>R</kbd></button></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div style="min-width:0">
+      <h3>Every other failure, in words</h3>
+      <div class="scroll-x">
+      <table class="err-table">
+        <thead><tr><th>State</th><th>What the reviewer reads</th><th>Way out</th></tr></thead>
+        <tbody>
+          <tr><td>Note too short</td><td><q>Add at least 5 characters so the engineer knows what to fix.</q></td><td class="way">Shown under the field as you type. The send button stays enabled and focuses the field.</td></tr>
+          <tr><td>Bot check failed</td><td><q>We couldn't confirm you're a person. Your decision is kept. Try again.</q></td><td class="way">Try again (Enter). The decision stays selected.</td></tr>
+          <tr><td>Network or API</td><td><q>Couldn't save your decision. Nothing was published. Check your connection and try again.</q></td><td class="way">Retry in place. The ribbon segment stays outlined until saved.</td></tr>
+          <tr><td>Not authorised</td><td><q>Your account can't review batch 0001-pilot. Ask a batch owner to invite you as a reviewer.</q></td><td class="way">Back to batches. Copy your account email.</td></tr>
+          <tr><td>Saved, with undo</td><td><q>Marked looks correct. Published.</q></td><td class="way">Undo (U) for 8 seconds, then the next record loads with J.</td></tr>
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== 7 Learn ===== -->
+<section class="sec" id="learn" aria-labelledby="h-ln">
+  <div class="sec-h"><span class="sec-n">7</span><h2 id="h-ln">Learn: how a brand becomes data</h2>
+    <p>The docs explain the model with one real medicine, followed from left to right. Each step answers why it exists, and the glossary uses pilot records as examples.</p></div>
+  <div class="frame">
+    <div class="frame-bar"><span class="frame-url">ekok / learn / the-model</span></div>
+    <div class="frame-scroll">
+      <div class="canvas">
+        <div class="docs">
+          <nav class="toc" aria-label="Docs">
+            <b>Start here</b>
+            <a href="#learn">Why Ekok exists</a>
+            <a href="#learn" class="on">From brand to substance</a>
+            <a href="#learn">How a record is checked</a>
+            <b>Reference</b>
+            <a href="#learn">Codes we use</a>
+            <a href="#learn">Interactions and severity</a>
+            <a href="#learn">Glossary</a>
+            <b>Partners</b>
+            <a href="#learn">Using the API</a>
+          </nav>
+          <div class="doc-main">
+            <div>
+              <h3>From brand to substance</h3>
+              <p class="lede">Doctors write brand names. Interaction data is about substances. Ekok connects the two in four steps, and every step is visible. This is Napa 500 mg tablet, followed all the way through.</p>
+            </div>
+            <div class="journey" role="list">
+              <div class="jn" role="listitem"><div class="lvl"><i></i>Brand</div>
+                <div class="jbox brand"><span class="t">Napa 500 mg tablet</span><span class="s">Beximco</span><span class="id">DAR 186-0030-006</span><span class="s">Register text: <span class="raw">Paracetamol 500 mg</span></span></div></div>
+              <div class="jn" role="listitem"><div class="lvl"><i></i>Clinical drug</div>
+                <div class="jbox"><span class="t">Acetaminophen 500 mg tablet</span><span class="id">BDC-000001</span><span class="s">Substance, strength and form. Many brands share one clinical drug.</span></div></div>
+              <div class="jn" role="listitem"><div class="lvl"><i></i>Substance</div>
+                <div class="jbox"><span class="t">Acetaminophen</span><span class="id">BDS-000001</span><span class="s">Also known as Paracetamol. The international name is used for matching.</span></div></div>
+              <div class="jn" role="listitem"><div class="lvl"><i></i>Codes</div>
+                <div class="jbox"><div class="codes" style="margin-top:0;display:grid;gap:6px"><span class="code"><span>ICD-11</span>XM5DJ7</span><span class="code"><span>RxCUI</span>161</span><span class="code"><span>ATC</span>N02BE01</span><span class="code"><span>DrugBank</span>DB00316</span></div></div></div>
+              <div class="jn" role="listitem"><div class="lvl"><i></i>Interactions</div>
+                <div class="jbox"><span class="t">DDInter14</span><span class="s">Its DDInter 2.0 entry. Drug, disease and food interactions come from here.</span></div></div>
+            </div>
+            <div class="why-row">
+              <p><b>Why keep the brand</b>It's what is printed on the strip and written on the prescription.</p>
+              <p><b>Why a clinical drug</b>500 mg and 650 mg of the same substance are different products.</p>
+              <p><b>Why a substance</b>Paracetamol and Acetaminophen are the same molecule under two names.</p>
+              <p><b>Why codes</b>So EMRs and pharmacy systems can join our data to theirs.</p>
+              <p><b>Why DDInter</b>An open, cited source. Gaps are shown as gaps.</p>
+            </div>
+            <div>
+              <h4 style="font-size:20px;letter-spacing:-.015em;margin-bottom:14px">Glossary, with pilot examples</h4>
+              <div class="glossary">
+                <div class="gl-item"><h4>Combination product</h4><p>One brand, more than one active substance. Each one is mapped and checked separately.</p>
+                  <div class="ex"><div class="formula"><span>Amoxicillin + Clavulanic Acid 500 mg + 125 mg tablet</span><span class="p">2 ingredients</span></div></div></div>
+                <div class="gl-item"><h4>Route</h4><p>How the medicine is given. It can change which DDInter entry applies.</p>
+                  <div class="ex">Chloramphenicol 5 mg/ml Eye Drops, route ophthalmic, uses <span class="mono">DDInter352</span> “Chloramphenicol (ophthalmic)”.</div></div>
+                <div class="gl-item"><h4>No interaction data</h4><p>DDInter has no entry for the substance. We say so and don't guess.</p>
+                  <div class="ex" style="background-color:var(--nodata-soft);background-image:repeating-linear-gradient(135deg, transparent 0 8px, var(--nodata-hatch) 8px 9px)"><span style="background:var(--surface);padding:2px 6px;border-radius:4px">Domperidone 10 mg tablet: no interaction data in DDInter.</span></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="scroll-hint">Scroll the frame sideways to see the full docs page.</p>
+</section>
+
+<!-- ===== 8 Checker ===== -->
+<section class="sec" id="checker" aria-labelledby="h-ck">
+  <div class="sec-h"><span class="sec-n">8</span><h2 id="h-ck">Interaction checker</h2>
+    <p>Three medicines selected. The result leads with a count, then the major pair. Domperidone gets its own hatched block, so missing data can't be mistaken for a clean result.</p></div>
+  <div class="frame">
+    <div class="frame-bar"><span class="frame-url">ekok / check</span></div>
+    <div class="frame-scroll">
+      <div class="canvas">
+        <div class="lp-nav" style="padding:16px 44px"><span class="wm sm">ekok<sup>১</sup></span><nav aria-label="Checker"><a href="#checker" style="color:var(--ink)">Check interactions</a><a href="#learn">How it works</a></nav><div class="sp-auto"><span style="font-size:14px;color:var(--ink-2)">Signed in as a prescriber</span></div></div>
+        <div class="chk">
+          <div class="chk-top"><div><h3>Check interactions</h3><p>Add the brands on the prescription. Only pharmacist-reviewed records appear.</p></div></div>
+          <div class="selbox">
+            <svg class="i" style="color:var(--ink-3)" aria-hidden="true"><use href="#i-search"/></svg>
+            <span class="med">G Warfarin 5 mg tablet <small>Warfarin</small><button type="button" aria-label="Remove G Warfarin"><svg class="i"><use href="#i-x"/></svg></button></span>
+            <span class="med">Aspirin 300 mg tablet <small>Aspirin</small><button type="button" aria-label="Remove Aspirin"><svg class="i"><use href="#i-x"/></svg></button></span>
+            <span class="med">Domperidone 10 mg tablet <small>Domperidone</small><button type="button" aria-label="Remove Domperidone"><svg class="i"><use href="#i-x"/></svg></button></span>
+            <label class="vh" for="addMed">Add a medicine</label>
+            <input id="addMed" type="text" placeholder="Add a brand, for example Clarith 500 mg">
+          </div>
+          <div class="summary" role="status">
+            <b>1 major interaction</b>
+            <span class="sev nodata"><svg class="i"><use href="#i-void"/></svg>1 medicine has no interaction data</span>
+            <span style="color:var(--ink-2);font-size:14px">3 medicines, 3 pairs checked</span>
+          </div>
+          <div class="res">
+            <article class="ix" aria-label="Major interaction">
+              <div class="ix-h"><span class="who">G Warfarin 5 mg tablet<span>and</span>Aspirin 300 mg tablet</span><span class="sev major"><svg class="i"><use href="#i-major"/></svg>Major</span></div>
+              <dl class="ix-b">
+                <dt>Substances</dt><dd>Warfarin and Aspirin</dd>
+                <dt>Action</dt><dd>Synergy</dd>
+                <dt>What to do</dt><dd>Increased bleeding risk. Avoid the combination, or monitor INR closely if it is needed.</dd>
+              </dl>
+              <div class="ix-f"><span>Source: DDInter 2.0</span><span class="trust"><svg class="i" style="color:var(--ok)"><use href="#i-shield"/></svg>Both records reviewed by a pharmacist</span></div>
+            </article>
+            <aside class="nod" aria-label="No interaction data">
+              <div class="nod-in">
+                <h4><svg class="i" style="color:var(--nodata)"><use href="#i-void"/></svg>Domperidone 10 mg tablet</h4>
+                <p class="must">No interaction data in DDInter for this substance. This does not mean it is safe to combine.</p>
+                <p class="scope">Check another source before prescribing Domperidone with the medicines below.</p>
+                <div class="pairs-mini">
+                  <div class="pm"><span>With G Warfarin 5 mg tablet</span><span>No data</span></div>
+                  <div class="pm"><span>With Aspirin 300 mg tablet</span><span>No data</span></div>
+                </div>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="scroll-hint">Scroll the frame sideways to see the full checker.</p>
+</section>
+
+<footer class="end">
+  <span>Direction C, Focused Review. Product name proposal: Ekok.</span>
+  <span>Data: DGDA register (39,196 products) and DDInter 2.0. Pilot: 10 medicines.</span>
+</footer>
+</div>
+
+<script>
+(function(){
+  /* Theme switch */
+  var root=document.documentElement, btns=document.querySelectorAll('.theme-switch button');
+  function setTheme(t){
+    if(t==='system'){root.removeAttribute('data-theme')}else{root.setAttribute('data-theme',t)}
+    btns.forEach(function(b){b.setAttribute('aria-pressed', String(b.dataset.t===t))});
+    try{localStorage.setItem('ekok-theme',t)}catch(e){}
+  }
+  var saved='system'; try{saved=localStorage.getItem('ekok-theme')||'system'}catch(e){}
+  setTheme(saved);
+  btns.forEach(function(b){b.addEventListener('click',function(){setTheme(b.dataset.t)})});
+
+  /* Swatches */
+  var sw=[
+    ['--bg','#F2F5F6','#0B1215','Page ground'],
+    ['--surface','#FFFFFF','#121B1F','Cards, sheets, workspace'],
+    ['--ink','#0F1D24','#E4ECEF','Primary text'],
+    ['--ink-2','#43545D','#A8B7BE','Secondary text'],
+    ['--line','#D4DCE0','#25333A','Hairlines, dividers'],
+    ['--accent','#0A6C8F','#5DBCDD','Actions, focus, current record'],
+    ['--accent-soft','#DCEEF5','#12323D','Extracted column tint, selection'],
+    ['--ok','#1E7A45','#6CCB92','Stage OK, approved segment'],
+    ['--warn','#975A00','#F0B45C','Stage warning, pending review, moderate'],
+    ['--crit','#B3261E','#FF8A7F','Stage fail, major interaction, reported'],
+    ['--info','#2E5AAC','#93B2F0','Minor interaction, neutral notices'],
+    ['--unknown','#5A6670','#A9B5BC','Severity not classified (dashed)'],
+    ['--nodata','#575C70','#B0B5C8','No interaction data (hatched)']
+  ];
+  var tb=document.getElementById('swatches');
+  sw.forEach(function(r){
+    var tr=document.createElement('tr');
+    var hatch=r[0]==='--nodata'?' hatch':'';
+    tr.innerHTML='<td class="tok">'+r[0]+'</td>'+
+      '<td><span class="sw"><span class="chipsw'+hatch+'" style="background-color:'+r[1]+'"></span><code>'+r[1]+'</code></span></td>'+
+      '<td><span class="sw"><span class="chipsw'+hatch+'" style="background-color:'+r[2]+'"></span><code>'+r[2]+'</code></span></td>'+
+      '<td class="use">'+r[3]+'</td>';
+    tb.appendChild(tr);
+  });
+
+  /* Motion demo */
+  var mot=document.getElementById('motion');
+  document.getElementById('playMotion').addEventListener('click',function(){
+    mot.querySelectorAll('.track').forEach(function(t){t.style.setProperty('--w',t.clientWidth+'px')});
+    mot.classList.toggle('play');
+  });
+
+  /* Sign-in demo: no real submission */
+  document.getElementById('authForm').addEventListener('submit',function(e){e.preventDefault()});
+
+  /* Reviewer demo */
+  var rv=document.getElementById('rv'), ribbon=document.getElementById('ribbon'), seg=ribbon.children[2];
+  var status=document.getElementById('rvStatus'), pane=document.getElementById('issuePane'), note=document.getElementById('issueNote');
+  var err=document.getElementById('issueErr'), cnt=document.getElementById('issueCount');
+  var why=document.getElementById('dockWhy'), acts=document.getElementById('dockActs');
+  var scrim=document.getElementById('rvScrim'), sheet=document.getElementById('rvSheet');
+  var mode='idle', undoTimer=null;
+  var whyDefault=why.innerHTML, actsDefault=acts.innerHTML, statusDefault=status.innerHTML, statusClass=status.className;
+
+  function bindActs(){
+    var o=document.getElementById('btnOk'), i=document.getElementById('btnIssue');
+    if(o) o.addEventListener('click',approve);
+    if(i) i.addEventListener('click',openIssue);
+  }
+  function reset(){
+    clearTimeout(undoTimer); mode='idle';
+    seg.className='cur'; status.className=statusClass; status.innerHTML=statusDefault;
+    pane.hidden=true; pane.classList.remove('invalid'); note.value=''; updCount();
+    why.innerHTML=whyDefault; acts.innerHTML=actsDefault; bindActs();
+    scrim.hidden=true; sheet.hidden=true;
+  }
+  function approve(){
+    if(mode==='stale') return;
+    mode='done'; pane.hidden=true;
+    seg.className='done';
+    status.className='pill pill-ok'; status.innerHTML='<svg class="i"><use href="#i-check"/></svg>Approved by you. Published.';
+    why.innerHTML='<span class="toast"><span class="ok-ic"><svg class="i"><use href="#i-check"/></svg></span>Marked looks correct. Published.</span>';
+    acts.innerHTML='<button type="button" class="btn btn-outline" id="btnUndo">Undo <kbd>U</kbd></button><button type="button" class="btn btn-primary" id="btnNext">Next record <kbd>J</kbd></button>';
+    document.getElementById('btnUndo').addEventListener('click',reset);
+    document.getElementById('btnNext').addEventListener('click',nextMsg);
+    clearTimeout(undoTimer);
+    undoTimer=setTimeout(function(){var u=document.getElementById('btnUndo'); if(u){u.disabled=true; u.style.opacity=.5}},8000);
+  }
+  function nextMsg(){
+    why.innerHTML='<b>Record 4 would load here.</b>This mockup shows record 3 only.';
+  }
+  function openIssue(){
+    if(mode==='stale') return;
+    mode='issue'; pane.hidden=false; note.focus();
+    why.innerHTML='<b>Reporting an issue.</b>The record stays unpublished.';
+    acts.innerHTML='<button type="button" class="btn btn-outline" id="btnCancel">Cancel <kbd>Esc</kbd></button><button type="button" class="btn btn-crit" id="btnSend">Send issue <kbd>⌘↵</kbd></button>';
+    document.getElementById('btnCancel').addEventListener('click',reset);
+    document.getElementById('btnSend').addEventListener('click',sendIssue);
+  }
+  function updCount(){ cnt.textContent=note.value.length+' / 1000'; if(pane.classList.contains('invalid') && note.value.trim().length>=5){pane.classList.remove('invalid'); err.textContent='An engineer will see this note. At least 5 characters.'} }
+  function sendIssue(){
+    var n=note.value.trim().length;
+    if(n<5){ pane.classList.add('invalid'); err.innerHTML='<svg class="i"><use href="#i-warn"/></svg>Add at least 5 characters so the engineer knows what to fix.'; note.focus(); return; }
+    mode='done'; pane.hidden=true; seg.className='issue';
+    status.className='pill pill-pending'; status.style.background='var(--crit-soft)'; status.style.color='var(--crit)';
+    status.innerHTML='<svg class="i"><use href="#i-flag"/></svg>Issue reported. Not published.';
+    why.innerHTML='<span class="toast">Issue sent to the engineers.</span>';
+    acts.innerHTML='<button type="button" class="btn btn-outline" id="btnUndo">Undo <kbd>U</kbd></button><button type="button" class="btn btn-primary" id="btnNext">Next record <kbd>J</kbd></button>';
+    document.getElementById('btnUndo').addEventListener('click',function(){status.removeAttribute('style'); reset()});
+    document.getElementById('btnNext').addEventListener('click',nextMsg);
+  }
+  function stale(){
+    mode='stale'; pane.hidden=true;
+    scrim.hidden=false; sheet.hidden=false;
+    sheet.classList.remove('anim-in'); void sheet.offsetWidth; sheet.classList.add('anim-in');
+    document.getElementById('sheetReload').focus();
+  }
+  note.addEventListener('input',updCount);
+  note.addEventListener('keydown',function(e){
+    if((e.metaKey||e.ctrlKey) && e.key==='Enter'){e.preventDefault(); sendIssue()}
+    if(e.key==='Escape'){e.preventDefault(); reset(); rv.focus()}
+  });
+  document.getElementById('sheetReload').addEventListener('click',function(){reset(); rv.focus()});
+  document.getElementById('sheetBack').addEventListener('click',function(){reset(); rv.focus()});
+  document.getElementById('simStale').addEventListener('click',function(){stale()});
+  document.getElementById('resetRv').addEventListener('click',function(){status.removeAttribute('style'); reset()});
+  rv.addEventListener('keydown',function(e){
+    if(e.target===note || e.metaKey || e.ctrlKey || e.altKey) return;
+    var k=e.key.toLowerCase();
+    if(mode==='stale'){ if(k==='r'){e.preventDefault(); reset()} return; }
+    if(k==='o' && mode==='idle'){e.preventDefault(); approve()}
+    else if(k==='i' && mode==='idle'){e.preventDefault(); openIssue()}
+    else if(k==='u' && mode==='done'){e.preventDefault(); var u=document.getElementById('btnUndo'); if(u && !u.disabled){status.removeAttribute('style'); reset()}}
+    else if(k==='j'){e.preventDefault(); nextMsg()}
+    else if(k==='escape'){reset()}
+  });
+  bindActs();
+})();
+</script>

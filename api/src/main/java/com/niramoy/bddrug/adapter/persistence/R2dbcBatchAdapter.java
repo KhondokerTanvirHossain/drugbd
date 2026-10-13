@@ -31,7 +31,7 @@ public class R2dbcBatchAdapter implements BatchQueryPort {
     }
 
     private record ItemRow(String conceptId, String review, String note, String sourceJson,
-                           R2dbcProductAdapter.Row product, Instant extractedAt) {}
+                           R2dbcProductAdapter.Row product, Instant extractedAt, Long lastDecisionId) {}
 
     private static Batch toBatch(Readable r) {
         return new Batch(r.get("batch_id", String.class), r.get("status", String.class),
@@ -72,6 +72,8 @@ public class R2dbcBatchAdapter implements BatchQueryPort {
         Mono<List<ItemRow>> rows = db.sql("""
                 SELECT bi.concept_id AS item_id, bi.review, bi.note AS review_note, rc.payload::text AS source_json,
                        bi.extracted_at,
+                       (SELECT max(rd.id) FROM ops.review_decision rd
+                         WHERE rd.batch_id = bi.batch_id AND rd.concept_id = bi.concept_id) AS last_decision_id,
                        bp.concept_id, bp.dar_number, bp.trade_name, bp.company, bp.dosage_form,
                        bp.generic_content_raw, bp.quality_flag, bp.parse_status, bp.parse_note, bp.bdc_id
                 FROM ops.batch_item bi
@@ -82,7 +84,7 @@ public class R2dbcBatchAdapter implements BatchQueryPort {
             .map(r -> new ItemRow(r.get("item_id", String.class), r.get("review", String.class),
                 r.get("review_note", String.class), r.get("source_json", String.class),
                 r.get("concept_id", String.class) == null ? null : R2dbcProductAdapter.rowWithReview(r, null),
-                instant(r.get("extracted_at", OffsetDateTime.class))))
+                instant(r.get("extracted_at", OffsetDateTime.class)), r.get("last_decision_id", Long.class)))
             .all().collectList();
         return Mono.zip(ingredients, stages, rows).flatMap(t -> {
             List<ItemRow> items = t.getT3();
@@ -92,7 +94,7 @@ public class R2dbcBatchAdapter implements BatchQueryPort {
                     .withIngredients(t.getT1().getOrDefault(i.conceptId(), List.of()))
                     .withClinicalDrug(i.product().bdcId() == null ? null : cds.get(i.product().bdcId()));
                 return new BatchItem(i.conceptId(), i.review(), i.note(), p, i.sourceJson(),
-                    List.copyOf(t.getT2().getOrDefault(i.conceptId(), List.of())), i.extractedAt());
+                    List.copyOf(t.getT2().getOrDefault(i.conceptId(), List.of())), i.extractedAt(), i.lastDecisionId());
             }).toList());
         });
     }

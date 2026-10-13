@@ -31,3 +31,8 @@ export function parseReviewers(raw: string | undefined): Map<string, ReviewerRol
 export function roleFor(email: string, raw: string | undefined = process.env.REVIEWERS): Role {
   return parseReviewers(raw).get(email.trim().toLowerCase()) ?? "user";
 }
+
+/** True for a pharmacist or engineer session; every other session (and none) sees public data only. */
+export function isReviewer<S extends { role: string }>(session: S | null | undefined): session is S & { role: ReviewerRole } {
+  return session?.role === "pharmacist" || session?.role === "engineer";
+}

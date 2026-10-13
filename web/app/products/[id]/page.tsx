@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import FlagForm from "@/components/FlagForm";
-import { Badge, UnreviewedBadge } from "@/components/badges";
-import { getProduct, isHidden, scopeFor, type DdinterRef } from "@/lib/api";
+import { Badge } from "@/components/badges";
+import { getProduct, isHidden, type DdinterRef } from "@/lib/api";
 import { formatStrength } from "@/lib/format";
 import { NOT_REVIEWED } from "@/lib/copy";
 import { ddinterText } from "@/lib/ddinter-text";
@@ -19,8 +19,7 @@ export default async function ProductPage({ params, searchParams }: {
   let decoded: string;
   try { decoded = decodeURIComponent(id); } catch { notFound(); }
   const session = await getSession();
-  const scope = scopeFor(session);
-  const p = await getProduct(decoded, scope);
+  const p = await getProduct(decoded);   // public scope for every session (spec §2.2)
   if (!p) notFound();
   const flagForm = <FlagForm session={session} targetType="product" targetId={decoded} outcome={flag} />;
   // Unapproved under public scope: the API sent no data, and the page shows nothing but this.
@@ -29,7 +28,7 @@ export default async function ProductPage({ params, searchParams }: {
   const parse = p.parseStatus ? (p.parseNote ? `${p.parseStatus}: ${p.parseNote}` : p.parseStatus) : "not parsed yet";
   return (
     <article>
-      <h1>{p.tradeName}<UnreviewedBadge scope={scope} reviewStatus={p.reviewStatus} /></h1>
+      <h1>{p.tradeName}</h1>
       <dl>
         <dt>DAR number</dt><dd>{p.darNumber}</dd>
         <dt>Company</dt><dd>{p.company}</dd>

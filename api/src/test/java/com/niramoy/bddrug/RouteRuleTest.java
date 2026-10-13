@@ -16,6 +16,13 @@ class RouteRuleTest {
         assertThat(choice.codes()).extracting(DdinterCode::code).containsExactly("DDInter352");
         assertThat(choice.routeAssumed()).isFalse();
     }
+    @Test void exactEntryWinsEvenWithoutPairs() {
+        // §8.2: the ophthalmic entry is used although DDInter lists no pair for it with the pilot drugs. There is no
+        // fallback to the systemic entry: that would bring back the false alerts on eye drops.
+        var choice = RouteRule.choose(CHLORAMPHENICOL, "ophthalmic").orElseThrow();
+        assertThat(choice.codes()).extracting(DdinterCode::code).containsExactly("DDInter352");
+        assertThat(choice.routeAssumed()).isFalse();
+    }
     @Test void systemicProductWithSystemicEntryIsNotAssumed() {
         var choice = RouteRule.choose(CHLORAMPHENICOL, "systemic").orElseThrow();
         assertThat(choice.codes()).extracting(DdinterCode::code).containsExactly("DDInter351");

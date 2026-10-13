@@ -1,6 +1,12 @@
 import { listBatches } from "@/lib/api";
+import { BATCHES_REVIEWERS_ONLY } from "@/lib/copy";
+import { isReviewer } from "@/lib/reviewers";
+import { getSession } from "@/lib/session";
 export const dynamic = "force-dynamic";
+
 export default async function Batches() {
+  // Batch evidence shows unreviewed records: reviewers only (spec §12.1). Status 200, so the deploy smoke check passes.
+  if (!isReviewer(await getSession())) return <><h1>Batches</h1><p role="status">{BATCHES_REVIEWERS_ONLY}</p></>;
   const batches = await listBatches();
   return (
     <>

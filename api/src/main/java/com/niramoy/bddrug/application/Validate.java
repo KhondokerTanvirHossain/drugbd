@@ -24,10 +24,14 @@ final class Validate {
         return s;
     }
 
+    /** The one email predicate: what {@code email} accepts is exactly what an audit row may record. */
+    static boolean isEmail(String stripped) {
+        return !stripped.isEmpty() && stripped.contains("@") && stripped.length() <= MAX_EMAIL;
+    }
+
     static String email(String value, String field) {
         String s = stripped(value);
-        if (s.isEmpty() || !s.contains("@") || s.length() > MAX_EMAIL)
-            throw new InvalidQueryException(field, field + " must be an email address");
+        if (!isEmail(s)) throw new InvalidQueryException(field, field + " must be an email address");
         return s;
     }
 }

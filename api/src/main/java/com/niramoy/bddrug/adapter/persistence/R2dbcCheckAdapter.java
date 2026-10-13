@@ -6,13 +6,14 @@ import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 import java.util.*;
 
-/** Four set-based queries per check: products, ingredients, DDInter codes, then pairs among those codes. */
+/** Four set-based queries per check: products, ingredients, DDInter codes (with their ddinter_drug row), then pairs among those codes. */
 @Component
 public class R2dbcCheckAdapter implements CheckQueryPort {
     private final DatabaseClient db;
     public R2dbcCheckAdapter(DatabaseClient db) { this.db = db; }
 
-    private record CodeRow(String bdsId, DdinterCode code) {}
+    private record CodeRow(String bdsId, DdinterCode code, boolean listed) {}
+    private record Codes(Map<String, List<DdinterCode>> byBds, Set<String> listed) {}
 
     @Override public Mono<CheckData> load(List<String> conceptIds) {
         String[] ids = conceptIds.toArray(String[]::new);
@@ -41,21 +42,33 @@ public class R2dbcCheckAdapter implements CheckQueryPort {
         return Mono.zip(products, ingredients).flatMap(t -> {
             String[] bds = t.getT2().stream().map(IngredientRow::bdsId).filter(Objects::nonNull).distinct()
                 .toArray(String[]::new);
-            return codes(bds).flatMap(codes -> pairs(codes).map(pairs ->
-                new CheckData(t.getT1(), t.getT2(), codes, pairs)));
+            return codes(bds).flatMap(codes -> pairs(codes.byBds()).map(pairs ->
+                new CheckData(t.getT1(), t.getT2(), codes.byBds(), codes.listed(), pairs)));
         });
     }
 
-    private Mono<Map<String, List<DdinterCode>>> codes(String[] bdsIds) {
-        if (bdsIds.length == 0) return Mono.just(Map.of());
-        return db.sql("SELECT bds_id, code, route_scope FROM curated.substance_code WHERE system = 'DDINTER' AND bds_id = ANY(:bds)")
+    /** Every DDINTER code of the substances; listed = it has a ddinter_drug row (its full pair list is stored, §7.4). */
+    private Mono<Codes> codes(String[] bdsIds) {
+        if (bdsIds.length == 0) return Mono.just(new Codes(Map.of(), Set.of()));
+        return db.sql("""
+                SELECT c.bds_id, c.code, c.route_scope, d.ddinter_id IS NOT NULL AS listed
+                FROM curated.substance_code c
+                LEFT JOIN curated.ddinter_drug d ON d.ddinter_id = c.code
+                WHERE c.system = 'DDINTER' AND c.bds_id = ANY(:bds)""")
             .bind("bds", bdsIds)
             .map(r -> new CodeRow(r.get("bds_id", String.class),
-                new DdinterCode(r.get("code", String.class), r.get("route_scope", String.class))))
-            .all()
-            .collect(() -> new HashMap<String, List<DdinterCode>>(),
-                     (m, c) -> m.computeIfAbsent(c.bdsId(), k -> new ArrayList<>()).add(c.code()))
-            .map(m -> m);
+                new DdinterCode(r.get("code", String.class), r.get("route_scope", String.class)),
+                Boolean.TRUE.equals(r.get("listed", Boolean.class))))
+            .all().collectList()
+            .map(rows -> {
+                Map<String, List<DdinterCode>> byBds = new HashMap<>();
+                Set<String> listed = new HashSet<>();
+                for (CodeRow c : rows) {
+                    byBds.computeIfAbsent(c.bdsId(), k -> new ArrayList<>()).add(c.code());
+                    if (c.listed()) listed.add(c.code().code());
+                }
+                return new Codes(byBds, listed);
+            });
     }
 
     private Mono<List<PairRow>> pairs(Map<String, List<DdinterCode>> codes) {

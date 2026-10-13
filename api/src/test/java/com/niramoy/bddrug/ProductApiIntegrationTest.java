@@ -126,10 +126,11 @@ class ProductApiIntegrationTest {
             .expectBody().jsonPath("$.errors[0].code").isEqualTo("NOT_FOUND");
     }
     @Test void batchShowsSourceBesideExtractedData() {
-        web.get().uri("/v1/batches/0001-pilot").exchange().expectStatus().isOk()
+        all().get().uri("/v1/batches/0001-pilot").exchange().expectStatus().isOk()
             .expectBody()
             .jsonPath("$.data.itemCount").isEqualTo(2)
             .jsonPath("$.data.items[0].conceptId").isEqualTo("341-0160-020--tericin")
+            .jsonPath("$.data.items[0].lastDecisionId").value(v -> org.assertj.core.api.Assertions.assertThat(v).isNull())
             .jsonPath("$.data.items[0].extracted.genericContentRaw").isEqualTo("Amphotericin B 50 mg/vial")
             .jsonPath("$.data.items[0].extracted.ingredients[0].xmCode").isEqualTo("XM5TR4")
             .jsonPath("$.data.items[0].sourceJson").value(s -> org.assertj.core.api.Assertions.assertThat((String) s).contains("Amphotericin B  50 mg/vial"))
@@ -138,9 +139,14 @@ class ProductApiIntegrationTest {
             .jsonPath("$.data.items[1].extracted").doesNotExist();
     }
     @Test void batchListAndUnknownBatch() {
-        web.get().uri("/v1/batches").exchange().expectStatus().isOk()
+        all().get().uri("/v1/batches").exchange().expectStatus().isOk()
             .expectBody().jsonPath("$.data[0].batchId").isEqualTo("0001-pilot");
-        web.get().uri("/v1/batches/nope").exchange().expectStatus().isNotFound();
+        all().get().uri("/v1/batches/nope").exchange().expectStatus().isNotFound();
+    }
+
+    @Test void batchReadsAnswer401WithoutTheToken() {
+        web.get().uri("/v1/batches").exchange().expectStatus().isUnauthorized();
+        web.get().uri("/v1/batches/0001-pilot").exchange().expectStatus().isUnauthorized();
     }
 
     @Test void detailIncludesParseStatusAndClinicalDrug() {
@@ -204,7 +210,7 @@ class ProductApiIntegrationTest {
             .jsonPath("$.data[0].clinicalDrug.bdcId").isEqualTo("BDC-000001");
     }
     @Test void batchItemsCarryStageResultsInPipelineOrder() {
-        web.get().uri("/v1/batches/0001-pilot").exchange().expectStatus().isOk()
+        all().get().uri("/v1/batches/0001-pilot").exchange().expectStatus().isOk()
             .expectBody()
             .jsonPath("$.data.items[0].stages.length()").isEqualTo(4)
             .jsonPath("$.data.items[0].stages[0].stage").isEqualTo("dgda")

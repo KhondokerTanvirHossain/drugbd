@@ -1,7 +1,5 @@
-import { UnreviewedBadge } from "@/components/badges";
-import { scopeFor, searchProducts } from "@/lib/api";
+import { searchProducts } from "@/lib/api";
 import { firstParam } from "@/lib/params";
-import { getSession } from "@/lib/session";
 export const dynamic = "force-dynamic";
 
 export default async function Home({ searchParams }: { searchParams: Promise<{ q?: string | string[]; page?: string | string[] }> }) {
@@ -9,9 +7,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ q
   const q = firstParam(sp.q);
   const page = firstParam(sp.page) || "0";
   const pageNum = Math.max(0, Number.parseInt(page, 10) || 0);
-  // Anonymous visitors search approved products only (scope=public); reviewers search everything.
-  const scope = scopeFor(await getSession());
-  const { items, error } = await searchProducts(q, pageNum, scope);
+  // Public scope for every session, reviewers included (spec §2.2): only approved products are listed.
+  const { items, error } = await searchProducts(q, pageNum);
   return (
     <>
       <form method="get" role="search">
@@ -23,8 +20,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ q
       <ul>
         {items.map((p) => (
           <li key={p.conceptId}>
-            <a href={`/products/${encodeURIComponent(p.conceptId)}`}>{p.tradeName}</a>
-            <UnreviewedBadge scope={scope} reviewStatus={p.reviewStatus} />{" "}
+            <a href={`/products/${encodeURIComponent(p.conceptId)}`}>{p.tradeName}</a>{" "}
             {p.dosageForm}: {p.genericContentRaw} <small>({p.company})</small>
           </li>
         ))}

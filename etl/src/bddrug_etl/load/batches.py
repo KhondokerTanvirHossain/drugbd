@@ -1,9 +1,11 @@
 """Batch runs: fetch an explicit list of DGDA concepts, load them, and record per-item review status."""
 import pathlib
+import uuid
 
 import psycopg
 
 from bddrug_etl.load.products import LoadStats, load_products
+from bddrug_etl.load.snapshots import write_snapshots
 from bddrug_etl.ocl.transform import concept_to_product
 from bddrug_etl.stages.results import SharedChanges, StageResult, write_stage_results
 
@@ -54,7 +56,8 @@ def _upsert_batch(cur: psycopg.Cursor, batch_id: str, concept_ids: list[str], is
     Every item in the file is (re)extracted now (``clock_timestamp()``, not the transaction start, so
     a decision recorded while this transaction was open is older than the stamp): its review goes back to ``pending`` (or ``issue``
     with the reason when it could not be loaded). Items no longer in the file are deleted only when
-    nobody has reviewed them; the others stay, marked ``removed from batch file``. The batch's stage
+    nobody has reviewed them and they have no snapshot; the others stay, marked ``removed from batch
+    file``. The batch's stage
     results are cleared, as the old delete-and-recreate did; this run's stages write them again.
     """
     cur.execute(
@@ -64,11 +67,15 @@ def _upsert_batch(cur: psycopg.Cursor, batch_id: str, concept_ids: list[str], is
         (batch_id, len(concept_ids)),
     )
     _upsert_items(cur, batch_id, concept_ids, issues)
+    # §8.1 item 6: a snapshot can never be deleted (append-only, NO ACTION foreign key), so an item that has one is
+    # kept and marked removed, like an item with decisions.
     cur.execute(
         """DELETE FROM ops.batch_item bi
            WHERE bi.batch_id = %s AND NOT (bi.concept_id = ANY(%s))
              AND NOT EXISTS (SELECT 1 FROM ops.review_decision rd
-                             WHERE rd.batch_id = bi.batch_id AND rd.concept_id = bi.concept_id)""",
+                             WHERE rd.batch_id = bi.batch_id AND rd.concept_id = bi.concept_id)
+             AND NOT EXISTS (SELECT 1 FROM ops.item_snapshot s
+                             WHERE s.batch_id = bi.batch_id AND s.concept_id = bi.concept_id)""",
         (batch_id, concept_ids),
     )
     cur.execute(
@@ -79,11 +86,11 @@ def _upsert_batch(cur: psycopg.Cursor, batch_id: str, concept_ids: list[str], is
 
 
 def reopen_review(conn: psycopg.Connection, batch_id: str, concept_ids: list[str],
-                  changes: SharedChanges | None = None) -> list[tuple[str, str]]:
+                  changes: SharedChanges | None = None, run_id: uuid.UUID | None = None) -> list[tuple[str, str]]:
     """Stamp ``extracted_at`` and put the items' review back to ``pending`` (Review Focus 3).
 
-    Call it last, inside the same transaction as the curated writes for ``concept_ids``, so the stamp
-    commits (or rolls back) with them. ``clock_timestamp()`` is used rather than ``now()``: a decision
+    Call it last, inside the same transaction as the curated writes and stage results for ``concept_ids``, so the
+    stamp commits (or rolls back) with them. ``clock_timestamp()`` is used rather than ``now()``: a decision
     recorded while that transaction was open saw the old data, so it must be older than the stamp.
     The decision history (``ops.review_decision``) is untouched; the batches go back to ``in_review``.
 
@@ -91,7 +98,11 @@ def reopen_review(conn: psycopg.Connection, batch_id: str, concept_ids: list[str
     shows them is re-opened too (``_reopen_dependents``) and returned as (batch_id, concept_id) pairs.
     All item rows are locked before any ``ops.batch`` row, the same order as the API's decision
     transaction, so the two cannot deadlock.
+
+    Every stamped item gets a snapshot (V6) with ``run_id`` (one per ETL invocation; a new one when None): the
+    targets with reason ``run``/``rerun``, the re-opened dependents with ``shared_change``.
     """
+    run_id = run_id or uuid.uuid4()
     if concept_ids:
         conn.execute(
             """UPDATE ops.batch_item SET review = 'pending', extracted_at = clock_timestamp()
@@ -102,6 +113,8 @@ def reopen_review(conn: psycopg.Connection, batch_id: str, concept_ids: list[str
     batches = sorted(({batch_id} if concept_ids else set()) | {b for b, _ in others})
     if batches:
         conn.execute("UPDATE ops.batch SET status = 'in_review' WHERE batch_id = ANY(%s)", (batches,))
+    write_snapshots(conn, [(batch_id, cid) for cid in concept_ids], run_id)
+    write_snapshots(conn, others, run_id, shared=True)
     return others
 
 
@@ -156,8 +169,9 @@ def _load(conn: psycopg.Connection, client, concept_ids: list[str]):
     return stats, found, missing, not_products, issues
 
 
-def run_batch(conn: psycopg.Connection, client, batch_id: str, concept_ids: list[str]) -> LoadStats:
-    """Load the batch and record its items and 'dgda' stage results in one transaction (committed here).
+def run_batch(conn: psycopg.Connection, client, batch_id: str, concept_ids: list[str],
+              run_id: uuid.UUID | None = None) -> LoadStats:
+    """Load the batch and record its items, 'dgda' stage results and snapshots in one transaction (committed here).
 
     Re-running a batch keeps its review history: see ``_upsert_batch``.
     """
@@ -165,15 +179,17 @@ def run_batch(conn: psycopg.Connection, client, batch_id: str, concept_ids: list
     with conn.cursor() as cur:
         _upsert_batch(cur, batch_id, concept_ids, issues)
     write_stage_results(conn, batch_id, "dgda", _dgda_results(concept_ids, found, missing, not_products))
+    write_snapshots(conn, [(batch_id, cid) for cid in concept_ids], run_id or uuid.uuid4())
     conn.commit()
     return stats
 
 
-def run_batch_items(conn: psycopg.Connection, client, batch_id: str, concept_ids: list[str]) -> LoadStats:
+def run_batch_items(conn: psycopg.Connection, client, batch_id: str, concept_ids: list[str],
+                    run_id: uuid.UUID | None = None) -> LoadStats:
     """Re-load only ``concept_ids`` of an already loaded batch (single-record re-run), committed here.
 
     Only these items are touched: they are re-extracted (``_upsert_items``), their stage results are
-    cleared and their 'dgda' results written, all in one transaction. The other items, the batch's
+    cleared and their 'dgda' results and snapshots written, all in one transaction. The other items, the batch's
     ``item_count`` and ``run_at`` stay as they are; the batch goes back to ``in_review``. Never call
     ``run_batch`` with a subset: it would treat every other item as removed from the batch file.
     """
@@ -184,5 +200,6 @@ def run_batch_items(conn: psycopg.Connection, client, batch_id: str, concept_ids
         cur.execute("DELETE FROM ops.stage_result WHERE batch_id = %s AND concept_id = ANY(%s)",
                     (batch_id, concept_ids))
     write_stage_results(conn, batch_id, "dgda", _dgda_results(concept_ids, found, missing, not_products))
+    write_snapshots(conn, [(batch_id, cid) for cid in concept_ids], run_id or uuid.uuid4())
     conn.commit()
     return stats
