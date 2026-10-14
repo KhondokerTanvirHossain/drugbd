@@ -130,13 +130,29 @@ function* sources(dir: string): Generator<string> {
   }
 }
 const stripComments = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
-/** The legacy checker page is rewritten in P2 (§12.2); P2 empties this list. */
-const LEGACY_EXEMPT = ["app/check/page.tsx"];
+/**
+ * Legacy pages that still retype copy. P2 rewrites app/check/page.tsx and app/page.tsx (the home page's `>Next page<`)
+ * and empties this list; P1B Task 20 deletes app/flags/page.tsx (`>Resolve<`) and app/batches/[id]/page.tsx (P0's
+ * REVIEW_OUTCOME texts) and removes them from it.
+ */
+const LEGACY_EXEMPT = ["app/check/page.tsx", "app/page.tsx", "app/flags/page.tsx", "app/batches/[id]/page.tsx"];
 /** Files that may hold the compact pill's short form (§3.4). */
 const SHORT_FORM_ALLOWED = ["components/ui/ReviewStatus.tsx"];
 const scanned = () => ["app", "components", "lib"].flatMap((d) => [...sources(join(WEB, d))])
   .filter((f) => f !== "lib/copy.ts" && !LEGACY_EXEMPT.includes(f));
 const text = (f: string) => stripComments(readFileSync(join(WEB, f), "utf8"));
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+/**
+ * Whether source code retypes a NEW_COPY value. A value of 20 or more characters counts wherever it appears. A shorter
+ * one ("On", "Resolve", "Try again", "Interaction check") counts only as a whole string literal or as JSX text, so
+ * identifiers such as submitResolve or DESK_NEW.deskSettings, and longer strings such as "Interaction check failed" or
+ * >Interaction checker<, never match, while `"Resolve"` and `>Resolve<` still do.
+ */
+function retypes(src: string, value: string): boolean {
+  if (value.length >= 20) return src.includes(value);
+  const v = escapeRe(value);
+  return new RegExp(`(["'\`])${v}\\1|>\\s*${v}\\s*<`).test(src);
+}
 
 describe("no paraphrase or retyping of the safety sentences", () => {
   it("no source file retypes a safety sentence instead of importing it", () => {
@@ -148,8 +164,22 @@ describe("no paraphrase or retyping of the safety sentences", () => {
 
   it("no source file retypes a NEW_COPY string (§11.1: page modules import them)", () => {
     const strings = Object.values(copy.NEW_COPY).flatMap((r) => Object.values(r)).filter((s) => s.length > 0);
-    const hits = scanned().flatMap((f) => strings.filter((s) => text(f).includes(s)).map((s) => `${f}: ${s}`));
+    const hits = scanned().flatMap((f) => strings.filter((s) => retypes(text(f), s)).map((s) => `${f}: ${s}`));
     expect(hits).toEqual([]);
+  });
+
+  it("the NEW_COPY guard sees literals and JSX text, not identifiers", () => {
+    expect(retypes("export async function submitResolve() {}", "Resolve")).toBe(false);
+    expect(retypes("const s = DESK_NEW.deskSettings; logOpenOnRender();", "Settings")).toBe(false);
+    expect(retypes("const s = DESK_NEW.deskSettings; logOpenOnRender();", "On")).toBe(false);
+    expect(retypes('<button type="submit">Resolve</button>', "Resolve")).toBe(true);
+    expect(retypes("label: 'Try again',", "Try again")).toBe(true);
+    expect(retypes("const t = `On`;", "On")).toBe(true);
+    expect(retypes('error: "Interaction check failed"', "Interaction check")).toBe(false);
+    expect(retypes('<a href="/check">Interaction checker</a>', "Interaction check")).toBe(false);
+    expect(retypes('interactionCheck: "Interaction check",', "Interaction check")).toBe(true);
+    expect(retypes("issueOpen: `An issue is open. It returns to review after the fix and re-run.`",
+      "It returns to review after the fix and re-run.")).toBe(true);
   });
 
   it.each([

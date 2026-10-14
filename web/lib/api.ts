@@ -1,4 +1,7 @@
 import "server-only";
+import type {
+  DeskOutcome, FilterKey, FlagItem, FlagPage, ItemsPage, ReviewBatchSummary, ReviewDiff, ReviewItem, VersionRow,
+} from "./review-types";
 
 /**
  * The BDDrug API client. Server-only: it reads INTERNAL_API_TOKEN, which must never reach a client bundle
@@ -90,10 +93,10 @@ export type BatchItem = { conceptId: string; review: ReviewStatus; note: string 
 export type Batch = { batchId: string; status: string; runAt: string; itemCount: number; items: BatchItem[] };
 
 /** Batch evidence shows unreviewed records: reviewers only (A1). These reads carry the token and fail without one. */
-async function reviewerRead(path: string): Promise<Response> {
+async function reviewerRead(path: string, headers: Record<string, string> = {}): Promise<Response> {
   const token = internalToken();
   if (!token) throw new Error("The internal API token is not configured");
-  return read(`${base()}${path}`, { [TOKEN_HEADER]: token });
+  return read(`${base()}${path}`, { ...headers, [TOKEN_HEADER]: token });
 }
 
 export async function listBatches(): Promise<Batch[]> {
@@ -144,6 +147,79 @@ export async function getDecisions(batchId: string, conceptId: string): Promise<
   const data = (await res.json())?.data;
   if (!Array.isArray(data)) throw new Error("API error: no decision list");
   return data.map((d: PublicDecision) => ({ decision: d.decision, note: d.note ?? "", role: d.role, decidedAt: d.decidedAt }));
+}
+
+// ---- Reviewer reads (spec §7.3). Every one needs the token; an unknown batch, record or snapshot is null. ----
+
+const enc = encodeURIComponent;
+
+async function reviewData<T>(path: string, headers: Record<string, string> = {}): Promise<T | null> {
+  const res = await reviewerRead(path, headers);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  return (await res.json()).data as T;
+}
+
+/** The API refuses a longer record filter (400); the desk never sends one. */
+export const REVIEW_Q_MAX = 100;
+
+export async function listReviewBatches(): Promise<ReviewBatchSummary[]> {
+  return (await reviewData<ReviewBatchSummary[]>("/v1/review/batches")) ?? [];
+}
+
+export async function getReviewItems(batchId: string, opts: { show?: FilterKey; q?: string; page?: number; size?: number } = {}):
+    Promise<ItemsPage | null> {
+  const params = new URLSearchParams();
+  if (opts.show && opts.show !== "all") params.set("show", opts.show);
+  const q = [...(opts.q ?? "").trim()].slice(0, REVIEW_Q_MAX).join("");
+  if (q) params.set("q", q);
+  if (opts.page) params.set("page", String(opts.page));
+  params.set("size", String(opts.size ?? 500));
+  return reviewData<ItemsPage>(`/v1/review/batches/${enc(batchId)}/items?${params}`);
+}
+
+export async function getReviewVersions(batchId: string): Promise<VersionRow[] | null> {
+  return reviewData<VersionRow[]>(`/v1/review/batches/${enc(batchId)}/versions`);
+}
+
+/** `viewerEmail` only marks the viewer's own decisions ("(you)"); the API never echoes it. */
+export async function getReviewItem(batchId: string, conceptId: string, viewerEmail: string | null): Promise<ReviewItem | null> {
+  return reviewData<ReviewItem>(`/v1/review/batches/${enc(batchId)}/items/${enc(conceptId)}`,
+    viewerEmail ? { "X-Viewer-Email": viewerEmail } : {});
+}
+
+export async function getReviewDiff(batchId: string, conceptId: string, from: string): Promise<ReviewDiff | null> {
+  return reviewData<ReviewDiff>(`/v1/review/batches/${enc(batchId)}/items/${enc(conceptId)}/diff?${new URLSearchParams({ from })}`);
+}
+
+/** The desk's decision write: like postDecision, plus the outcome's version (spec §5.8.2 "own saves"). */
+export async function postDeskDecision(batchId: string, conceptId: string, d: DecisionRequest): Promise<WriteResult<DeskOutcome>> {
+  const payload = { decision: d.decision, note: d.note, reviewerEmail: d.reviewerEmail, reviewerRole: d.reviewerRole,
+    extractedAt: d.extractedAt, expectedLastDecisionId: d.expectedLastDecisionId, requestId: d.requestId };
+  const r = await write<DeskOutcome>(`/v1/batches/${enc(batchId)}/items/${enc(conceptId)}/decisions`, payload);
+  if (!r.ok) return r;
+  return { ok: true, data: { review: r.data?.review, displayStatus: r.data?.displayStatus, batchStatus: r.data?.batchStatus,
+    version: { extractedAt: r.data?.version?.extractedAt ?? null, lastDecisionId: r.data?.version?.lastDecisionId ?? null },
+    replayed: r.data?.replayed === true } };
+}
+
+/** Problem reports are every flag but partner requests; partner requests are (other, partner-access) (§5.16, D17). */
+const FLAG_FILTERS = {
+  reports: { excludeTargetId: "partner-access" },
+  partner: { targetType: "other", targetId: "partner-access" },
+} as const;
+
+export async function listFlagPage(kind: keyof typeof FLAG_FILTERS, page: number): Promise<FlagPage> {
+  const params = new URLSearchParams({ status: "open", ...FLAG_FILTERS[kind], page: String(page), size: "50" });
+  const res = await reviewerRead(`/v1/flags?${params}`);
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  const data = (await res.json())?.data;
+  if (!data || !Array.isArray(data.items)) throw new Error("API error: no flag list");
+  return {
+    items: data.items.map((f: FlagItem) => ({ id: f.id, targetType: f.targetType, targetId: f.targetId, message: f.message,
+      status: f.status, createdAt: f.createdAt })),
+    page: data.page, size: data.size, hasMore: data.hasMore === true,
+  };
 }
 
 export type Substance = {
@@ -244,7 +320,7 @@ export async function postDecision(batchId: string, conceptId: string, d: Decisi
 }
 
 export type FlagTarget = "product" | "substance" | "check";
-export type FlagRequest = { targetType: FlagTarget; targetId: string; message: string; reporterEmail: string };
+export type FlagRequest = { targetType: FlagTarget; targetId: string; message: string; reporterEmail: string; requestId?: string };
 /** A flag as the /flags page shows it: no reporter or resolver email. */
 export type Flag = { id: number; targetType: string; targetId: string; message: string; status: string; createdAt: string };
 
@@ -258,14 +334,14 @@ export async function listFlags(status: "open" | "resolved" = "open"): Promise<F
   if (!token) throw new Error("The internal API token is not configured");
   const res = await read(`${base()}/v1/flags?status=${status}`, { [TOKEN_HEADER]: token });
   if (!res.ok) throw new Error(`API error ${res.status}`);
-  const data = (await res.json())?.data;
+  const data = (await res.json())?.data?.items;
   if (!Array.isArray(data)) throw new Error("API error: no flag list");
   return data.map((f: Flag) => ({ id: f.id, targetType: f.targetType, targetId: f.targetId, message: f.message,
     status: f.status, createdAt: f.createdAt }));
 }
 
-export async function resolveFlag(id: number, resolvedBy: string): Promise<WriteResult<unknown>> {
-  return write<unknown>(`/v1/flags/${encodeURIComponent(String(id))}/resolve`, { resolvedBy });
+export async function resolveFlag(id: number, resolvedBy: string, requestId?: string): Promise<WriteResult<unknown>> {
+  return write<unknown>(`/v1/flags/${encodeURIComponent(String(id))}/resolve`, requestId ? { resolvedBy, requestId } : { resolvedBy });
 }
 
 export type AuditEventRequest = {

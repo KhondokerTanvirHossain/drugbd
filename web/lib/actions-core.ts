@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { createFlag, postDecision, resolveFlag, type FlagTarget } from "./api";
 import { recordAudit } from "./audit";
+import { DESK_NEW } from "./copy";
 import { allowAccountAction, allowDeniedAudit } from "./limits";
 import { clientIp } from "./rate-limit";
 import type { ReviewerRole } from "./reviewers";
@@ -32,7 +33,8 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const DECISION_ID_RE = /^[1-9][0-9]{0,14}$/;
 /** The API's step 6 to 8 messages (spec §7.2), which share the field `review`. */
 const REVIEW_REFUSALS: Record<string, ReviewCode> = {
-  "An issue is open on this record. It returns to review after the fix and re-run.": "issue_open",
+  // The API's message ends in a NEW_COPY sentence, so it is built from it (copy.test fails on a retyped NEW_COPY string).
+  [`An issue is open on this record. ${DESK_NEW.approvalRefused.promiseBody}`]: "issue_open",
   "This record is already approved by a pharmacist": "approved",
   "Your check is already recorded for this record": "checked",
 };
