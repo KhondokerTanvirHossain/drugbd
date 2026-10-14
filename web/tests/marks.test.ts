@@ -22,6 +22,7 @@ export const MATERIAL_ALLOWED: string[] = [
   "components/review/ReviewDesk.tsx",
   "components/review/desk/DeskRecordContext.tsx",
   "components/review/desk/DecisionBar.tsx",
+  "components/review/desk/LoadingPanes.tsx",
 ];
 
 describe("§3.4 mark exclusivity", () => {
