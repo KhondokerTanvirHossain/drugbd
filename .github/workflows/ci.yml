@@ -1,5 +1,7 @@
 name: ci
 on: [pull_request, push]
+# Read-only token for every job: npm install scripts, Docker builds and lhci run with it.
+permissions: {contents: read}
 jobs:
   schema-lock:
     runs-on: ubuntu-24.04

@@ -48,6 +48,11 @@ describe("CI-only compose override (§11.4)", () => {
   it("runs as its own compose project, so it never touches the bddrug containers or the bddrug_dbdata volume", () => {
     expect(repo("deploy/docker-compose.ci.yml")).toMatch(/^name: bddrug-ci$/m);
   });
+  it("CI's GITHUB_TOKEN is read-only for every job (npm install scripts, Docker builds and lhci run with it)", () => {
+    const yml = repo(".github/workflows/ci.yml");
+    expect(yml).toMatch(/^permissions: \{contents: read\}$/m);
+    expect(yml.match(/^\s*permissions:/gm)).toHaveLength(1);
+  });
   it("the e2e job runs Playwright and Lighthouse CI against both compose files", () => {
     const yml = repo(".github/workflows/ci.yml");
     expect(yml).toContain("-f deploy/docker-compose.yml -f deploy/docker-compose.ci.yml");
