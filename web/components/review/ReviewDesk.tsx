@@ -78,7 +78,8 @@ export default function ReviewDesk(props: ReviewDeskProps) {
   const [diff, setDiff] = useState<DiffRow[] | null>(null);
   const [diffOpen, setDiffOpen] = useState(false);
   const token = useRef<{ value: string; at: number } | null>(null);
-  const waiters = useRef<((t: string | null) => void)[]>([]);
+  /** Sends waiting in freshToken for a token, oldest first. Each takes one single-use token (§5.8.5). */
+  const waiters = useRef<{ resolve: (t: string | null) => void; timer: number }[]>([]);
   const retrying = useRef(false);
   const [retryBusy, setRetryBusy] = useState(false);
   const retryFocus = useRef(false);
@@ -179,8 +180,13 @@ export default function ReviewDesk(props: ReviewDeskProps) {
     setResetKey((k) => k + 1);
     setBotState("checking");
     return new Promise((resolve) => {
-      waiters.current.push(resolve);
-      window.setTimeout(() => resolve(null), TOKEN_WAIT_MS);
+      const w = {
+        resolve,
+        // 10 s without a token is a bot failure (§5.8.5). The entry leaves the queue first, so a later token is
+        // never handed to a send that already gave up.
+        timer: window.setTimeout(() => { waiters.current = waiters.current.filter((x) => x !== w); resolve(null); }, TOKEN_WAIT_MS),
+      };
+      waiters.current.push(w);
     });
   }
 
@@ -270,13 +276,16 @@ export default function ReviewDesk(props: ReviewDeskProps) {
   // ---- Turnstile (§5.8.5)
   function onToken(t: string | null) {
     if (t === null) { token.current = null; setBotState((s) => (s === "failed" ? s : "checking")); return; }
-    setBotState("passed");
-    if (waiters.current.length > 0) {
-      const ws = waiters.current;
-      waiters.current = [];
-      ws.forEach((w) => w(t));
+    const w = waiters.current.shift();
+    if (w) {
+      // One single-use token per send: the first waiter takes it, and the widget re-executes for anyone still waiting.
+      window.clearTimeout(w.timer);
+      w.resolve(t);
+      if (waiters.current.length > 0) { setResetKey((k) => k + 1); setBotState("checking"); }
+      else setBotState("passed");
       return;
     }
+    setBotState("passed");
     token.current = { value: t, at: performance.now() };
     if (retrying.current) {
       retrying.current = false;
@@ -292,7 +301,8 @@ export default function ReviewDesk(props: ReviewDeskProps) {
     setBotState("failed");
     const ws = waiters.current;
     waiters.current = [];
-    ws.forEach((w) => w(null));
+    for (const w of ws) window.clearTimeout(w.timer);
+    for (const w of ws) w.resolve(null);
     if (retrying.current) { retrying.current = false; setRetryBusy(false); fire({ type: "RETRY_FAIL" }); return; }
     if (m.current.commit.kind === "awaitingToken") fire({ type: "WIDGET_ERROR" });
   }

@@ -19,6 +19,7 @@ const NAPA = makeReg("napa");
 const V0 = NAPA.version;
 const OUTCOME = { review: "ok", displayStatus: "approved", batchStatus: "in_review", version: { extractedAt: V0.extractedAt, lastDecisionId: 42 }, replayed: false };
 const STALE = "This record changed — reload to review the latest data";
+const BOT_FAILED = "We couldn't confirm you're a person. Your decision is kept. Retry the check to continue.";
 const desk = () => document.getElementById("desk")!;
 const hintText = () => (document.querySelector(".decision-hint")?.hasAttribute("hidden") ? "" : document.querySelector(".decision-hint")?.textContent ?? "");
 const live = () => document.querySelector('[data-desk="live"]')!.textContent;
@@ -334,5 +335,90 @@ describe("Turnstile at commit (§5.8.5, Review Focus 1)", () => {
     await settle(100);
     expect(actions.decide.mock.calls[0][0]).toMatchObject({ decision: "issue", turnstileToken: "tok-after-reset" });
     expect(live()).toBe("Issue reported for Napa. An engineer will see your note.");
+  });
+
+  it("after a commit bot hold from a 10 s token wait, Retry check sends the kept decision with the retry's token", async () => {
+    actions.decide.mockResolvedValue({ ok: true, outcome: OUTCOME });
+    await mount();
+    await settle(271_000);                                     // tok-1 is too old to send
+    fireEvent.keyDown(desk(), { key: "a" });
+    await settle(8_100);
+    await settle(10_000);                                      // no token within 10 s: the commit bot hold
+    expect(actions.decide).not.toHaveBeenCalled();
+    expect(screen.getByText(BOT_FAILED)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry check" }));
+    expect(screen.getByRole("button", { name: /Retry check|Checking/ }).getAttribute("aria-busy")).toBe("true");
+    act(() => turnstile.props!.onToken!("tok-3"));
+    await settle(100);
+    // The 10 s wait sent nothing, so the retry is the first and only send: the kept op (same record, decision and
+    // viewed version, a requestId) with the retry's token, and no new window.
+    expect(actions.decide).toHaveBeenCalledTimes(1);
+    const sent = actions.decide.mock.calls[0][0];
+    expect(sent).toMatchObject({ conceptId: NAPA.conceptId, decision: "ok", extractedAt: V0.extractedAt, turnstileToken: "tok-3" });
+    expect(sent.requestId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(document.querySelector('[aria-busy="true"]')).toBeNull();
+    expect(screen.queryByText(BOT_FAILED)).toBeNull();
+    expect(document.querySelector(".toast.is-running")).toBeNull();
+  });
+
+  it("a token that arrives after a 10 s wait ran out, with no retry pending, is held and sends nothing", async () => {
+    actions.decide.mockResolvedValue({ ok: true, outcome: OUTCOME });
+    await mount();
+    await settle(271_000);
+    fireEvent.keyDown(desk(), { key: "a" });
+    await settle(18_100);                                      // the window, then 10 s without a token: the commit bot hold
+    expect(screen.getByText(BOT_FAILED)).toBeTruthy();
+    act(() => turnstile.props!.onToken!("tok-late"));
+    await settle(100);
+    expect(actions.decide).not.toHaveBeenCalled();
+    expect(document.querySelector(".botcheck")!.textContent).toBe("Bot check passed");
+    expect(screen.getByText(BOT_FAILED)).toBeTruthy();         // the hold stays until the reviewer presses Retry check
+  });
+
+  it("a commit and a report waiting at the same time each get their own single-use token", async () => {
+    actions.decide.mockResolvedValue({ ok: true, outcome: OUTCOME });
+    await mount();
+    await settle(271_000);
+    fireEvent.keyDown(desk(), { key: "a" });
+    await settle(8_100);                                       // the commit waits for a fresh token
+    fireEvent.keyDown(desk(), { key: "r" });
+    fireEvent.change(document.getElementById("note")!, { target: { value: "strength should read 5 mg" } });
+    fireEvent.keyDown(document.getElementById("note")!, { key: "Enter", ctrlKey: true });
+    await settle(100);                                         // the report waits too
+    expect(actions.decide).not.toHaveBeenCalled();
+    const resetBefore = turnstile.props!.resetKey;
+    act(() => turnstile.props!.onToken!("tok-a"));
+    expect(turnstile.props!.resetKey).not.toBe(resetBefore);   // at once, before the commit's decide returns: the report still waits
+    expect(document.querySelector(".botcheck")!.textContent).toBe("Checking");
+    await settle(10);
+    act(() => turnstile.props!.onToken!("tok-b"));
+    await settle(100);
+    expect(actions.decide).toHaveBeenCalledTimes(2);
+    const sent = actions.decide.mock.calls.map((c) => [c[0].decision, c[0].turnstileToken]);
+    expect(sent).toEqual([["ok", "tok-a"], ["issue", "tok-b"]]);
+  });
+
+  it("Retry check while a report still waits for a token: the report takes the first token, the retry the next", async () => {
+    actions.decide.mockResolvedValue({ ok: true, outcome: OUTCOME });
+    await mount();
+    await settle(271_000);
+    fireEvent.keyDown(desk(), { key: "a" });
+    await settle(8_100);                                       // the commit waits for a token from here
+    await settle(5_000);
+    fireEvent.keyDown(desk(), { key: "r" });
+    fireEvent.change(document.getElementById("note")!, { target: { value: "strength should read 5 mg" } });
+    fireEvent.keyDown(document.getElementById("note")!, { key: "Enter", ctrlKey: true });
+    await settle(5_100);                                       // the commit's 10 s ran out; the report still waits
+    expect(screen.getByText(BOT_FAILED)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry check" }));
+    const resetBefore = turnstile.props!.resetKey;
+    act(() => turnstile.props!.onToken!("tok-r"));
+    await settle(10);
+    expect(turnstile.props!.resetKey).not.toBe(resetBefore);   // the report's send resets the used token, so the widget re-executes
+    act(() => turnstile.props!.onToken!("tok-c"));
+    await settle(100);
+    const sent = actions.decide.mock.calls.map((c) => [c[0].decision, c[0].turnstileToken]);
+    expect(sent).toEqual([["issue", "tok-r"], ["ok", "tok-c"]]);
+    expect(screen.queryByText(BOT_FAILED)).toBeNull();
   });
 });
