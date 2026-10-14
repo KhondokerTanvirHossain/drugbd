@@ -1,0 +1,277 @@
+import { describe, expect, it } from "vitest";
+import {
+  TOKEN_MAX_AGE_MS, applySaved, blocksUnload, initialMachine, staleReason, step, toOutcome, toastView, tokenPlan, unconfirmedOn,
+  type Effect, type Event, type MachineState, type Op,
+} from "@/components/review/desk/commit-machine";
+import { parseUndo } from "@/lib/desk-settings";
+
+const V1 = { extractedAt: "2026-10-12T09:00:00.123456Z", lastDecisionId: null };
+const op = (over: Partial<Op> = {}): Op => ({ conceptId: "186-0030-006--napa", name: "Napa", role: "pharmacist", decision: "ok",
+  note: "", viewedVersion: V1, requestId: "0c6f7a49-8f1b-4c62-9d0e-0a3f5a9a1b22", ...over });
+const OUT = { review: "ok", displayStatus: "approved" as const, batchStatus: "in_review",
+  version: { extractedAt: V1.extractedAt, lastDecisionId: 41 }, replayed: false };
+
+function run(s: MachineState, ...events: Event[]): { state: MachineState; effects: Effect[] } {
+  let state = s;
+  const effects: Effect[] = [];
+  for (const e of events) {
+    const r = step(state, e);
+    state = r.state;
+    effects.push(...r.effects);
+  }
+  return { state, effects };
+}
+const texts = (effects: Effect[], type: "announce" | "hint") =>
+  effects.filter((e): e is Extract<Effect, { type: typeof type }> => e.type === type).map((e) => e.text);
+const sends = (effects: Effect[]) => effects.filter((e) => e.type === "send");
+
+describe("the undo window (§5.8.1)", () => {
+  it("is a deadline on the monotonic clock: 8, 20 or 60 s, and 8 for a bad cookie", () => {
+    for (const [cookie, ms] of [["8", 8000], ["20", 20000], ["60", 60000], ["bogus", 8000]] as const) {
+      const { state } = run(initialMachine(parseUndo(cookie)), { type: "PRESS_A", op: op(), token: "held", now: 1000 });
+      expect(state.commit).toEqual({ kind: "armed", op: op(), deadline: 1000 + ms });
+    }
+  });
+
+  it("an early DEADLINE does nothing; only now >= deadline commits (a wall-clock jump cannot shorten it)", () => {
+    const armed = run(initialMachine(8), { type: "PRESS_A", op: op(), token: "held", now: 1000 }).state;
+    expect(run(armed, { type: "DEADLINE", now: 8999 }).state.commit.kind).toBe("armed");
+    const r = run(armed, { type: "DEADLINE", now: 9000 });
+    expect(r.state.commit).toEqual({ kind: "committing", op: op() });
+    expect(sends(r.effects)).toEqual([{ type: "send", channel: "commit", op: op() }]);
+  });
+
+  it("announces once on open, with the role's sub, and never per second", () => {
+    const p = run(initialMachine(8), { type: "PRESS_A", op: op(), token: "held", now: 0 });
+    expect(texts(p.effects, "announce")).toEqual(["Napa marked correct. Publishes in 8 seconds. Press U to undo."]);
+    const e = run(initialMachine(20), { type: "PRESS_A", op: op({ role: "engineer" }), token: "held", now: 0 });
+    expect(texts(e.effects, "announce")).toEqual(["Napa marked correct. Your check saves in 20 seconds. It does not publish. Press U to undo."]);
+  });
+
+  it("U undoes: idle, announced, nothing sent", () => {
+    const r = run(initialMachine(8), { type: "PRESS_A", op: op(), token: "held", now: 0 }, { type: "PRESS_U" });
+    expect(r.state.commit).toEqual({ kind: "idle" });
+    expect(texts(r.effects, "announce")).toContain("Undone. Napa was not saved.");
+    expect(sends(r.effects)).toEqual([]);
+  });
+
+  it("U with no window says so", () => {
+    expect(texts(run(initialMachine(8), { type: "PRESS_U" }).effects, "hint")).toEqual(["Nothing to undo."]);
+  });
+
+  it("a second A while armed changes nothing (the desk shows the other-window hint)", () => {
+    const armed = run(initialMachine(8), { type: "PRESS_A", op: op(), token: "held", now: 0 }).state;
+    const r = run(armed, { type: "PRESS_A", op: op({ conceptId: "x", name: "Aspirin" }), token: "held", now: 10 });
+    expect(r.state).toEqual(armed);
+  });
+
+  it("U while committing keeps committing and says it is too late; the toast drops Undo on DEADLINE", () => {
+    const committing = run(initialMachine(8), { type: "PRESS_A", op: op(), token: "held", now: 0 }, { type: "DEADLINE", now: 8000 }).state;
+    expect(toastView(committing)).toEqual({ mode: "saving", op: op() });
+    const r = run(committing, { type: "PRESS_U" });
+    expect(r.state.commit.kind).toBe("committing");
+    expect(texts(r.effects, "hint")).toEqual(["Too late to undo: Napa is saving. Use Report issue to withdraw it."]);
+    expect(toastView(run(initialMachine(8), { type: "PRESS_A", op: op(), token: "held", now: 0 }).state))
+      .toEqual({ mode: "running", op: op() });
+  });
+
+  it("stale cancels the window on that record, and says the decision was not saved", () => {
+    const armed = run(initialMachine(8), { type: "PRESS_A", op: op(), token: "held", now: 0 }).state;
+    const r = run(armed, { type: "STALE", conceptId: op().conceptId, reason: "rerun" });
+    expect(r.state.commit).toEqual({ kind: "idle" });
+    expect(r.effects).toContainEqual({ type: "stale", conceptId: op().conceptId, reason: "rerun", cancelled: true });
+    expect(run(armed, { type: "STALE", conceptId: "other", reason: "other" }).state.commit.kind).toBe("armed");
+  });
+
+  it("unload discards: nothing sent, nothing announced", () => {
+    const armed = run(initialMachine(8), { type: "PRESS_A", op: op(), token: "held", now: 0 }).state;
+    expect(blocksUnload(armed)).toBe(true);
+    const r = run(armed, { type: "PAGE_UNLOAD" });
+    expect(r.state.commit).toEqual({ kind: "idle" });
+    expect(r.effects).toEqual([]);
+    expect(blocksUnload(r.state)).toBe(false);
+  });
+});
+
+describe("Turnstile (§5.8.5)", () => {
+  it("A while the widget is re-executing waits for a token, then arms a full window from that moment", () => {
+    const waiting = run(initialMachine(8), { type: "PRESS_A", op: op(), token: "pending", now: 100 }).state;
+    expect(waiting.commit).toEqual({ kind: "awaitingToken", op: op(), since: 100 });
+    expect(run(waiting, { type: "TOKEN", now: 2100 }).state.commit).toEqual({ kind: "armed", op: op(), deadline: 10100 });
+  });
+
+  it("an error-callback or 10 s without a token is a bot hold, never a window", () => {
+    const waiting = run(initialMachine(8), { type: "PRESS_A", op: op(), token: "pending", now: 0 }).state;
+    for (const e of [{ type: "WIDGET_ERROR" }, { type: "TOKEN_TIMEOUT", now: 10_000 }] as Event[]) {
+      const r = run(waiting, e);
+      expect(r.state.commit).toEqual({ kind: "botHold", hold: "approve", op: op() });
+      expect(texts(r.effects, "announce")).toEqual(["Bot check failed. Your decision is kept. Retry the check to continue."]);
+    }
+    expect(run(initialMachine(8), { type: "PRESS_A", op: op(), token: "failed", now: 0 }).state.commit.kind).toBe("botHold");
+  });
+
+  it("a bot hold before arming: retry arms a new window", () => {
+    const hold = run(initialMachine(8), { type: "PRESS_A", op: op(), token: "failed", now: 0 }).state;
+    const r = run(hold, { type: "RETRY_OK", now: 5000 });
+    expect(r.state.commit).toEqual({ kind: "armed", op: op(), deadline: 13000 });
+    expect(texts(r.effects, "announce")[0]).toBe("Bot check passed.");
+  });
+
+  it("captcha at commit: retry sends the same decision without a new window", () => {
+    const hold = run(initialMachine(8), { type: "PRESS_A", op: op(), token: "held", now: 0 }, { type: "DEADLINE", now: 8000 },
+      { type: "RESULT", channel: "commit", result: toOutcome({ ok: false, code: "captcha" }) }).state;
+    expect(hold.commit).toEqual({ kind: "botHold", hold: "commit", op: op() });
+    const r = run(hold, { type: "RETRY_OK", now: 9000 });
+    expect(r.state.commit).toEqual({ kind: "committing", op: op() });
+    expect(sends(r.effects)).toEqual([{ type: "send", channel: "commit", op: op() }]);
+    expect(run(hold, { type: "RETRY_FAIL" }).state.commit).toEqual(hold.commit);
+  });
+
+  it("tokenPlan: a token older than 270 s is refreshed, never reused (thresholds; the desk path is pinned in desk-flow.test.tsx)", () => {
+    expect(TOKEN_MAX_AGE_MS).toBe(270_000);
+    expect(tokenPlan(null, 1000)).toBe("refresh");
+    expect(tokenPlan(0, 269_999)).toBe("use");
+    expect(tokenPlan(0, 270_000)).toBe("refresh");
+    expect(tokenPlan(0, 10 * 60_000)).toBe("refresh");
+  });
+});
+
+describe("commit outcomes (§5.8.2, §5.11)", () => {
+  const committing = run(initialMachine(8), { type: "PRESS_A", op: op(), token: "held", now: 0 }, { type: "DEADLINE", now: 8000 }).state;
+  const result = (r: Parameters<typeof toOutcome>[0]) => run(committing, { type: "RESULT", channel: "commit", result: toOutcome(r) });
+
+  it("OK and a replayed OK are the same save", () => {
+    for (const replayed of [false, true]) {
+      const r = result({ ok: true, outcome: { ...OUT, replayed } });
+      expect(r.state.commit).toEqual({ kind: "idle" });
+      expect(r.effects).toContainEqual({ type: "saved", channel: "commit", op: op(), outcome: { ...OUT, replayed } });
+    }
+  });
+
+  it("429 or rate_limited is not saved; network, 5xx and timeout are unconfirmed", () => {
+    expect(result({ ok: false, code: "rate_limited" }).state.commit).toEqual({ kind: "netErr", op: op(), saved: "no" });
+    expect(texts(result({ ok: false, code: "rate_limited" }).effects, "announce"))
+      .toEqual(["Couldn't save your decision. Nothing was published. Check your connection and try again."]);
+    for (const r of ["network", "timeout", { ok: false as const, code: "failed" as const }] as const) {
+      const x = result(r);
+      expect(x.state.commit).toEqual({ kind: "netErr", op: op(), saved: "unknown" });
+      expect(texts(x.effects, "announce")).toEqual(["Couldn't confirm your decision. We couldn't confirm your decision was saved. "
+        + "Try again to find out; it will not be saved twice."]);
+    }
+  });
+
+  it("Try again resends the same requestId and viewedVersion, with no new window", () => {
+    const err = result("network").state;
+    const r = run(err, { type: "TRY_AGAIN", channel: "commit" });
+    expect(r.state.commit).toEqual({ kind: "committing", op: op() });
+    expect(sends(r.effects)).toEqual([{ type: "send", channel: "commit", op: op() }]);
+  });
+
+  it("while unconfirmed, a changed lastDecisionId is not another reviewer; a changed stamp still is a re-run", () => {
+    const err = result("network").state;
+    expect(unconfirmedOn(err, op().conceptId)).toBe(true);
+    // In flight is the same: the server may already have saved it (D45, own saves never make the record stale).
+    expect(unconfirmedOn(committing, op().conceptId)).toBe(true);
+    expect(unconfirmedOn(committing, "other")).toBe(false);
+    const sendingReport = run(initialMachine(8), { type: "SEND_REPORT", op: op({ decision: "issue", note: "wrong strength" }), token: "held" }).state;
+    expect(unconfirmedOn(sendingReport, op().conceptId)).toBe(true);
+    expect(unconfirmedOn(result({ ok: false, code: "rate_limited" }).state, op().conceptId)).toBe(false);   // "not saved" is proven
+    expect(staleReason(V1, { ...V1, lastDecisionId: 41 }, true)).toBeNull();
+    expect(staleReason(V1, { ...V1, lastDecisionId: 41 }, false)).toBe("other");
+    expect(staleReason(V1, { extractedAt: "2026-10-13T00:00:00Z", lastDecisionId: 41 }, true)).toBe("rerun");
+    expect(staleReason(V1, V1, false)).toBeNull();
+  });
+
+  it("forbidden and unauthenticated are different states", () => {
+    const f = result({ ok: false, code: "forbidden" });
+    expect(f.state.auth).toBe("forbidden");
+    expect(texts(f.effects, "announce")).toEqual(["Your account can't review this batch. Your decision on Napa was not saved."]);
+    const u = result({ ok: false, code: "unauthenticated" });
+    expect(u.state.auth).toBe("signedOut");
+    expect(texts(u.effects, "announce")).toEqual(["Your sign-in expired. Your decision on Napa was not saved."]);
+    const armed = run(initialMachine(8), { type: "PRESS_A", op: op(), token: "held", now: 0 }).state;
+    expect(run(armed, { type: "UNAUTHENTICATED" }).state).toMatchObject({ commit: { kind: "idle" }, auth: "signedOut" });
+    expect(run(armed, { type: "FORBIDDEN" }).state).toMatchObject({ commit: { kind: "idle" }, auth: "forbidden" });
+  });
+
+  it("409s map by field: stale copy for versions, a hint and a refresh for the rest", () => {
+    const rerun = result({ ok: false, code: "stale_rerun" });
+    expect(rerun.effects).toContainEqual({ type: "stale", conceptId: op().conceptId, reason: "rerun", cancelled: true });
+    expect(result({ ok: false, code: "stale_decision" }).effects)
+      .toContainEqual({ type: "stale", conceptId: op().conceptId, reason: "other", cancelled: true });
+    for (const [code, hint] of [
+      ["issue_open", "An issue is open on this record. It returns to review after the fix and re-run."],
+      ["already_approved", "This record is already approved by a pharmacist."],
+      ["already_checked", "Your check is already recorded for this record."],
+      ["removed", "This record was removed from the batch file. Nothing was saved."],
+      ["stage_failed", "A check failed on this record. It returns to review after the fix and re-run. Nothing was saved."],
+    ] as const) {
+      const r = result({ ok: false, code });
+      expect(r.state.commit).toEqual({ kind: "idle" });
+      expect(texts(r.effects, "hint")).toEqual([hint]);
+      expect(r.effects).toContainEqual({ type: "refresh" });
+    }
+  });
+});
+
+describe("own saves never make the record stale (§5.8.2, D45)", () => {
+  it("after A, on the open record or another one, the saved version becomes the viewed version", () => {
+    const viewed = { [op().conceptId]: V1, other: V1 };
+    const saved = result();
+    function result() {
+      return run(initialMachine(8), { type: "PRESS_A", op: op(), token: "held", now: 0 }, { type: "DEADLINE", now: 8000 },
+        { type: "RESULT", channel: "commit", result: toOutcome({ ok: true, outcome: OUT }) });
+    }
+    const after = saved.effects.reduce(applySaved, viewed);
+    expect(after[op().conceptId]).toEqual(OUT.version);
+    expect(staleReason(after[op().conceptId], OUT.version, false)).toBeNull();
+    expect(after.other).toBe(V1);
+  });
+
+  it("after R (a report), too", () => {
+    const viewed = { [op().conceptId]: V1 };
+    const reportOp = op({ decision: "issue", note: "strength should read 5 mg" });
+    const r = run(initialMachine(8), { type: "SEND_REPORT", op: reportOp, token: "held" },
+      { type: "RESULT", channel: "report", result: toOutcome({ ok: true, outcome: { ...OUT, displayStatus: "issue" } }) });
+    expect(r.effects.filter((e) => e.type === "send")).toEqual([{ type: "send", channel: "report", op: reportOp }]);
+    expect(r.effects.reduce(applySaved, viewed)[op().conceptId]).toEqual(OUT.version);
+    expect(texts(r.effects, "announce")).toEqual(["Issue reported for Napa. An engineer will see your note."]);
+  });
+
+  it("the refresh race: a re-stamp that lands with other rows' refresh makes the open record stale, and the decision keeps the viewed version", () => {
+    const viewed = { [op().conceptId]: V1 };
+    const restamped = { extractedAt: "2026-10-12T10:00:00Z", lastDecisionId: null };
+    expect(staleReason(viewed[op().conceptId], restamped, false)).toBe("rerun");
+    const armed = run(initialMachine(8), { type: "PRESS_A", op: op({ viewedVersion: viewed[op().conceptId] }), token: "held", now: 0 });
+    expect(armed.state.commit.kind === "armed" && armed.state.commit.op.viewedVersion).toEqual(V1);
+  });
+});
+
+describe("reports (§5.10)", () => {
+  it("a report cancels an open window on the same record first; only a widget error is a bot hold", () => {
+    const armed = run(initialMachine(8), { type: "PRESS_A", op: op(), token: "held", now: 0 }).state;
+    const r = run(armed, { type: "SEND_REPORT", op: op({ decision: "issue", note: "wrong strength" }), token: "held" });
+    expect(r.state.commit).toEqual({ kind: "idle" });
+    expect(r.state.report.kind).toBe("sending");
+    // §5.8.5: right after a reset the widget is re-executing; the send waits for the token (freshToken, at most 10 s)
+    const waiting = run(initialMachine(8), { type: "SEND_REPORT", op: op({ decision: "issue", note: "wrong strength" }), token: "pending" });
+    expect(waiting.state.report.kind).toBe("sending");
+    expect(sends(waiting.effects)).toHaveLength(1);
+    expect(texts(waiting.effects, "announce")).toEqual([]);
+    // no token after the wait comes back as CAPTCHA, which is the report bot hold
+    const timedOut = run(waiting.state, { type: "RESULT", channel: "report", result: toOutcome({ ok: false, code: "captcha" }) });
+    expect(timedOut.state.report.kind).toBe("botHold");
+    const hold = run(initialMachine(8), { type: "SEND_REPORT", op: op({ decision: "issue", note: "wrong strength" }), token: "failed" });
+    expect(hold.state.report.kind).toBe("botHold");
+    expect(texts(hold.effects, "announce")).toEqual(["Bot check failed. Your decision is kept. Retry the check to continue."]);
+    expect(run(hold.state, { type: "RETRY_OK", now: 0 }).state.report.kind).toBe("sending");
+  });
+
+  it("a report failure says the report was not sent and offers Try again", () => {
+    const sending = run(initialMachine(8), { type: "SEND_REPORT", op: op({ decision: "issue", note: "wrong strength" }), token: "held" }).state;
+    const r = run(sending, { type: "RESULT", channel: "report", result: toOutcome("network") });
+    expect(r.state.report.kind).toBe("netErr");
+    expect(texts(r.effects, "announce")).toEqual(["Couldn't send your report. Nothing was saved. Check your connection and try again."]);
+    expect(run(r.state, { type: "TRY_AGAIN", channel: "report" }).state.report.kind).toBe("sending");
+  });
+});
