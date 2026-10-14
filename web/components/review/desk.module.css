@@ -22,6 +22,9 @@
 .empty { padding: 20px 18px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; font-size: 13.5px; color: var(--fg-2); }
 .empty b { color: var(--fg); font-weight: 600; }
 .recLink { display: contents; color: inherit; text-decoration: none; }
+/* §10.1 without JavaScript: .recLink has no box (display: contents), so the focus ring goes on the .rec row it sits in. */
+:global(.rec):has(> .recLink:focus-visible) { outline: 2px solid var(--focus); outline-offset: -2px; }
+:global(.rec.is-selected):has(> .recLink:focus-visible) { outline-color: var(--on-accent); box-shadow: 0 0 0 2px var(--accent); }
 .detail { position: relative; display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--canvas); }
 .dBody { position: relative; flex: 1; min-height: 0; }
 .dScroll { position: absolute; inset: 0; overflow: auto; padding: 20px 28px 32px; display: flex; flex-direction: column; gap: 24px; scroll-padding-bottom: var(--bar-h, 0px); }

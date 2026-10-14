@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -133,6 +135,78 @@ describe("list search (§5.3)", () => {
     expect(router.replace).not.toHaveBeenCalled();
     act(() => { vi.advanceTimersByTime(1); });
     expect(router.replace).toHaveBeenCalledWith(`/review/0001-pilot/${reg.conceptId}?show=warn&q=para`, { scroll: false });
+  });
+
+  const box = () => document.querySelector('[data-desk="search"]') as HTMLInputElement;
+  const type = (v: string) => fireEvent.change(box(), { target: { value: v } });
+
+  it("keeps what was typed while the server echoes an older q, and follows an external change", () => {
+    vi.useFakeTimers();
+    const reg = makeReg("napa", { show: "warn" });
+    const ui = (q: string) => <WithDesk desk={stubDesk(reg)}><ListSearch batchId="0001-pilot" conceptId={reg.conceptId} show="warn" q={q} /></WithDesk>;
+    const { rerender } = render(ui(""));
+    type("par");
+    act(() => { vi.advanceTimersByTime(250); });
+    rerender(ui("pa"));                       // a stale echo of an earlier keystroke
+    expect(box().value).toBe("par");
+    rerender(ui("par"));                      // the echo of what was sent
+    expect(box().value).toBe("par");
+    rerender(ui(""));                         // external: Show all, a filter link, back/forward
+    expect(box().value).toBe("");
+  });
+
+  it("does not overwrite text being typed with an external q while a send is pending", () => {
+    vi.useFakeTimers();
+    const reg = makeReg("napa", { show: "warn" });
+    const ui = (q: string) => <WithDesk desk={stubDesk(reg)}><ListSearch batchId="0001-pilot" conceptId={reg.conceptId} show="warn" q={q} /></WithDesk>;
+    const { rerender } = render(ui("a"));
+    box().focus();
+    type("ab");
+    rerender(ui(""));
+    expect(box().value).toBe("ab");
+  });
+
+  it("clears its timer on unmount and when the record or filter changes, so an old q never replays", () => {
+    vi.useFakeTimers();
+    const reg = makeReg("napa", { show: "warn" });
+    const ui = (conceptId: string, show: "warn" | "all") => <WithDesk desk={stubDesk(reg)}><ListSearch batchId="0001-pilot" conceptId={conceptId} show={show} q="" /></WithDesk>;
+    const { rerender, unmount } = render(ui(reg.conceptId, "warn"));
+    type("par");
+    rerender(ui("other-record", "warn"));
+    act(() => { vi.advanceTimersByTime(300); });
+    expect(router.replace).not.toHaveBeenCalled();
+    expect(box().value).toBe("");
+    type("par");
+    rerender(ui("other-record", "all"));
+    act(() => { vi.advanceTimersByTime(300); });
+    expect(router.replace).not.toHaveBeenCalled();
+    type("par");
+    unmount();
+    act(() => { vi.advanceTimersByTime(300); });
+    expect(router.replace).not.toHaveBeenCalled();
+  });
+
+  it("the registered Esc clear cancels a pending timer, empties the field and replaces with scroll: false", () => {
+    vi.useFakeTimers();
+    const reg = makeReg("napa", { show: "warn" });
+    const desk = stubDesk(reg);
+    render(<WithDesk desk={desk}><ListSearch batchId="0001-pilot" conceptId={reg.conceptId} show="warn" q="" /></WithDesk>);
+    const clear = (desk.registerSearchClear as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]).filter(Boolean).at(-1) as () => void;
+    type("par");
+    act(() => { clear(); });
+    expect(box().value).toBe("");
+    expect(router.replace).toHaveBeenCalledTimes(1);
+    expect(router.replace).toHaveBeenCalledWith(`/review/0001-pilot/${reg.conceptId}?show=warn`, { scroll: false });
+    act(() => { vi.advanceTimersByTime(300); });
+    expect(router.replace).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("record row focus ring without JavaScript (§10.1)", () => {
+  const css = readFileSync(join(process.cwd(), "components/review/desk.module.css"), "utf8");
+  it("rings the .rec row, and the selected row with --on-accent and an accent halo, when its link has keyboard focus", () => {
+    expect(css).toMatch(/:global\(\.rec\):has\(> \.recLink:focus-visible\)\s*\{[^}]*outline:\s*2px solid var\(--focus\)/);
+    expect(css).toMatch(/:global\(\.rec\.is-selected\):has\(> \.recLink:focus-visible\)\s*\{[^}]*outline-color:\s*var\(--on-accent\)[^}]*box-shadow:\s*0 0 0 2px var\(--accent\)/);
   });
 });
 
