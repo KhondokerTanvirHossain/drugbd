@@ -83,70 +83,11 @@ export async function listLoadedProducts(): Promise<LoadedProduct[]> {
   return data as LoadedProduct[];
 }
 
-export type StageResult = { stage: string; status: "ok" | "warn" | "fail"; note: string; evidence: unknown };
-export type BatchItem = { conceptId: string; review: ReviewStatus; note: string | null;
-  extracted: Product | null; sourceJson: string | null; stages: StageResult[];
-  /** The record's latest pipeline run; the review form echoes it so the API can refuse a decision on stale data. */
-  extractedAt?: string | null;
-  /** The newest decision's id (null when none); the review form echoes it as expectedLastDecisionId (§7.2 step 3). */
-  lastDecisionId?: number | null };
-export type Batch = { batchId: string; status: string; runAt: string; itemCount: number; items: BatchItem[] };
-
 /** Batch evidence shows unreviewed records: reviewers only (A1). These reads carry the token and fail without one. */
 async function reviewerRead(path: string, headers: Record<string, string> = {}): Promise<Response> {
   const token = internalToken();
   if (!token) throw new Error("The internal API token is not configured");
   return read(`${base()}${path}`, { ...headers, [TOKEN_HEADER]: token });
-}
-
-export async function listBatches(): Promise<Batch[]> {
-  const res = await reviewerRead("/v1/batches");
-  if (!res.ok) throw new Error(`API error ${res.status}`);
-  return (await res.json()).data as Batch[];
-}
-
-export async function getBatch(id: string): Promise<Batch | null> {
-  const res = await reviewerRead(`/v1/batches/${encodeURIComponent(id)}`);
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error(`API error ${res.status}`);
-  return (await res.json()).data as Batch;
-}
-
-export type StageCounts = { ok: number; warn: number; fail: number };
-export type ItemNote = { conceptId: string; stage: string; note: string };
-export type BatchRun = { id?: number; runAt: string; stages: string[]; counts: Record<string, StageCounts>; conceptIds: string[] };
-export type BatchReport = {
-  counts: Record<string, StageCounts>;
-  review: { pending: number; ok: number; issue: number };
-  warnings: ItemNote[];
-  fails: ItemNote[];
-  /** The last 5 pipeline runs; conceptIds is empty for a full run. */
-  runs: BatchRun[];
-  /** Latest full run minus the one before, per stage; null when there are fewer than two full runs. */
-  deltaVsPrevious: Record<string, StageCounts> | null;
-};
-
-/** Reviewers only, with the token (A1). null for an unknown batch. */
-export async function getBatchReport(id: string): Promise<BatchReport | null> {
-  const res = await reviewerRead(`/v1/batches/${encodeURIComponent(id)}/report`);
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error(`API error ${res.status}`);
-  return (await res.json()).data as BatchReport;
-}
-
-/** One decision as shown on the batch page: the role, never the reviewer's email. */
-export type PublicDecision = { decision: "ok" | "issue"; note: string; role: string; decidedAt: string };
-
-/**
- * The decision history, newest first. The API serves it only with the token (A2), and then includes emails; the
- * mapping keeps only the fields a page may show, so no email can reach a page.
- */
-export async function getDecisions(batchId: string, conceptId: string): Promise<PublicDecision[]> {
-  const res = await reviewerRead(`/v1/batches/${encodeURIComponent(batchId)}/items/${encodeURIComponent(conceptId)}/decisions`);
-  if (!res.ok) throw new Error(`API error ${res.status}`);
-  const data = (await res.json())?.data;
-  if (!Array.isArray(data)) throw new Error("API error: no decision list");
-  return data.map((d: PublicDecision) => ({ decision: d.decision, note: d.note ?? "", role: d.role, decidedAt: d.decidedAt }));
 }
 
 // ---- Reviewer reads (spec §7.3). Every one needs the token; an unknown batch, record or snapshot is null. ----
@@ -192,7 +133,7 @@ export async function getReviewDiff(batchId: string, conceptId: string, from: st
   return reviewData<ReviewDiff>(`/v1/review/batches/${enc(batchId)}/items/${enc(conceptId)}/diff?${new URLSearchParams({ from })}`);
 }
 
-/** The desk's decision write: like postDecision, plus the outcome's version (spec §5.8.2 "own saves"). */
+/** The desk's decision write (spec §7.2), with the outcome's version (spec §5.8.2 "own saves"). */
 export async function postDeskDecision(batchId: string, conceptId: string, d: DecisionRequest): Promise<WriteResult<DeskOutcome>> {
   const payload = { decision: d.decision, note: d.note, reviewerEmail: d.reviewerEmail, reviewerRole: d.reviewerRole,
     extractedAt: d.extractedAt, expectedLastDecisionId: d.expectedLastDecisionId, requestId: d.requestId };
@@ -307,37 +248,11 @@ export type DecisionRequest = {
   /** A UUID rendered with the form and reused on every resend, so a retry is answered once (§7.2 step 1). */
   requestId: string;
 };
-export type DecisionOutcome = { review: string; displayStatus: string; batchStatus: string; replayed: boolean };
-
-export async function postDecision(batchId: string, conceptId: string, d: DecisionRequest):
-    Promise<WriteResult<DecisionOutcome>> {
-  const payload = { decision: d.decision, note: d.note, reviewerEmail: d.reviewerEmail, reviewerRole: d.reviewerRole,
-    extractedAt: d.extractedAt, expectedLastDecisionId: d.expectedLastDecisionId, requestId: d.requestId };
-  const r = await write<DecisionOutcome>(
-    `/v1/batches/${encodeURIComponent(batchId)}/items/${encodeURIComponent(conceptId)}/decisions`, payload);
-  return r.ok ? { ok: true, data: { review: r.data?.review, displayStatus: r.data?.displayStatus,
-    batchStatus: r.data?.batchStatus, replayed: r.data?.replayed === true } } : r;
-}
-
 export type FlagTarget = "product" | "substance" | "check";
 export type FlagRequest = { targetType: FlagTarget; targetId: string; message: string; reporterEmail: string; requestId?: string };
-/** A flag as the /flags page shows it: no reporter or resolver email. */
-export type Flag = { id: number; targetType: string; targetId: string; message: string; status: string; createdAt: string };
 
 export async function createFlag(f: FlagRequest): Promise<WriteResult<unknown>> {
   return write<unknown>("/v1/flags", f);
-}
-
-/** Open (or resolved) flags; needs the token. Emails are dropped here so no page can render them. */
-export async function listFlags(status: "open" | "resolved" = "open"): Promise<Flag[]> {
-  const token = internalToken();
-  if (!token) throw new Error("The internal API token is not configured");
-  const res = await read(`${base()}/v1/flags?status=${status}`, { [TOKEN_HEADER]: token });
-  if (!res.ok) throw new Error(`API error ${res.status}`);
-  const data = (await res.json())?.data?.items;
-  if (!Array.isArray(data)) throw new Error("API error: no flag list");
-  return data.map((f: Flag) => ({ id: f.id, targetType: f.targetType, targetId: f.targetId, message: f.message,
-    status: f.status, createdAt: f.createdAt }));
 }
 
 export async function resolveFlag(id: number, resolvedBy: string, requestId?: string): Promise<WriteResult<unknown>> {

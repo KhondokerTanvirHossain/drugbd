@@ -72,7 +72,7 @@ function parse(x: unknown): DecideInput | null {
 /**
  * The audit target `{batchId}/{conceptId}`, or null. P1A Task 17's AuditService refuses a targetId over 200 characters
  * (TARGET_ID_MAX, 400 field=targetId), and recordAudit is best effort, so a longer target would silently lose the row;
- * the same bound as P1A Task 18's denyDecision (batchId.length + conceptId.length < ID_MAX) keeps the row, without a target.
+ * the same bound as P1A Task 18's legacy decision_denied helper (batchId.length + conceptId.length < ID_MAX) keeps the row, without a target.
  */
 function targetId(batchId: unknown, conceptId: unknown): string | null {
   return validId(batchId) && validId(conceptId) && batchId.length + conceptId.length < ID_MAX ? `${batchId}/${conceptId}` : null;

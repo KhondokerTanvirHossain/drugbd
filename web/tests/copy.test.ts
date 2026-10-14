@@ -132,10 +132,9 @@ function* sources(dir: string): Generator<string> {
 const stripComments = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
 /**
  * Legacy pages that still retype copy. P2 rewrites app/check/page.tsx and app/page.tsx (the home page's `>Next page<`)
- * and empties this list; P1B Task 20 deletes app/flags/page.tsx (`>Resolve<`) and app/batches/[id]/page.tsx (P0's
- * REVIEW_OUTCOME texts) and removes them from it.
+ * and empties this list.
  */
-const LEGACY_EXEMPT = ["app/check/page.tsx", "app/page.tsx", "app/flags/page.tsx", "app/batches/[id]/page.tsx"];
+const LEGACY_EXEMPT = ["app/check/page.tsx", "app/page.tsx"];
 /** Files that may hold the compact pill's short form (§3.4). */
 const SHORT_FORM_ALLOWED = ["components/ui/ReviewStatus.tsx"];
 const scanned = () => ["app", "components", "lib"].flatMap((d) => [...sources(join(WEB, d))])

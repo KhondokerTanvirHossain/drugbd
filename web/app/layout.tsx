@@ -3,7 +3,10 @@ import "@/styles/fonts.css";
 import { cookies, headers } from "next/headers";
 import Footer from "@/components/Footer";
 import Header from "@/components/Header";
+import { newestInReview } from "@/components/review/ReviewAccount";
+import { listReviewBatches } from "@/lib/api";
 import { ONEST_URL } from "@/lib/fonts";
+import { isReviewer } from "@/lib/reviewers";
 import { getSession } from "@/lib/session";
 import { isReviewSurface } from "@/lib/surface";
 import { THEME_COOKIE, htmlThemeAttr, parseTheme } from "@/lib/theme";
@@ -19,6 +22,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // /review/* brings its own toolbar, skip links and <main> (spec §5.1, §5.16).
   const review = isReviewSurface((await headers()).get("x-pathname") ?? "");
   const session = review ? null : await getSession();
+  // The account menu names the newest batch in review (§6.2); a failed read only leaves the name out.
+  const batchId = isReviewer(session) ? newestInReview(await listReviewBatches().catch(() => [])) : null;
   return (
     <html lang="en" data-theme={htmlThemeAttr(theme)}>
       <head>
@@ -28,7 +33,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         {review ? children : (
           <>
             <a className={styles.skipLink} href="#content">Skip to content</a>
-            <Header session={session} theme={theme} />
+            <Header session={session} theme={theme} batchId={batchId} />
             <main id="content" className={styles.main}>{children}</main>
             <Footer theme={theme} />
           </>
