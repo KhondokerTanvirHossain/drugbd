@@ -1,9 +1,15 @@
 package com.niramoy.bddrug.application.port;
+import com.niramoy.bddrug.domain.BatchPairs;
+import com.niramoy.bddrug.domain.IngredientSummary;
+import com.niramoy.bddrug.domain.ItemHistory;
 import com.niramoy.bddrug.domain.ReviewDecision;
+import com.niramoy.bddrug.domain.ReviewItem;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
 /** What the reviewer read endpoints need from the database. Removed items ("removed from batch file") are never read. */
 public interface ReviewQueryPort {
@@ -23,4 +29,24 @@ public interface ReviewQueryPort {
     Mono<BatchRow> batch(String batchId);
     /** Current items of the batch in concept order (byte order, COLLATE "C"). */
     Mono<List<ItemFacts>> items(String batchId);
+
+    /** The brand, clinical drug, DGDA ingredients and source of one current item; empty when unknown or removed. */
+    record ItemDetail(String conceptId, String sourceJson, ReviewItem.Brand brand, ReviewItem.Clinical clinical, String bdcId,
+                      List<ReviewItem.DgdaIngredient> dgdaIngredients) {}
+
+    Mono<ItemDetail> itemDetail(String batchId, String conceptId);
+    /** The product's ingredients in XM-code order, with names, codes, coverage and DDInter entries chosen for {@code route}. */
+    Mono<List<IngredientSummary>> ingredients(String conceptId, String bdcId, String route);
+    /** Every current product of the batch with its substances and their DDInter codes (for RouteRule on both sides). */
+    Mono<List<BatchPairs.Product>> batchProducts(String batchId);
+    /** Stored pairs whose two sides are both in {@code ids}; DDInter placeholder text already removed. */
+    Mono<List<BatchPairs.PairRow>> pairRows(Collection<String> ids);
+    /** DDInter names of the entries in {@code ids} that have a curated.ddinter_drug row (a complete pair list, §8.1). */
+    Mono<Map<String, String>> entryNames(Collection<String> ids);
+    /** The item's snapshots, oldest first. */
+    Mono<List<ItemHistory.Snapshot>> snapshots(String batchId, String conceptId);
+    /** run_at of every full batch run (no concept ids), oldest first. */
+    Mono<List<Instant>> fullRuns(String batchId);
+    /** The snapshot payload stamped exactly {@code extractedAt}; empty when there is none. */
+    Mono<String> payload(String batchId, String conceptId, Instant extractedAt);
 }

@@ -207,4 +207,142 @@ class ReviewQueryIntegrationTest {
             assertThat(new String(body, StandardCharsets.UTF_8)).as(uri).doesNotContain("@");
         }
     }
+
+    // ---- the record (Task 6)
+
+    @Test void sourceUrlEncodesLikeEncodeURIComponent() {
+        String base = com.niramoy.bddrug.application.ReviewQueryService.OCL_CONCEPT;
+        // encodeURIComponent keeps A-Z a-z 0-9 - _ . ! ~ * ' ( ) and escapes everything else as UTF-8 (web/lib/evidence.ts)
+        assertThat(com.niramoy.bddrug.application.ReviewQueryService.sourceUrl("186-0030-006 (a)!~'*_."))
+            .isEqualTo(base + "186-0030-006%20(a)!~'*_./");
+        assertThat(com.niramoy.bddrug.application.ReviewQueryService.sourceUrl("x/y?z&+é"))
+            .isEqualTo(base + "x%2Fy%3Fz%26%2B%C3%A9/");
+    }
+
+    @Test void detailReadsNeedTheToken() {
+        for (String uri : List.of("/v1/review/batches/Q-1/items/W-1", "/v1/review/batches/Q-1/items/W-1/diff?from=2026-10-12T09:00:00Z"))
+            web.get().uri(uri).exchange().expectStatus().isUnauthorized()
+                .expectBody().jsonPath("$.errors[0].code").isEqualTo("UNAUTHORIZED");
+    }
+
+    @Test void theEyeDropIsCheckedAgainstTheOphthalmicEntryAndHasNoBatchPair() {
+        ok("/v1/review/batches/Q-1/items/C-EYE")
+            .jsonPath("$.data.index").isEqualTo(2)
+            .jsonPath("$.data.total").isEqualTo(7)
+            .jsonPath("$.data.displayStatus").isEqualTo("back_in_review")
+            .jsonPath("$.data.review").isEqualTo("pending")
+            .jsonPath("$.data.clinicalDrug.route").isEqualTo("ophthalmic")
+            .jsonPath("$.data.clinicalDrug.signature").isEqualTo("eye drops|ophthalmic|BDS-000003:0.5%/")
+            .jsonPath("$.data.ingredients[0].name").isEqualTo("Chloramphenicol")
+            .jsonPath("$.data.ingredients[0].raw").isEqualTo("Chloramphenicol 0.5%")
+            .jsonPath("$.data.ingredients[0].strengthValue").isEqualTo(0.5)
+            .jsonPath("$.data.ingredients[0].coverage.coverage").isEqualTo("full")
+            .jsonPath("$.data.ingredients[0].ddinter.chosen[*].ddinterId").isEqualTo(List.of("DDInter352"))
+            .jsonPath("$.data.ingredients[0].ddinter.chosen[0].routeAssumed").isEqualTo(false)
+            .jsonPath("$.data.ingredients[0].ddinter.chosen[0].name").isEqualTo("Chloramphenicol (ophthalmic)")
+            .jsonPath("$.data.ingredients[0].ddinter.entries[*].ddinterId").isEqualTo(List.of("DDInter351", "DDInter352", "DDInter353"))
+            .jsonPath("$.data.ingredients[0].ddinter.entries[0].counts.moderate").isEqualTo(1)
+            .jsonPath("$.data.ingredients[0].ddinter.entries[1].counts.total").isEqualTo(0)
+            .jsonPath("$.data.batchPairs.totalBatchPairs").isEqualTo(2)
+            .jsonPath("$.data.batchPairs.pairs.length()").isEqualTo(0)
+            .jsonPath("$.data.batchPairs.notChecked[*].reason").isEqualTo(List.of("no_data", "not_run", "unmapped"))
+            .jsonPath("$.data.batchPairs.notChecked[*].partnerSubstance").isEqualTo(List.of("Domperidone", "Testmol", "Newmol"))
+            .jsonPath("$.data.batchPairs.notChecked[0].side").isEqualTo("partner")
+            .jsonPath("$.data.batchPairs.notChecked[0].partners[0].conceptId").isEqualTo("D-1")
+            .jsonPath("$.data.batchPairs.notChecked[0].partners[0].index").isEqualTo(3)
+            .jsonPath("$.data.reopen").isEmpty();
+    }
+
+    @Test void warfarinCarriesPairsCodesNotesHistoryAndSource() {
+        ok("/v1/review/batches/Q-1/items/W-1")
+            .jsonPath("$.data.brand.tradeName").isEqualTo("Warin")
+            .jsonPath("$.data.brand.darNumber").isEqualTo("001")
+            .jsonPath("$.data.dgdaIngredients[0].xmCode").isEqualTo("XM5S93")
+            .jsonPath("$.data.version.extractedAt").isEqualTo("2026-10-12T09:30:00.123456Z")
+            .jsonPath("$.data.batch.runAt").isEqualTo("2026-10-11T21:27:17Z")
+            .jsonPath("$.data.batch.itemCount").isEqualTo(7)
+            .jsonPath("$.data.ingredients[0].codes[*].system").isEqualTo(List.of("ICD11_XM", "DRUGBANK", "DDINTER"))
+            .jsonPath("$.data.ingredients[0].names[*].type").isEqualTo(List.of("icd11", "dgda_content"))
+            .jsonPath("$.data.ingredients[0].ddinter.entries[0].counts.major").isEqualTo(1)
+            .jsonPath("$.data.ingredients[0].ddinter.entries[0].counts.moderate").isEqualTo(2)
+            .jsonPath("$.data.ingredients[0].ddinter.entries[0].counts.minor").isEqualTo(1)
+            .jsonPath("$.data.ingredients[0].ddinter.entries[0].counts.unknown").isEqualTo(1)
+            .jsonPath("$.data.ingredients[0].ddinter.entries[0].counts.total").isEqualTo(5)
+            .jsonPath("$.data.ingredients[0].ddinter.entries[0].diseaseCount").isEqualTo(2)
+            .jsonPath("$.data.ingredients[0].ddinter.entries[0].foodCount").isEqualTo(1)
+            .jsonPath("$.data.batchPairs.pairs[*].severity").isEqualTo(List.of("major", "moderate"))
+            .jsonPath("$.data.batchPairs.pairs[0].substance").isEqualTo("Warfarin")
+            .jsonPath("$.data.batchPairs.pairs[0].partnerSubstance").isEqualTo("Aspirin")
+            .jsonPath("$.data.batchPairs.pairs[0].management").isEqualTo("Avoid the combination unless the benefit outweighs the bleeding risk; monitor INR.")
+            .jsonPath("$.data.batchPairs.pairs[0].partners[0].tradeName").isEqualTo("Ecosprin")
+            .jsonPath("$.data.batchPairs.pairs[1].interaction").isEmpty()
+            .jsonPath("$.data.stages[3].stage").isEqualTo("ddinter")
+            .jsonPath("$.data.stages[3].notes[*].kind").isEqualTo(List.of("text_missing", "text_missing"))
+            .jsonPath("$.data.stages[3].textMissing[0].nameA").isEqualTo("Acetaminophen")
+            .jsonPath("$.data.stages[3].textMissing[0].nameB").isEqualTo("Warfarin")
+            .jsonPath("$.data.stages[3].textMissing[0].severity").isEqualTo("moderate")
+            .jsonPath("$.data.stages[3].textMissing[0].inBatch").isEqualTo(true)
+            .jsonPath("$.data.stages[3].textMissing[1].nameB").isEqualTo("Alpha Unknown")
+            .jsonPath("$.data.stages[3].textMissing[1].severity").isEqualTo("unknown")
+            .jsonPath("$.data.stages[3].textMissing[1].inBatch").isEqualTo(false)
+            .jsonPath("$.data.sourceJson.extras.x").isEqualTo(1)
+            .jsonPath("$.data.sourceUrl").isEqualTo("https://tr.ocl.dghs.gov.bd/#/orgs/MoHFW/sources/DGDA-Drugs/concepts/W-1/")
+            .jsonPath("$.data.history[*].kind").isEqualTo(List.of("run", "extract", "extract"))
+            .jsonPath("$.data.history[1].reason").isEqualTo("run")
+            .jsonPath("$.data.history[2].reason").isEqualTo("rerun")
+            .jsonPath("$.data.history[0].role").doesNotExist()
+            .jsonPath("$.data.reopen.reason").isEqualTo("rerun")
+            .jsonPath("$.data.reopen.previousExtractedAt").isEqualTo("2026-10-12T09:00:00Z")
+            .jsonPath("$.data.reopen.diffAvailable").isEqualTo(true);
+    }
+
+    @Test void failNotesStayWholeAndUnmappedIngredientsHaveNoSubstance() {
+        ok("/v1/review/batches/Q-1/items/X-NOSUB")
+            .jsonPath("$.data.stages[1].notes.length()").isEqualTo(1)
+            .jsonPath("$.data.stages[1].notes[0].kind").isEqualTo("other")
+            .jsonPath("$.data.stages[1].notes[0].text").isEqualTo("error: ValueError: no substance; unmapped xm")
+            .jsonPath("$.data.ingredients[0].bdsId").isEmpty()
+            .jsonPath("$.data.ingredients[0].name").isEqualTo("Newmol")
+            .jsonPath("$.data.ingredients[0].coverage.coverage").isEqualTo("not_run")
+            .jsonPath("$.data.clinicalDrug").isEmpty();
+        ok("/v1/review/batches/Q-1/items/T-NR")
+            .jsonPath("$.data.ingredients[0].coverage.coverage").isEqualTo("not_run")
+            .jsonPath("$.data.ingredients[0].ddinter.chosen[0].ddinterId").isEqualTo("DDInter777")
+            .jsonPath("$.data.ingredients[0].ddinter.chosen[0].routeAssumed").isEqualTo(true);
+    }
+
+    @Test void mineComparesTheViewerEmailCaseInsensitivelyAndNoEmailIsEverSent() {
+        byte[] body = internal(web).get().uri("/v1/review/batches/Q-1/items/D-1").header("X-Viewer-Email", "eng.reviewer@EXAMPLE.org")
+            .exchange().expectStatus().isOk()
+            .expectBody()
+            .jsonPath("$.data.history[?(@.kind == 'decision')].mine").isEqualTo(List.of(true))
+            .jsonPath("$.data.history[?(@.kind == 'decision')].note").isEqualTo(List.of("route should be otic"))
+            .jsonPath("$.data.history[?(@.kind == 'decision')].counts").isEqualTo(List.of(true))
+            .returnResult().getResponseBody();
+        assertThat(new String(body, StandardCharsets.UTF_8)).doesNotContain("@");
+        ok("/v1/review/batches/Q-1/items/D-1").jsonPath("$.data.history[?(@.kind == 'decision')].mine").isEqualTo(List.of(false));
+    }
+
+    /** Review Focus 4 (detail side). */
+    @Test void removedAndUnknownRecordsAre404() {
+        for (String uri : List.of("/v1/review/batches/Q-1/items/gone", "/v1/review/batches/Q-1/items/nope", "/v1/review/batches/NOPE/items/W-1"))
+            internal(web).get().uri(uri).exchange().expectStatus().isNotFound()
+                .expectBody().jsonPath("$.errors[0].code").isEqualTo("NOT_FOUND");
+    }
+
+    @Test void theDiffListsChangedCellsBetweenTwoSnapshots() {
+        ok("/v1/review/batches/Q-1/items/W-1/diff?from=2026-10-12T09:00:00Z")
+            .jsonPath("$.data.from").isEqualTo("2026-10-12T09:00:00Z")
+            .jsonPath("$.data.to").isEqualTo("2026-10-12T09:30:00.123456Z")
+            .jsonPath("$.data.reason").isEqualTo("rerun")
+            .jsonPath("$.data.rows[*].field").isEqualTo(List.of("DDInter note", "Pipeline extracted at"))
+            .jsonPath("$.data.rows[0].before").isEqualTo("DDInter text not found for DDInter14/DDInter1951");
+        internal(web).get().uri("/v1/review/batches/Q-1/items/W-1/diff?from=2026-10-12T08:00:00Z").exchange()
+            .expectStatus().isNotFound().expectBody().jsonPath("$.errors[0].field").isEqualTo("from");
+        internal(web).get().uri("/v1/review/batches/Q-1/items/A-1/diff?from=2026-10-12T09:00:00Z").exchange()
+            .expectStatus().isNotFound();
+        for (String bad : List.of("/v1/review/batches/Q-1/items/W-1/diff", "/v1/review/batches/Q-1/items/W-1/diff?from=yesterday"))
+            internal(web).get().uri(bad).exchange().expectStatus().isBadRequest()
+                .expectBody().jsonPath("$.errors[0].field").isEqualTo("from");
+    }
 }
