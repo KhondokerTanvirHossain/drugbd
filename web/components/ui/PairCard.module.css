@@ -1,1 +1,5 @@
+/* Ported from Boards P and R (.pair-text.is-open); doubled class to outrank .pair-text. */
 .open.open { display: block; -webkit-line-clamp: unset; overflow: visible; }
+/* Footer wording follows the text: "truncated" while clamped, "in full" while open (the server renders it open). */
+:global(.pair-text):not(.open) ~ :global(.pair-source) .whenOpen { display: none; }
+:global(.pair-text).open ~ :global(.pair-source) .whenClosed { display: none; }
