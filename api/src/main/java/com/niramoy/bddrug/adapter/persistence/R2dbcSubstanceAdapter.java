@@ -59,7 +59,7 @@ public class R2dbcSubstanceAdapter implements SubstanceQueryPort {
             .bind("id", id)
             .map(r -> new Substance.Coverage(r.get("coverage", String.class), r.get("note", String.class)))
             .one()
-            .defaultIfEmpty(new Substance.Coverage("none", Substance.NOT_LOADED_NOTE));
+            .defaultIfEmpty(new Substance.Coverage("not_run", Substance.NOT_LOADED_NOTE));   // §7.3: no row = never ran
     }
 
     private Mono<List<Substance.ProductRef>> products(String id, boolean approvedOnly) {

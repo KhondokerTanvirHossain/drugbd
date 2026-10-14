@@ -137,13 +137,15 @@ class InteractionCheckServiceTest {
         assertThat(alerts.get(0).severity()).isEqualTo("major");
     }
 
-    @Test void noCoverageMissingCoverageAndNoRouteEntryAreAllNoData() {
+    @Test void noCoverageMissingCoverageAndNoRouteEntryAreAllListed() {
         CheckResult r = check("W", "D", "NOCOV", "OTIC");
         assertThat(r.alerts()).isEmpty();
         assertThat(r.noData()).extracting(n -> n.conceptId() + "/" + n.bdsId() + "/" + n.name())
             .containsExactly("D/BDS-4/Domperidone", "NOCOV/BDS-6/Newcovmol", "OTIC/BDS-7/Oticmol");
         assertThat(r.products()).hasSize(4);
-        assertThat(r.products().get(2).substances().get(0).coverage()).isEqualTo("none");
+        // NOCOV (BDS-6) has no curated.interaction_coverage row: DDInter never ran for it (§7.3), so it is not_run, not none
+        assertThat(r.products().get(2).substances().get(0).coverage()).isEqualTo("not_run");
+        assertThat(r.products().get(1).substances().get(0).coverage()).as("a real coverage row stays as stored").isEqualTo("none");
     }
 
     @Test void sameSubstanceInTwoProductsIsADuplicateNotAnAlert() {

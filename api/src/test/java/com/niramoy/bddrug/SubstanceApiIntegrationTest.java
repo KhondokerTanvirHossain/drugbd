@@ -128,4 +128,14 @@ class SubstanceApiIntegrationTest {
             .jsonPath("$.errors[0].code").isEqualTo("NOT_FOUND")
             .jsonPath("$.message").isEqualTo("Substance not found");
     }
+
+    @Test void aSubstanceWithNoCoverageRowIsNotRunNeverNoData() throws Exception {
+        TestSupport.exec(pg, """
+            INSERT INTO curated.substance (bds_id, preferred_name) VALUES ('BDS-000099', 'Notrunmol')
+            ON CONFLICT DO NOTHING""");
+        all().get().uri("/v1/substances/BDS-000099?scope=all").exchange().expectStatus().isOk()
+            .expectBody()
+            .jsonPath("$.data.coverage.coverage").isEqualTo("not_run")
+            .jsonPath("$.data.coverage.note").isEqualTo("DDInter mapping has not run for this substance");
+    }
 }
