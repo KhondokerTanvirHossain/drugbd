@@ -19,6 +19,8 @@ const classStrings = (src: string) => [...src.matchAll(/className=(?:"([^"]*)"|\
 /** P1B adds the reviewer toolbar, sidebar and decision bar files here. */
 export const MATERIAL_ALLOWED: string[] = [
   "components/review/ReviewToolbar.tsx",
+  "components/review/desk/DeskRecordContext.tsx",
+  "components/review/desk/DecisionBar.tsx",
 ];
 
 describe("§3.4 mark exclusivity", () => {

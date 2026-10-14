@@ -52,6 +52,7 @@
 .doneT { font: var(--t-title2); letter-spacing: var(--tr-title2); }
 .done p { font-size: 14px; color: var(--fg-2); }
 .noscript { font-size: 13px; color: var(--fg-2); }
+.fallbackForm { display: flex; }
 .drawerH2 { font: var(--t-title3); letter-spacing: var(--tr-title3); }
 @media (prefers-reduced-motion: reduce) { .reducedOnly { display: inline; } }
 @media (max-width: 1279px) {
