@@ -6,6 +6,7 @@ import { recordAudit } from "./audit";
 import { DESK_NEW } from "./copy";
 import { allowAccountAction, allowDeniedAudit } from "./limits";
 import { clientIp } from "./rate-limit";
+import { requestId } from "./request-id";
 import type { ReviewerRole } from "./reviewers";
 import { getSession, type Session } from "./session";
 import { TURNSTILE_RESPONSE_FIELD, verifyTurnstile } from "./turnstile";
@@ -149,7 +150,8 @@ export async function submitFlag(fd: FormData): Promise<ActionResult<FlagCode>> 
   if (!allowAccountAction("flag", session.email)) return { status: 429, code: "failed" };
   if (!(await turnstilePassed(fd, "flag"))) return { status: 403, code: "captcha" };
 
-  const r = await createFlag({ targetType: targetType as FlagTarget, targetId, message, reporterEmail: session.email });
+  const r = await createFlag({ targetType: targetType as FlagTarget, targetId, message, reporterEmail: session.email,
+    requestId: await requestId() });
   if (r.ok) {
     revalidatePath("/flags");
     return { status: 200, code: "sent" };
@@ -166,8 +168,9 @@ export async function submitResolve(fd: FormData): Promise<ActionResult<ResolveC
 
   if (!(await turnstilePassed(fd, "resolve"))) return { status: 403, code: "captcha" };
 
-  const r = await resolveFlag(Number(raw), session.email);
+  // §5.15: the audit row carries the web request id (the middleware's x-request-id). A second resolve is the API's 409.
+  const r = await resolveFlag(Number(raw), session.email, await requestId());
   if (!r.ok) return r.status === 404 || r.status === 409 ? { status: 400, code: "invalid" } : { status: 502, code: "failed" };
-  revalidatePath("/flags");
+  revalidatePath("/review/flags");
   return { status: 200, code: "resolved" };
 }

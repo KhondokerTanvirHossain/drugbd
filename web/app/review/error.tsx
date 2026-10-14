@@ -15,13 +15,14 @@ import styles from "./review.module.css";
 export default function ReviewError({ reset }: { error: Error; reset: () => void }) {
   const id = decodeURIComponent(usePathname()?.split("/")[2] ?? "");
   const t = DESK_NEW.deskLoad;
-  const title = fill(t.errorTitle, { id });
+  const named = id !== "" && id !== "flags";
+  const title = named ? fill(t.errorTitle, { id }) : t.errorBody;
   const live = useRef<HTMLDivElement>(null);
   useEffect(() => announce(live.current, title), [title]);
   return (
     <main id="content" className={styles.page}>
       <div ref={live} className="sr-only" aria-live="polite" aria-atomic="true" />
-      <Banner tone="crit" title={title} body={t.errorBody}
+      <Banner tone="crit" title={title} body={named ? t.errorBody : undefined}
         action={<Button variant="tonal" size="sm" onClick={reset}>{DESK_NEW.reviewLists.tryAgain}</Button>} />
     </main>
   );

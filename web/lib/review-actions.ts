@@ -37,5 +37,6 @@ export async function flagAction(formData: FormData): Promise<void> {
 
 export async function resolveFlagAction(formData: FormData): Promise<void> {
   const { code } = await logged("action:resolve", () => submitResolve(formData));
-  redirect(`/flags?resolve=${code}`);
+  const kind = formData.get("kind") === "partner" ? "partner" : "reports";
+  redirect(`/review/flags?${new URLSearchParams({ resolve: code, kind })}`);
 }

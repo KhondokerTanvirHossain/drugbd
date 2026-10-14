@@ -235,3 +235,8 @@ export function historyText(e: HistoryEntry, batchId: string): string {
 
 /** The approved pill's wording, for the "done" view (rendered through ReviewStatus elsewhere). */
 export const APPROVED_TEXT = APPROVED;
+
+/** §5.16 Board DS copy that Board R does not draw: the batch banner body. New §1.7 copy lives in NEW_COPY (Task 9). */
+export const REVIEW_LISTS = {
+  batchBannerBody: "The batch is approved when every record is approved by a pharmacist.",
+} as const;

@@ -7,7 +7,8 @@ vi.mock("@/lib/turnstile", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/turnstile")>()),
   verifyTurnstile: (token: unknown, ip: unknown, action: unknown) => verifyTurnstile(token, ip, action),
 }));
-vi.mock("next/headers", () => ({ headers: async () => new Headers({ "x-forwarded-for": "203.0.113.9, 10.0.0.1" }) }));
+vi.mock("next/headers", () => ({ headers: async () => new Headers({ "x-forwarded-for": "203.0.113.9, 10.0.0.1",
+  "x-request-id": "5f0c2d1e-7a3b-4c8d-9e1f-2a3b4c5d6e7f" }) }));
 const revalidatePath = vi.fn();
 vi.mock("next/cache", () => ({ revalidatePath: (p: string) => revalidatePath(p) }));
 const allowAccountAction = vi.fn((_kind: string, _email: string) => true);
@@ -31,6 +32,7 @@ const PHARMACIST = { email: "pharm@example.org", role: "pharmacist" };
 const ENGINEER = { email: "eng@example.org", role: "engineer" };
 const USER = { email: "someone@gmail.com", role: "user" };
 const REQ = "3f2504e0-4f89-41d3-9a0c-0305e82c3301";
+const REQ_ID = "5f0c2d1e-7a3b-4c8d-9e1f-2a3b4c5d6e7f";   // the x-request-id in the next/headers mock above
 
 const form = (fields: Record<string, string>) => {
   const fd = new FormData();
@@ -196,7 +198,7 @@ describe("submitFlag (flag a problem server action)", () => {
     expect(url).toBe("http://api:8080/v1/flags");
     expect(new Headers(init.headers).get("X-Internal-Token")).toBe(TOKEN);
     expect(JSON.parse(init.body)).toEqual({ targetType: "product", targetId: "P-1", message: "Wrong company name",
-      reporterEmail: "someone@gmail.com" });
+      reporterEmail: "someone@gmail.com", requestId: REQ_ID });
   });
 
   it("validates the message length (5-2000 characters after trimming) before any API call", async () => {
@@ -252,15 +254,27 @@ describe("submitResolve (resolve flag server action)", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("a reviewer resolves with the token and the session's email, then revalidates /flags", async () => {
+  it("a reviewer resolves with the token, the session's email and the web request id, then revalidates /review/flags", async () => {
     getSession.mockResolvedValue(ENGINEER);
     fetchMock.mockResolvedValue(ok({ id: 3, status: "resolved" }));
-    expect(await submitResolve(form({ flagId: "3", "cf-turnstile-response": "t" }))).toMatchObject({ status: 200, code: "resolved" });
+    expect(await submitResolve(form({ flagId: "3", "cf-turnstile-response": "t" })))
+      .toMatchObject({ status: 200, code: "resolved" });
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe("http://api:8080/v1/flags/3/resolve");
     expect(new Headers(init.headers).get("X-Internal-Token")).toBe(TOKEN);
-    expect(JSON.parse(init.body)).toEqual({ resolvedBy: "eng@example.org" });
-    expect(revalidatePath).toHaveBeenCalledWith("/flags");
+    expect(JSON.parse(init.body)).toEqual({ resolvedBy: "eng@example.org", requestId: REQ_ID });
+    expect(revalidatePath).toHaveBeenCalledWith("/review/flags");
+  });
+
+  it("a request id in the form is ignored; the audit row carries the web request id (§5.15)", async () => {
+    getSession.mockResolvedValue(ENGINEER);
+    fetchMock.mockResolvedValue(ok({ id: 3, status: "resolved" }));
+    await submitResolve(form({ flagId: "3", requestId: "'; drop table flags; --", "cf-turnstile-response": "t" }));
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ resolvedBy: "eng@example.org", requestId: REQ_ID });
+    getSession.mockResolvedValue(USER);
+    fetchMock.mockResolvedValue(ok({ id: 9 }, 201));
+    await submitFlag(flag({ requestId: "0c6f7a49-8f1b-4c62-9d0e-0a3f5a9a1b22" }));
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body).requestId).toBe(REQ_ID);
   });
 
   it("maps an unknown or already-resolved flag (404/409) to invalid", async () => {
@@ -271,10 +285,22 @@ describe("submitResolve (resolve flag server action)", () => {
     expect(await submitResolve(form({ flagId: "3", "cf-turnstile-response": "t" }))).toMatchObject({ status: 400, code: "invalid" });
   });
 
-  it("resolveFlagAction redirects to /flags with the outcome", async () => {
+  it("resolveFlagAction redirects to /review/flags with the outcome and the kind", async () => {
     getSession.mockResolvedValue(USER);
-    await expect(resolveFlagAction(form({ flagId: "3" }))).rejects.toSatisfy((e) =>
-      redirectTarget(e) === "/flags?resolve=forbidden");
+    await expect(resolveFlagAction(form({ flagId: "3", kind: "partner" }))).rejects.toSatisfy((e) =>
+      redirectTarget(e) === "/review/flags?resolve=forbidden&kind=partner");
+    await expect(resolveFlagAction(form({ flagId: "3", kind: "<x>" }))).rejects.toSatisfy((e) =>
+      redirectTarget(e) === "/review/flags?resolve=forbidden&kind=reports");
+  });
+
+  it("resolveFlagAction keeps P1A's log line: one action:resolve line with the status, never an email", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    getSession.mockResolvedValue(USER);
+    await resolveFlagAction(form({ flagId: "3", kind: "partner" })).catch(() => {});
+    expect(log.mock.calls.map((c) => JSON.parse(String(c[0]))).map((l) => [l.route, l.method, l.status]))
+      .toEqual([["action:resolve", "POST", 403]]);
+    expect(JSON.stringify(log.mock.calls)).not.toContain("someone@");
+    log.mockRestore();
   });
 });
 
