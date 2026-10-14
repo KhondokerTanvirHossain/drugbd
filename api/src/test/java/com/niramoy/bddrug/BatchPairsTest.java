@@ -114,4 +114,25 @@ class BatchPairsTest {
         assertThat(r.pairs()).isEmpty();
         assertThat(r.notChecked()).isEmpty();
     }
+
+    @Test void twoPartnersWithTheSameSubstanceAndReasonButDifferentRoutesStayTwoEntriesEachWithItsOwnRoute() {
+        List<Product> batch = List.of(p("W", 1, "systemic", WARFARIN), p("MN", 2, "nasal", MUPIROCIN), p("MO", 3, "otic", MUPIROCIN));
+        BatchPairs.Result r = BatchPairs.compute("W", batch, ROWS, COMPLETE);
+        assertThat(r.notChecked()).containsExactly(
+            new NotChecked("Warfarin", "Mupirocin", List.of(ref("MN", 2)), "no_route", "partner", "nasal"),
+            new NotChecked("Warfarin", "Mupirocin", List.of(ref("MO", 3)), "no_route", "partner", "otic"));
+    }
+
+    @Test void twoPartnersWithTheSameSubstanceReasonAndRouteMergeIntoOneEntryWithBothPartners() {
+        List<Product> batch = List.of(p("W", 1, "systemic", WARFARIN), p("MN", 2, "nasal", MUPIROCIN), p("MN2", 3, "nasal", MUPIROCIN));
+        BatchPairs.Result r = BatchPairs.compute("W", batch, ROWS, COMPLETE);
+        assertThat(r.notChecked()).containsExactly(
+            new NotChecked("Warfarin", "Mupirocin", List.of(ref("MN", 2), ref("MN2", 3)), "no_route", "partner", "nasal"));
+    }
+
+    @Test void aNullRoutePartnerStaysApartFromANamedRoutePartner() {
+        List<Product> batch = List.of(p("W", 1, "systemic", WARFARIN), p("MN", 2, "nasal", MUPIROCIN), p("MX", 3, null, MUPIROCIN));
+        BatchPairs.Result r = BatchPairs.compute("W", batch, ROWS, COMPLETE);
+        assertThat(r.notChecked()).extracting(NotChecked::route).containsExactly("nasal", null);
+    }
 }

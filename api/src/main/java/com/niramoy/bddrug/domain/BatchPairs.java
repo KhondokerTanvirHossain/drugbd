@@ -92,7 +92,10 @@ public final class BatchPairs {
                         && REASON_ORDER.indexOf(us.reason()) <= REASON_ORDER.indexOf(ut.reason()));
                     String reason = thisSide ? us.reason() : ut.reason();
                     String side = thisSide ? "this" : "partner";
-                    String k = s.name() + "|" + t.name() + "|" + reason + "|" + side;
+                    // Spec §5.6.2/§6.7.3: the line names the route of the record the reason applies to, so partners that
+                    // differ by route must not merge (a null route stays apart from a named one).
+                    String k = s.name() + "|" + t.name() + "|" + reason + "|" + side
+                        + (thisSide ? "" : "|" + String.valueOf(q.route()));
                     NotChecked old = notChecked.get(k);
                     notChecked.put(k, old == null
                         ? new NotChecked(s.name(), t.name(), List.of(partner), reason, side, thisSide ? me.route() : q.route())
