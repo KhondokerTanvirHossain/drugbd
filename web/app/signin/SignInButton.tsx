@@ -50,6 +50,7 @@ export default function SignInButton({ config, siteKey, returnTo, siteOrigin, no
   const [rejectedBody, setRejectedBody] = useState<string>(SIGN_IN_STATES.requestFailedBody);
   const [resetKey, setResetKey] = useState(0);
   const live = useRef<HTMLParagraphElement>(null);
+  const googleButton = useRef<HTMLButtonElement>(null);
 
   const onToken = useCallback((t: string | null) => { tokenRef.current = t; setToken(t); }, []);
   const freshCheck = useCallback(() => { tokenRef.current = null; setToken(null); setResetKey((k) => k + 1); }, []);
@@ -155,11 +156,19 @@ export default function SignInButton({ config, siteKey, returnTo, siteOrigin, no
     }
   }
 
+  // Retry check unmounts its own banner, so focus moves to Continue with Google, never to <body> (§10.1).
+  // The button stays focusable while aria-disabled, until the fresh token arrives.
+  function retryCheck() {
+    setStatus("idle");
+    freshCheck();
+    googleButton.current?.focus();
+  }
+
   const disabled = !token || status === "loading";
   const banner =
     status === "captcha" ? (
       <Banner tone="crit" role="note" title={SIGN_IN.captchaTitle} body={SIGN_IN.captchaBody}
-        action={<Button variant="tonal" size="sm" onClick={() => { setStatus("idle"); freshCheck(); }}>{SIGN_IN.retry}</Button>} />
+        action={<Button variant="tonal" size="sm" onClick={retryCheck}>{SIGN_IN.retry}</Button>} />
     ) : status === "cancelled" ? (
       <Banner tone="info" role="note" title={SIGN_IN.cancelledTitle} body={SIGN_IN.cancelledBody} />
     ) : status === "blocked" ? (
@@ -183,7 +192,7 @@ export default function SignInButton({ config, siteKey, returnTo, siteOrigin, no
 
   return (
     <div className={styles.root}>
-      <Button variant="primary" size="lg" aria-disabled={disabled ? "true" : undefined} busy={status === "loading"}
+      <Button ref={googleButton} variant="primary" size="lg" aria-disabled={disabled ? "true" : undefined} busy={status === "loading"}
         busyLabel={SIGN_IN.loading} onClick={disabled ? undefined : signIn}>
         {SIGN_IN.button}
       </Button>

@@ -114,6 +114,23 @@ describe("SignInButton island (§6.2)", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["a failed exchange", () => { fetchMock.mockResolvedValue(json(403, { success: false, errors: [{ code: "CAPTCHA" }] }));
+      passBotCheck(); fireEvent.click(google()); }],
+    ["a widget failure", () => fireEvent.click(screen.getByRole("button", { name: "fail bot check" }))],
+  ])("after %s, Retry check moves focus to Continue with Google, never to <body> (§10.1)", async (_label, arrange) => {
+    renderButton();
+    arrange();
+    expect(await bannerTitle("We couldn't confirm you're a person.")).toBeTruthy();
+    const retry = screen.getByRole("button", { name: "Retry check" });
+    retry.focus();
+    expect(document.activeElement).toBe(retry);
+    fireEvent.click(retry);
+    expect(screen.queryByRole("button", { name: "Retry check" })).toBeNull();
+    expect(document.activeElement).toBe(google());
+    expect(google().getAttribute("aria-disabled")).toBe("true");
+  });
+
   it("resets the bot check after a failed exchange and never re-sends a spent token (Review Focus 4)", async () => {
     fetchMock.mockResolvedValueOnce(json(401, { success: false, message: "Sign-in is too old. Please sign in again.",
       errors: [{ code: "STALE_SIGN_IN", message: "Sign-in is too old. Please sign in again." }] }));
