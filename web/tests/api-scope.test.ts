@@ -183,8 +183,9 @@ describe("writes (internal token, JSON body)", () => {
   });
 
   it("listFlags reads open flags with the token and drops emails", async () => {
-    f.mockResolvedValue(ok([{ id: 3, targetType: "substance", targetId: "BDS-1", message: "Name typo",
-      reporterEmail: "u@gmail.com", status: "open", createdAt: "2026-10-12T10:00:00Z", resolvedAt: null, resolvedBy: null }]));
+    f.mockResolvedValue(ok({ items: [{ id: 3, targetType: "substance", targetId: "BDS-1", message: "Name typo",
+      reporterEmail: "u@gmail.com", status: "open", createdAt: "2026-10-12T10:00:00Z", resolvedAt: null, resolvedBy: null }],
+      page: 0, size: 50, hasMore: false }));
     const flags = await listFlags();
     expect(f.mock.calls[0][0]).toBe("http://api:8080/v1/flags?status=open");
     expect(headerOf(f.mock.calls[0][1], "X-Internal-Token")).toBe(TOKEN);
