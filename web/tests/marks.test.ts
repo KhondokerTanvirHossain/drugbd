@@ -17,7 +17,9 @@ const read = (f: string) => readFileSync(join(WEB, f), "utf8");
 const classStrings = (src: string) => [...src.matchAll(/className=(?:"([^"]*)"|\{`([^`]*)`\})/g)].map((m) => m[1] ?? m[2]);
 
 /** P1B adds the reviewer toolbar, sidebar and decision bar files here. */
-export const MATERIAL_ALLOWED: string[] = [];
+export const MATERIAL_ALLOWED: string[] = [
+  "components/review/ReviewToolbar.tsx",
+];
 
 describe("§3.4 mark exclusivity", () => {
   it("green approval (.rv--approved) is printed only by ReviewStatus", () => {

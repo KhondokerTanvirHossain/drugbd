@@ -1,0 +1,50 @@
+import AccountMenu from "@/components/AccountMenu";
+import ThemeSwitch from "@/components/ThemeSwitch";
+import { buttonClass } from "@/components/ui/Button";
+import { DESK_NEW } from "@/lib/copy";
+import type { KeysSetting } from "@/lib/desk-settings";
+import { DESK, ROLE_LABEL_DESK } from "@/lib/review-copy";
+import type { ReviewBatchSummary } from "@/lib/review-types";
+import type { Session } from "@/lib/session";
+import type { Theme } from "@/lib/theme";
+import KeysSwitch from "./desk/KeysSwitch";
+import styles from "@/app/review/review.module.css";
+
+const initials = (s: Session) => ((s.name ?? "").trim() || s.email)
+  .split(/[\s@._-]+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join("");
+
+/** The newest in_review batch: the one the copy "Batch {id}" names (§5.13). */
+export function newestInReview(batches: ReviewBatchSummary[]): string | null {
+  return [...batches].filter((b) => b.status === "in_review").sort((a, b) => b.runAt.localeCompare(a.runAt))[0]?.batchId ?? null;
+}
+
+/**
+ * The account menu on /review/* (§6.2): own name and email, role badge and batch, Review desk, Problem reports and
+ * partner requests, the theme, "Keyboard shortcuts and settings" (desk only; shown once the desk is running) and the
+ * single-key shortcuts control, then Sign out. Links are plain <a>: leaving /review is a document navigation.
+ */
+export default function ReviewAccount({ session, theme, batchId, keys, shortcutsItem }:
+    { session: Session; theme: Theme; batchId: string | null; keys: KeysSetting; shortcutsItem: boolean }) {
+  const reviewer = session.role === "pharmacist" || session.role === "engineer";
+  const name = (session.name ?? "").trim() || session.email;
+  return (
+    <AccountMenu>
+      <summary className={styles.avatar}>
+        <span aria-hidden="true">{initials(session)}</span><span className="sr-only">{`Account menu for ${name}`}</span>
+      </summary>
+      <div className={styles.panel}>
+        <p className={styles.who}><b>{name}</b><span>{session.email}</span></p>
+        {reviewer && <p><span className="role-badge">{ROLE_LABEL_DESK[session.role as "pharmacist" | "engineer"]}</span>
+          {batchId && <> {DESK.batchPrefix} <span className="mono">{batchId}</span></>}</p>}
+        {reviewer && <a className={styles.menuLink} href="/review">{DESK.reviewDesk}</a>}
+        {reviewer && <a className={styles.menuLink} href="/review/flags">{DESK_NEW.reviewLists.flagsLink}</a>}
+        {reviewer && shortcutsItem && (
+          <button type="button" className={buttonClass("plain", "sm")} data-desk-open="sheet" hidden>{DESK_NEW.shortcutsMenuItem.item}</button>
+        )}
+        <ThemeSwitch value={theme} />
+        {reviewer && <><span className={styles.label}>{DESK_NEW.deskSettings.keysLabel}</span><KeysSwitch value={keys} /></>}
+        <form method="post" action="/signout"><button type="submit" className={buttonClass("plain", "sm")}>Sign out</button></form>
+      </div>
+    </AccountMenu>
+  );
+}

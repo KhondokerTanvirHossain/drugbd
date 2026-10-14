@@ -15,6 +15,8 @@ export const AUTH_PROXY_PREFIX = "/__/auth/";
 export function nextWithSecurityHeaders(request: NextRequest): NextResponse {
   const headers = new Headers(request.headers);
   headers.set("x-request-id", crypto.randomUUID());
+  // The root layout leaves the public chrome out on /review/* (it cannot read the path otherwise).
+  headers.set("x-pathname", request.nextUrl.pathname);
   headers.delete("x-nonce");
   headers.delete("content-security-policy");
   // Match the way the rewrite does: case-insensitive (caseSensitiveRoutes is false) and `:path*` allows zero segments.
