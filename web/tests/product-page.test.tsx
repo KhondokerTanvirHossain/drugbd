@@ -99,7 +99,7 @@ describe("product page", () => {
     const html = await render();
     expect(html).toContain("Chloramphenicol 0.5% Eye Drop");
     expect(html).toContain("BDC-000003");
-    expect(html).toMatch(/<span class="badge"[^>]*>ophthalmic<\/span>/);
+    expect(html).toMatch(/<span class="badge[^"]*"[^>]*>ophthalmic<\/span>/);
     expect(html).toContain('<a href="/substances/BDS-000003">Chloramphenicol</a>');
     expect(html).toContain("Chloramphenicol</a> 0.5%");
     expect(html).toContain("DDInter352 Chloramphenicol (ophthalmic)");

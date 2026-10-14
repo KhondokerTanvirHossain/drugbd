@@ -1,3 +1,4 @@
+import legacy from "@/app/legacy.module.css";
 import Turnstile from "@/components/Turnstile";
 import { listFlags, type Flag } from "@/lib/api";
 import { isReviewer } from "@/lib/reviewers";
@@ -5,6 +6,7 @@ import { flagReturnPath } from "@/lib/actions-core";
 import { formatUtc } from "@/lib/format";
 import { firstParam } from "@/lib/params";
 import { resolveFlagAction } from "@/lib/review-actions";
+import { cspNonce } from "@/lib/nonce";
 import { getSession } from "@/lib/session";
 export const dynamic = "force-dynamic";
 
@@ -27,6 +29,7 @@ function Target({ f }: { f: Flag }) {
 /** Open flags, for pharmacists and engineers only. Shows no reporter emails (the API client drops them). */
 export default async function FlagsPage({ searchParams }: { searchParams?: Promise<{ resolve?: string | string[] }> }) {
   const session = await getSession();
+  const nonce = await cspNonce();
   if (!isReviewer(session)) {
     return (<><h1>Flags</h1><p role="alert">Only pharmacists and engineers can see flags.</p></>);
   }
@@ -42,10 +45,10 @@ export default async function FlagsPage({ searchParams }: { searchParams?: Promi
         <ul>{flags.map((f) => (
           <li key={f.id}>
             <Target f={f} />{` · ${formatUtc(f.createdAt)}`}
-            <p style={{ whiteSpace: "pre-wrap" }}>{f.message}</p>
+            <p className={legacy.pre}>{f.message}</p>
             <form action={resolveFlagAction}>
               <input type="hidden" name="flagId" value={String(f.id)} />
-              <Turnstile />
+              <Turnstile action="resolve" nonce={nonce} />
               <button type="submit">Resolve</button>
             </form>
           </li>))}</ul>)}

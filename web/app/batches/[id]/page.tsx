@@ -1,3 +1,4 @@
+import legacy from "@/app/legacy.module.css";
 import { notFound } from "next/navigation";
 import Turnstile from "@/components/Turnstile";
 import { StatusPill } from "@/components/badges";
@@ -5,17 +6,16 @@ import { ISSUE_NOTE_MIN, NOTE_MAX } from "@/lib/actions-core";
 import {
   getBatch, getBatchReport, getDecisions, type BatchReport, type PublicDecision, type StageCounts, type StageResult,
 } from "@/lib/api";
-import { BATCHES_REVIEWERS_ONLY } from "@/lib/copy";
+import { BATCHES_REVIEWERS_ONLY, TOO_MANY_REQUESTS } from "@/lib/copy";
 import { summariseSource } from "@/lib/evidence";
 import { formatUtc } from "@/lib/format";
+import { cspNonce } from "@/lib/nonce";
 import { firstParam } from "@/lib/params";
 import { ROLE_LABEL, isReviewer, type Role } from "@/lib/reviewers";
 import { reviewAction } from "@/lib/review-actions";
 import { getSession } from "@/lib/session";
 export const dynamic = "force-dynamic";
 
-const cell = { verticalAlign: "top", border: "1px solid #ccc", padding: 8, width: "50%" } as const;
-const stageCell = { verticalAlign: "top", border: "1px solid #ccc", padding: 6 } as const;
 const STAGES = ["dgda", "substances", "clinical", "ddinter"] as const;
 
 /** Fixed messages for the review action's outcome codes; anything else in the URL is ignored. */
@@ -32,6 +32,7 @@ const REVIEW_OUTCOME: Record<string, { text: string; ok: boolean }> = {
   checked: { text: "Your check is already recorded for this record.", ok: false },
   removed: { text: "This record was removed from the batch file.", ok: false },
   failed: { text: "The decision could not be saved. Please try again.", ok: false },
+  rate_limited: { text: TOO_MANY_REQUESTS, ok: false },
 };
 
 const approvalLabel = (status: string) => status === "approved" ? "approved" : status === "in_review" ? "in review" : status;
@@ -58,7 +59,7 @@ function Report({ report }: { report: BatchReport | null }) {
     <section>
       <h2>Batch report</h2>
       <p>{`Review: ${report.review.ok} OK · ${report.review.issue} issue · ${report.review.pending} pending`}</p>
-      <table style={{ borderCollapse: "collapse" }}>
+      <table className={legacy.collapse}>
         <thead><tr><th>Stage</th><th>OK</th><th>Warn</th><th>Fail</th><th>Change vs previous full run (ok / warn / fail)</th></tr></thead>
         <tbody>{stages.map((name) => {
           const c = report.counts?.[name] ?? { ok: 0, warn: 0, fail: 0 };
@@ -104,13 +105,13 @@ function ItemFields({ batchId, conceptId, version, decision }:
 }
 
 /** Reviewer controls. The server action re-checks the session, the role and Turnstile before calling the API. */
-function ReviewForms({ batchId, conceptId, version, role }:
-    { batchId: string; conceptId: string; version: ItemVersion; role: Role }) {
+function ReviewForms({ batchId, conceptId, version, role, nonce }:
+    { batchId: string; conceptId: string; version: ItemVersion; role: Role; nonce?: string }) {
   return (
     <div>
       <form action={reviewAction}>
         <ItemFields batchId={batchId} conceptId={conceptId} version={version} decision="ok" />
-        <Turnstile />
+        <Turnstile action="decision" nonce={nonce} />
         <button type="submit">Mark OK</button>
       </form>
       <form action={reviewAction}>
@@ -120,7 +121,7 @@ function ReviewForms({ batchId, conceptId, version, role }:
           <br />
           <textarea name="note" required minLength={ISSUE_NOTE_MIN} maxLength={NOTE_MAX} rows={3} cols={60} />
         </label>
-        <Turnstile />
+        <Turnstile action="decision" nonce={nonce} />
         <button type="submit">Report issue</button>
       </form>
       {role === "engineer" && <p><small>An engineer&apos;s OK is recorded, but only a pharmacist&apos;s OK approves a record.</small></p>}
@@ -135,17 +136,17 @@ function Outcome({ code }: { code: string }) {
 
 function StageTable({ stages }: { stages: StageResult[] }) {
   return (
-    <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 8 }}>
-      <thead><tr><th style={stageCell}>Stage</th><th style={stageCell}>Status</th><th style={stageCell}>Note</th></tr></thead>
+    <table className={legacy.stageTable}>
+      <thead><tr><th className={legacy.stageCell}>Stage</th><th className={legacy.stageCell}>Status</th><th className={legacy.stageCell}>Note</th></tr></thead>
       <tbody>{STAGES.map((name) => {
         const r = stages.find((x) => x.stage === name);
         return (
           <tr key={name}>
-            <td style={stageCell}>{name}</td>
-            <td style={stageCell}><StatusPill status={r?.status ?? null} /></td>
-            <td style={stageCell}>{r ? (<>
+            <td className={legacy.stageCell}>{name}</td>
+            <td className={legacy.stageCell}><StatusPill status={r?.status ?? null} /></td>
+            <td className={legacy.stageCell}>{r ? (<>
               {r.note}
-              <details><summary>Evidence</summary><pre style={{ whiteSpace: "pre-wrap" }}>{JSON.stringify(r.evidence ?? {}, null, 2)}</pre></details>
+              <details><summary>Evidence</summary><pre className={legacy.pre}>{JSON.stringify(r.evidence ?? {}, null, 2)}</pre></details>
             </>) : "This stage has not run for this item."}</td>
           </tr>);
       })}</tbody>
@@ -158,6 +159,7 @@ export default async function BatchPage({ params, searchParams }: {
   // Batch evidence shows unreviewed records: reviewers only (spec §12.1). Checked before any API call, so an
   // anonymous visitor learns nothing, not even whether the batch exists (status 200, never 404).
   const session = await getSession();
+  const nonce = await cspNonce();
   if (!isReviewer(session)) return <><h1>Batches</h1><p role="status">{BATCHES_REVIEWERS_ONLY}</p></>;
   const { id } = await params;
   const sp = (await searchParams) ?? {};
@@ -186,17 +188,17 @@ export default async function BatchPage({ params, searchParams }: {
           <section key={item.conceptId} id={item.conceptId}>
             <h2>{item.conceptId} <small>[{item.review}{item.note ? `: ${item.note}` : ""}]</small></h2>
             {outcomeItem === item.conceptId && <Outcome code={outcome} />}
-            <table style={{ width: "100%", borderCollapse: "collapse" }}><tbody><tr>
-              <td style={cell}>
+            <table className={legacy.table}><tbody><tr>
+              <td className={legacy.cell}>
                 <strong>Source (DGDA via OCL)</strong>
                 {src ? (<>
-                  <pre style={{ whiteSpace: "pre-wrap" }}>{JSON.stringify(src.extras, null, 2)}</pre>
+                  <pre className={legacy.pre}>{JSON.stringify(src.extras, null, 2)}</pre>
                   <ul>{src.ingredients.map((i, n) => <li key={`${i.code}-${n}`}>{i.name} <code>{i.code}</code>{i.retired ? " (retired)" : ""}</li>)}</ul>
                   <a href={src.oclUrl} rel="noopener noreferrer" target="_blank">Open original record</a>
-                  <details><summary>Full raw JSON</summary><pre style={{ whiteSpace: "pre-wrap" }}>{item.sourceJson}</pre></details>
+                  <details><summary>Full raw JSON</summary><pre className={legacy.pre}>{item.sourceJson}</pre></details>
                 </>) : <p>No source snapshot (not found at source).</p>}
               </td>
-              <td style={cell}>
+              <td className={legacy.cell}>
                 <strong>Extracted</strong>
                 {p ? (<dl>
                   <dt>Trade name</dt><dd>{p.tradeName}</dd>
@@ -211,7 +213,7 @@ export default async function BatchPage({ params, searchParams }: {
             <StageTable stages={item.stages ?? []} />
             <History decisions={histories[n]} />
             <ReviewForms batchId={batch.batchId} conceptId={item.conceptId}
-              version={{ extractedAt: item.extractedAt, lastDecisionId: item.lastDecisionId }} role={session.role} />
+              version={{ extractedAt: item.extractedAt, lastDecisionId: item.lastDecisionId }} role={session.role} nonce={nonce} />
           </section>
         );
       })}

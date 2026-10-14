@@ -190,7 +190,7 @@ describe("check page", () => {
     }), error: null });
     const html = await render(["W-1", "A-1"]);
     expect(html.match(/Interaction text not available from DDInter\./g)).toHaveLength(2);
-    expect(html.match(/Management advice not available from DDInter\./g)).toHaveLength(3);
+    expect(html.match(/DDInter 2\.0 gives no management text for this pair\./g)).toHaveLength(3);
     expect(html).toContain("Real effect.");
     expect(html).not.toMatch(/>\s*(None|-|N\/A)\s*</);
     expect(html).not.toContain("Management: -");
@@ -210,7 +210,7 @@ describe("check page", () => {
     }), error: null });
     const html = await render(["W-1", "A-1"]);
     expect(html).toContain("<h3>Severity not classified by DDInter (1)</h3>");
-    expect(html).toMatch(/<span class="badge"[^>]*>Severity not classified by DDInter<\/span>/);
+    expect(html).toMatch(/<span class="badge[^"]*"[^>]*>Severity not classified by DDInter<\/span>/);
     expect(html.toLowerCase()).not.toContain("unknown");
   });
 

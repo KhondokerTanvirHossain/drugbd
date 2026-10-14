@@ -1,16 +1,17 @@
+import legacy from "@/app/legacy.module.css";
 import FlagForm from "@/components/FlagForm";
 import { Badge } from "@/components/badges";
 import { checkInteractions, listLoadedProducts, type AlertSide, type CheckOutcome, type CheckResult } from "@/lib/api";
-import { NO_INTERACTION_TEXT, NO_MANAGEMENT_TEXT } from "@/lib/copy";
+import { NO_INTERACTION_TEXT, NO_MANAGEMENT } from "@/lib/copy";
 import { ddinterText } from "@/lib/ddinter-text";
 import { firstParam, listParam } from "@/lib/params";
+import { cspNonce } from "@/lib/nonce";
 import { getSession } from "@/lib/session";
 import { groupBySeverity, severityLabel, severityText } from "@/lib/severity";
 export const dynamic = "force-dynamic";
 
 const MIN_SELECTED = 2, MAX_SELECTED = 20;   // the API accepts 2-20 unique product IDs
 const FLAG_TARGET_MAX = 200;                 // the API's limit for a flag's targetId
-const box = { border: "1px solid #ccc", borderRadius: 4, padding: 12, margin: "8px 0" } as const;
 
 type Option = { conceptId: string; label: string };
 
@@ -39,6 +40,7 @@ export default async function CheckPage({ searchParams }: {
   const sp = await searchParams;
   const ids = listParam(sp.ids);
   const session = await getSession();
+  const nonce = await cspNonce();
   const checkable = ids.length >= MIN_SELECTED && ids.length <= MAX_SELECTED;
   const [options, outcome] = await Promise.all([
     loadOptions(),   // public scope for every session (spec §2.2)
@@ -72,7 +74,7 @@ export default async function CheckPage({ searchParams }: {
       {ids.length > MAX_SELECTED && <p>Select at most 20 products to check.</p>}
       {outcome?.error && <p role="alert">{outcome.error}</p>}
       {outcome?.result && <Results r={outcome.result} />}
-      <FlagForm session={session} targetType="check" targetId={flagTarget(ids)} outcome={firstParam(sp.flag)} />
+      <FlagForm nonce={nonce} session={session} targetType="check" targetId={flagTarget(ids)} outcome={firstParam(sp.flag)} />
     </>
   );
 }
@@ -99,11 +101,11 @@ function Results({ r }: { r: CheckResult }) {
             // A missing text (or DDInter's "None" placeholder) is never printed: it could read as "no interaction".
             const management = ddinterText(a.management);
             return (
-              <div key={n} style={box}>
+              <div key={n} className={legacy.box}>
                 <p><strong>{`${side(a.a)} + ${side(a.b)}`}</strong> <Badge>{severityText(a.severity)}</Badge></p>
                 {a.actions.length > 0 && <p>{`Actions: ${a.actions.join(", ")}`}</p>}
                 <p>{ddinterText(a.interaction) || NO_INTERACTION_TEXT}</p>
-                <p>{management ? `Management: ${management}` : NO_MANAGEMENT_TEXT}</p>
+                <p>{management ? `Management: ${management}` : NO_MANAGEMENT}</p>
                 {a.routeAssumed && <p><small>Route assumed: the general DDInter entry was used for at least one of these products.</small></p>}
                 <p><small>{`Source: ${a.source}`}</small></p>
               </div>);

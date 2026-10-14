@@ -1,6 +1,16 @@
 "use server";
 import { redirect } from "next/navigation";
 import { batchPath, flagReturnPath, submitFlag, submitResolve, submitReview } from "./actions-core";
+import { requestId } from "./request-id";
+import { logRequest } from "./request-log";
+
+/** §5.15 log line for a server action: its name, status and duration, never its form fields. Not exported. */
+async function logged<T extends { status: number }>(route: string, run: () => Promise<T>): Promise<T> {
+  const started = performance.now();
+  const result = await run();
+  logRequest({ route, method: "POST", status: result.status, ms: performance.now() - started, requestId: await requestId() });
+  return result;
+}
 
 /*
  * Server actions behind the plain <form>s on batch, product, substance, check and /flags pages. They work without
@@ -11,7 +21,7 @@ import { batchPath, flagReturnPath, submitFlag, submitResolve, submitReview } fr
  */
 
 export async function reviewAction(formData: FormData): Promise<void> {
-  const { code } = await submitReview(formData);
+  const { code } = await logged("action:review", () => submitReview(formData));
   const batchId = formData.get("batchId"), conceptId = formData.get("conceptId");
   if (typeof batchId !== "string" || !batchId) redirect("/batches");
   const item = typeof conceptId === "string" ? conceptId : "";
@@ -20,12 +30,12 @@ export async function reviewAction(formData: FormData): Promise<void> {
 }
 
 export async function flagAction(formData: FormData): Promise<void> {
-  const { code } = await submitFlag(formData);
+  const { code } = await logged("action:flag", () => submitFlag(formData));
   const path = flagReturnPath(String(formData.get("targetType") ?? ""), String(formData.get("targetId") ?? ""));
   redirect(`${path}${path.includes("?") ? "&" : "?"}flag=${code}#flag`);
 }
 
 export async function resolveFlagAction(formData: FormData): Promise<void> {
-  const { code } = await submitResolve(formData);
+  const { code } = await logged("action:resolve", () => submitResolve(formData));
   redirect(`/flags?resolve=${code}`);
 }

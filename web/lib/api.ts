@@ -267,3 +267,12 @@ export async function listFlags(status: "open" | "resolved" = "open"): Promise<F
 export async function resolveFlag(id: number, resolvedBy: string): Promise<WriteResult<unknown>> {
   return write<unknown>(`/v1/flags/${encodeURIComponent(String(id))}/resolve`, { resolvedBy });
 }
+
+export type AuditEventRequest = {
+  event: string; actorEmail: string | null; actorRole: string | null; targetType: string | null; targetId: string | null;
+  outcome: string; requestId: string;
+};
+/** POST /v1/audit-events (§7.5). Never carries free text from forms. */
+export async function postAuditEvent(e: AuditEventRequest): Promise<WriteResult<{ id: number }>> {
+  return write<{ id: number }>("/v1/audit-events", e);
+}

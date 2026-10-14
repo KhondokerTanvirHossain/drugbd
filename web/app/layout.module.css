@@ -1,0 +1,17 @@
+.skipLink {
+  position: absolute;
+  left: var(--s4);
+  top: -48px;
+  z-index: 10;
+  padding: var(--s2) var(--s3);
+  border-radius: var(--r-ctl-sm);
+  background: var(--surface);
+  color: var(--accent);
+  box-shadow: var(--shadow-2);
+}
+.skipLink:focus-visible { top: var(--s2); }
+.main {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: var(--s5) var(--s4) var(--s7);
+}

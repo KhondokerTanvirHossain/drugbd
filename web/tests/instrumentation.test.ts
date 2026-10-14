@@ -42,4 +42,21 @@ describe("startup check (instrumentation register)", () => {
     await expect(register()).resolves.toBeUndefined();
     expect(exit).not.toHaveBeenCalled();
   });
+
+  it("exits when SITE_HOST is unset in production", async () => {
+    vi.stubEnv("NEXT_RUNTIME", "nodejs");
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("SESSION_SECRET", "k".repeat(32));
+    vi.stubEnv("SITE_HOST", "");
+    await expect(register()).rejects.toThrow("process.exit(1)");
+    expect(error.mock.calls.flat().map(String).join(" ")).toMatch(/SITE_HOST must be set/);
+  });
+
+  it("refuses to start in e2e mode with the production host", async () => {
+    vi.stubEnv("NEXT_RUNTIME", "nodejs");
+    vi.stubEnv("SESSION_SECRET", "k".repeat(32));
+    vi.stubEnv("INTELLIDRUGS_E2E", "1");
+    vi.stubEnv("SITE_HOST", "drugdb.eliooo.org");
+    await expect(register()).rejects.toThrow("process.exit(1)");
+  });
 });

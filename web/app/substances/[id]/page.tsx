@@ -1,17 +1,16 @@
+import legacy from "@/app/legacy.module.css";
 import { notFound } from "next/navigation";
 import FlagForm from "@/components/FlagForm";
 import { Badge } from "@/components/badges";
 import { getSubstance, isHidden } from "@/lib/api";
-import { NO_DATA_SENTENCE, NO_INTERACTION_TEXT, NO_MANAGEMENT_TEXT, NOT_REVIEWED } from "@/lib/copy";
+import { NO_DATA_SENTENCE, NO_INTERACTION_TEXT, NO_MANAGEMENT, NOT_REVIEWED } from "@/lib/copy";
 import { ddinterText } from "@/lib/ddinter-text";
 import { firstParam } from "@/lib/params";
+import { cspNonce } from "@/lib/nonce";
 import { getSession } from "@/lib/session";
 import { groupBySeverity, severityLabel, severityText } from "@/lib/severity";
 export const dynamic = "force-dynamic";
 
-const table = { borderCollapse: "collapse", width: "100%" } as const;
-const banner = (bad: boolean) => ({ padding: 12, borderRadius: 4, border: `1px solid ${bad ? "#b35900" : "#2e7d32"}`,
-  background: bad ? "#fff4e5" : "#edf7ee" }) as const;
 
 export default async function SubstancePage({ params, searchParams }: {
   params: Promise<{ id: string }>; searchParams?: Promise<{ flag?: string | string[] }> }) {
@@ -20,9 +19,10 @@ export default async function SubstancePage({ params, searchParams }: {
   let decoded: string;
   try { decoded = decodeURIComponent(id); } catch { notFound(); }
   const session = await getSession();
+  const nonce = await cspNonce();
   const s = await getSubstance(decoded);   // public scope for every session (spec §2.2)
   if (!s) notFound();
-  const flagForm = <FlagForm session={session} targetType="substance" targetId={decoded} outcome={flag} />;
+  const flagForm = <FlagForm nonce={nonce} session={session} targetType="substance" targetId={decoded} outcome={flag} />;
   // None of its products is approved (public scope): the API sent no data, and the page shows nothing but this.
   if (isHidden(s)) return <article><h1>{NOT_REVIEWED}</h1>{flagForm}</article>;
   const none = s.coverage.coverage !== "full";
@@ -32,7 +32,7 @@ export default async function SubstancePage({ params, searchParams }: {
     <article>
       <h1>{s.preferredName} <code>{s.bdsId}</code></h1>
 
-      <section role="status" style={banner(none)}>
+      <section role="status" className={none ? legacy.bannerWarn : legacy.bannerInfo}>
         {none
           ? <p><strong>{NO_DATA_SENTENCE}</strong></p>
           : <p><strong>Interaction data: DDInter 2.0.</strong></p>}
@@ -40,14 +40,14 @@ export default async function SubstancePage({ params, searchParams }: {
       </section>
 
       <h2>Names</h2>
-      <table style={table}>
+      <table className={legacy.table}>
         <thead><tr><th>Name</th><th>Type</th><th>Source</th></tr></thead>
         <tbody>{s.names.map((n) => (
           <tr key={`${n.name}|${n.nameType}`}><td>{n.name}</td><td>{n.nameType}</td><td>{n.source}</td></tr>))}</tbody>
       </table>
 
       <h2>Codes</h2>
-      <table style={table}>
+      <table className={legacy.table}>
         <thead><tr><th>System</th><th>Code</th><th>Route</th><th>Source</th><th>Method</th><th>Confidence</th></tr></thead>
         <tbody>{s.codes.map((c) => (
           <tr key={`${c.system}|${c.code}`}><td>{c.system}</td><td>{c.code}</td><td>{c.routeScope}</td><td>{c.source}</td>
@@ -58,7 +58,7 @@ export default async function SubstancePage({ params, searchParams }: {
       {s.interactions.length === 0 ? <p>{empty}</p> : groupBySeverity(s.interactions).map(([sev, xs]) => (
         <section key={sev}>
           <h3>{`${severityLabel(sev)} (${xs.length})`}</h3>
-          <table style={table}>
+          <table className={legacy.table}>
             <thead><tr><th>With</th><th>Actions</th><th>Entry route</th></tr></thead>
             <tbody>{xs.map((x, n) => (
               <tr key={`${x.partnerName}|${x.routeScope}|${n}`}>
@@ -73,7 +73,7 @@ export default async function SubstancePage({ params, searchParams }: {
 
       <h2>Diseases</h2>
       {s.diseases.length === 0 ? <p>{empty}</p> : (
-        <table style={table}>
+        <table className={legacy.table}>
           <thead><tr><th>Disease</th><th>Severity</th><th>Text</th></tr></thead>
           <tbody>{s.diseases.map((d) => (
             <tr key={`${d.interactionId}|${d.routeScope}`}><td>{d.diseaseName}</td><td>{severityText(d.severity)}</td>
@@ -82,12 +82,12 @@ export default async function SubstancePage({ params, searchParams }: {
 
       <h2>Foods</h2>
       {s.foods.length === 0 ? <p>{empty}</p> : (
-        <table style={table}>
+        <table className={legacy.table}>
           <thead><tr><th>Food</th><th>Severity</th><th>Description</th><th>Management</th></tr></thead>
           <tbody>{s.foods.map((f) => (
             <tr key={`${f.interactionId}|${f.routeScope}`}><td>{f.food}</td><td>{severityText(f.severity)}</td>
               <td>{ddinterText(f.description) || NO_INTERACTION_TEXT}</td>
-              <td>{ddinterText(f.management) || NO_MANAGEMENT_TEXT}</td></tr>))}</tbody>
+              <td>{ddinterText(f.management) || NO_MANAGEMENT}</td></tr>))}</tbody>
         </table>)}
 
       <h2>Products using it</h2>

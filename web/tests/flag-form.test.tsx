@@ -34,4 +34,11 @@ describe("FlagForm", () => {
     expect(renderToStaticMarkup(<FlagForm session={null} targetType="product" targetId="P" outcome="forbidden" />))
       .toContain("Sign in to flag a problem.");
   });
+
+  it("the flag form's Turnstile script carries the CSP nonce and the widget names action=flag (§9.4)", () => {
+    const html = renderToStaticMarkup(
+      <FlagForm session={{ email: "u@x.org", role: "user" }} targetType="product" targetId="P-1" nonce="n0nce123" />);
+    expect(html).toMatch(/<script[^>]*src="https:\/\/challenges\.cloudflare\.com\/turnstile\/v0\/api\.js"[^>]*nonce="n0nce123"/);
+    expect(html).toContain('data-action="flag"');
+  });
 });

@@ -1,36 +1,21 @@
 import "server-only";
 import { cookies } from "next/headers";
-import { SignJWT, jwtVerify } from "jose";
 import { ROLES, roleFor, type Role } from "./reviewers";
+import { SESSION_TTL_SECONDS, decryptSession, encryptSession, sessionCookieName, sessionKey } from "./session-crypto";
 
-export type Session = { email: string; role: Role };
+export { LEGACY_SESSION_COOKIE, SESSION_TTL_SECONDS, sessionCookieName } from "./session-crypto";
 
-export const SESSION_COOKIE = "bddrug_session";
-export const SESSION_TTL_SECONDS = 8 * 60 * 60;
-const MIN_SECRET_LENGTH = 32;
+/** `name` is the Google display name (shown to its owner only, in the account menu). */
+export type Session = { email: string; role: Role; name?: string };
 
 /** Throws when SESSION_SECRET is unset or shorter than 32 characters. The message never contains the secret. */
 export function assertSessionSecret(): void {
   sessionKey();
 }
 
-function sessionKey(): Uint8Array {
-  const secret = process.env.SESSION_SECRET ?? "";
-  if (secret.length < MIN_SECRET_LENGTH) {
-    throw new Error(`SESSION_SECRET must be at least ${MIN_SECRET_LENGTH} characters (generate one with: openssl rand -hex 32)`);
-  }
-  return new TextEncoder().encode(secret);
-}
-
-/** The signed session JWT (HS256, `{email, role}`, expires after 8 h). */
+/** The encrypted session JWT (JWE dir + A256GCM, `{email, name, role}`, 8 h). */
 export async function createSessionCookie(session: Session): Promise<string> {
-  const key = sessionKey();
-  const now = Math.floor(Date.now() / 1000);
-  return new SignJWT({ email: session.email, role: session.role })
-    .setProtectedHeader({ alg: "HS256", typ: "JWT" })
-    .setIssuedAt(now)
-    .setExpirationTime(now + SESSION_TTL_SECONDS)
-    .sign(key);
+  return encryptSession({ email: session.email, name: session.name ?? "", role: session.role });
 }
 
 export function sessionCookieOptions() {
@@ -44,28 +29,20 @@ export function sessionCookieOptions() {
 }
 
 /**
- * Verifies a session JWT. Returns null when it is forged, tampered, expired or malformed.
- * The role is re-checked against the current REVIEWERS list: a reviewer removed from the list (or moved to another
- * role) drops to `user` at once instead of keeping the signed role for the rest of the 8 h. A role is never raised.
+ * Decrypts a session JWE. Null when it is forged, tampered, expired or malformed. The role is re-checked against
+ * the current REVIEWERS list: it can drop to `user`, never rise.
  */
 export async function verifySessionToken(token: string): Promise<Session | null> {
-  const key = sessionKey();
-  let payload: Record<string, unknown>;
-  try {
-    ({ payload } = await jwtVerify(token, key, { algorithms: ["HS256"], requiredClaims: ["exp", "iat"] }));
-  } catch {
-    return null;
-  }
-  const { email, role } = payload;
-  if (typeof email !== "string" || !email.includes("@")) return null;
-  if (typeof role !== "string" || !(ROLES as readonly string[]).includes(role)) return null;
-  const effective: Role = role !== "user" && roleFor(email) === role ? (role as Role) : "user";
-  return { email, role: effective };
+  const claims = await decryptSession(token);
+  if (!claims || !(ROLES as readonly string[]).includes(claims.role)) return null;
+  const role = claims.role as Role;
+  const effective: Role = role !== "user" && roleFor(claims.email) === role ? role : "user";
+  return { email: claims.email, name: claims.name, role: effective };
 }
 
-/** The current visitor's session from the `bddrug_session` cookie, or null. */
+/** The visitor's session from the IntelliDrugs session cookie, or null. The old bddrug_session cookie is ignored. */
 export async function getSession(): Promise<Session | null> {
-  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  const token = (await cookies()).get(sessionCookieName())?.value;
   if (!token) return null;
   return verifySessionToken(token);
 }

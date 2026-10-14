@@ -10,3 +10,6 @@ build/
 *.egg-info/
 deploy/docker-compose.override.yml
 *.tsbuildinfo
+web/test-results/
+web/playwright-report/
+web/.lighthouseci/
