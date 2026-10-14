@@ -1,11 +1,11 @@
 "use client";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useMemo, type ReactNode } from "react";
 import Button from "@/components/ui/Button";
 import Kbd from "@/components/ui/Kbd";
 import { fill } from "@/lib/copy";
 import { DESK } from "@/lib/review-copy";
 import CompleteView from "./CompleteView";
-import { useDesk, type RecordRegistration } from "./context";
+import { useDesk, type HeldRecord, type RecordRegistration } from "./context";
 import DecisionBar from "./DecisionBar";
 import { recordHref } from "./hrefs";
 import ListSearch from "./ListSearch";
@@ -15,14 +15,16 @@ import styles from "../desk.module.css";
 
 /**
  * Island (§4.2): hands the record page's data to the persistent ReviewDesk and renders the panes. While the open record is
- * stale it renders the detail subtree the desk holds for viewedVersion, never the refreshed one (§5.11).
+ * stale it renders the detail and the evidence the desk holds for viewedVersion, never the refreshed ones (§5.11).
  */
 export default function DeskRecordContext({ reg, filters, evidence, fallbackWidget, confirm, emptyText, pane, children }: {
   reg: RecordRegistration; filters: ReactNode; evidence: ReactNode; fallbackWidget: ReactNode; confirm: ReactNode;
   emptyText: string | null; pane: "list" | null; children: ReactNode;
 }) {
   const desk = useDesk();
-  useEffect(() => { desk.register(reg, children); }, [reg, children]); // eslint-disable-line react-hooks/exhaustive-deps
+  const held = useMemo<HeldRecord>(() => ({ detail: children, evidence }), [children, evidence]);
+  useEffect(() => { desk.register(reg, held); }, [reg, held]); // eslint-disable-line react-hooks/exhaustive-deps
+  const shown = desk.subtree(reg.conceptId, reg.version, held);
   const stale = desk.staleFor(reg.conceptId);
   const count = reg.rows.length === reg.total ? fill(DESK.listCount, { n: reg.total }) : fill(DESK.listCountFiltered, { v: reg.rows.length, n: reg.total });
   return (
@@ -53,9 +55,9 @@ export default function DeskRecordContext({ reg, filters, evidence, fallbackWidg
           <div className={styles.dScroll} tabIndex={-1} inert={desk.drawerOpen || undefined}>
             {stale && <StaleBanner name={reg.tradeName} reason={stale} />}
             {confirm}
-            {desk.complete ? <CompleteView /> : desk.subtree(reg.conceptId, reg.version, children)}
+            {desk.complete ? <CompleteView /> : shown.detail}
             {!desk.ready && (
-              <details id="evidence" className={styles.evidenceFallback}><summary>{DESK.evidence}</summary><div className="drawer-b">{evidence}</div></details>
+              <details id="evidence" className={styles.evidenceFallback}><summary>{DESK.evidence}</summary><div className="drawer-b">{shown.evidence}</div></details>
             )}
           </div>
           {desk.ready && (
@@ -65,7 +67,7 @@ export default function DeskRecordContext({ reg, filters, evidence, fallbackWidg
                   <p>{fill(DESK.drawerSub, { name: reg.tradeName, k: reg.index, n: reg.total })}</p></div>
                 <Button variant="plain" size="sm" data-fk="drawer-close" onClick={() => desk.toggleDrawer(false)}>{DESK.close} <Kbd keys="Esc" /></Button>
               </div>
-              <div className="drawer-b">{evidence}</div>
+              <div className="drawer-b">{shown.evidence}</div>
             </aside>
           )}
         </div>

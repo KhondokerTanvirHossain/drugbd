@@ -102,8 +102,7 @@ describe("the decision bar rendered from desk state (§5.7)", () => {
 
 describe("DeskRecordContext (§4.2, §5.11)", () => {
   it("registers the record with the desk and renders the subtree the desk holds", () => {
-    const held = <p>napa as opened</p>;
-    const desk = stubDesk(NAPA, { staleFor: () => "rerun", subtree: () => held });
+    const desk = stubDesk(NAPA, { staleFor: () => "rerun", subtree: () => ({ detail: <p>napa as opened</p>, evidence: <p>evidence as opened</p> }) });
     render(<WithDesk desk={desk}>
       <DeskRecordContext reg={NAPA} filters={null} evidence={<p>evidence body</p>} fallbackWidget={null} confirm={null} emptyText={null} pane={null}>
         <p>napa after the re-run</p>
@@ -114,6 +113,44 @@ describe("DeskRecordContext (§4.2, §5.11)", () => {
     expect(screen.queryByText("napa after the re-run")).toBeNull();
     expect(screen.getByText("This record changed — reload to review the latest data")).toBeTruthy();
     expect(document.getElementById("drawer")!.hidden).toBe(true);
+  });
+
+  it("registers the detail and the evidence as one held pair (§5.11)", () => {
+    const desk = stubDesk(NAPA);
+    render(<WithDesk desk={desk}>
+      <DeskRecordContext reg={NAPA} filters={null} evidence={<p>evidence body</p>} fallbackWidget={null} confirm={null} emptyText={null} pane={null}>
+        <p>napa detail</p>
+      </DeskRecordContext>
+    </WithDesk>);
+    expect(desk.register).toHaveBeenCalledWith(NAPA, { detail: expect.anything(), evidence: expect.anything() });
+    const held = (desk.register as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    expect(held.detail.props.children).toBe("napa detail");
+    expect(held.evidence.props.children).toBe("evidence body");
+  });
+
+  it("while stale the drawer keeps the evidence the desk holds, never the re-run's (§5.11)", () => {
+    const desk = stubDesk(NAPA, { staleFor: () => "rerun", drawerOpen: true,
+      subtree: () => ({ detail: <p>napa as opened</p>, evidence: <p>evidence as opened</p> }) });
+    render(<WithDesk desk={desk}>
+      <DeskRecordContext reg={NAPA} filters={null} evidence={<p>evidence after the re-run</p>} fallbackWidget={null} confirm={null} emptyText={null} pane={null}>
+        <p>napa after the re-run</p>
+      </DeskRecordContext>
+    </WithDesk>);
+    const drawer = document.getElementById("drawer")!;
+    expect(drawer.hidden).toBe(false);
+    expect(drawer.textContent).toContain("evidence as opened");
+    expect(document.body.textContent).not.toContain("evidence after the re-run");
+  });
+
+  it("before the desk runs the evidence fallback renders the held evidence too", () => {
+    const desk = stubDesk(NAPA, { ready: false, subtree: () => ({ detail: <p>napa as opened</p>, evidence: <p>evidence as opened</p> }) });
+    render(<WithDesk desk={desk}>
+      <DeskRecordContext reg={NAPA} filters={null} evidence={<p>evidence after the re-run</p>} fallbackWidget={null} confirm={null} emptyText={null} pane={null}>
+        <p>napa after the re-run</p>
+      </DeskRecordContext>
+    </WithDesk>);
+    expect(document.getElementById("evidence")!.textContent).toContain("evidence as opened");
+    expect(document.body.textContent).not.toContain("evidence after the re-run");
   });
 
   it("the complete view replaces the record; an empty view offers Show all", () => {

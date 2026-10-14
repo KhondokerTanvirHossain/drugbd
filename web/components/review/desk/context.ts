@@ -25,6 +25,12 @@ export type RecordRegistration = {
   complete: boolean;
 };
 
+/**
+ * The record's detail and its evidence, held together for one version (§5.11): while the open record is stale the desk
+ * keeps rendering the pair it received for viewedVersion, so the evidence drawer never shows content the detail does not.
+ */
+export type HeldRecord = { detail: ReactNode; evidence: ReactNode };
+
 export type DeskApi = {
   ready: boolean; batchId: string; role: ReviewerRole; total: number; singleKeys: boolean; undoSeconds: number;
   machine: MachineState; bar: BarCtx; complete: boolean; hint: string | null; botState: "checking" | "passed" | "failed";
@@ -33,8 +39,8 @@ export type DeskApi = {
   staleFor(conceptId: string): "rerun" | "other" | null;
   netErrFor(conceptId: string): "no" | "unknown" | null;
   statusFor(conceptId: string, fallback: DisplayStatus): DisplayStatus;
-  register(reg: RecordRegistration, node: ReactNode): void;
-  subtree(conceptId: string, version: Version, node: ReactNode): ReactNode;
+  register(reg: RecordRegistration, held: HeldRecord): void;
+  subtree(conceptId: string, version: Version, held: HeldRecord): HeldRecord;
   reloadOpen(): void;
   pressApprove(): void; clickReport(): void; closeReport(focusBack: boolean, discard: boolean): void;
   setNote(v: string): void; sendReport(): void; undo(): void; tryAgain(): void; retryCheck(): void;
