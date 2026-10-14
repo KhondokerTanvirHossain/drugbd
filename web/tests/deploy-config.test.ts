@@ -12,6 +12,9 @@ describe("deploy configuration (§12.4)", () => {
     expect(webService()).toContain("SITE_HOST: ${SITE_HOST}\n");
     expect(webService()).toContain("HERO_CONCEPT_ID: ${HERO_CONCEPT_ID:-}\n");
   });
+  it("caps the web container's json-file logs, so 429 log lines cannot grow the shared host's disk without limit", () => {
+    expect(webService()).toContain('\n    logging: {driver: json-file, options: {max-size: "10m", max-file: "5"}}\n');
+  });
   it("deploy/docker-compose.yml never sets INTELLIDRUGS_E2E (§11.4)", () => {
     expect(repo("deploy/docker-compose.yml")).not.toContain("INTELLIDRUGS_E2E");
   });

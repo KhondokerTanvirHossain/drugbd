@@ -61,6 +61,9 @@ services:
       HERO_CONCEPT_ID: ${HERO_CONCEPT_ID:-}
     depends_on: [api]
     mem_limit: 256m
+    # Every 429 the middleware ends writes a log line, so anyone over the limit sets the log growth rate.
+    # Cap it here: the shared host's daemon keeps json-file logs without limit.
+    logging: {driver: json-file, options: {max-size: "10m", max-file: "5"}}
     networks:
       internal: {}
       edge: {aliases: [bddrug-web]}
