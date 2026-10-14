@@ -193,6 +193,9 @@ export function step(s: MachineState, e: Event): { state: MachineState; effects:
       if (c.kind !== "armed" || e.now < c.deadline) return { state: s, effects: [] };
       return { state: { ...s, commit: { kind: "committing", op: c.op } }, effects: [{ type: "send", channel: "commit", op: c.op }] };
     case "SEND_REPORT": {
+      // One report at a time, as PRESS_A ignores a press while the commit is not idle: a report still sending, in a bot
+      // hold or failed keeps its own op and requestId, so its outcome and Try again stay its own (§5.8.2 D45, §5.10).
+      if (s.report.kind !== "idle") return { state: s, effects: [] };
       const { s: next } = cancelWindow(s, e.op.conceptId);
       // §5.8.5: only error-callback (or 10 s without a token, which the send reports as CAPTCHA) is a bot failure.
       // "pending" sends now; the desk's freshToken waits up to TOKEN_WAIT_MS for the token.

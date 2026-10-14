@@ -275,3 +275,50 @@ describe("reports (§5.10)", () => {
     expect(run(r.state, { type: "TRY_AGAIN", channel: "report" }).state.report.kind).toBe("sending");
   });
 });
+
+describe("one report at a time (§5.8.2 D45, §5.10; Task 10 Ruling)", () => {
+  const X = op({ decision: "issue", note: "wrong strength" });
+  const Y = op({ conceptId: "186-0031-001--aspirin", name: "Aspirin", decision: "issue", note: "wrong route",
+    requestId: "7d2e4b10-3c5a-4f8e-9b61-2a7c9e0d4f33" });
+
+  it("a report on X that is unconfirmed: Send report on Y changes nothing, and Try again still resends X's own requestId", () => {
+    const err = run(initialMachine(8), { type: "SEND_REPORT", op: X, token: "held" },
+      { type: "RESULT", channel: "report", result: toOutcome("network") }).state;
+    expect(err.report).toEqual({ kind: "netErr", op: X, saved: "unknown" });
+    // An open window on Y is not cancelled by the ignored press either.
+    const withWindow = run(err, { type: "PRESS_A", op: op({ conceptId: Y.conceptId, name: Y.name }), token: "held", now: 0 }).state;
+    for (const s of [err, withWindow]) {
+      const r = run(s, { type: "SEND_REPORT", op: Y, token: "held" });
+      expect(r.state).toEqual(s);
+      expect(r.effects).toEqual([]);
+      expect(unconfirmedOn(r.state, X.conceptId)).toBe(true);
+      expect(unconfirmedOn(r.state, Y.conceptId)).toBe(false);
+      const again = run(r.state, { type: "TRY_AGAIN", channel: "report" });
+      expect(sends(again.effects)).toEqual([{ type: "send", channel: "report", op: X }]);
+      expect(again.effects.flatMap((e) => (e.type === "send" ? [e.op.requestId] : []))).toEqual([X.requestId]);
+    }
+  });
+
+  it("a report on X that is sending: Send report on Y sends nothing, and the OK is X's save, never Y's", () => {
+    const sending = run(initialMachine(8), { type: "SEND_REPORT", op: X, token: "held" }).state;
+    const pressed = run(sending, { type: "SEND_REPORT", op: Y, token: "held" });
+    expect(pressed.state).toEqual(sending);
+    expect(sends(pressed.effects)).toEqual([]);
+    const ok = run(pressed.state, { type: "RESULT", channel: "report",
+      result: toOutcome({ ok: true, outcome: { ...OUT, displayStatus: "issue" } }) });
+    expect(ok.effects).toContainEqual({ type: "saved", channel: "report", op: X, outcome: { ...OUT, displayStatus: "issue" } });
+    expect(texts(ok.effects, "announce")).toEqual(["Issue reported for Napa. An engineer will see your note."]);
+    const viewed = ok.effects.reduce(applySaved, { [X.conceptId]: V1, [Y.conceptId]: V1 });
+    expect(viewed[X.conceptId]).toEqual(OUT.version);
+    expect(viewed[Y.conceptId]).toBe(V1);
+  });
+
+  it("a report on X in a bot hold: Send report on Y keeps X's hold, and Retry sends X", () => {
+    const hold = run(initialMachine(8), { type: "SEND_REPORT", op: X, token: "failed" }).state;
+    expect(hold.report).toEqual({ kind: "botHold", op: X });
+    const r = run(hold, { type: "SEND_REPORT", op: Y, token: "held" });
+    expect(r.state).toEqual(hold);
+    expect(r.effects).toEqual([]);
+    expect(sends(run(r.state, { type: "RETRY_OK", now: 0 }).effects)).toEqual([{ type: "send", channel: "report", op: X }]);
+  });
+});
