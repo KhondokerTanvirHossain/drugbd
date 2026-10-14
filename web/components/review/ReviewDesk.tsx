@@ -88,6 +88,7 @@ export default function ReviewDesk(props: ReviewDeskProps) {
   const navStart = useRef<number | null>(null);
   /** A record navigation is in flight: the bar is "loading" and A does nothing (§5.7, §5.8.4) until the record registers. */
   const navigating = useRef(false);
+  const [, setNavTick] = useState(0);   // a ref alone does not render: this puts the bar into its loading state while the record loads
   /** Reload record was pressed before the refreshed props arrived (the poll found the change); see register(). */
   const reloading = useRef(new Set<string>());
   /** The version that made a record stale, so the reviewer's own save that it turns out to be can clear it (D45). */
@@ -330,7 +331,11 @@ export default function ReviewDesk(props: ReviewDeskProps) {
     const prev = openRef.current;
     openRef.current = reg;
     setOpen(reg);
-    if (prev?.conceptId === reg.conceptId) return;
+    if (prev?.conceptId === reg.conceptId) {
+      // Same record, new filter or search (Show all): the list is what changed, so focus goes where navigate() asked.
+      if (focusAfterNav.current !== null && navStart.current !== null) { requestFocus(focusAfterNav.current || "desk"); focusAfterNav.current = null; navStart.current = null; }
+      return;
+    }
     reloading.current.clear();
     setDone(reg.complete);
     if (pendingGuard.current === reg.conceptId) setGuard({ conceptId: reg.conceptId, at: performance.now() });
@@ -358,7 +363,14 @@ export default function ReviewDesk(props: ReviewDeskProps) {
     focusAfterNav.current = focusKey ?? (a && root.current?.contains(a) ? (a.getAttribute("data-fk") ?? "") : null);
     navStart.current = performance.now();
     navigating.current = true;
-    router.push(href, { scroll: false });
+    setNavTick((n) => n + 1);
+    if (url.pathname === window.location.pathname) {
+      // Same record, new filter or search (a filter, Show all): Next 15.5's router drops the answer to a push that changes only
+      // the query string (it patches the page segment as `__PAGE__?{…}` but seeds `__PAGE__`), so the URL is set directly,
+      // which Next adopts as its own, and the server components are refetched for it. Found by the review e2e.
+      window.history.pushState(null, "", href);
+      window.setTimeout(() => router.refresh(), 0);   // after Next has taken the new URL as its canonical one
+    } else router.push(href, { scroll: false });
   }
 
   function move(delta: 1 | -1 | "first" | "last") {

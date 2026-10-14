@@ -61,6 +61,13 @@
   .sideDisclosure { display: block; }
   .toastWrap { left: 16px; }
 }
+@media (max-width: 639px) {
+  /* §10.4 reflow at 320 px: the toolbar wraps instead of overflowing, and its grid row grows with it. */
+  .app { grid-template-rows: auto minmax(0, 1fr); }
+  .app .toolbar { flex-wrap: wrap; height: auto; min-height: 52px; padding-block: 6px; row-gap: 6px; }
+  .center { margin: 0; flex-wrap: wrap; gap: 8px; }
+  .right { flex-wrap: wrap; gap: 8px; }
+}
 @media (max-width: 1023px) {
   .app { height: auto; min-height: 100dvh; overflow: visible; }
   .panes { grid-template-columns: minmax(0, 1fr); height: auto; }

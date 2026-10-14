@@ -10,7 +10,7 @@ import styles from "../desk.module.css";
 
 /**
  * §5.4: the server's <ul> of <a href> rows (works without JavaScript); once the desk runs it becomes a listbox of options
- * whose links leave the tab order and the accessibility tree, so no option holds a focusable element.
+ * whose links lose their href (the option's click navigates), so no option holds a focusable element (axe nested-interactive).
  */
 export default function RecordListbox({ reg }: { reg: RecordRegistration }) {
   const desk = useDesk();
@@ -31,7 +31,7 @@ export default function RecordListbox({ reg }: { reg: RecordRegistration }) {
         return (
           <li key={row.conceptId} id={`opt-${row.index}`} className={`rec${isOpen ? " is-selected" : ""}`}
             {...(up ? { role: "option", "aria-selected": isOpen, onClick: () => { desk.navigate(row.href); list.current?.focus(); } } : {})}>
-            <a href={row.href} className={styles.recLink} aria-current={!up && isOpen ? "page" : undefined}
+            <a href={up ? undefined : row.href} className={styles.recLink} aria-current={!up && isOpen ? "page" : undefined}
               {...(up ? { tabIndex: -1, role: "presentation", onClick: (e: React.MouseEvent) => e.preventDefault() } : {})}>
               <span className="rec-ix">{row.index}</span>
               <span className="rec-name">{row.tradeName}</span>
