@@ -5,6 +5,7 @@ import { accountKey, clientIp, secondsUntilDhakaMidnight } from "@/lib/rate-limi
 import { logRequest, routeTemplate } from "@/lib/request-log";
 import { AUTH_PROXY_PREFIX, nextWithSecurityHeaders } from "@/lib/security-headers";
 import { LEGACY_SESSION_COOKIE, decryptSession, sessionCookieName } from "@/lib/session-crypto";
+import { legacyRedirect, reviewGate } from "@/lib/surface";
 
 const NO_STORE = "private, no-store";
 const VERSIONS = /^\/review\/[^/]+\/versions$/;
@@ -39,6 +40,9 @@ export function createMiddleware(limits: Limits, now: () => number = Date.now) {
     const ip = clientIp(request.headers);
     if (!limits.perIp.allow(ip)) return tooMany(1);
 
+    const legacy = legacyRedirect(request.nextUrl);
+    if (legacy) return NextResponse.redirect(new URL(legacy, request.url), 308);
+
     if (request.method === "POST" && path === "/api/session" && !limits.signIn.allow(ip)) {
       return NextResponse.json(
         { success: false, data: null, message: SIGN_IN_RATE_LIMITED, errors: [{ code: "RATE_LIMITED", message: SIGN_IN_RATE_LIMITED }] },
@@ -51,6 +55,8 @@ export function createMiddleware(limits: Limits, now: () => number = Date.now) {
 
     const email = await sessionEmail(request);
     const account = email ? accountKey(email) : null;
+    const gate = reviewGate(path, request.nextUrl.search, request.method, email !== null);
+    if (gate) return NextResponse.redirect(new URL(gate, request.url), 307);
     if (VERSIONS.test(path)) {
       if (account && !limits.versions.allow(account)) return tooMany(5);
     } else if (isPage(request, path)) {
