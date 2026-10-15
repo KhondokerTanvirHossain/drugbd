@@ -99,7 +99,7 @@ export default function InteractionsChapter({ ctx }: { ctx: LearnContext }) {
                     ) : (
                       <>
                         <td>{s.entries.map((e, i) => <span key={e.id}>{i > 0 && <br />}<span className="mono">{e.id}</span> {e.route}</span>)}</td>
-                        <td><div className={styles.stack}><span className="num">{s.drugDrug.total} records</span>{LEVELS.map((l) => <Severity key={l} level={l} count={s.drugDrug[l]} />)}</div></td>
+                        <td><div className={styles.stack}><span className="num">{s.drugDrug.total} records</span>{LEVELS.map((l) => <Severity key={l} level={l} count={s.drugDrug[l]} />)}{s.countedEntry && <span className={styles.small}>Counted for <span className="mono">{s.countedEntry.id}</span> {s.countedEntry.route}, the entry {S.records[s.product].tradeName} uses.</span>}</div></td>
                         <td className="num">{s.disease}</td>
                         <td className="num">{s.food}</td>
                         <td><NeutralTag /></td>

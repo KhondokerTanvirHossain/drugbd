@@ -32,6 +32,16 @@ const DATA = JSON.parse(/var DATA=(\{[\s\S]*?\});\n/.exec(html)![1]) as { items:
 const DROPPED = "DDInter351";
 const key = (a: string, b: string) => [a, b].sort().join("/");
 const boardPair = (a: string, b: string) => DATA.pilotPairs.find((p) => key(p.ida, p.idb) === key(a, b))!;
+/**
+ * Product owner, 2026-10-15: chapter 6 counts Chloramphenicol by the eye drops' route-scoped entry, as the desk does. Board R
+ * carries only the sum of its three entries, so these are the per-entry counts read from production (read-only, counted
+ * the way IngredientSummaryReader does); they must add up to Board R's sum.
+ */
+const CHLORAMPHENICOL_ENTRIES = {
+  DDInter351: { major: 47, moderate: 421, minor: 21, unknown: 49, total: 538, disease: 3, food: 0 },
+  DDInter352: { major: 1, moderate: 111, minor: 0, unknown: 0, total: 112, disease: 1, food: 0 },
+  DDInter353: { major: 0, moderate: 4, minor: 0, unknown: 0, total: 4, disease: 2, food: 0 },
+} as const;
 const ddinterParts = (it: BoardItem) => (it.stages.ddinter.note ?? "").split("; ").filter((p) => p !== "" && !p.includes(DROPPED));
 
 describe("the pilot snapshot against Board R's pilot export", () => {
@@ -81,9 +91,31 @@ describe("the pilot snapshot against Board R's pilot export", () => {
       expect(s.codes).toEqual({ icd11: codes("ICD11_XM")[0], rxcui: codes("RXCUI")[0], atc: codes("ATC"), drugbank: codes("DRUGBANK")[0],
         snomed: codes("SNOMEDCT") });
       expect(s.entries).toEqual(i.codes.filter((c) => c.system === "DDINTER").map((c) => ({ id: c.code, route: c.route })));
+      expect(s.coverage).toBe(i.coverage.coverage);
+      if (s.countedEntry) continue;  // checked against its own entry below
       expect(s.drugDrug).toEqual({ major: i.ddi.major, moderate: i.ddi.moderate, minor: i.ddi.minor, unknown: i.ddi.unknown, total: i.ddi.total });
-      expect([s.disease, s.food, s.coverage]).toEqual([i.disease, i.food, i.coverage.coverage]);
+      expect([s.disease, s.food]).toEqual([i.disease, i.food]);
     }
+  });
+
+  it("counts Chloramphenicol by DDInter352 (ophthalmic) only: 112 records, as the desk does; the three entries sum to Board R's 654", () => {
+    expect(S.substances.filter((s) => s.countedEntry).map((s) => s.name)).toEqual(["Chloramphenicol"]);
+    const s = substanceNamed("Chloramphenicol");
+    const it = DATA.items.find((x) => x.conceptId === s.product)!;
+    const i = it.ingredients.find((x) => x.bds === s.bdsId)!;
+    expect(s.countedEntry).toEqual({ id: "DDInter352", route: it.clinical.route });
+    expect(s.entries).toContainEqual(s.countedEntry);
+    const { disease, food, ...drugDrug } = CHLORAMPHENICOL_ENTRIES.DDInter352;
+    expect(s.drugDrug).toEqual(drugDrug);
+    expect([s.disease, s.food]).toEqual([disease, food]);
+    expect(s.drugDrug.total).toBe(112);
+    const all = Object.values(CHLORAMPHENICOL_ENTRIES);
+    const sum = (k: keyof (typeof all)[number]) => all.reduce((n, e) => n + e[k], 0);
+    expect(Object.keys(CHLORAMPHENICOL_ENTRIES)).toEqual(s.entries.map((e) => e.id));
+    expect({ major: sum("major"), moderate: sum("moderate"), minor: sum("minor"), unknown: sum("unknown"), total: sum("total") }).toEqual(i.ddi);
+    expect([sum("disease"), sum("food")]).toEqual([i.disease, i.food]);
+    // None of its 112 pairs is with a pilot drug (§1.6 item 5): Board R has no DDInter352 pilot pair.
+    expect(DATA.pilotPairs.filter((p) => p.ida === s.countedEntry!.id || p.idb === s.countedEntry!.id)).toEqual([]);
   });
 
   it("its 28 pairs are Board R's pilot pairs without the DDInter351 ones (§1.6 items 5 and 10)", () => {

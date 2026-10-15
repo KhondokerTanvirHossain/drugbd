@@ -86,6 +86,14 @@ describe("chapter 6, Interactions explained", () => {
     expect(html).toContain('style="--w:138"');
   });
 
+  it("the per-substance table counts Chloramphenicol by DDInter352 (ophthalmic) only: 112 records, as the desk does", () => {
+    const html = ints();
+    expect(html).not.toContain("654 records");
+    expect(html).toContain('<span class="num">112 records</span><span class="sev sev--major">Major <b class="sev-n">1</b></span><span class="sev sev--moderate">Moderate <b class="sev-n">111</b></span>');
+    expect(html).toContain('<span class="small">Counted for <span class="mono">DDInter352</span> ophthalmic, the entry Chloramphenicol uses.</span>');
+    expect(html.match(/Counted for /g)).toHaveLength(1);
+  });
+
   it("coverage: not run is its own state with NOT_RUN (§3.6)", () => {
     expect(ints()).toContain(`is a different state: &quot;${NOT_RUN}&quot;.`);
   });

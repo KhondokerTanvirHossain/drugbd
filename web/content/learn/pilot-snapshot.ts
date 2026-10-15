@@ -33,6 +33,11 @@ export type DrugDrugCounts = { major: number; moderate: number; minor: number; u
 export type PilotSubstance = {
   bdsId: string; name: string; product: PilotId; codes: SubstanceCodes; entries: { id: string; route: string }[];
   drugDrug: DrugDrugCounts; disease: number; food: number; coverage: "full" | "none";
+  /**
+   * Set when the substance has several route-scoped entries: the one entry the pilot product's route uses, and the only
+   * one `drugDrug`, `disease` and `food` count, as the reviewer desk does (IngredientSummaryReader, per entry).
+   */
+  countedEntry?: { id: string; route: string };
 };
 export type PilotPair = { a: string; b: string; ddinterA: string; ddinterB: string; severity: Severity; action: string };
 export type TextMissingPair = { a: string; b: string; ddinterA: string; ddinterB: string };
@@ -135,7 +140,10 @@ export const PILOT_SNAPSHOT: PilotSnapshot = {
       codes: { icd11: "XM2TE7", rxcui: "2348", atc: ["D06AX02", "D10AF03", "G01AA05", "J01BA01", "S01AA01", "S02AA01", "S03AA08"],
         drugbank: "DB00446", snomed: ["372777009", "57191001"] },
       entries: [{ id: "DDInter351", route: "systemic" }, { id: "DDInter352", route: "ophthalmic" }, { id: "DDInter353", route: "otic" }],
-      drugDrug: { major: 48, moderate: 536, minor: 21, unknown: 49, total: 654 }, disease: 6, food: 0, coverage: "full" },
+      // Product owner, 2026-10-15: the eye drops count only their route-scoped entry DDInter352 (ophthalmic, §1.6 item 3),
+      // as the desk shows it; production curated.ddinter_pair/_disease/_food, read-only. Board R's 654 sums all three entries.
+      countedEntry: { id: "DDInter352", route: "ophthalmic" },
+      drugDrug: { major: 1, moderate: 111, minor: 0, unknown: 0, total: 112 }, disease: 1, food: 0, coverage: "full" },
     { bdsId: "BDS-000010", name: "Domperidone", product: P.domperidone,
       codes: { icd11: "XM3GF5", rxcui: "3626", atc: ["A03FA03"], drugbank: "DB01184", snomed: ["32955006", "387181004"] },
       entries: [], drugDrug: { major: 0, moderate: 0, minor: 0, unknown: 0, total: 0 }, disease: 0, food: 0, coverage: "none" },
