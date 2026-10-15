@@ -20,7 +20,8 @@ import styles from "./LearnShell.module.css";
  * theme control), the chapter nav (links with aria-current="page" and the live nav note), one reading column ending in
  * Board L's footer, and the "On this page" rail with the LearnRail island. The root layout adds no chrome here, so the
  * shell also renders the page's one polite, sr-only live region (§10.2). With `ctx` null (§6.8 "Stats unavailable")
- * it leaves out the nav note and the rail, the two parts that need /v1/stats or a chapter body.
+ * it leaves out the nav note and the rail, the two parts that need /v1/stats or a chapter body; the nav note is also
+ * left out while /v1/stats does not report the pilot batch.
  */
 export default function LearnShell({ slug, ctx, theme, children }: { slug: ChapterSlug; ctx: LearnContext | null; theme: Theme; children: ReactNode }) {
   const chapter = chapterBySlug(slug)!;
@@ -48,7 +49,8 @@ export default function LearnShell({ slug, ctx, theme, children }: { slug: Chapt
               </li>
             ))}
           </ol>
-          {ctx && <div className={styles.navNote}><BatchNote ctx={ctx} /></div>}
+          {/* §6.8 "Approval-state sentences": the note states the batch's count and state, so only while /v1/stats reports it. */}
+          {ctx?.batch && <div className={styles.navNote}><BatchNote ctx={ctx} /></div>}
         </nav>
         <main id="main" className={styles.main} tabIndex={-1}>
           <div className={styles.col}>

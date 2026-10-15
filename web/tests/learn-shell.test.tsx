@@ -38,6 +38,16 @@ describe("Learn shell (Board L, §6.8)", () => {
     expect(render()).not.toContain("rv--compact");
   });
 
+  it("no nav note while /v1/stats does not report the pilot batch: no count, no pill from absence (§6.8)", () => {
+    for (const stats of [{ ...pilotStats(), batches: [] }, pilotStats({ batchId: "0002-other" })]) {
+      const nav = /<nav[^>]*aria-label="Chapters"[\s\S]*?<\/nav>/.exec(render("process", stats))![0];
+      expect(nav).not.toContain("All 0");
+      expect(nav).not.toContain("pilot records");
+      expect(nav).not.toContain('class="rv ');
+      expect(nav).not.toContain("navNote");
+    }
+  });
+
   it("one <main id=main> holding the chapter and Board L's footer with the snapshot date", () => {
     const html = render();
     expect(html.match(/<main/g)).toHaveLength(1);
