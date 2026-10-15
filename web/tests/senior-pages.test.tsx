@@ -43,7 +43,13 @@ beforeEach(() => {
 describe("access (§5.17: role senior only)", () => {
   it.each(["pharmacist", "engineer"])("a %s gets status 200, the info banner and no data", async (role) => {
     getSession.mockResolvedValue({ ...SENIOR, role });
-    for (const html of [await queue(), renderToStaticMarkup(await SubstancesPage({ searchParams: sp() })), await substancePage()]) {
+    const pages: [string, string][] = [[await queue(), "Pair queue"],
+      [renderToStaticMarkup(await SubstancesPage({ searchParams: sp() })), "Substances"], [await substancePage(), "Substances"]];
+    for (const [html, h1] of pages) {
+      // Every page has its h1 (WCAG 2.4.6), above the banner; never the substance's name, which is data (§5.17 "Access").
+      expect(html.match(/<h1>/g)).toHaveLength(1);
+      expect(html).toContain(`<main id="content" class="page"><h1>${h1}</h1><div class="banner`);
+      expect(html).not.toContain("Warfarin");
       expect(html).toContain("Senior review is for senior pharmacists.");
       expect(html).toContain("Your account reviews batches. Ask the IntelliDrugs team if you need senior access.");
       expect(html).toContain('<a class="btn btn--tonal btn--sm" href="/review">Open the review desk</a>');

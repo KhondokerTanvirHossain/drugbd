@@ -52,7 +52,7 @@ export default async function SubstancePage({ params, searchParams }: {
   const store = await cookies();
   const theme = parseTheme(store.get(THEME_COOKIE)?.value), keys = parseKeys(store.get(KEYS_COOKIE)?.value);
   if (session.role !== "senior")
-    return <SeniorShell session={session} theme={theme} keys={keys} current="substances" toReview={null}><NotSenior /></SeniorShell>;
+    return <SeniorShell session={session} theme={theme} keys={keys} current="substances" toReview={null}><NotSenior heading={SHARED_WORDS.substances} /></SeniorShell>;
   const { bdsId } = await params;
   if (bdsId.length > 64) notFound();
   const q = parseSubstanceQuery(await searchParams);

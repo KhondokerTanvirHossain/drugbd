@@ -36,9 +36,17 @@ export default function SeniorShell({ session, theme, keys, current, toReview, c
   );
 }
 
-/** §5.17 "Access": pharmacists and engineers get this banner, with status 200 and no data (§13.1 Q8). */
-export function NotSenior() {
+/**
+ * §5.17 "Access": pharmacists and engineers get this banner, with status 200 and no data (§13.1 Q8). The page keeps its
+ * h1 above it ("Pair queue" or "Substances"), never a substance's name, which would be data.
+ */
+export function NotSenior({ heading }: { heading: string }) {
   const r = P1C_COPY.review;
-  return <Banner tone="info" title={r.notAuthTitle} body={r.notAuthBody}
-    action={<a className={buttonClass("tonal", "sm")} href="/review">{DESK.openDesk}</a>} />;
+  return (
+    <>
+      <h1>{heading}</h1>
+      <Banner tone="info" title={r.notAuthTitle} body={r.notAuthBody}
+        action={<a className={buttonClass("tonal", "sm")} href="/review">{DESK.openDesk}</a>} />
+    </>
+  );
 }

@@ -20,7 +20,7 @@ export default async function SubstancesPage({ searchParams }: { searchParams: P
   const store = await cookies();
   const theme = parseTheme(store.get(THEME_COOKIE)?.value), keys = parseKeys(store.get(KEYS_COOKIE)?.value);
   if (session.role !== "senior")
-    return <SeniorShell session={session} theme={theme} keys={keys} current="substances" toReview={null}><NotSenior /></SeniorShell>;
+    return <SeniorShell session={session} theme={theme} keys={keys} current="substances" toReview={null}><NotSenior heading={SHARED_WORDS.substances} /></SeniorShell>;
   const { q, page } = parseSubstancesQuery(await searchParams);
   const data = await listSeniorSubstances(q, page);
   const r = P1C_COPY.review, t = DESK_NEW.reviewLists;

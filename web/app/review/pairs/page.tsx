@@ -26,7 +26,7 @@ export default async function PairQueuePage({ searchParams }: { searchParams: Pr
   const store = await cookies();
   const theme = parseTheme(store.get(THEME_COOKIE)?.value), keys = parseKeys(store.get(KEYS_COOKIE)?.value);
   if (session.role !== "senior")
-    return <SeniorShell session={session} theme={theme} keys={keys} current="queue" toReview={null}><NotSenior /></SeniorShell>;
+    return <SeniorShell session={session} theme={theme} keys={keys} current="queue" toReview={null}><NotSenior heading={P1C_COPY.senior.pairQueue} /></SeniorShell>;
   const q = parsePairQuery(await searchParams);
   const data = await getPairQueue(q, session.email);
   return (
