@@ -132,6 +132,10 @@ Corrections:
     - Chapter 8: both example response bodies are regenerated from the §7.4 shapes (the hidden product has no `reviewStatus`; `notReviewed[]` items carry `tradeName`). "Napa is not approved yet, so a public caller gets its name and review status, with hidden: true." becomes "Napa is not approved yet, so a public caller gets its id, trade name and status "not_reviewed", with hidden: true." The safety-fields row 'hidden: true / reviewStatus other than "ok"' becomes 'hidden: true, status "not_reviewed" or "removed"'. The access legend "All" becomes "scope=all with the internal token, used only by integration tests. Reviewers read unreviewed data through /v1/review/*."
 14. **Undo window wording (D30).** In Board L, "8-second undo window" becomes "undo window (8 seconds by default; 20 or 60 in desk settings)", in the chapter 4 gate table and re-run steps, chapter 7 "Decide" and keys, and the glossary "Undo window" ("The undo window after "Looks correct" (8 seconds by default; 20 or 60 in desk settings) when U cancels it. Nothing is saved until it closes."). Chapter 4's "After 8 seconds the record is public." becomes "When the undo window closes, the record is public." The FAQ answer becomes "Press U or Undo before the undo window closes (8 seconds unless you lengthened it). Nothing is saved or published until the window closes." Pictures of the desk (the promise and the toast in chapter 7) keep the default 8. Board DS principle 6 is documentation and is not rendered.
 15. **Board P strings changed by scope.** Product page "With the other pilot medicines" becomes "With the other medicines in batch {id}" (D25). "No other pilot brand maps to…" becomes "No other approved brand maps to…", because only approved brands are listed (§7.4). The search substance meta "{k} product in the pilot" becomes "{k} approved product[s]", for the same reason.
+16. **Board L sentences the live system makes false.**
+    - Chapter 6 "A worked check" banner: "All three records are not yet reviewed by a pharmacist." becomes "All three records are "Not yet reviewed by a pharmacist"." (§3.6: rendered from `NOT_REVIEWED`). The second sentence stays. The banner shows only while all three are not approved (§6.8 "Approval-state sentences").
+    - Chapter 8 "Reviewer" access legend: "It never includes emails." becomes "Reviewer emails are never shown on public pages or in public API answers." Decision history needs the internal token and includes emails (§7.1 A2).
+    - FAQ "Is my email shown to anyone?": "Public decision history shows the role, never the email." becomes "Decision history is served only to signed-in reviewers; public pages and the public API never show an email."
 
 ### 1.7 States the boards do not draw (new copy, Decision)
 
@@ -152,6 +156,7 @@ The boards do not cover the states below. Their copy is defined in the section n
 | Maximum of 20 medicines reached in the checker | §6.7.1 |
 | Landing hero card while the hero product is not approved; its `aria-label` in both states | §6.1 |
 | Learn: snapshot-value date suffix "as stored on {date}" | §6.8 |
+| Learn: chapter not shown because the live numbers did not load | §6.8 |
 | Decision saving (`committing`): promise and toast | §5.7, §5.8.4 |
 | Desk: narrow-screen "Back to list", the no-JavaScript notices, loading and loaded announcements | §5.1, §4.4, §5.12 |
 | Desk: batch load error, batch not found | §5.12 |
@@ -379,7 +384,7 @@ A build check, `scripts/check-client-islands.mjs` (run in `postbuild` next to th
 | Expander | `components/Expander.tsx` | Line clamp toggle | the id of the server-rendered text, and `label: "reviewer" \| "public"`. Reviewer (Board R): "Full text from DDInter 2.0" / "Show less". Public and Learn (Boards P and L): "Show full text" / "Show less". Without JS the text renders unclamped. |
 | AccountMenu | `components/AccountMenu.tsx` | Esc and outside-click closing for a `<details>`-based menu | none (works as plain `<details>` without JS) |
 | GlossaryFilter | `components/learn/GlossaryFilter.tsx` | Live filter with a debounced count | none (filters the server-rendered list in the DOM) |
-| LearnRail | `components/learn/LearnRail.tsx` | Scroll-spy `aria-current` on "On this page" | none |
+| LearnRail | `components/learn/LearnRail.tsx` | Scroll-spy `aria-current` on "On this page"; scrolls the current chapter into view in the narrow nav; drives chapter 8's `.seg` example switches | none |
 | ErrorBoundary | `app/error.tsx`, `app/review/error.tsx` | Next requires error boundaries to be client components | none |
 
 ### 4.3 What data may reach the browser
@@ -1395,6 +1400,9 @@ For the selected products, the API removes the unapproved ones under public scop
   - empty: "No terms match." plus "Clear the filter", which empties the field and focuses it; Esc clears;
   - without JavaScript the input is not rendered and all terms show.
 - **FAQ**: native `<details>`.
+- **Stats unavailable (Decision).** When `GET /v1/stats` fails or answers a malformed body, `/learn/{chapter}` renders no chapter body and no snapshot block. It renders the shell (skip link, toolbar, chapter nav without the nav note, no rail, the footer), the chapter title as the page's `<h1>`, and a `crit` banner: title "Couldn't load this chapter.", body "The live pilot numbers did not load, so no example is shown. Nothing was changed.", and a link "Try again" to the same chapter.
+- **Approval-state sentences (Decision).** A Board L sentence that states a pilot record's approval state renders only while `/v1/stats` says it is true: chapter 1's public card (with its `aria-label`, its caption and the sentence that points to it), chapter 6's worked-check banner, chapter 8's captions under the public example bodies, and the FAQ's "Why can't I see Napa on the public site?". Once it is false the sentence is left out; no replacement copy is shown.
+- **Before P2 (Decision).** §1.6 item 13's chapter 1 sentence "The API returns the same thing: the id, trade name, status "not_reviewed" and hidden: true." and chapter 8's caption under the public product body describe the §7.4 hidden stub, which P2 ships. Learn renders them only once `GET /v1/products/{id}` serves that shape (a web test reads `HiddenRecord.java`, so P2's change cannot go unnoticed). Chapter 8's example bodies and its safety-fields row describe the §7.4 contract under Board L's "illustrative" banner.
 
 ### 6.9 Partner access request (`/partners`)
 
@@ -2043,6 +2051,8 @@ Playwright screenshots of the §11.4 states at 1280 px and 320 px in light and d
 | **2. Public surfaces** | Landing, search, product, stub (including removed), substance, checker, sign-in states, partners, privacy; §7.4 endpoints with the visibility rule; redirect `/?q=` | `VisibilityApiIntegrationTest` matrix green; S2, S3, S5 and S6 hold; licence lines confirmed (§13 Q1); no Example marker on any record data |
 | **3. Learn** | Ten chapter routes, snapshot, glossary filter, rail | The Learn e2e suite and axe are green; the §1.6 corrections are present |
 
+Phase 3 may ship before phase 2 (amended 15/10/2026): P3 builds the §7.4 `GET /v1/stats` row itself and uses no other phase-2 component, route or endpoint.
+
 The pharmacist reviews the pilot in phase 1, on the workspace. The public site keeps its current pages (restyled only through the shared layout) until phase 2; only `/signin` gains the bot check, the return path and their error states in phase 1 (§12.2, P1A).
 
 ### 12.2 Implementation plans (Decision)
@@ -2054,14 +2064,14 @@ This spec is **not one implementation plan**. It is split into five plans, each 
 | **P0 Safety prerequisites** | 0 | §8 (ETL route fix, pair-list reconciliation, snapshots, removed-item rule, re-run, the `stages` input of `load-dgda.yml`), §7.1, §7.2, §7.6, the phase-0 current-web adjustments in §12.1, and their §11.3 tests, including the updates to existing API and ETL tests | none |
 | **P1A Foundation** | 1 | §3 (tokens, fonts, theming, `ui/` components, copy constants), §4 (islands allowlist and check), §9 (CSP nonce, `next.config.ts` header changes, nonce on `components/Turnstile.tsx`, request id, JWE session, `/signout` and the removal of `DELETE /api/session`, rate-limit keys, Turnstile action and hostname checks), §5.15 and §7.5 audit plumbing, `safeReturnTo()`, `/healthz`, the §12.4 environment and compose changes, and the e2e harness (§11.4 environment). **Sign-in function ships here**, together with the `/api/session` Turnstile check, so sign-in never breaks between plans: the SignInButton's `TurnstileField` (action `signin`), `turnstileToken` and `returnTo` (through `safeReturnTo()`) in the POST, and the `/signin` states "Bot check failed", "Session request failed" and "Too many sign-in attempts" (§6.2). | P0 |
 | **P1B Reviewer workspace** | 1 | §5 entirely, §7.3, `/review` and `/review/flags` (§5.16), the `/batches` and `/flags` redirects, `docs/runbooks/reviewer-invite.md` (new), and the review parts of §11 | P1A |
-| **P2 Public surfaces** | 2 | §6.1–§6.7, §6.9, §7.4, the `/?q=` redirect, `docs/runbooks/partner-requests.md` (new), and the public parts of §11. For sign-in, P2 adds only the visual card (§6.2 "Card") and the welcome states. | P1A (P1B not required) |
-| **P3 Learn** | 3 | §6.8 and the §1.6 Learn corrections | P1A, and the §7.4 `/v1/stats` endpoint from P2 |
+| **P2 Public surfaces** | 2 | §6.1–§6.7, §6.9, §7.4 (reusing `GET /v1/stats` from P3, and switching every public adapter to the one §7.4 rule), the `/?q=` redirect, `docs/runbooks/partner-requests.md` (new), and the public parts of §11. For sign-in, P2 adds only the visual card (§6.2 "Card") and the welcome states. | P1A (P1B not required) |
+| **P3 Learn** | 3 | §6.8, the §1.6 Learn corrections, and the §7.4 `GET /v1/stats` row | P0, P1A, P1B; builds the §7.4 `GET /v1/stats` row |
 
 P1A may ship as its own release: it changes the shared layout, security and the sign-in function, and no other surface's behaviour. P1B and P2 each ship as one release (§12.3).
 
 ### 12.3 Feature flags
 
-**Decision: no runtime feature flags.** Each phase is one release (an image tag) with its own redirects. This avoids a second code path for safety rules. Partially built surfaces are not deployed, and the branch model enforces it: every push to `main` that passes CI deploys at once (§12.4), so each plan's PRs merge into a `phase-N` integration branch (`phase-0`, `phase-1`, `phase-2`, `phase-3`), and only the phase-complete merge of that branch into `main` deploys. P0 and P1A are the exceptions that may merge to `main` on their own, because each is a complete release (§12.2).
+**Decision: no runtime feature flags.** Each phase is one release (an image tag) with its own redirects. This avoids a second code path for safety rules. Partially built surfaces are not deployed, and the branch model enforces it: every push to `main` that passes CI deploys at once (§12.4), so each plan's PRs merge into a `phase-N` integration branch (`phase-0`, `phase-1`, `phase-2`, `phase-3`), and only the phase-complete merge of that branch into `main` deploys. P0, P1A and P3 are the exceptions that may merge to `main` on their own, because each is a complete release (§12.2; P3 is the whole of phase 3).
 
 ### 12.4 Deploy without touching other services
 
@@ -2143,9 +2153,10 @@ P1A may ship as its own release: it changes the shared layout, security and the 
 | D39 | Five implementation plans (P0, P1A, P1B, P2, P3), not one; sign-in function ships in P1A with the `/api/session` Turnstile check | §12.2 |
 | D40 | One snapshot per stamp, grouped by a per-invocation `run_id`; history shows one `extract` entry per run; removed items with snapshots are kept | §5.6.5, §7.6, §8.1 |
 | D41 | The stored DDInter pair list is the union of the graph and `interact-with`; an incomplete read fails the stage, so "No interaction listed" is never computed from a partial list | §6.7.2, §8.1 |
-| D42 | Plan PRs merge into `phase-N` branches; only phase-complete merges (and P0, P1A) reach `main`, which deploys automatically | §12.3, §12.4 |
+| D42 | Plan PRs merge into `phase-N` branches; only phase-complete merges (and P0, P1A, P3) reach `main`, which deploys automatically | §12.3, §12.4 |
 | D43 | `exampleUsable` is an accepted coarse public signal ("withdrawn from examples"); no other review detail is public | §6.8, §7.4 |
 | D44 | The batch layout holds ReviewDesk with batch-level props; the record page renders filters, list and detail and registers record data through `DeskRecordContext` | §4.2, §5.8.1 |
 | D45 | The reviewer's own save updates that record's `viewedVersion`, so it never turns the record stale | §5.8.2, §5.11 |
 | D46 | The hatch and `NoDataChip` mean coverage `none` only; other not-checked reasons are plain text | §3.4, §6.5, §6.7 |
 | D47 | Checker counts exclude same-product and same-BDS pairs; `{m}` counts every selected medicine | §6.7.2, §7.4 |
+| D48 | Learn (P3) ships before the public surfaces (P2): P3 builds `GET /v1/stats` and depends on P0, P1A and P1B; until P2 serves the §7.4 hidden stub, Learn leaves out the sentences that describe it; a failed stats read shows a banner inside the Learn shell, never a chapter | §6.8, §7.4, §12.1–§12.3 |
