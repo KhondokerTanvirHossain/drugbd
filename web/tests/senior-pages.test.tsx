@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { pairView, pairsPage, substanceDetail } from "./fixtures/senior";
@@ -206,5 +208,59 @@ describe("the substance page (§5.17.4)", () => {
   it("a substance that is not held is a 404", async () => {
     getSeniorSubstance.mockResolvedValue(null);
     await expect(substancePage({}, "BDS-999999")).rejects.toThrow("NOT_FOUND");
+  });
+});
+
+describe("reflow at 320 px and 24 × 24 px targets (§10.4, WCAG 1.4.10 and 2.5.8)", () => {
+  const css = readFileSync(join(process.cwd(), "components/review/senior/pages.module.css"), "utf8");
+  const narrow = /@media \(max-width: 639px\)\s*\{([\s\S]*?)\n\}/.exec(css)?.[1] ?? "";
+  /** The declarations of the innermost rule whose selector list names `sel`, or null. */
+  const body = (src: string, sel: string) => {
+    for (const m of src.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+)\{([^{}]*)\}/g)) if (m[1].split(",").map((x) => x.trim()).includes(sel)) return m[2];
+    return null;
+  };
+
+  it("the senior shell carries its own class, so the toolbar can wrap on these pages only", async () => {
+    expect(await queue()).toContain('<div class="shell senior">');
+  });
+  it("under 640 px the toolbar wraps and grows, and its centre loses the auto margin and wraps (as desk.module.css does)", () => {
+    expect(narrow).not.toBe("");
+    const bar = body(narrow, ".senior :global(.chrome-toolbar)");
+    expect(bar).not.toBeNull();
+    expect(bar).toMatch(/flex-wrap:\s*wrap/);
+    expect(bar).toMatch(/height:\s*auto/);
+    expect(bar).toMatch(/min-height:\s*52px/);
+    const center = body(narrow, ".center");
+    expect(center).not.toBeNull();
+    expect(center).toMatch(/margin:\s*0/);
+    expect(center).toMatch(/flex-wrap:\s*wrap/);
+    expect(center).toMatch(/gap:\s*8px/);
+  });
+  it("the disclosure summaries get a 24 px line and keep their marker (never flex)", () => {
+    for (const sel of [".brands summary", ".details summary"]) {
+      const b = body(css, sel);
+      expect(b, sel).not.toBeNull();
+      expect(b).toMatch(/min-height:\s*24px/);
+      expect(b).toMatch(/line-height:\s*24px/);
+      expect(b).not.toMatch(/display:/);
+    }
+  });
+  it("the nav, filter and paging links are 24 px inline-flex targets", () => {
+    for (const sel of [".links a", ".nav a", ".paging a"]) {
+      const b = body(css, sel);
+      expect(b, sel).not.toBeNull();
+      expect(b).toMatch(/min-height:\s*24px/);
+      expect(b).toMatch(/display:\s*inline-flex/);
+      expect(b).toMatch(/align-items:\s*center/);
+    }
+  });
+  it("a brand link gets a 24 px line, inline-block so the space before its mono batch id survives (never flex)", () => {
+    for (const sel of [".brands li > a", ".brands p > a"]) {
+      const b = body(css, sel);
+      expect(b, sel).not.toBeNull();
+      expect(b).toMatch(/display:\s*inline-block/);
+      expect(b).toMatch(/min-height:\s*24px/);
+      expect(b).toMatch(/line-height:\s*24px/);
+    }
   });
 });

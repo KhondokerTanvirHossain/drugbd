@@ -25,7 +25,7 @@ export default function SeniorShell({ session, theme, keys, current, toReview, c
     </div>
   );
   return (
-    <div className={shell.shell}>
+    <div className={`${shell.shell} ${s.senior}`}>
       <ReviewToolbar session={session} theme={theme} batchId={null} keys={keys} center={center} />
       <nav className={s.nav} aria-label={sr.seniorReview}>
         <a href="/review/pairs" aria-current={current === "queue" ? "page" : undefined}>{sr.pairQueue}</a>
