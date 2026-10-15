@@ -191,15 +191,23 @@ public class ReviewQueryService {
                             List<Instant> runs = t.getT4().isEmpty() ? List.of(batch.runAt()) : t.getT4();
                             List<ItemHistory.Decision> decisions = me.facts().decisions().stream().map(x -> new ItemHistory.Decision(
                                 x.id(), x.decision(), x.note(), x.reviewerRole(), x.decidedAt(),
-                                viewerEmail != null && x.reviewerEmail() != null && x.reviewerEmail().equalsIgnoreCase(viewerEmail.strip()))).toList();
+                                isMine(x.reviewerEmail(), viewerEmail))).toList();
                             ItemHistory.Result history = ItemHistory.build(runs, t.getT3(), decisions, me.facts().extractedAt());
+                            List<ReviewItem.OpenIssue> openIssues = ApprovalRule.openIssues(me.facts().decisions(), me.facts().extractedAt())
+                                .stream().map(x -> new ReviewItem.OpenIssue(x.reviewerRole(), x.decidedAt(), x.note(),
+                                    isMine(x.reviewerEmail(), viewerEmail))).toList();
                             return new ReviewItem(batchId, conceptId, me.index(), all.size(), me.displayStatus(), me.facts().review(),
                                 me.version(), new ReviewItem.BatchInfo(batch.runAt(), all.size(), batch.status()), d.brand(),
                                 d.dgdaIngredients(), d.clinical(), t.getT1(), stages, t.getT2().result(), d.sourceJson(),
-                                sourceUrl(conceptId), history.history(), history.reopen());
+                                sourceUrl(conceptId), history.history(), history.reopen(), openIssues);
                         }));
                 });
         }));
+    }
+
+    /** §7.3 mine: the decision's email equals X-Viewer-Email, case-insensitively. */
+    static boolean isMine(String reviewerEmail, String viewerEmail) {
+        return viewerEmail != null && reviewerEmail != null && reviewerEmail.equalsIgnoreCase(viewerEmail.strip());
     }
 
     /** The batch products and the pair result for the open record (RouteRule on both sides, §5.6.2). */
@@ -242,9 +250,9 @@ public class ReviewQueryService {
                     if ("ddinter".equals(stage))
                         for (String[] m : textMissing(s.evidence())) {
                             BatchPairs.PairRow row = rows.get(m[0] + "|" + m[1]);
-                            String other = mine.contains(m[0]) ? m[1] : m[0];
+                            String scope = BatchPairs.partnerScope(m[0], m[1], mine, others);
                             pairs.add(new ReviewItem.TextMissingPair(m[0], name(t.getT1(), row, m[0], true), m[1],
-                                name(t.getT1(), row, m[1], false), row == null ? null : row.severity(), others.contains(other)));
+                                name(t.getT1(), row, m[1], false), row == null ? null : row.severity(), "batch".equals(scope), scope));
                         }
                     out.add(new ReviewItem.Stage(s.stage(), s.status(), StageNotes.parse(s.stage(), s.status(), s.note()),
                         List.copyOf(pairs), s.evidence()));

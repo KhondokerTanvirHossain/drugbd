@@ -7,6 +7,7 @@ import com.niramoy.bddrug.domain.IngredientSummary;
 import com.niramoy.bddrug.domain.ItemHistory;
 import com.niramoy.bddrug.domain.ReviewDecision;
 import com.niramoy.bddrug.domain.ReviewItem;
+import com.niramoy.bddrug.domain.SourceLinks;
 import io.r2dbc.spi.Readable;
 import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.stereotype.Component;
@@ -121,7 +122,7 @@ public class R2dbcReviewQueryAdapter implements ReviewQueryPort {
         return db.sql("""
                 SELECT bi.concept_id, rc.payload::text AS source_json, bp.concept_id AS brand_id, bp.dar_number, bp.trade_name,
                        bp.company, bp.dosage_form, bp.generic_content_raw, bp.quality_flag, bp.parse_status, bp.parse_note,
-                       bp.bdc_id, cd.display_name, cd.dose_form, cd.route, cd.signature
+                       bp.bdc_id, cd.display_name, cd.dose_form, cd.route, cd.signature, rc.fetched_at AS ocl_fetched_at
                 FROM ops.batch_item bi
                 LEFT JOIN raw.ocl_concept rc ON rc.source = bi.source AND rc.concept_id = bi.concept_id
                 LEFT JOIN curated.brand_product bp ON bp.concept_id = bi.concept_id
@@ -131,10 +132,12 @@ public class R2dbcReviewQueryAdapter implements ReviewQueryPort {
             .map(r -> {
                 String brandId = r.get("brand_id", String.class);
                 String bdcId = r.get("bdc_id", String.class);
+                OffsetDateTime fetched = r.get("ocl_fetched_at", OffsetDateTime.class);
                 ReviewItem.Brand brand = brandId == null ? null : new ReviewItem.Brand(brandId, r.get("dar_number", String.class),
                     r.get("trade_name", String.class), r.get("company", String.class), r.get("dosage_form", String.class),
                     r.get("generic_content_raw", String.class), r.get("quality_flag", String.class),
-                    r.get("parse_status", String.class), r.get("parse_note", String.class));
+                    r.get("parse_status", String.class), r.get("parse_note", String.class),
+                    SourceLinks.brand(brandId, fetched == null ? null : fetched.toInstant()));
                 ReviewItem.Clinical clinical = r.get("display_name", String.class) == null ? null : new ReviewItem.Clinical(bdcId,
                     r.get("display_name", String.class), r.get("dose_form", String.class), r.get("route", String.class),
                     r.get("signature", String.class));
@@ -225,10 +228,12 @@ public class R2dbcReviewQueryAdapter implements ReviewQueryPort {
     }
 
     @Override public Mono<List<ItemHistory.Snapshot>> snapshots(String batchId, String conceptId) {
-        return db.sql("SELECT extracted_at, run_id, reason FROM ops.item_snapshot WHERE batch_id = :b AND concept_id = :c ORDER BY extracted_at")
+        return db.sql("""
+                SELECT extracted_at, run_id, reason, payload -> 'carried_from' ->> 'batchId' AS carried_from
+                FROM ops.item_snapshot WHERE batch_id = :b AND concept_id = :c ORDER BY extracted_at""")
             .bind("b", batchId).bind("c", conceptId)
             .map(r -> new ItemHistory.Snapshot(r.get("extracted_at", OffsetDateTime.class).toInstant(), r.get("run_id", UUID.class),
-                r.get("reason", String.class)))
+                r.get("reason", String.class), r.get("carried_from", String.class)))
             .all().collectList();
     }
 
