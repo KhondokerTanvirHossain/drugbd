@@ -60,6 +60,7 @@ export default async function RecordPage({ params, searchParams }: {
     displayStatus: item.displayStatus, version: item.version, stagesBlocked: stagesBlocked(item), sourceUrl: item.sourceUrl,
     show, q, rows, all, requestId: randomUUID(), prevHref: rows[k - 1]?.href ?? null, nextHref: rows[k + 1]?.href ?? null,
     complete: firstParam(sp.view) === "done" && all.length > 0 && all.length === whole.total && all.every((r) => r.displayStatus === "approved"),
+    openIssues: item.openIssues,
   };
   const emptyText = rows.length === 0 ? (q ? fill(DESK.noMatch, { q }) : DESK.empty[show]) : null;
   const diff = item.displayStatus === "back_in_review" && item.reopen?.diffAvailable

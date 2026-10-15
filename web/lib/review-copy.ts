@@ -1,6 +1,6 @@
 import { Fragment, createElement, type ReactNode } from "react";
 import { APPROVED, DESK_NEW, P1C_COPY, UNCLASSIFIED_NOT_LOW_RISK, fill } from "./copy";
-import { actsAsPharmacist, type HistoryEntry, type ReviewerRole, type StageKey } from "./review-types";
+import { actsAsPharmacist, type DisplayStatus, type HistoryEntry, type ReviewerRole, type StageKey } from "./review-types";
 
 /*
  * Board R wording for the review workspace (docs/artifacts/2026-10-12-intellidrugs-reviewer.html). Client-safe.
@@ -194,9 +194,17 @@ export const KEY_ROW: [string[], string][] = [
   [["S"], "DGDA source"], [["?"], "all keys"],
 ];
 
-/** The shortcuts sheet rows (Board R); the first uses the reviewer's undo window. */
-export const SHEET_ROWS = (n: number): [string, string][] => [
+/** §5.7 item 8: for a senior on an `issue` record, "D dismiss issue" follows "R report". */
+export function keyRow(role: ReviewerRole, status: DisplayStatus | undefined): [string[], string][] {
+  if (role !== "senior" || status !== "issue") return KEY_ROW;
+  const at = KEY_ROW.findIndex(([keys]) => keys[0] === "R") + 1;
+  return [...KEY_ROW.slice(0, at), [["D"], P1C_COPY.dismiss.keyRow], ...KEY_ROW.slice(at)];
+}
+
+/** The shortcuts sheet rows (Board R); the first uses the reviewer's undo window. A senior also gets D (§5.14 P1C). */
+export const SHEET_ROWS = (n: number, role: ReviewerRole = "pharmacist"): [string, string][] => [
   ["A", `Looks correct, then an ${n}-second undo window`], ["U", "Undo during the window"], ["R", "Report an issue"],
+  ...(role === "senior" ? [["D", P1C_COPY.dismiss.sheetRow] as [string, string]] : []),
   ["J K", "Next and previous record"], ["E", "Evidence: raw DGDA row and pipeline notes"], ["S", "Open the DGDA source"],
   ["?", "This sheet"], ["Esc", "Close the sheet, the evidence or the note"], ["SEND", "Send the report, inside the note field"],
   ["Enter", "Never approves"],

@@ -1,5 +1,5 @@
 import { createContext, useContext, type ReactNode } from "react";
-import type { DiffRow, DisplayStatus, FilterKey, ItemHint, ReviewerRole, Version } from "@/lib/review-types";
+import type { DiffRow, DisplayStatus, FilterKey, ItemHint, OpenIssue, ReviewerRole, Version } from "@/lib/review-types";
 import { initialMachine, type MachineState } from "./commit-machine";
 import type { BarCtx } from "./bar-state";
 
@@ -23,6 +23,8 @@ export type RecordRegistration = {
    * reviewer here with `?view=done`. Opening any record from the list or with J/K reads it (§5.7 "Open any record to read it").
    */
   complete: boolean;
+  /** §5.10a: the counted issues the dismiss panel quotes, oldest first (roles only, never an email). */
+  openIssues: OpenIssue[];
 };
 
 /**
@@ -35,6 +37,7 @@ export type DeskApi = {
   ready: boolean; batchId: string; role: ReviewerRole; total: number; singleKeys: boolean; undoSeconds: number;
   machine: MachineState; bar: BarCtx; complete: boolean; hint: string | null; botState: "checking" | "passed" | "failed";
   retryBusy: boolean; drawerOpen: boolean; sheetOpen: boolean; reportOpen: boolean; note: string; noteError: boolean;
+  dismissOpen: boolean; dismissNote: string; dismissError: boolean;
   diff: DiffRow[] | null; diffOpen: boolean; slots: { batchesNav: ReactNode; batchCard: ReactNode };
   staleFor(conceptId: string): "rerun" | "other" | null;
   netErrFor(conceptId: string): "no" | "unknown" | null;
@@ -47,6 +50,8 @@ export type DeskApi = {
   toggleDrawer(on?: boolean): void; toggleDiff(): void; navigate(href: string, focusKey?: string): void;
   move(delta: 1 | -1 | "first" | "last"): void;
   openSource(): void; openFirst(): void; registerSearchClear(fn: (() => void) | null): void;
+  /** §5.10a, seniors only: the dismiss panel shares the report channel (§5.8.2). */
+  clickDismiss(): void; closeDismiss(focusBack: boolean, discard: boolean): void; setDismissNote(v: string): void; sendDismiss(): void;
   /** Writes to the page's one polite live region (§10.2) through `announce` from `@/lib/live-region` (P1A). */
   announce(text: string): void;
 };
@@ -63,5 +68,5 @@ export function useDesk(): DeskApi {
 export function barFromRegistration(reg: RecordRegistration, role: ReviewerRole, undoSeconds: number): BarCtx {
   return { loading: false, complete: false, role, batchId: reg.batchId,
     record: { conceptId: reg.conceptId, name: reg.tradeName, status: reg.displayStatus, stagesBlocked: reg.stagesBlocked },
-    stale: false, drawerOpen: false, reportOpen: false, machine: initialMachine(undoSeconds), undoSeconds, advanceGuard: null, now: 0 };
+    stale: false, drawerOpen: false, reportOpen: false, dismissOpen: false, machine: initialMachine(undoSeconds), undoSeconds, advanceGuard: null, now: 0 };
 }

@@ -1,4 +1,4 @@
-import { DESK_NEW, PROMISE_ENGINEER, PROMISE_PAUSED, PROMISE_PHARMACIST, PROMISE_SENIOR, fill } from "@/lib/copy";
+import { DESK_NEW, P1C_COPY, PROMISE_ENGINEER, PROMISE_PAUSED, PROMISE_PHARMACIST, PROMISE_SENIOR, fill } from "@/lib/copy";
 import { DESK } from "@/lib/review-copy";
 import { actsAsPharmacist, type DisplayStatus, type ReviewerRole } from "@/lib/review-types";
 import { windowOn, type MachineState } from "./commit-machine";
@@ -7,7 +7,9 @@ import { windowOn, type MachineState } from "./commit-machine";
 export type BarCtx = {
   loading: boolean; complete: boolean; role: ReviewerRole; batchId: string;
   record: { conceptId: string; name: string; status: DisplayStatus; stagesBlocked: boolean } | null;
-  stale: boolean; drawerOpen: boolean; reportOpen: boolean; machine: MachineState; undoSeconds: number;
+  stale: boolean; drawerOpen: boolean; reportOpen: boolean;
+  /** §5.10a, seniors only; absent reads as closed. */ dismissOpen?: boolean;
+  machine: MachineState; undoSeconds: number;
   advanceGuard: { conceptId: string; at: number } | null; now: number;
 };
 
@@ -20,6 +22,13 @@ const p = (lead: string, body: string) => ({ lead, body });
 const onRecord = (ctx: BarCtx, conceptId: string | undefined) => ctx.record !== null && ctx.record.conceptId === conceptId;
 const netErrHere = (ctx: BarCtx) => ctx.machine.commit.kind === "netErr" && onRecord(ctx, ctx.machine.commit.op.conceptId)
   ? ctx.machine.commit.saved : null;
+const dismissingHere = (ctx: BarCtx) => ctx.machine.report.kind === "sending" && ctx.machine.report.op.decision === "dismiss"
+  && onRecord(ctx, ctx.machine.report.op.conceptId);
+/** §5.10a: D is refused while a decision on this record is open, saving or failed (the commit channel). */
+const commitHere = (ctx: BarCtx) => {
+  const open = windowOn(ctx.machine);
+  return (open !== null && onRecord(ctx, open.conceptId)) || netErrHere(ctx) !== null;
+};
 
 export function promise(ctx: BarCtx): { lead: string; body: string } {
   const c = ctx.machine.commit, r = ctx.record, pharmacist = actsAsPharmacist(ctx.role);
@@ -35,7 +44,8 @@ export function promise(ctx: BarCtx): { lead: string; body: string } {
     return p(DESK_NEW.committing.lead, pharmacist ? DESK_NEW.committing.pharmacistBody : DESK_NEW.committing.engineerBody);
   if (r?.stagesBlocked) return p(DESK_NEW.approvalRefused.promiseLead, DESK_NEW.approvalRefused.promiseBody);
   if (r?.status === "approved") return p(DESK.promiseApproved, DESK.promiseApprovedBody);
-  if (r?.status === "issue") return p(DESK.promiseIssue, DESK.promiseIssueBody);
+  if (dismissingHere(ctx)) return p(P1C_COPY.dismiss.promiseSavingLead, P1C_COPY.dismiss.promiseSavingBody);
+  if (r?.status === "issue") return p(DESK.promiseIssue, ctx.role === "senior" ? P1C_COPY.dismiss.promiseSeniorIssueBody : DESK.promiseIssueBody);
   if (!pharmacist && r?.status === "engineer_checked") return p(DESK.promiseChecked, DESK.promiseCheckedBody);
   if (ctx.role === "senior") return p(PROMISE_SENIOR.lead, PROMISE_SENIOR.body(ctx.undoSeconds));
   return pharmacist ? p(PROMISE_PHARMACIST.lead, PROMISE_PHARMACIST.body(ctx.undoSeconds)) : p(PROMISE_ENGINEER.lead, PROMISE_ENGINEER.body);
@@ -93,7 +103,8 @@ export function sendHint(ctx: BarCtx): string | null {
 
 export function approveDisabled(ctx: BarCtx): boolean {
   const r = ctx.record, m = ctx.machine;
-  if (r === null || ctx.loading || ctx.complete || ctx.stale || ctx.drawerOpen || ctx.reportOpen || m.auth !== "ok") return true;
+  if (r === null || ctx.loading || ctx.complete || ctx.stale || ctx.drawerOpen || ctx.reportOpen || ctx.dismissOpen || m.auth !== "ok") return true;
+  if (dismissingHere(ctx)) return true;
   const open = windowOn(m);
   if (open && open.conceptId === r.conceptId) return true;
   if (netErrHere(ctx) !== null) return true;
@@ -106,3 +117,30 @@ export function reportDisabled(ctx: BarCtx): boolean {
 }
 
 export const sendDisabled = (ctx: BarCtx) => ctx.stale;
+
+/** D, and the Dismiss issue button while the panel is closed (§5.8.4 P1C rows). Not a senior: nothing, and no hint (§5.14). */
+export function dismissHint(ctx: BarCtx): Hint {
+  if (ctx.role !== "senior") return { block: true, text: null };
+  if (ctx.machine.auth === "forbidden") return say(DESK.noAuthTitle);
+  if (ctx.machine.auth === "signedOut") return say(DESK_NEW.sessionExpired.hint);
+  if (ctx.loading || ctx.complete || ctx.record === null) return { block: true, text: null };
+  if (ctx.drawerOpen) return say(DESK_NEW.drawerOpen.hint);
+  if (ctx.stale) return say(DESK.paused);
+  if (ctx.record.status !== "issue") return say(P1C_COPY.dismiss.hintNoIssue);
+  if (commitHere(ctx)) return say(P1C_COPY.dismiss.hintFinish);
+  if (ctx.machine.commit.kind === "botHold" || ctx.machine.report.kind === "botHold") return say(DESK.botFirst);
+  return allow;
+}
+
+/** §5.7: "Dismiss issue" stays focusable but is aria-disabled in these states. */
+export function dismissDisabled(ctx: BarCtx): boolean {
+  const m = ctx.machine;
+  return ctx.stale || ctx.drawerOpen || commitHere(ctx) || m.commit.kind === "botHold" || m.report.kind === "botHold" || m.auth !== "ok";
+}
+
+/** §5.10a "While stale" and the bot hold, for the panel's Dismiss issue button and Ctrl/Cmd+Enter. */
+export function sendDismissHint(ctx: BarCtx): string | null {
+  if (ctx.stale) return P1C_COPY.dismiss.paused;
+  if (ctx.machine.report.kind === "botHold" || ctx.machine.commit.kind === "botHold") return DESK.botFirst;
+  return null;
+}

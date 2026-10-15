@@ -26,3 +26,16 @@ describe("sign-out clears note drafts (§5.10)", () => {
     expect(sessionStorage.getItem(draftKey("0001-pilot", "x"))).toBe("draft");
   });
 });
+
+describe("sign-out clears the P1C drafts too (§5.10a, §5.17.2)", () => {
+  it("dismiss and pair drafts go with the report drafts", async () => {
+    const { clearAllDrafts, dismissDraftKey, pairDraftKey, saveDraftAt } = await import("@/components/review/desk/drafts");
+    saveDraftAt(dismissDraftKey("0001-pilot", "napa"), "the register says 500 mg");
+    saveDraftAt(pairDraftKey("DDInter14", "DDInter1951"), "text contradicts the severity");
+    sessionStorage.setItem("unrelated", "kept");
+    clearAllDrafts();
+    expect(sessionStorage.getItem("intellidrugs-dismiss-draft:0001-pilot:napa")).toBeNull();
+    expect(sessionStorage.getItem("intellidrugs-pair-draft:DDInter14:DDInter1951")).toBeNull();
+    expect(sessionStorage.getItem("unrelated")).toBe("kept");
+  });
+});

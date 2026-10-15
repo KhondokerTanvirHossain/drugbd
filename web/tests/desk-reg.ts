@@ -13,6 +13,6 @@ export function makeReg(key: string, over: Partial<RecordRegistration> = {}, ver
     displayStatus: row.displayStatus, version: version ?? row.version, stagesBlocked: false,
     sourceUrl: `https://tr.ocl.dghs.gov.bd/#/orgs/MoHFW/sources/DGDA-Drugs/concepts/${row.conceptId}/`,
     show: "all", q: "", rows: all, all, requestId: "11111111-2222-4333-8444-555555555555",
-    prevHref: i > 0 ? all[i - 1].href : null, nextHref: i < all.length - 1 ? all[i + 1].href : null, complete: false, ...over,
+    prevHref: i > 0 ? all[i - 1].href : null, nextHref: i < all.length - 1 ? all[i + 1].href : null, complete: false, openIssues: [], ...over,
   };
 }

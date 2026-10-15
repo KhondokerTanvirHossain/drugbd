@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  ADVANCE_GUARD_MS, approveDisabled, approveHint, noteLength, promise, reportDisabled, reportHint, sendDisabled, sendHint, type BarCtx,
+  ADVANCE_GUARD_MS, approveDisabled, approveHint, dismissDisabled, dismissHint, noteLength, promise, reportDisabled, reportHint, sendDisabled, sendDismissHint, sendHint, type BarCtx,
 } from "@/components/review/desk/bar-state";
 import { initialMachine, type MachineState, type Op } from "@/components/review/desk/commit-machine";
 
@@ -132,5 +132,53 @@ describe("note length (Review Focus 2)", () => {
     expect("😀😀😀😀".length).toBe(8);
     expect(noteLength("ঔষধ ভুল")).toBe(7);
     expect(noteLength("😀😀😀😀😀")).toBe(5);
+  });
+});
+
+describe("Dismiss issue (§5.7, §5.8.4, §5.10a)", () => {
+  const senior = (over: Partial<BarCtx> = {}) => ctx({ role: "senior", record: rec({ status: "issue" }), ...over });
+  const dismissOp = op({ role: "senior", decision: "dismiss", note: "the register says 500 mg" });
+
+  it("the promise: a senior on an issue, a dismissal saving, and a failed dismissal that keeps the senior row", () => {
+    expect(promise(senior())).toEqual({ lead: "An issue is open on this record.",
+      body: "If the report was a mistake, dismiss it. Otherwise it returns to review after the fix and re-run." });
+    expect(promise(ctx({ record: rec({ status: "issue" }) })).body).toBe("It returns to review after the fix and re-run.");
+    expect(promise(senior({ machine: machine({ report: { kind: "sending", op: dismissOp } }) })))
+      .toEqual({ lead: "Dismissing the issue.", body: "Saving now." });
+    expect(promise(senior({ machine: machine({ report: { kind: "netErr", op: dismissOp, saved: "unknown" } }) })).lead)
+      .toBe("An issue is open on this record.");
+  });
+
+  it.each([
+    ["pharmacist: D does nothing, no hint", { role: "pharmacist" as const }, { block: true, text: null }],
+    ["drawer open", { drawerOpen: true }, { block: true, text: "Close the evidence first (Esc)." }],
+    ["stale", { stale: true }, { block: true, text: "Decisions are paused. Reload the record first." }],
+    ["no open issue", { record: rec({ status: "pending" }) }, { block: true, text: "No issue is open on this record." }],
+    ["undo window here", { machine: machine({ commit: { kind: "armed", op: op({ role: "senior" }), deadline: 1 } }) },
+      { block: true, text: "Finish or undo your decision on this record first." }],
+    ["saving commit here", { machine: machine({ commit: { kind: "committing", op: op({ role: "senior" }) } }) },
+      { block: true, text: "Finish or undo your decision on this record first." }],
+    ["failed commit here", { machine: machine({ commit: { kind: "netErr", op: op({ role: "senior" }), saved: "no" } }) },
+      { block: true, text: "Finish or undo your decision on this record first." }],
+    ["ready", {}, { block: false, text: null }],
+  ] as [string, Partial<BarCtx>, { block: boolean; text: string | null }][])("D: %s", (_name, over, want) => {
+    expect(dismissHint(senior(over))).toEqual(want);
+  });
+
+  it("Dismiss is aria-disabled when stale, drawer open, a window or failed commit here, a bot hold, or no auth", () => {
+    expect(dismissDisabled(senior())).toBe(false);
+    for (const over of [{ stale: true }, { drawerOpen: true },
+      { machine: machine({ commit: { kind: "armed", op: op({ role: "senior" }), deadline: 1 } }) },
+      { machine: machine({ commit: { kind: "netErr", op: op({ role: "senior" }), saved: "unknown" } }) },
+      { machine: machine({ report: { kind: "botHold", op: dismissOp } }) }, { machine: machine({ auth: "signedOut" }) }] as Partial<BarCtx>[])
+      expect(dismissDisabled(senior(over))).toBe(true);
+  });
+
+  it("Send dismissal: paused while stale, held during a bot hold; Looks correct is disabled while the panel is open", () => {
+    expect(sendDismissHint(senior({ stale: true }))).toBe("Dismissing is paused until you reload the record. Your note is kept.");
+    expect(sendDismissHint(senior({ machine: machine({ report: { kind: "botHold", op: dismissOp } }) })))
+      .toBe("Retry the bot check first. Your earlier decision is kept.");
+    expect(sendDismissHint(senior())).toBeNull();
+    expect(approveDisabled(ctx({ role: "senior", dismissOpen: true }))).toBe(true);
   });
 });
