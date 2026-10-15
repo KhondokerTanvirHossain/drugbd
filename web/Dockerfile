@@ -1,6 +1,7 @@
 FROM node:22-alpine AS build
 WORKDIR /app
 COPY package*.json ./
+ENV PUPPETEER_SKIP_DOWNLOAD=true
 RUN npm ci
 COPY . .
 # Public values only (never secrets): `next build` inlines NEXT_PUBLIC_* and the CSP auth domain.

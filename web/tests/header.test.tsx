@@ -33,16 +33,23 @@ describe("Header", () => {
     expect(html).toContain('<span class="role-badge">Pharmacist</span>');
     expect(html).toContain('aria-label="Colour theme"');
     expect(html).toContain('<form action="/signout" method="post"><button type="submit" class="btn btn--plain btn--sm">Sign out</button></form>');
-    for (const href of ["/batches", "/flags"]) expect(html).toContain(`href="${href}"`);
+    expect(html).not.toMatch(/href="\/(batches|flags)"/);
+    expect(html).toContain('<a href="/review">Review desk</a>');
+    expect(html).toContain('<a href="/review/flags">Problem reports and partner requests</a>');
   });
 
   it("a reader gets no role badge and no reviewer links; a missing name falls back to the email", () => {
     const html = renderToStaticMarkup(<Header session={{ email: "someone@gmail.com", role: "user" }} theme="system" />);
     expect(html).not.toContain("role-badge");
-    expect(html).not.toContain("/batches");
-    expect(html).not.toContain("/flags");
+    expect(html).not.toContain('href="/review');
     expect(html).toContain("Account menu for someone@gmail.com");
     expect(html).toContain('<span aria-hidden="true">SG</span>');
+  });
+
+  it("a reviewer's menu names the newest batch in review next to the role badge", () => {
+    const html = renderToStaticMarkup(<Header session={PHARMACIST} theme="system" batchId="0001-pilot" />);
+    expect(html).toContain('<span class="role-badge">Pharmacist</span> Batch <span class="mono">0001-pilot</span>');
+    expect(renderToStaticMarkup(<Header session={PHARMACIST} theme="system" batchId={null} />)).not.toContain("Batch <span");
   });
 });
 

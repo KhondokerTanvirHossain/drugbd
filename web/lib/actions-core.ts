@@ -1,17 +1,17 @@
 import "server-only";
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
-import { createFlag, postDecision, resolveFlag, type FlagTarget } from "./api";
-import { recordAudit } from "./audit";
-import { allowAccountAction, allowDeniedAudit } from "./limits";
+import { createFlag, resolveFlag, type FlagTarget } from "./api";
+import { allowAccountAction } from "./limits";
 import { clientIp } from "./rate-limit";
+import { requestId } from "./request-id";
 import type { ReviewerRole } from "./reviewers";
 import { getSession, type Session } from "./session";
 import { TURNSTILE_RESPONSE_FIELD, verifyTurnstile } from "./turnstile";
 import type { TurnstileAction } from "./turnstile-actions";
 
 /**
- * The checks behind the review and flag server actions. Each write runs, in order:
+ * The checks behind the flag and resolve server actions. Each write runs, in order:
  *   1. the session (re-read from the signed cookie) and its role,
  *   2. input validation,
  *   3. the Turnstile check (server-side, fails closed),
@@ -20,33 +20,12 @@ import type { TurnstileAction } from "./turnstile-actions";
  * Nothing here logs: the session email is personal data.
  */
 
-export type ReviewCode = "saved" | "forbidden" | "captcha" | "invalid" | "stale" | "decided" | "checks" | "issue_open"
-  | "approved" | "checked" | "removed" | "failed" | "rate_limited";
 export type FlagCode = "sent" | "forbidden" | "captcha" | "invalid" | "failed";
 export type ResolveCode = "resolved" | "forbidden" | "captcha" | "invalid" | "failed";
 export type ActionResult<C extends string> = { status: 200 | 400 | 403 | 409 | 429 | 502; code: C };
 
-export const ISSUE_NOTE_MIN = 5, NOTE_MAX = 1000, FLAG_MESSAGE_MIN = 5, FLAG_MESSAGE_MAX = 2000;
+export const FLAG_MESSAGE_MIN = 5, FLAG_MESSAGE_MAX = 2000;
 const ID_MAX = 200;
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const DECISION_ID_RE = /^[1-9][0-9]{0,14}$/;
-/** The API's step 6 to 8 messages (spec §7.2), which share the field `review`. */
-const REVIEW_REFUSALS: Record<string, ReviewCode> = {
-  "An issue is open on this record. It returns to review after the fix and re-run.": "issue_open",
-  "This record is already approved by a pharmacist": "approved",
-  "Your check is already recorded for this record": "checked",
-};
-
-/** A 409 from the decision endpoint, by its `field` (spec §7.2). Anything unknown asks for a reload. */
-function conflictCode(field: string | null, message: string): ReviewCode {
-  switch (field) {
-    case "lastDecisionId": return "decided";
-    case "stages": return "checks";
-    case "conceptId": return "removed";
-    case "review": return REVIEW_REFUSALS[message] ?? "stale";
-    default: return "stale";
-  }
-}
 export const FLAG_TARGETS: readonly FlagTarget[] = ["product", "substance", "check"];
 
 const field = (fd: FormData, name: string) => {
@@ -56,72 +35,9 @@ const field = (fd: FormData, name: string) => {
 const isReviewer = (s: Session | null): s is Session & { role: ReviewerRole } =>
   s?.role === "pharmacist" || s?.role === "engineer";
 const validId = (s: string) => s.length > 0 && s.length <= ID_MAX;
-/** A batch or concept id fit for an audit row: a strict character set, so no form text reaches it (§5.15). */
-const AUDIT_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,98}$/;
-
-type DeniedOutcome = "unauthenticated" | "forbidden" | "rate_limited" | "captcha";
-/**
- * §5.15 decision_denied: a decision stopped here, before any API call. The target is the batch item only for a
- * signed-in caller and only when both ids match AUDIT_ID_RE (never other form text; an anonymous caller's ids are
- * unverified form text, so its row has no target). Throttled to one row per minute per actor and outcome
- * (allowDeniedAudit), so repeated denials cannot fill the append-only table. Best effort: a skipped write or an audit
- * outage never changes the action's answer.
- */
-async function denyDecision(outcome: DeniedOutcome, session: Session | null, fd: FormData): Promise<void> {
-  if (!allowDeniedAudit(outcome, session?.email ?? null, clientIp(await headers()))) return;
-  const batchId = field(fd, "batchId"), conceptId = field(fd, "conceptId");
-  const targetId = outcome !== "unauthenticated" && AUDIT_ID_RE.test(batchId) && AUDIT_ID_RE.test(conceptId)
-    ? `${batchId}/${conceptId}` : null;
-  await recordAudit({ event: "decision_denied", outcome, actorEmail: session?.email ?? null, actorRole: session?.role ?? null,
-    targetType: targetId ? "batch_item" : null, targetId }).catch(() => false);
-}
 
 async function turnstilePassed(fd: FormData, action: TurnstileAction): Promise<boolean> {
   return verifyTurnstile(fd.get(TURNSTILE_RESPONSE_FIELD), clientIp(await headers()), action);
-}
-
-/** Path of a batch page, used for both revalidation and the redirect back. */
-export const batchPath = (batchId: string) => `/batches/${encodeURIComponent(batchId)}`;
-
-export async function submitReview(fd: FormData): Promise<ActionResult<ReviewCode>> {
-  const session = await getSession();
-  if (!isReviewer(session)) {
-    await denyDecision(session ? "forbidden" : "unauthenticated", session, fd);
-    return { status: 403, code: "forbidden" };
-  }
-
-  const batchId = field(fd, "batchId"), conceptId = field(fd, "conceptId"), decision = field(fd, "decision");
-  const note = field(fd, "note").trim();
-  // The form always carries the item's extractedAt ("" when the item has none, sent as null); the API requires it.
-  const rawExtractedAt = fd.get("extractedAt");
-  if (typeof rawExtractedAt !== "string" || rawExtractedAt.length > 64) return { status: 400, code: "invalid" };
-  const extractedAt = rawExtractedAt || null;
-  // The form also carries the newest decision id ("" when none, sent as null) and a requestId rendered with the page.
-  const rawLast = fd.get("expectedLastDecisionId");
-  if (typeof rawLast !== "string" || (rawLast !== "" && !DECISION_ID_RE.test(rawLast))) return { status: 400, code: "invalid" };
-  const expectedLastDecisionId = rawLast === "" ? null : Number(rawLast);
-  const requestId = field(fd, "requestId");
-  if (!UUID_RE.test(requestId)) return { status: 400, code: "invalid" };
-  if (!validId(batchId) || !validId(conceptId)) return { status: 400, code: "invalid" };
-  if (decision !== "ok" && decision !== "issue") return { status: 400, code: "invalid" };
-  if (note.length > NOTE_MAX || (decision === "issue" && note.length < ISSUE_NOTE_MIN)) return { status: 400, code: "invalid" };
-
-  if (!allowAccountAction("decision", session.email)) {
-    await denyDecision("rate_limited", session, fd);
-    return { status: 429, code: "rate_limited" };
-  }
-  if (!(await turnstilePassed(fd, "decision"))) {
-    await denyDecision("captcha", session, fd);
-    return { status: 403, code: "captcha" };
-  }
-
-  const r = await postDecision(batchId, conceptId, { decision, note, reviewerEmail: session.email,
-    reviewerRole: session.role, extractedAt, expectedLastDecisionId, requestId });
-  if (r.ok || r.status === 409) revalidatePath(batchPath(batchId));
-  if (r.ok) return { status: 200, code: "saved" };   // a replayed request (200) is the same saved decision
-  if (r.status === 409) return { status: 409, code: conflictCode(r.field, r.error) };
-  if (r.status === 400) return { status: 400, code: "invalid" };
-  return { status: 502, code: "failed" };
 }
 
 /** Where a flag form sends the visitor back to; built from validated fields only (no open redirect). */
@@ -147,9 +63,10 @@ export async function submitFlag(fd: FormData): Promise<ActionResult<FlagCode>> 
   if (!allowAccountAction("flag", session.email)) return { status: 429, code: "failed" };
   if (!(await turnstilePassed(fd, "flag"))) return { status: 403, code: "captcha" };
 
-  const r = await createFlag({ targetType: targetType as FlagTarget, targetId, message, reporterEmail: session.email });
+  const r = await createFlag({ targetType: targetType as FlagTarget, targetId, message, reporterEmail: session.email,
+    requestId: await requestId() });
   if (r.ok) {
-    revalidatePath("/flags");
+    revalidatePath("/review/flags");
     return { status: 200, code: "sent" };
   }
   return r.status === 400 ? { status: 400, code: "invalid" } : { status: 502, code: "failed" };
@@ -164,8 +81,9 @@ export async function submitResolve(fd: FormData): Promise<ActionResult<ResolveC
 
   if (!(await turnstilePassed(fd, "resolve"))) return { status: 403, code: "captcha" };
 
-  const r = await resolveFlag(Number(raw), session.email);
+  // §5.15: the audit row carries the web request id (the middleware's x-request-id). A second resolve is the API's 409.
+  const r = await resolveFlag(Number(raw), session.email, await requestId());
   if (!r.ok) return r.status === 404 || r.status === 409 ? { status: 400, code: "invalid" } : { status: 502, code: "failed" };
-  revalidatePath("/flags");
+  revalidatePath("/review/flags");
   return { status: 200, code: "resolved" };
 }

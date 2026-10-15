@@ -15,19 +15,32 @@ declare global {
 
 const SCRIPT = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
 let loading: Promise<TurnstileApi> | null = null;
+let loadingScript: HTMLScriptElement | null = null;
 
 function loadTurnstile(nonce?: string): Promise<TurnstileApi> {
   if (window.turnstile) return Promise.resolve(window.turnstile);
+  // A pending promise whose script tag has left the document can never settle (jsdom never loads external scripts, and a
+  // page may swap the tag): drop it and attach to the script that is there now.
+  if (loading && !loadingScript?.isConnected) { loading = null; loadingScript = null; }
   loading ??= new Promise<TurnstileApi>((resolve, reject) => {
-    const s = document.createElement("script");
-    s.src = SCRIPT;
-    s.async = true;
-    if (nonce) s.setAttribute("nonce", nonce);
+    // The no-JavaScript decision form (§5.8.6) puts Cloudflare's implicit script on the page; wait for it, never load twice.
+    const existing = document.querySelector<HTMLScriptElement>('script[src^="https://challenges.cloudflare.com/turnstile/v0/api.js"]');
+    const s = existing ?? document.createElement("script");
+    loadingScript = s;
     // A failed load clears the shared promise and its tag, so a later retry requests the script again.
-    const fail = () => { loading = null; s.remove(); reject(new Error("Turnstile did not load")); };
-    s.onload = () => (window.turnstile ? resolve(window.turnstile) : fail());
-    s.onerror = fail;
-    document.head.appendChild(s);
+    const fail = () => { loading = null; loadingScript = null; s.remove(); reject(new Error("Turnstile did not load")); };
+    const ok = () => (window.turnstile ? resolve(window.turnstile) : fail());
+    if (existing) {
+      existing.addEventListener("load", ok);
+      existing.addEventListener("error", fail);
+    } else {
+      s.src = SCRIPT;
+      s.async = true;
+      if (nonce) s.setAttribute("nonce", nonce);
+      s.onload = ok;
+      s.onerror = fail;
+      document.head.appendChild(s);
+    }
   });
   return loading;
 }
@@ -35,13 +48,15 @@ function loadTurnstile(nonce?: string): Promise<TurnstileApi> {
 export type TurnstileFieldProps = {
   siteKey: string; action: TurnstileAction; nonce?: string; resetKey?: number;
   onToken?: (token: string | null) => void; onError?: () => void;
+  /** §5.8.5: the desk uses "interaction-only" and refresh-expired "auto"; the desk shows its own BotCheck (hideStatus). */
+  appearance?: "always" | "interaction-only"; refreshExpired?: "auto" | "manual"; hideStatus?: boolean;
 };
 
 /**
  * Island (§4.2): explicit Turnstile render, reset and status. Turnstile puts the `cf-turnstile-response` field into
  * the enclosing form; `onToken` hands the same token to a fetch-based caller (sign-in).
  */
-export default function TurnstileField({ siteKey, action, nonce, resetKey = 0, onToken, onError }: TurnstileFieldProps) {
+export default function TurnstileField({ siteKey, action, nonce, resetKey = 0, onToken, onError, appearance, refreshExpired, hideStatus }: TurnstileFieldProps) {
   const box = useRef<HTMLDivElement>(null);
   const widget = useRef<string | null>(null);
   const callbacks = useRef({ onToken, onError });
@@ -57,6 +72,8 @@ export default function TurnstileField({ siteKey, action, nonce, resetKey = 0, o
         sitekey: siteKey,
         action,
         "response-field-name": "cf-turnstile-response",
+        ...(appearance ? { appearance } : {}),
+        ...(refreshExpired ? { "refresh-expired": refreshExpired } : {}),
         callback: (token: string) => { setState("passed"); callbacks.current.onToken?.(token); },
         "error-callback": () => { setState("failed"); callbacks.current.onToken?.(null); callbacks.current.onError?.(); },
         "expired-callback": () => { setState("checking"); callbacks.current.onToken?.(null); },
@@ -71,7 +88,7 @@ export default function TurnstileField({ siteKey, action, nonce, resetKey = 0, o
       if (widget.current && window.turnstile) window.turnstile.remove(widget.current);
       widget.current = null;
     };
-  }, [siteKey, action, nonce, loadAttempt]);
+  }, [siteKey, action, nonce, appearance, refreshExpired, loadAttempt]);
 
   useEffect(() => {
     if (resetKey === 0) return;
@@ -84,7 +101,7 @@ export default function TurnstileField({ siteKey, action, nonce, resetKey = 0, o
   return (
     <div className={styles.field}>
       <div ref={box} />
-      <BotCheck state={state} />
+      {!hideStatus && <BotCheck state={state} />}
     </div>
   );
 }

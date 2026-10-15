@@ -62,5 +62,6 @@ jobs:
       - run: curl -fsS --retry 30 --retry-delay 2 --retry-all-errors http://localhost:3000/healthz
       - run: cd web && E2E_BASE_URL=http://localhost:3000 npx playwright test
       - run: cd web && npx lhci autorun
+      - run: cd web && npx lhci autorun --config=./lighthouserc.review.json
       - if: failure()
         run: $COMPOSE logs --no-color web api | tail -n 300

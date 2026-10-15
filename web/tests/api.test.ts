@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { checkInteractions, getBatch, getProduct, getSubstance, searchProducts } from "../lib/api";
+import { checkInteractions, getProduct, getSubstance, searchProducts } from "../lib/api";
 
 const ok = (data: unknown) => new Response(JSON.stringify({ success: true, data }), { status: 200 });
 beforeEach(() => {
@@ -51,23 +51,6 @@ describe("api client", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("x", { status: 500 })));
     await expect(getProduct("x")).rejects.toThrow("API error 500");
   });
-  it("getBatch returns null on 404", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("{}", { status: 404 })));
-    expect(await getBatch("nope")).toBeNull();
-  });
-  it("getBatch throws on 500", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("boom", { status: 500 })));
-    await expect(getBatch("x")).rejects.toThrow("API error 500");
-  });
-  it("getBatch URL-encodes the id and passes timeout and no-store", async () => {
-    const f = vi.fn().mockResolvedValue(ok({ batchId: "a/b c", items: [] })); vi.stubGlobal("fetch", f);
-    await getBatch("a/b c");
-    expect(f.mock.calls[0][0]).toBe("http://api:8080/v1/batches/a%2Fb%20c");
-    expect(new Headers(f.mock.calls[0][1].headers).get("X-Internal-Token")).toBe("test-internal-token-0123456789abcdef");
-    expect(f.mock.calls[0][1].cache).toBe("no-store");
-    expect(f.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
-  });
-
   it("getSubstance encodes the id and passes timeout and no-store", async () => {
     const f = vi.fn().mockResolvedValue(ok({ bdsId: "BDS-000001" })); vi.stubGlobal("fetch", f);
     expect(await getSubstance("BDS-000001/x")).toEqual({ bdsId: "BDS-000001" });

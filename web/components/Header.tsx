@@ -2,6 +2,8 @@ import AccountMenu from "@/components/AccountMenu";
 import ThemeSwitch from "@/components/ThemeSwitch";
 import { buttonClass } from "@/components/ui/Button";
 import Wordmark from "@/components/ui/Wordmark";
+import { DESK_NEW } from "@/lib/copy";
+import { DESK } from "@/lib/review-copy";
 import { ROLE_LABEL } from "@/lib/reviewers";
 import type { Session } from "@/lib/session";
 import type { Theme } from "@/lib/theme";
@@ -13,9 +15,9 @@ const initials = (s: Session) => ((s.name ?? "").trim() || s.email)
 
 /**
  * Site header. The owner's own name and email appear only inside their account menu (§2.2); nobody else's email
- * is ever rendered. The links are the current routes until P1B (/review) and P2 (§6.1 navigation) replace them.
+ * is ever rendered. Reviewers reach the review surface from the account menu (§6.2); P2 replaces the navigation (§6.1).
  */
-export default function Header({ session, theme }: { session: Session | null; theme: Theme }) {
+export default function Header({ session, theme, batchId = null }: { session: Session | null; theme: Theme; batchId?: string | null }) {
   const reviewer = session?.role === "pharmacist" || session?.role === "engineer";
   const displayName = session ? (session.name ?? "").trim() || session.email : "";
   return (
@@ -23,8 +25,6 @@ export default function Header({ session, theme }: { session: Session | null; th
       <a className={styles.home} href="/"><Wordmark size={20} /></a>
       <nav className={styles.nav} aria-label="Main">
         <a href="/check">Interaction checker</a>
-        {reviewer && <a href="/batches">Batches</a>}
-        {reviewer && <a href="/flags">Flags</a>}
       </nav>
       <div className={styles.end}>
         {session ? (
@@ -34,7 +34,12 @@ export default function Header({ session, theme }: { session: Session | null; th
             </summary>
             <div className={styles.panel}>
               <p className={styles.who}><b>{displayName}</b><span>{session.email}</span></p>
-              {reviewer && <span className="role-badge">{ROLE_LABEL[session.role]}</span>}
+              {reviewer && (
+                <p><span className="role-badge">{ROLE_LABEL[session.role]}</span>
+                  {batchId && <> {DESK.batchPrefix} <span className="mono">{batchId}</span></>}</p>
+              )}
+              {reviewer && <a href="/review">{DESK.reviewDesk}</a>}
+              {reviewer && <a href="/review/flags">{DESK_NEW.reviewLists.flagsLink}</a>}
               <ThemeSwitch value={theme} />
               <form method="post" action="/signout"><button type="submit" className={buttonClass("plain", "sm")}>Sign out</button></form>
             </div>
