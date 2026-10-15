@@ -9,6 +9,7 @@ import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /** What the senior review service reads (§7.7). "Held" = the latest current item of a product, never one marked removed. */
 public interface SeniorReviewPort {
@@ -44,4 +45,19 @@ public interface SeniorReviewPort {
     Mono<SubstanceFacts> substance(String bdsId);
     /** The strength text of {@code bdsId} in each clinical drug, by bdc_id. */
     Mono<Map<String, String>> strengths(Collection<String> bdcIds, String bdsId);
+
+    record NewPairDecision(String decision, String note, String reviewerEmail, String expectedContentHash,
+                           Long expectedLastPairReviewId, UUID requestId) {}
+    /** {@code outcome} is the error code (CONFLICT or INVALID_QUERY); email, role and target only when they were valid. */
+    record PairRejection(String ddinterA, String ddinterB, String actorEmail, String actorRole, String outcome, UUID requestId) {}
+
+    /**
+     * §7.7, one transaction, SELECT … FOR UPDATE on the pair row: (1) a requestId already used for a pair decision answers
+     * replayed for the same pair and decision, else InvalidQueryException(requestId); (2) NotFoundException(pair) when the
+     * pair is not stored, a ≥ b, or a side is not held; (3) ConflictException(contentHash); (4) ConflictException(lastPairReviewId);
+     * (5) ConflictException(state) for reviewed on a reviewed pair; then the pair_review row and its pair_decision audit row.
+     */
+    Mono<SeniorViews.PairOutcome> decide(String ddinterA, String ddinterB, NewPairDecision decision);
+    /** One pair_decision_rejected audit row, in its own transaction. */
+    Mono<Void> recordRejection(PairRejection rejection);
 }

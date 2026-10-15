@@ -1,13 +1,20 @@
 package com.niramoy.bddrug.adapter.persistence;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.niramoy.bddrug.application.ConflictException;
+import com.niramoy.bddrug.application.InvalidQueryException;
+import com.niramoy.bddrug.application.NotFoundException;
 import com.niramoy.bddrug.application.port.SeniorReviewPort;
 import com.niramoy.bddrug.domain.BatchPairs;
 import com.niramoy.bddrug.domain.IngredientSummary;
+import com.niramoy.bddrug.domain.PairContent;
 import com.niramoy.bddrug.domain.PairReviewRule;
 import com.niramoy.bddrug.domain.ReviewDecision;
 import com.niramoy.bddrug.domain.SeniorViews;
 import com.niramoy.bddrug.domain.SourceLinks;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.reactive.TransactionalOperator;
 import reactor.core.publisher.Mono;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -15,9 +22,12 @@ import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
 
 /** Senior review SQL (§7.7). Held products come from the latest current item only (statusOf semantics, PO D7). */
 @Component
@@ -28,10 +38,15 @@ public class R2dbcSeniorReviewAdapter implements SeniorReviewPort {
     protected final DatabaseClient db;
     protected final IngredientSummaryReader ingredients;
     protected final PairReviewReader pairReviews;
-    public R2dbcSeniorReviewAdapter(DatabaseClient db, IngredientSummaryReader ingredients, PairReviewReader pairReviews) {
+    protected final TransactionalOperator tx;
+    protected final ObjectMapper json;
+    public R2dbcSeniorReviewAdapter(DatabaseClient db, IngredientSummaryReader ingredients, PairReviewReader pairReviews,
+                                    TransactionalOperator tx, ObjectMapper json) {
         this.db = db;
         this.ingredients = ingredients;
         this.pairReviews = pairReviews;
+        this.tx = tx;
+        this.json = json;
     }
 
     private static Instant at(OffsetDateTime t) { return t == null ? null : t.toInstant(); }
@@ -228,5 +243,131 @@ public class R2dbcSeniorReviewAdapter implements SeniorReviewPort {
         if (value == null) return "";
         String base = (ClinicalDrugReader.plain(value).toPlainString() + " " + (unit == null ? "" : unit)).trim();
         return per == null ? base : (base + " per " + ClinicalDrugReader.plain(per).toPlainString() + " " + (perUnit == null ? "" : perUnit)).trim();
+    }
+
+    // ---- pair decisions (§7.7)
+
+    static final String TARGET_TYPE = "ddinter_pair";
+    private record Locked(String severity, List<String> actions, String interactionId) {}
+    private record AuditHit(String targetId, String outcome) {}
+
+    private static String target(String a, String b) { return a + "/" + b; }
+
+    @Override public Mono<SeniorViews.PairOutcome> decide(String a, String b, NewPairDecision d) {
+        Mono<Optional<Locked>> lock = a.compareTo(b) >= 0 ? Mono.just(Optional.empty()) : db.sql("""
+                SELECT severity, actions, interaction_id FROM curated.ddinter_pair WHERE ddinter_a = :a AND ddinter_b = :b FOR UPDATE""")
+            .bind("a", a).bind("b", b)
+            .map(r -> Optional.of(new Locked(r.get("severity", String.class), R2dbcSubstanceAdapter.list(r, "actions"),
+                r.get("interaction_id", String.class))))
+            .one().defaultIfEmpty(Optional.empty());
+        return tx.transactional(lock.flatMap(locked -> replay(a, b, d).switchIfEmpty(Mono.defer(() -> locked.isEmpty()
+                ? Mono.error(notFound())
+                : held(a, b).flatMap(h -> h ? fresh(a, b, d, locked.get()) : Mono.<SeniorViews.PairOutcome>error(notFound()))))))
+            .onErrorResume(DuplicateKeyException.class, e -> tx.transactional(replay(a, b, d).switchIfEmpty(Mono.error(e))));
+    }
+
+    private static NotFoundException notFound() {
+        return new NotFoundException("pair", "No stored DDInter pair with these entries between substances we hold");
+    }
+
+    /** Step 1: empty when the requestId is new. */
+    private Mono<SeniorViews.PairOutcome> replay(String a, String b, NewPairDecision d) {
+        return db.sql("SELECT target_id, outcome FROM ops.audit_event WHERE event = 'pair_decision' AND request_id = :r")
+            .bind("r", d.requestId())
+            .map(r -> new AuditHit(r.get("target_id", String.class), r.get("outcome", String.class))).one()
+            .flatMap(hit -> target(a, b).equals(hit.targetId()) && d.decision().equals(hit.outcome())
+                ? current(a, b, d.reviewerEmail(), true)
+                : Mono.error(new InvalidQueryException("requestId",
+                    "requestId was already used for another pair decision; send a new requestId for a new decision")));
+    }
+
+    /** Step 2's "held": both entries map to a substance of a held product. */
+    private Mono<Boolean> held(String a, String b) {
+        return db.sql("WITH " + LATEST + """
+                , held AS (SELECT DISTINCT xm.bds_id FROM latest l
+                           JOIN curated.brand_product_ingredient bpi ON bpi.concept_id = l.concept_id
+                           JOIN curated.substance_code xm ON xm.system = 'ICD11_XM' AND xm.code = bpi.xm_code
+                           WHERE l.note IS DISTINCT FROM '%s')
+                SELECT EXISTS (SELECT 1 FROM curated.substance_code c JOIN held h ON h.bds_id = c.bds_id WHERE c.system = 'DDINTER' AND c.code = :a)
+                   AND EXISTS (SELECT 1 FROM curated.substance_code c JOIN held h ON h.bds_id = c.bds_id WHERE c.system = 'DDINTER' AND c.code = :b)
+                   AS held""".formatted(ReviewSql.REMOVED_NOTE))
+            .bind("a", a).bind("b", b).map(r -> Boolean.TRUE.equals(r.get("held", Boolean.class))).one();
+    }
+
+    private Mono<PairContent.Content> content(Locked l) {
+        if (l.interactionId() == null) return Mono.just(new PairContent.Content(l.severity(), l.actions(), null, null));
+        return db.sql("SELECT interaction, management FROM curated.ddinter_interaction_text WHERE interaction_id = :i")
+            .bind("i", l.interactionId())
+            .map(r -> new PairContent.Content(l.severity(), l.actions(), r.get("interaction", String.class), r.get("management", String.class)))
+            .one().defaultIfEmpty(new PairContent.Content(l.severity(), l.actions(), null, null));
+    }
+
+    private Mono<List<PairReviewRule.Decision>> decisionsOf(String a, String b, String viewer) {
+        return pairReviews.forCodes(List.of(a, b), viewer).map(m -> m.getOrDefault(a + "|" + b, List.of()));
+    }
+
+    /** Steps 3–5, then the writes. */
+    private Mono<SeniorViews.PairOutcome> fresh(String a, String b, NewPairDecision d, Locked locked) {
+        return content(locked).flatMap(content -> decisionsOf(a, b, d.reviewerEmail()).flatMap(ds -> {
+            String hash = PairContent.hash(a, b, content);
+            if (!hash.equals(d.expectedContentHash()))
+                return Mono.error(new ConflictException("contentHash",
+                    "This pair changed in DDInter after the page was loaded; reload it and review again"));
+            if (!java.util.Objects.equals(PairReviewRule.lastId(ds), d.expectedLastPairReviewId()))
+                return Mono.error(new ConflictException("lastPairReviewId",
+                    "Another senior pharmacist decided on this pair after the page was loaded; reload it"));
+            if ("reviewed".equals(d.decision()) && PairReviewRule.REVIEWED.equals(PairReviewRule.review(ds, hash).state()))
+                return Mono.error(new ConflictException("state", "This pair is already reviewed"));
+            Map<String, Object> stored = new LinkedHashMap<>();
+            stored.put("severity", content.severity());
+            stored.put("actions", content.actions());
+            stored.put("interaction", content.interaction());
+            stored.put("management", content.management());
+            String json;
+            try {
+                json = this.json.writeValueAsString(stored);
+            } catch (Exception e) {
+                return Mono.error(new IllegalStateException("pair content is not serialisable", e));
+            }
+            return db.sql("""
+                    INSERT INTO ops.pair_review (ddinter_a, ddinter_b, decision, note, content_hash, content, reviewer_email, reviewer_role)
+                    VALUES (:a, :b, :decision, :note, :hash, CAST(:content AS jsonb), :email, 'senior')""")
+                .bind("a", a).bind("b", b).bind("decision", d.decision()).bind("note", d.note()).bind("hash", hash)
+                .bind("content", json).bind("email", d.reviewerEmail())
+                .fetch().rowsUpdated()
+                .then(db.sql("""
+                        INSERT INTO ops.audit_event (event, actor_email, actor_role, target_type, target_id, outcome, request_id)
+                        VALUES ('pair_decision', :email, 'senior', :type, :target, :outcome, :rid)""")
+                    .bind("email", d.reviewerEmail()).bind("type", TARGET_TYPE).bind("target", target(a, b))
+                    .bind("outcome", d.decision()).bind("rid", d.requestId()).fetch().rowsUpdated())
+                .then(current(a, b, d.reviewerEmail(), false));
+        }));
+    }
+
+    private Mono<SeniorViews.PairOutcome> current(String a, String b, String viewer, boolean replayed) {
+        Locked none = new Locked(null, List.of(), null);
+        return db.sql("SELECT severity, actions, interaction_id FROM curated.ddinter_pair WHERE ddinter_a = :a AND ddinter_b = :b")
+            .bind("a", a).bind("b", b)
+            .map(r -> new Locked(r.get("severity", String.class), R2dbcSubstanceAdapter.list(r, "actions"), r.get("interaction_id", String.class)))
+            .one().defaultIfEmpty(none)
+            .flatMap(this::content)
+            .flatMap(content -> decisionsOf(a, b, viewer).map(ds -> {
+                String hash = PairContent.hash(a, b, content);
+                return new SeniorViews.PairOutcome(a, b, PairReviewRule.review(ds, hash),
+                    new SeniorViews.PairVersion(hash, PairReviewRule.lastId(ds)), replayed);
+            }));
+    }
+
+    @Override public Mono<Void> recordRejection(PairRejection r) {
+        DatabaseClient.GenericExecuteSpec spec = db.sql("""
+                INSERT INTO ops.audit_event (event, actor_email, actor_role, target_type, target_id, outcome, request_id)
+                VALUES ('pair_decision_rejected', :email, :role, :type, :target, :outcome, :rid)""")
+            .bind("outcome", r.outcome());
+        spec = r.actorEmail() == null ? spec.bindNull("email", String.class) : spec.bind("email", r.actorEmail());
+        spec = r.actorRole() == null ? spec.bindNull("role", String.class) : spec.bind("role", r.actorRole());
+        spec = r.ddinterA() == null ? spec.bindNull("type", String.class).bindNull("target", String.class)
+            : spec.bind("type", TARGET_TYPE).bind("target", target(r.ddinterA(), r.ddinterB()));
+        spec = r.requestId() == null ? spec.bindNull("rid", UUID.class) : spec.bind("rid", r.requestId());
+        return tx.transactional(spec.fetch().rowsUpdated()).then();
     }
 }

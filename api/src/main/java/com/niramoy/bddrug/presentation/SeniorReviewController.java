@@ -1,6 +1,9 @@
 package com.niramoy.bddrug.presentation;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.niramoy.bddrug.application.SeniorReviewService;
 import com.niramoy.bddrug.domain.SeniorViews;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
 
@@ -44,5 +47,25 @@ public class SeniorReviewController {
             @RequestParam(required = false) String page, @RequestParam(required = false) String size) {
         auth.require(token);
         return service.substance(bdsId, pairs, severity, page, size, viewer).map(ApiResponse::ok);
+    }
+
+    /** The pair decision body; expectedLastPairReviewId is a JsonNode so a left-out key can be told from an explicit null. */
+    public record PairDecisionBody(String decision, String note, String reviewerEmail, String reviewerRole, String expectedContentHash,
+                                   JsonNode expectedLastPairReviewId, String requestId) {
+        SeniorReviewService.PairRequest toRequest() {
+            boolean sent = expectedLastPairReviewId != null;
+            String id = !sent || expectedLastPairReviewId.isNull() ? null
+                : expectedLastPairReviewId.isIntegralNumber() ? expectedLastPairReviewId.asText() : "invalid:" + expectedLastPairReviewId.getNodeType();
+            return new SeniorReviewService.PairRequest(decision, note, reviewerEmail, reviewerRole, expectedContentHash, sent, id, requestId);
+        }
+    }
+
+    /** 201 for a new pair decision, 200 for a replay of a known requestId. The token is checked before the body is read. */
+    @PostMapping("/pairs/{ddinterA}/{ddinterB}/decisions")
+    public Mono<ResponseEntity<ApiResponse<SeniorViews.PairOutcome>>> decide(@PathVariable String ddinterA, @PathVariable String ddinterB,
+            @RequestHeader(value = InternalAuth.HEADER, required = false) String token, @RequestBody Mono<PairDecisionBody> body) {
+        auth.require(token);
+        return body.flatMap(b -> service.decide(ddinterA, ddinterB, b.toRequest()))
+            .map(o -> ResponseEntity.status(o.replayed() ? HttpStatus.OK : HttpStatus.CREATED).body(ApiResponse.ok(o)));
     }
 }

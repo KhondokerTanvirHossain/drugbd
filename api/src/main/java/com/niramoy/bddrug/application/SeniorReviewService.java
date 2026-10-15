@@ -25,6 +25,10 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.UUID;
+import java.util.regex.Pattern;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Senior clinical review (spec §5.17, §7.7). Every read covers all batches at once: the held products (latest current
@@ -360,5 +364,63 @@ public class SeniorReviewService {
         return new SeniorViews.BrandRow(p.conceptId(), p.tradeName(), p.batchId(), displayStatus(p, states, decisions),
             p.bdcId() == null ? null : new SeniorViews.Clinical(p.bdcId(), p.clinicalName(), p.route()),
             p.bdcId() == null ? "" : strengths.getOrDefault(p.bdcId(), ""), reason == null ? chosen : List.of(), reason);
+    }
+
+    // ---- pair decisions (§7.7)
+
+    private static final Logger log = LoggerFactory.getLogger(SeniorReviewService.class);
+    public static final Set<String> PAIR_DECISIONS = Set.of("reviewed", "issue");
+    private static final Pattern HASH = Pattern.compile("^[0-9a-f]{64}$");
+    private static final Pattern UUID_TEXT =
+        Pattern.compile("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$");
+    private static final Pattern DDINTER_ID = Pattern.compile("^DDInter[0-9]{1,6}$");
+
+    /** {@code lastIdSent} is false when the key was left out; the id arrives as text (digits, null, or anything else). */
+    public record PairRequest(String decision, String note, String reviewerEmail, String reviewerRole, String expectedContentHash,
+                              boolean lastIdSent, String expectedLastPairReviewId, String requestId) {}
+
+    public Mono<SeniorViews.PairOutcome> decide(String a, String b, PairRequest r) {
+        return Mono.fromCallable(() -> validate(r))
+            .flatMap(d -> port.decide(a, b, d))
+            .onErrorResume(e -> e instanceof InvalidQueryException || e instanceof ConflictException,
+                e -> port.recordRejection(rejection(a, b, r, e))
+                    .onErrorResume(x -> {
+                        log.error("pair_decision_rejected audit row not written: {}", x.getClass().getName());
+                        return Mono.empty();
+                    })
+                    .then(Mono.<SeniorViews.PairOutcome>error(e)));
+    }
+
+    static SeniorReviewPort.NewPairDecision validate(PairRequest r) {
+        if (!"senior".equals(r.reviewerRole()))
+            throw new InvalidQueryException("reviewerRole", "Only a senior pharmacist can review pairs");
+        String decision = Validate.oneOf(r.decision(), PAIR_DECISIONS, "decision");
+        String note = Validate.text(r.note(), "issue".equals(decision) ? 5 : 0, 1000, "note");
+        String email = Validate.email(r.reviewerEmail(), "reviewerEmail");
+        if (r.requestId() == null || !UUID_TEXT.matcher(r.requestId()).matches())
+            throw new InvalidQueryException("requestId", "requestId must be a UUID, reused unchanged on every retry");
+        if (r.expectedContentHash() == null || !HASH.matcher(r.expectedContentHash()).matches())
+            throw new InvalidQueryException("expectedContentHash", "expectedContentHash must be 64 lower-case hex characters");
+        if (!r.lastIdSent())
+            throw new InvalidQueryException("expectedLastPairReviewId",
+                "expectedLastPairReviewId is required: send the pair's lastPairReviewId as the page showed it (null when none)");
+        Long last = null;
+        if (r.expectedLastPairReviewId() != null) {
+            try {
+                last = Long.parseLong(r.expectedLastPairReviewId());
+                if (last < 1) throw new NumberFormatException();
+            } catch (NumberFormatException e) {
+                throw new InvalidQueryException("expectedLastPairReviewId", "expectedLastPairReviewId must be a positive integer or null");
+            }
+        }
+        return new SeniorReviewPort.NewPairDecision(decision, note, email, r.expectedContentHash(), last, UUID.fromString(r.requestId()));
+    }
+
+    static SeniorReviewPort.PairRejection rejection(String a, String b, PairRequest r, Throwable e) {
+        String email = Validate.stripped(r.reviewerEmail());
+        boolean ids = a != null && b != null && DDINTER_ID.matcher(a).matches() && DDINTER_ID.matcher(b).matches();
+        UUID rid = r.requestId() != null && UUID_TEXT.matcher(r.requestId()).matches() ? UUID.fromString(r.requestId()) : null;
+        return new SeniorReviewPort.PairRejection(ids ? a : null, ids ? b : null, Validate.isEmail(email) ? email : null,
+            "senior".equals(r.reviewerRole()) ? "senior" : null, e instanceof ConflictException ? "CONFLICT" : "INVALID_QUERY", rid);
     }
 }
