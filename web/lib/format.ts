@@ -37,6 +37,11 @@ export function fmtDhaka(iso: string): string {
   const z = zoned(iso, "Asia/Dhaka");
   return z ? `${z.date} ${z.time} Dhaka` : iso;
 }
+/** "12/10/2026 03:27": the Dhaka date and time without the zone word, for sentences that name it ("… in Dhaka"). */
+export function fmtDhakaClock(iso: string): string {
+  const z = zoned(iso, "Asia/Dhaka");
+  return z ? `${z.date} ${z.time}` : iso;
+}
 /** "12/10/2026 03:28 Dhaka time" (public surfaces) */
 export function fmtDhakaTime(iso: string): string {
   const z = zoned(iso, "Asia/Dhaka");

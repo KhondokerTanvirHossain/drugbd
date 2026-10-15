@@ -25,6 +25,7 @@ export default function Header({ session, theme, batchId = null }: { session: Se
       <a className={styles.home} href="/"><Wordmark size={20} /></a>
       <nav className={styles.nav} aria-label="Main">
         <a href="/check">Interaction checker</a>
+        <a href="/learn">Learn</a>
       </nav>
       <div className={styles.end}>
         {session ? (

@@ -120,3 +120,27 @@ describe("middleware request log (§5.15, §9.7)", () => {
     log.mockRestore();
   });
 });
+
+describe("middleware: an almost-right Learn chapter (Review Focus 4)", () => {
+  // A page-level notFound() aborts Next 15's server-rendered shell (its HTML is the bare <html id="__next_error__">, with
+  // chrome only after hydration), so the middleware sends these paths to Next's own /_not-found page, rendered on the
+  // server inside the root layout. The layout still sees the original path.
+  it("rewrites a one-segment non-chapter path to /_not-found, with the security headers and the original x-pathname", async () => {
+    const mw = createMiddleware(createLimits(clock), clock);
+    for (const path of ["/learn/Start", "/learn/START", "/learn/start%20", "/learn/start.html", "/learn/nope"]) {
+      const res = await mw(req(path));
+      expect(new URL(res.headers.get("x-middleware-rewrite")!).pathname, path).toBe("/_not-found");
+      expect(res.headers.get("content-security-policy"), path).toContain("nonce-");
+      expect(res.headers.get("x-middleware-request-x-pathname"), path).toBe(path);
+    }
+  });
+
+  it("passes the ten chapters and an encoded chapter slug through unchanged", async () => {
+    const mw = createMiddleware(createLimits(clock), clock);
+    for (const path of ["/learn/start", "/learn/faq", "/learn/st%61rt", "/learn/glossary/extra"]) {
+      const res = await mw(req(path));
+      expect(res.headers.get("x-middleware-rewrite"), path).toBeNull();
+      expect(res.headers.get("x-middleware-next"), path).toBe("1");
+    }
+  });
+});

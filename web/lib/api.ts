@@ -2,6 +2,7 @@ import "server-only";
 import type {
   DeskOutcome, FilterKey, FlagItem, FlagPage, ItemsPage, ReviewBatchSummary, ReviewDiff, ReviewItem, VersionRow,
 } from "./review-types";
+import { parseStats, type SiteStats } from "./stats";
 
 /**
  * The BDDrug API client. Server-only: it reads INTERNAL_API_TOKEN, which must never reach a client bundle
@@ -81,6 +82,18 @@ export async function listLoadedProducts(): Promise<LoadedProduct[]> {
   const data = (await res.json())?.data;
   if (!Array.isArray(data)) throw new Error("API error: no product list");
   return data as LoadedProduct[];
+}
+
+/**
+ * GET /v1/stats (§7.4): public, never with the token. Throws on any failure or malformed body, so a Learn chapter
+ * never renders a frozen example without its live `exampleUsable` check (§6.8).
+ */
+export async function getStats(): Promise<SiteStats> {
+  const res = await read(`${base()}/v1/stats`);
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  const stats = parseStats((await res.json().catch(() => null))?.data);
+  if (!stats) throw new Error("API error: malformed stats");
+  return stats;
 }
 
 /** Batch evidence shows unreviewed records: reviewers only (A1). These reads carry the token and fail without one. */

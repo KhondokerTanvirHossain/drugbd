@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fmtDhaka, fmtDhakaOn, fmtDhakaTime, fmtUtc } from "@/lib/format";
+import { fmtDhaka, fmtDhakaClock, fmtDhakaOn, fmtDhakaTime, fmtUtc } from "@/lib/format";
 
 describe("§3.5 date formatters (DD/MM/YYYY, 24-hour, zone named)", () => {
   it("formats the Board DS examples", () => {
@@ -19,5 +19,10 @@ describe("§3.5 date formatters (DD/MM/YYYY, 24-hour, zone named)", () => {
   it("accepts an offset timestamp and returns an unparseable value unchanged", () => {
     expect(fmtUtc("2026-10-12T03:27:00+06:00")).toBe("11/10/2026 21:27 UTC");
     expect(fmtDhaka("not a date")).toBe("not a date");
+  });
+  it("fmtDhakaClock gives the Dhaka date and time without the zone word (Learn: \"… in Dhaka\")", () => {
+    expect(fmtDhakaClock("2026-10-11T21:27:17.629Z")).toBe("12/10/2026 03:27");
+    expect(fmtDhakaClock("2026-10-12T18:00:00Z")).toBe("13/10/2026 00:00");
+    expect(fmtDhakaClock("not a date")).toBe("not a date");
   });
 });

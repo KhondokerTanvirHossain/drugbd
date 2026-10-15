@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -17,7 +17,7 @@ describe("§3.1 inline styles", () => {
   const bad = /style=\{(?!\{\s*["']--(w|dur-commit)["']\s*:)/;
 
   it("only --w and --dur-commit are set inline (style={{ \"--w\": … }})", () => {
-    const files = [...tsx(join(WEB, "app")), ...tsx(join(WEB, "components"))];
+    const files = ["app", "components", "content"].filter((d) => existsSync(join(WEB, d))).flatMap((d) => [...tsx(join(WEB, d))]);
     expect(files.filter((f) => bad.test(readFileSync(join(WEB, f), "utf8")))).toEqual([]);
   });
 
