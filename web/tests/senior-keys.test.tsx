@@ -84,3 +84,15 @@ describe("senior keyboard model (§5.17.5, §11.1 senior-keys)", () => {
     expect(document.querySelector('[data-sk="mark-DDInter14-DDInter1951"]')!.hasAttribute("aria-keyshortcuts")).toBe(false);
   });
 });
+
+describe("M and R need a current row (§5.17.5)", () => {
+  it("before any J or row focus, M and R send nothing and open nothing", async () => {
+    await mount();
+    region().focus();
+    expect(document.querySelector('article.pair-row[aria-current]')).toBeNull();
+    await act(async () => { key("m"); key("r"); });
+    expect(pairDecide).not.toHaveBeenCalled();
+    expect(document.querySelector('[id^="pair-note-"]')).toBeNull();
+    expect(document.querySelector('[data-sk="report-DDInter14-DDInter1951"]')!.getAttribute("aria-expanded")).toBe("false");
+  });
+});

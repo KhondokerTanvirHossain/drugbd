@@ -117,3 +117,64 @@ describe("pair decisions on the senior pages (§5.17.2)", () => {
     expect(state(ROW1)).toBe("Pair reviewed by a senior pharmacist on 15/10/2026 (you)");
   });
 });
+
+describe("focus never falls to <body> after an outcome (§5.17.5)", () => {
+  const MARK = '[data-sk="mark-DDInter14-DDInter1951"]';
+  const press = async (el: HTMLElement) => { el.focus(); await act(async () => { fireEvent.click(el); }); };
+  const notBody = () => {
+    expect(document.activeElement).not.toBeNull();
+    expect(document.activeElement).not.toBe(document.body);
+  };
+
+  it("Try again: focus moves to the row's Mark reviewed, which stays mounted", async () => {
+    await mount();
+    pairDecide.mockRejectedValueOnce(new Error("network"));
+    await press(document.querySelector<HTMLElement>(MARK)!);
+    act(() => turnstile.props!.onToken!("tok-2"));
+    pairDecide.mockResolvedValueOnce({ ok: true, outcome: OUT({ replayed: true }) });
+    await press(within(document.getElementById(ROW1)!).getByRole("button", { name: "Try again" }));
+    notBody();
+    expect(document.activeElement).toBe(document.querySelector(MARK));
+  });
+
+  it("Try again on an issue whose panel is open: focus moves to the note field", async () => {
+    await mount();
+    fireEvent.click(document.querySelector('[data-sk="report-DDInter14-DDInter1951"]')!);
+    const field = document.getElementById("pair-note-DDInter14-DDInter1951") as HTMLTextAreaElement;
+    fireEvent.change(field, { target: { value: "text contradicts the severity" } });
+    pairDecide.mockRejectedValueOnce(new Error("network"));
+    await act(async () => { key("Enter", field, { ctrlKey: true }); });
+    act(() => turnstile.props!.onToken!("tok-2"));
+    pairDecide.mockReturnValueOnce(new Promise(() => {}));
+    await press(within(document.getElementById(ROW1)!).getByRole("button", { name: "Try again" }));
+    notBody();
+    expect(document.activeElement).toBe(document.getElementById("pair-note-DDInter14-DDInter1951"));
+  });
+
+  it("Reload: focus moves to the row's Mark reviewed", async () => {
+    await mount();
+    pairDecide.mockResolvedValue({ ok: false, code: "content_changed" });
+    await press(document.querySelector<HTMLElement>(MARK)!);
+    await press(within(document.getElementById(ROW1)!).getByRole("button", { name: "Reload" }));
+    notBody();
+    expect(document.activeElement).toBe(document.querySelector(MARK));
+  });
+
+  it("forbidden: the buttons go and focus moves to the senior region", async () => {
+    await mount();
+    pairDecide.mockResolvedValue({ ok: false, code: "forbidden" });
+    await press(document.querySelector<HTMLElement>(MARK)!);
+    expect(document.querySelector(MARK)).toBeNull();
+    notBody();
+    expect(document.activeElement).toBe(document.getElementById("senior"));
+  });
+
+  it("signed out: the buttons go and focus moves to the sign-in link", async () => {
+    await mount();
+    pairDecide.mockResolvedValue({ ok: false, code: "unauthenticated" });
+    await press(document.querySelector<HTMLElement>(MARK)!);
+    expect(document.querySelector(MARK)).toBeNull();
+    notBody();
+    expect(document.activeElement?.textContent).toBe("Sign in again");
+  });
+});

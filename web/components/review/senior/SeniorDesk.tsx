@@ -81,16 +81,26 @@ export default function SeniorDesk(props: SeniorDeskProps) {
     panelsRef.current = { ...panelsRef.current, [key]: { ...panelOf(key), ...p } };
     setPanels(panelsRef.current);
   };
+  /** The row marked aria-current (set by J/K or focus entering a row), or null: M and R never act on an implicit row. */
   const currentKey = () => {
-    const ref = pairs[Math.max(current, 0)];
+    const ref = current >= 0 ? pairs[current] : undefined;
     return ref ? pairKey(ref.ddinterA, ref.ddinterB) : null;
+  };
+  /** After a banner's button unmounts (Try again, Reload), focus the row's closest control: its open note, else Mark reviewed. */
+  const focusRow = (key: string) => {
+    const ref = refOf(key);
+    if (!ref) return;
+    focus(panelOf(key).open ? `#pair-note-${ref.ddinterA}-${ref.ddinterB}` : `[data-sk="mark-${ref.ddinterA}-${ref.ddinterB}"]`);
   };
 
   // ---- the machine
   function fire(e: PairEvent) {
+    const before = m.current.auth;
     const r = pairStep(m.current, e);
     m.current = r.state;
     setMachine(r.state);
+    // §5.17.5: an auth stop unmounts the row buttons and the note panel; focus the sign-in link, else the region.
+    if (before === "ok" && r.state.auth !== "ok") focus(r.state.auth === "signedOut" ? '[data-senior="sign-in"]' : "#senior");
     for (const fx of r.effects) effect(fx);
   }
   function effect(fx: PairEffect) {
@@ -225,6 +235,7 @@ export default function SeniorDesk(props: SeniorDeskProps) {
     overridesRef.current = rest;
     setOverrides(rest);
     fire({ type: "RELOADED", key });
+    if (rowStatus(m.current, key).kind !== "paused") focusRow(key);
     router.refresh();
   }
   function move(delta: 1 | -1) {
@@ -297,7 +308,7 @@ export default function SeniorDesk(props: SeniorDeskProps) {
         state: overrides[key]?.review.state ?? refOf(key)?.state ?? "not_reviewed", panelOpen: p.open, note: p.note, noteError: p.error };
     },
     mark, clickReport: (key) => (panelOf(key).open ? setPanel(key, { open: false }) : openNote(key)), closeNote, setNote, sendNote,
-    tryAgain: (key) => fire({ type: "TRY_AGAIN", key }), reload,
+    tryAgain: (key) => { fire({ type: "TRY_AGAIN", key }); if (rowStatus(m.current, key).kind !== "netErr") focusRow(key); }, reload,
   };
   const r = P1C_COPY.review;
   const botHold = Object.values(machine.rows).some((x) => x.kind === "botHold");
@@ -307,7 +318,7 @@ export default function SeniorDesk(props: SeniorDeskProps) {
       <div className={styles.region} id="senior" role="region" tabIndex={0} aria-label={singleKeys ? r.regionLabel : r.regionPlain}
         ref={root} onKeyDown={onKeyDown} onFocus={onFocusIn}>
         {machine.auth === "signedOut" && (
-          <Banner tone="info" title={DESK_NEW.sessionExpired.hint} body={<a href={signInHref(here)}>{DESK_NEW.sessionExpired.signInAgain}</a>} />
+          <Banner tone="info" title={DESK_NEW.sessionExpired.hint} body={<a href={signInHref(here)} data-senior="sign-in">{DESK_NEW.sessionExpired.signInAgain}</a>} />
         )}
         {machine.auth === "forbidden" && <Banner tone="info" title={r.notAuthTitle} body={r.notAuthBody} />}
         {ready && (
