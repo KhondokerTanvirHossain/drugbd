@@ -88,6 +88,9 @@ export default function ReviewDesk(props: ReviewDeskProps) {
   const navStart = useRef<number | null>(null);
   /** §5.12: a transition longer than TRANSITION_MS announces "Loading batch {id}"; register() cancels it when the record arrives. */
   const loadTimer = useRef<number | undefined>(undefined);
+  /** The navigation in flight already has its own announcement (the auto-advance's "{saved} Opened {name}…", §5.9), so it
+   *  announces neither "Loading batch {id}" nor "Batch {id} loaded.": the one polite region keeps the save confirmation (§10.2). */
+  const navAnnounced = useRef(false);
   /** A record navigation is in flight: the bar is "loading" and A does nothing (§5.7, §5.8.4) until the record registers. */
   const navigating = useRef(false);
   const [, setNavTick] = useState(0);   // a ref alone does not render: this puts the bar into its loading state while the record loads
@@ -268,7 +271,8 @@ export default function ReviewDesk(props: ReviewDeskProps) {
     if (a.kind === "open" && o) {
       const target = o.all.find((r) => r.conceptId === a.target.conceptId)!;
       pendingGuard.current = target.conceptId;   // the guard starts on arrival, in register()
-      navigate(a.clearFilter ? recordHref(batchId, target.conceptId) : (o.rows.find((r) => r.conceptId === target.conceptId)?.href ?? target.href));
+      // a.announce already says "Opened {name}": this navigation adds no loading or loaded message over it (§10.2).
+      navigate(a.clearFilter ? recordHref(batchId, target.conceptId) : (o.rows.find((r) => r.conceptId === target.conceptId)?.href ?? target.href), undefined, true);
     }
     if (retryFocus.current) {
       retryFocus.current = false;
@@ -336,7 +340,7 @@ export default function ReviewDesk(props: ReviewDeskProps) {
     setOpen(reg);
     if (prev?.conceptId === reg.conceptId) {
       // Same record, new filter or search (Show all): the list is what changed, so focus goes where navigate() asked.
-      if (navStart.current !== null && performance.now() - navStart.current > TRANSITION_MS) announce(fill(DESK.loaded, { id: batchId }));
+      announceLoaded();
       if (focusAfterNav.current !== null && navStart.current !== null) { requestFocus(focusAfterNav.current || "desk"); focusAfterNav.current = null; }
       navStart.current = null;
       return;
@@ -352,12 +356,18 @@ export default function ReviewDesk(props: ReviewDeskProps) {
     setDiffOpen(false);
     if (staleRef.current[reg.conceptId] === "rerun") loadDiffFor(reg.conceptId);
     void logRecordOpen(batchId, reg.conceptId);
-    if (navStart.current !== null && performance.now() - navStart.current > TRANSITION_MS) announce(fill(DESK.loaded, { id: batchId }));
+    announceLoaded();
     navStart.current = null;
     if (focusAfterNav.current !== null) { requestFocus(focusAfterNav.current || "desk"); focusAfterNav.current = null; }
   }
 
-  function navigate(href: string, focusKey?: string) {
+  /** §5.12: a transition longer than TRANSITION_MS ends with "Batch {id} loaded.", unless it was already announced. */
+  function announceLoaded() {
+    if (!navAnnounced.current && navStart.current !== null && performance.now() - navStart.current > TRANSITION_MS) announce(fill(DESK.loaded, { id: batchId }));
+    navAnnounced.current = false;
+  }
+
+  function navigate(href: string, focusKey?: string, announced = false) {
     setDone(false);   // "Open any record to read it" (§5.7): any navigation leaves the complete view
     const url = new URL(href, window.location.href);
     if (`${url.pathname}${url.search}` === `${window.location.pathname}${window.location.search}`) {
@@ -368,8 +378,9 @@ export default function ReviewDesk(props: ReviewDeskProps) {
     focusAfterNav.current = focusKey ?? (a && root.current?.contains(a) ? (a.getAttribute("data-fk") ?? "") : null);
     navStart.current = performance.now();
     navigating.current = true;
+    navAnnounced.current = announced;
     window.clearTimeout(loadTimer.current);
-    loadTimer.current = window.setTimeout(() => { if (navigating.current) announce(fill(DESK.loadingStatus, { id: batchId })); }, TRANSITION_MS);
+    if (!announced) loadTimer.current = window.setTimeout(() => { if (navigating.current) announce(fill(DESK.loadingStatus, { id: batchId })); }, TRANSITION_MS);
     setNavTick((n) => n + 1);
     if (url.pathname === window.location.pathname) {
       // Same record, new filter or search (a filter, Show all): Next 15.5's router drops the answer to a push that changes only

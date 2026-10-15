@@ -182,6 +182,21 @@ describe("in-island transitions (§5.12)", () => {
     expect(live()).toBe("Batch 0001-pilot loaded.");
   });
 
+  it("a slow auto-advance after a save never overwrites the save confirmation with 'Loading' or 'loaded' (§5.9, §10.2)", async () => {
+    actions.decide.mockResolvedValue({ ok: true, outcome: OUTCOME });
+    const view = await mount();
+    fireEvent.keyDown(desk(), { key: "a" });
+    await settle(8_100);
+    expect(router.push).toHaveBeenCalledWith("/review/0001-pilot/239-0407-023--clarith", { scroll: false });
+    const saved = "Saved. Napa is approved by a pharmacist and published. Opened Clarith, record 9 of 10.";
+    expect(live()).toBe(saved);
+    await settle(1_500);                                    // a slow server: well past 300 ms before Clarith arrives
+    expect(live()).toBe(saved);
+    view.rerender(<Desk reg={makeReg("clarith")}><p>clarith detail</p></Desk>);
+    await settle(1_000);
+    expect(live()).toBe(saved);
+  });
+
   it("a transition that ends within 300 ms announces neither message", async () => {
     const view = await mount();
     fireEvent.keyDown(desk(), { key: "j" });
