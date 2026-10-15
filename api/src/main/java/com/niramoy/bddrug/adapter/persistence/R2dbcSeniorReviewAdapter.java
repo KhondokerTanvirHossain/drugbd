@@ -17,6 +17,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /** Senior review SQL (§7.7). Held products come from the latest current item only (statusOf semantics, PO D7). */
 @Component
@@ -36,34 +37,78 @@ public class R2dbcSeniorReviewAdapter implements SeniorReviewPort {
     private static Instant at(OffsetDateTime t) { return t == null ? null : t.toInstant(); }
     private static String[] arr(Collection<String> c) { return c.stream().distinct().toArray(String[]::new); }
 
+    /**
+     * Narrow, unordered rows (one per held product and ingredient); the substance and clinical-drug facts are looked up by key
+     * in two small queries. No ORDER BY: Task 7b measured an ORDER BY on the collated trade name over every held product
+     * (it spilled to disk) against the §10.6 300 ms p95; the service orders only the lists it shows (BRAND_ORDER).
+     */
     @Override public Mono<List<HeldRow>> held() {
-        return db.sql("WITH " + LATEST + """
-                SELECT l.batch_id, l.concept_id, coalesce(bp.trade_name, l.concept_id) AS trade_name, l.review, l.extracted_at,
-                       bp.bdc_id, cd.display_name, cd.route, bpi.xm_code, bpi.ingredient_name, xm.bds_id, s.preferred_name,
-                       CASE WHEN xm.bds_id IS NULL THEN NULL ELSE coalesce(ic.coverage, 'not_run') END AS coverage
+        Mono<List<Narrow>> rows = db.sql("WITH " + LATEST + """
+                SELECT l.batch_id, l.concept_id, coalesce(bp.trade_name, l.concept_id) AS trade_name, bp.bdc_id, bpi.xm_code
                 FROM latest l
                 LEFT JOIN curated.brand_product bp ON bp.concept_id = l.concept_id
-                LEFT JOIN curated.clinical_drug cd ON cd.bdc_id = bp.bdc_id
                 LEFT JOIN curated.brand_product_ingredient bpi ON bpi.concept_id = l.concept_id
-                LEFT JOIN curated.substance_code xm ON xm.system = 'ICD11_XM' AND xm.code = bpi.xm_code
-                LEFT JOIN curated.substance s ON s.bds_id = xm.bds_id
-                LEFT JOIN curated.interaction_coverage ic ON ic.bds_id = xm.bds_id
-                WHERE l.note IS DISTINCT FROM '%s'
-                ORDER BY l.batch_id COLLATE "C", trade_name, l.concept_id COLLATE "C", bpi.xm_code COLLATE "C\"""".formatted(ReviewSql.REMOVED_NOTE))
-            .map(r -> new HeldRow(r.get("concept_id", String.class), r.get("batch_id", String.class), r.get("trade_name", String.class),
-                r.get("review", String.class), at(r.get("extracted_at", OffsetDateTime.class)), r.get("bdc_id", String.class),
-                r.get("display_name", String.class), r.get("route", String.class), r.get("xm_code", String.class),
-                r.get("ingredient_name", String.class), r.get("bds_id", String.class), r.get("preferred_name", String.class),
-                r.get("coverage", String.class)))
+                WHERE l.note IS DISTINCT FROM '%s'""".formatted(ReviewSql.REMOVED_NOTE))
+            .map(r -> new Narrow(r.get(0, String.class), r.get(1, String.class), r.get(2, String.class), r.get(3, String.class),
+                r.get(4, String.class)))
             .all().collectList();
+        return rows.flatMap(list -> {
+            String[] xm = list.stream().map(Narrow::xmCode).filter(Objects::nonNull).distinct().toArray(String[]::new);
+            String[] bdc = list.stream().map(Narrow::bdcId).filter(Objects::nonNull).distinct().toArray(String[]::new);
+            return Mono.zip(xmFacts(xm), clinical(bdc)).map(t -> heldRows(list, t.getT1(), t.getT2()));
+        });
     }
 
-    @Override public Mono<List<Code>> ddinterCodes(Collection<String> bdsIds) {
-        if (bdsIds.isEmpty()) return Mono.just(List.of());
-        return db.sql("SELECT bds_id, code, route_scope FROM curated.substance_code WHERE system = 'DDINTER' AND bds_id = ANY(:ids) " +
-                      "ORDER BY bds_id, code")
-            .bind("ids", arr(bdsIds))
-            .map(r -> new Code(r.get("bds_id", String.class), r.get("code", String.class), r.get("route_scope", String.class)))
+    private record Narrow(String batchId, String conceptId, String tradeName, String bdcId, String xmCode) {}
+    private record XmFact(String bdsId, String substance, String coverage) {}
+    private record Clinical(String displayName, String route) {}
+
+    private static List<HeldRow> heldRows(List<Narrow> rows, Map<String, XmFact> facts, Map<String, Clinical> clinical) {
+        List<HeldRow> out = new ArrayList<>(rows.size());
+        for (Narrow n : rows) {
+            XmFact f = n.xmCode() == null ? null : facts.get(n.xmCode());
+            Clinical c = n.bdcId() == null ? null : clinical.get(n.bdcId());
+            out.add(new HeldRow(n.conceptId(), n.batchId(), n.tradeName(), n.bdcId(), c == null ? null : c.displayName(),
+                c == null ? null : c.route(), n.xmCode(), f == null ? null : f.bdsId(), f == null ? null : f.substance(),
+                f == null ? null : f.coverage()));
+        }
+        return out;
+    }
+
+    /** The substance, its name and its coverage behind each XM code (one query). */
+    private Mono<Map<String, XmFact>> xmFacts(String[] xmCodes) {
+        if (xmCodes.length == 0) return Mono.just(Map.of());
+        return db.sql("""
+                SELECT xm.code, xm.bds_id, s.preferred_name, coalesce(ic.coverage, 'not_run') AS coverage
+                FROM curated.substance_code xm
+                LEFT JOIN curated.substance s ON s.bds_id = xm.bds_id
+                LEFT JOIN curated.interaction_coverage ic ON ic.bds_id = xm.bds_id
+                WHERE xm.system = 'ICD11_XM' AND xm.code = ANY(:codes)""")
+            .bind("codes", xmCodes)
+            .map(r -> Map.entry(r.get(0, String.class), new XmFact(r.get(1, String.class), r.get(2, String.class), r.get(3, String.class))))
+            .all().collectMap(Map.Entry::getKey, Map.Entry::getValue);
+    }
+
+    /** Display name and route of each clinical drug (one query). */
+    private Mono<Map<String, Clinical>> clinical(String[] bdcIds) {
+        if (bdcIds.length == 0) return Mono.just(Map.of());
+        return db.sql("SELECT bdc_id, display_name, route FROM curated.clinical_drug WHERE bdc_id = ANY(:ids)")
+            .bind("ids", bdcIds)
+            .map(r -> Map.entry(r.get(0, String.class), new Clinical(r.get(1, String.class), r.get(2, String.class))))
+            .all().collectMap(Map.Entry::getKey, Map.Entry::getValue);
+    }
+
+    /** Read beside held() (not after it): the substances are found in SQL, so no rows travel twice. */
+    @Override public Mono<List<Code>> heldDdinterCodes() {
+        return db.sql("WITH " + LATEST + """
+                SELECT dd.bds_id, dd.code, dd.route_scope FROM curated.substance_code dd
+                WHERE dd.system = 'DDINTER' AND dd.bds_id IN (
+                  SELECT xm.bds_id FROM curated.substance_code xm
+                  JOIN curated.brand_product_ingredient bpi ON bpi.xm_code = xm.code
+                  JOIN latest l ON l.concept_id = bpi.concept_id
+                  WHERE xm.system = 'ICD11_XM' AND l.note IS DISTINCT FROM '%s')
+                ORDER BY dd.bds_id COLLATE "C", dd.code COLLATE "C\"""".formatted(ReviewSql.REMOVED_NOTE))
+            .map(r -> new Code(r.get(0, String.class), r.get(1, String.class), r.get(2, String.class)))
             .all().collectList();
     }
 
@@ -75,14 +120,15 @@ public class R2dbcSeniorReviewAdapter implements SeniorReviewPort {
             .all().collectList();
     }
 
-    @Override public Mono<List<BatchPairs.PairRow>> pairDetails(Collection<String> as, Collection<String> bs) {
-        if (as.isEmpty() || bs.isEmpty()) return Mono.just(List.of());
+    @Override public Mono<List<BatchPairs.PairRow>> pairDetails(List<String> as, List<String> bs) {
+        if (as.isEmpty()) return Mono.just(List.of());
+        if (as.size() != bs.size()) throw new IllegalArgumentException("pairDetails: as and bs must be aligned");
         return db.sql("""
                 SELECT p.ddinter_a, p.ddinter_b, p.partner_name_a, p.partner_name_b, p.severity, p.actions, t.interaction, t.management,
                        p.interaction_id
                 FROM curated.ddinter_pair p LEFT JOIN curated.ddinter_interaction_text t ON t.interaction_id = p.interaction_id
-                WHERE p.ddinter_a = ANY(:as) AND p.ddinter_b = ANY(:bs)""")
-            .bind("as", arr(as)).bind("bs", arr(bs))
+                WHERE (p.ddinter_a, p.ddinter_b) IN (SELECT * FROM unnest(:as::text[], :bs::text[]))""")
+            .bind("as", as.toArray(String[]::new)).bind("bs", bs.toArray(String[]::new))
             .map(R2dbcReviewQueryAdapter::pairRow).all().collectList();
     }
 
@@ -99,12 +145,32 @@ public class R2dbcSeniorReviewAdapter implements SeniorReviewPort {
             .all().collectMap(Map.Entry::getKey, Map.Entry::getValue);
     }
 
+    @Override public Mono<Map<String, ItemState>> itemStates(Collection<String> itemKeys) {
+        if (itemKeys.isEmpty()) return Mono.just(Map.of());
+        return db.sql("""
+                SELECT batch_id, concept_id, review, extracted_at FROM ops.batch_item
+                WHERE (batch_id, concept_id) IN (SELECT * FROM unnest(:b::text[], :c::text[]))""")
+            .bind("b", batches(itemKeys)).bind("c", concepts(itemKeys))
+            .map(r -> Map.entry(r.get(0, String.class) + "|" + r.get(1, String.class),
+                new ItemState(r.get(2, String.class), at(r.get(3, OffsetDateTime.class)))))
+            .all().collectMap(Map.Entry::getKey, Map.Entry::getValue);
+    }
+
+    /** Item keys are "{batchId}|{conceptId}"; batch ids never hold '|'. Aligned by index with {@link #concepts}. */
+    private static String[] batches(Collection<String> itemKeys) {
+        return itemKeys.stream().distinct().map(k -> k.substring(0, k.indexOf('|'))).toArray(String[]::new);
+    }
+
+    private static String[] concepts(Collection<String> itemKeys) {
+        return itemKeys.stream().distinct().map(k -> k.substring(k.indexOf('|') + 1)).toArray(String[]::new);
+    }
+
     @Override public Mono<Map<String, List<ReviewDecision>>> decisions(Collection<String> itemKeys) {
         if (itemKeys.isEmpty()) return Mono.just(Map.of());
         return db.sql("""
                 SELECT batch_id, concept_id, id, decision, reviewer_role, decided_at FROM ops.review_decision
-                WHERE batch_id || '|' || concept_id = ANY(:keys) ORDER BY decided_at, id""")
-            .bind("keys", arr(itemKeys))
+                WHERE (batch_id, concept_id) IN (SELECT * FROM unnest(:b::text[], :c::text[])) ORDER BY decided_at, id""")
+            .bind("b", batches(itemKeys)).bind("c", concepts(itemKeys))
             .map(r -> Map.entry(r.get("batch_id", String.class) + "|" + r.get("concept_id", String.class),
                 new ReviewDecision(r.get("id", Long.class), r.get("decision", String.class), null, null,
                     r.get("reviewer_role", String.class), r.get("decided_at", OffsetDateTime.class).toInstant())))

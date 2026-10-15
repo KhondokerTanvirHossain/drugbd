@@ -14,12 +14,10 @@ import com.niramoy.bddrug.domain.SeniorViews.PairView;
 import com.niramoy.bddrug.domain.SourceLinks;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -40,19 +38,24 @@ public class SeniorReviewService {
     protected final SeniorReviewPort port;
     public SeniorReviewService(SeniorReviewPort port) { this.port = port; }
 
-    record Product(String conceptId, String batchId, String tradeName, String review, Instant extractedAt, String bdcId,
-                   String clinicalName, String route, List<BatchPairs.Substance> substances) {}
+    /**
+     * A held product; its review state is read only when a page shows it (SeniorReviewPort.itemStates). {@code nameKey} is
+     * the trade name lower-cased (Locale.ROOT), computed once for BRAND_ORDER.
+     */
+    record Product(String conceptId, String batchId, String tradeName, String nameKey, String bdcId, String clinicalName, String route,
+                   List<BatchPairs.Substance> substances) {}
     /**
      * {@code bdsOfCode}: every held substance a DDInter code is mapped to (V3 allows several), sorted; {@code codesOfBds}: each
      * held substance's own DDInter codes; {@code codeInfo}: code → bds_id → that mapping (its route scope).
      */
-    record Universe(Map<String, Product> products, Map<String, String> substanceNames, Map<String, Set<String>> bdsOfCode,
+    record Universe(List<Product> products, Map<String, String> substanceNames, Map<String, Set<String>> bdsOfCode,
                     Map<String, Set<String>> codesOfBds, Map<String, Map<String, DdinterCode>> codeInfo,
                     Map<String, List<Product>> choosers, List<PairQueue.Entry> entries,
                     Map<String, List<PairReviewRule.Decision>> reviews) {}
 
-    private static final Comparator<Product> BRAND_ORDER = Comparator.comparing(Product::batchId)
-        .thenComparing(p -> p.tradeName().toLowerCase(Locale.ROOT)).thenComparing(Product::conceptId);
+    /** Batch, trade name ignoring case, concept id (§5.17.2 "ordered by batch, then trade name"). */
+    static final Comparator<Product> BRAND_ORDER = Comparator.comparing(Product::batchId).thenComparing(Product::nameKey)
+        .thenComparing(Product::conceptId);
 
     // ---- parameters
 
@@ -74,53 +77,65 @@ public class SeniorReviewService {
 
     // ---- the universe
 
+    /**
+     * Two independent reads run side by side (§10.6): the held rows, and the chain DDInter codes of the held substances →
+     * stored pairs among them and their pair reviews → the texts of the reviewed pairs (exact pairs, for the hash).
+     */
     Mono<Universe> universe(String viewerEmail) {
-        return port.held().flatMap(rows -> {
-            Set<String> bds = new HashSet<>();
-            for (HeldRow r : rows) if (r.bdsId() != null) bds.add(r.bdsId());
-            return port.ddinterCodes(bds).flatMap(codes -> {
-                Map<String, List<DdinterCode>> byBds = new HashMap<>();
-                Map<String, Set<String>> bdsOfCode = new TreeMap<>(), codesOfBds = new HashMap<>();
-                Map<String, Map<String, DdinterCode>> codeInfo = new HashMap<>();
-                for (SeniorReviewPort.Code c : codes) {
-                    DdinterCode dc = new DdinterCode(c.code(), c.routeScope());
-                    byBds.computeIfAbsent(c.bdsId(), k -> new ArrayList<>()).add(dc);
-                    bdsOfCode.computeIfAbsent(c.code(), k -> new TreeSet<>()).add(c.bdsId());
-                    codesOfBds.computeIfAbsent(c.bdsId(), k -> new HashSet<>()).add(c.code());
-                    codeInfo.computeIfAbsent(c.code(), k -> new HashMap<>()).put(c.bdsId(), dc);
-                }
-                Map<String, Product> products = products(rows, byBds);
-                Map<String, String> names = new HashMap<>();
-                for (Product p : products.values())
-                    for (BatchPairs.Substance s : p.substances()) if (s.bdsId() != null) names.putIfAbsent(s.bdsId(), s.name());
-                Map<String, List<Product>> choosers = new HashMap<>();
-                for (Product p : products.values())
-                    for (BatchPairs.Substance s : p.substances())
-                        RouteRule.choose(s.codes(), p.route()).ifPresent(choice ->
-                            choice.codes().forEach(c -> choosers.computeIfAbsent(c.code(), k -> new ArrayList<>()).add(p)));
-                return Mono.zip(port.pairsAmong(bdsOfCode.keySet()), port.reviews(bdsOfCode.keySet(), viewerEmail)).flatMap(t -> {
-                    Map<String, List<PairReviewRule.Decision>> reviews = t.getT2();
-                    Set<String> as = new HashSet<>(), bs = new HashSet<>();
-                    for (String k : reviews.keySet()) { String[] ab = k.split("\\|"); as.add(ab[0]); bs.add(ab[1]); }
-                    return port.pairDetails(as, bs).map(rowsWithText -> {
-                        Map<String, String> hashes = new HashMap<>();
-                        for (BatchPairs.PairRow r : rowsWithText) hashes.put(r.ddinterA() + "|" + r.ddinterB(), hash(r));
-                        List<PairQueue.Entry> entries = new ArrayList<>();
-                        for (SeniorReviewPort.PairLite p : t.getT1()) {
-                            // One entry per stored pair; its side labels are the smallest mapped bds_id (deterministic).
-                            String bdsA = first(bdsOfCode.get(p.ddinterA())), bdsB = first(bdsOfCode.get(p.ddinterB()));
-                            String key = p.ddinterA() + "|" + p.ddinterB();
-                            List<PairReviewRule.Decision> ds = reviews.getOrDefault(key, List.of());
-                            String state = ds.isEmpty() ? PairReviewRule.NOT_REVIEWED : PairReviewRule.review(ds, hashes.get(key)).state();
-                            entries.add(new PairQueue.Entry(p.ddinterA(), p.ddinterB(), p.severity(), bdsA, names.getOrDefault(bdsA, bdsA),
-                                bdsB, names.getOrDefault(bdsB, bdsB), choosers.containsKey(p.ddinterA()) && choosers.containsKey(p.ddinterB()),
-                                state));
-                        }
-                        return new Universe(products, names, bdsOfCode, codesOfBds, codeInfo, choosers, List.copyOf(entries), reviews);
-                    });
-                });
+        Mono<Pairs> pairs = port.heldDdinterCodes().flatMap(codes -> {
+            Set<String> all = new TreeSet<>();
+            for (SeniorReviewPort.Code c : codes) all.add(c.code());
+            return Mono.zip(port.pairsAmong(all), port.reviews(all, viewerEmail)).flatMap(t -> {
+                List<String> as = new ArrayList<>(), bs = new ArrayList<>();
+                for (String k : t.getT2().keySet()) { int i = k.indexOf('|'); as.add(k.substring(0, i)); bs.add(k.substring(i + 1)); }
+                return port.pairDetails(as, bs).map(texts -> new Pairs(codes, t.getT1(), t.getT2(), texts));
             });
         });
+        return Mono.zip(port.held(), pairs).map(t -> build(t.getT1(), t.getT2()));
+    }
+
+    private record Pairs(List<SeniorReviewPort.Code> codes, List<SeniorReviewPort.PairLite> stored,
+                         Map<String, List<PairReviewRule.Decision>> reviews, List<BatchPairs.PairRow> reviewedTexts) {}
+
+    private static Universe build(List<HeldRow> rows, Pairs read) {
+        Set<String> held = new HashSet<>();
+        for (HeldRow r : rows) if (r.bdsId() != null) held.add(r.bdsId());
+        Map<String, List<DdinterCode>> byBds = new HashMap<>();
+        Map<String, Set<String>> bdsOfCode = new TreeMap<>(), codesOfBds = new HashMap<>();
+        Map<String, Map<String, DdinterCode>> codeInfo = new HashMap<>();
+        for (SeniorReviewPort.Code c : read.codes()) {
+            if (!held.contains(c.bdsId())) continue;   // the two reads are separate statements: keep only what both agree is held
+            DdinterCode dc = new DdinterCode(c.code(), c.routeScope());
+            byBds.computeIfAbsent(c.bdsId(), k -> new ArrayList<>()).add(dc);
+            bdsOfCode.computeIfAbsent(c.code(), k -> new TreeSet<>()).add(c.bdsId());
+            codesOfBds.computeIfAbsent(c.bdsId(), k -> new HashSet<>()).add(c.code());
+            codeInfo.computeIfAbsent(c.code(), k -> new HashMap<>()).put(c.bdsId(), dc);
+        }
+        List<Product> products = products(rows, byBds);
+        Map<String, String> names = new HashMap<>();
+        Map<String, List<Product>> choosers = new HashMap<>();
+        Map<String, Optional<RouteRule.Choice>> choices = new HashMap<>();   // one RouteRule call per (substance, route)
+        for (Product p : products)
+            for (BatchPairs.Substance s : p.substances()) {
+                if (s.bdsId() == null) continue;
+                names.putIfAbsent(s.bdsId(), s.name());
+                choices.computeIfAbsent(s.bdsId() + "|" + p.route(), k -> RouteRule.choose(s.codes(), p.route())).ifPresent(choice ->
+                    choice.codes().forEach(c -> choosers.computeIfAbsent(c.code(), k -> new ArrayList<>()).add(p)));
+            }
+        Map<String, String> hashes = new HashMap<>();
+        for (BatchPairs.PairRow r : read.reviewedTexts()) hashes.put(r.ddinterA() + "|" + r.ddinterB(), hash(r));
+        List<PairQueue.Entry> entries = new ArrayList<>();
+        for (SeniorReviewPort.PairLite p : read.stored()) {
+            // One entry per stored pair; its side labels are the smallest mapped bds_id (deterministic).
+            String bdsA = first(bdsOfCode.get(p.ddinterA())), bdsB = first(bdsOfCode.get(p.ddinterB()));
+            if (bdsA == null || bdsB == null) continue;
+            String key = p.ddinterA() + "|" + p.ddinterB();
+            List<PairReviewRule.Decision> ds = read.reviews().getOrDefault(key, List.of());
+            String state = ds.isEmpty() ? PairReviewRule.NOT_REVIEWED : PairReviewRule.review(ds, hashes.get(key)).state();
+            entries.add(new PairQueue.Entry(p.ddinterA(), p.ddinterB(), p.severity(), bdsA, names.getOrDefault(bdsA, bdsA),
+                bdsB, names.getOrDefault(bdsB, bdsB), choosers.containsKey(p.ddinterA()) && choosers.containsKey(p.ddinterB()), state));
+        }
+        return new Universe(products, names, bdsOfCode, codesOfBds, codeInfo, choosers, List.copyOf(entries), read.reviews());
     }
 
     private static String first(Set<String> sorted) { return sorted == null || sorted.isEmpty() ? null : sorted.iterator().next(); }
@@ -131,21 +146,35 @@ public class SeniorReviewService {
         return codes.contains(e.ddinterA()) || codes.contains(e.ddinterB());
     }
 
-    private static Map<String, Product> products(List<HeldRow> rows, Map<String, List<DdinterCode>> byBds) {
-        Map<String, List<HeldRow>> byConcept = new LinkedHashMap<>();
-        for (HeldRow r : rows) byConcept.computeIfAbsent(r.conceptId(), k -> new ArrayList<>()).add(r);
-        Map<String, Product> out = new LinkedHashMap<>();
+    /**
+     * One Product per held product (unordered; lists are put in BRAND_ORDER where they are shown). Its substances are the
+     * held substances behind its XM codes, in XM-code order, one per bds_id; an ingredient with no substance is left out (no
+     * senior read shows it). Products with the same XM codes share one substance list.
+     */
+    private static List<Product> products(List<HeldRow> rows, Map<String, List<DdinterCode>> byBds) {
+        Map<String, List<HeldRow>> byConcept = new HashMap<>(rows.size() * 2);
+        for (HeldRow r : rows) byConcept.computeIfAbsent(r.conceptId(), k -> new ArrayList<>(1)).add(r);
+        Map<String, List<BatchPairs.Substance>> shared = new HashMap<>();
+        List<Product> out = new ArrayList<>(byConcept.size());
         for (List<HeldRow> group : byConcept.values()) {
+            if (group.size() > 1) group.sort(Comparator.comparing(HeldRow::xmCode, Comparator.nullsLast(Comparator.naturalOrder())));
             HeldRow f = group.get(0);
-            List<BatchPairs.Substance> subs = new ArrayList<>();
-            Set<String> seen = new HashSet<>();
-            for (HeldRow r : group) {
-                if (r.xmCode() == null || (r.bdsId() != null && !seen.add(r.bdsId()))) continue;
-                subs.add(new BatchPairs.Substance(r.bdsId(), r.substance() != null ? r.substance() : r.ingredientName(), r.coverage(),
-                    r.bdsId() == null ? List.of() : List.copyOf(byBds.getOrDefault(r.bdsId(), List.of()))));
+            String key = f.xmCode();
+            if (group.size() > 1) {
+                StringBuilder b = new StringBuilder();
+                for (HeldRow r : group) b.append(r.xmCode()).append(',');
+                key = b.toString();
             }
-            out.put(f.conceptId(), new Product(f.conceptId(), f.batchId(), f.tradeName(), f.review(), f.extractedAt(), f.bdcId(),
-                f.clinicalName(), f.route(), List.copyOf(subs)));
+            List<BatchPairs.Substance> subs = shared.computeIfAbsent(String.valueOf(key), k -> {
+                List<BatchPairs.Substance> list = new ArrayList<>();
+                Set<String> seen = new HashSet<>();
+                for (HeldRow r : group)
+                    if (r.bdsId() != null && seen.add(r.bdsId()))
+                        list.add(new BatchPairs.Substance(r.bdsId(), r.substance(), r.coverage(), List.copyOf(byBds.getOrDefault(r.bdsId(), List.of()))));
+                return List.copyOf(list);
+            });
+            out.add(new Product(f.conceptId(), f.batchId(), f.tradeName(), f.tradeName().toLowerCase(Locale.ROOT), f.bdcId(),
+                f.clinicalName(), f.route(), subs));
         }
         return out;
     }
@@ -162,29 +191,37 @@ public class SeniorReviewService {
 
     private record Sides(List<Product> a, List<Product> b) {}
 
-    private Sides sides(Universe u, PairQueue.Entry e) {
-        return new Sides(u.choosers().getOrDefault(e.ddinterA(), List.of()).stream().sorted(BRAND_ORDER).toList(),
-            u.choosers().getOrDefault(e.ddinterB(), List.of()).stream().sorted(BRAND_ORDER).toList());
+    /** The held products that choose each side's entry, in BRAND_ORDER; each code's list is sorted once per call. */
+    private static Sides sides(Universe u, PairQueue.Entry e, Map<String, List<Product>> sorted) {
+        return new Sides(chooserList(u, e.ddinterA(), sorted), chooserList(u, e.ddinterB(), sorted));
+    }
+
+    private static List<Product> chooserList(Universe u, String code, Map<String, List<Product>> sorted) {
+        return sorted.computeIfAbsent(code, c -> u.choosers().getOrDefault(c, List.of()).stream().sorted(BRAND_ORDER).toList());
     }
 
     private static String itemKey(Product p) { return p.batchId() + "|" + p.conceptId(); }
 
-    private static String displayStatus(Product p, Map<String, List<ReviewDecision>> decisions) {
-        return ApprovalRule.displayStatus(decisions.getOrDefault(itemKey(p), List.of()), p.extractedAt(), p.review());
+    private static String displayStatus(Product p, Map<String, SeniorReviewPort.ItemState> states, Map<String, List<ReviewDecision>> decisions) {
+        SeniorReviewPort.ItemState s = states.get(itemKey(p));
+        return ApprovalRule.displayStatus(decisions.getOrDefault(itemKey(p), List.of()), s == null ? null : s.extractedAt(),
+            s == null ? null : s.review());
     }
 
     Mono<List<PairView>> views(Universe u, List<PairQueue.Entry> page) {
         if (page.isEmpty()) return Mono.just(List.of());
-        Set<String> as = new HashSet<>(), bs = new HashSet<>(), codes = new HashSet<>(), items = new HashSet<>();
+        List<String> as = new ArrayList<>(page.size()), bs = new ArrayList<>(page.size());
+        Set<String> codes = new HashSet<>(), items = new HashSet<>();
         Map<String, Sides> sides = new HashMap<>();
+        Map<String, List<Product>> sorted = new HashMap<>();
         for (PairQueue.Entry e : page) {
             as.add(e.ddinterA()); bs.add(e.ddinterB()); codes.add(e.ddinterA()); codes.add(e.ddinterB());
-            Sides s = sides(u, e);
+            Sides s = sides(u, e, sorted);
             sides.put(e.key(), s);
             s.a().stream().limit(BRANDS_SHOWN).forEach(p -> items.add(itemKey(p)));
             s.b().stream().limit(BRANDS_SHOWN).forEach(p -> items.add(itemKey(p)));
         }
-        return Mono.zip(port.pairDetails(as, bs), port.entries(codes), port.decisions(items)).map(t -> {
+        return Mono.zip(port.pairDetails(as, bs), port.entries(codes), port.itemStates(items), port.decisions(items)).map(t -> {
             Map<String, BatchPairs.PairRow> rows = new HashMap<>();
             for (BatchPairs.PairRow r : t.getT1()) rows.put(r.ddinterA() + "|" + r.ddinterB(), r);
             List<PairView> out = new ArrayList<>();
@@ -197,9 +234,9 @@ public class SeniorReviewService {
                 Sides s = sides.get(e.key());
                 List<SeniorViews.Brand> brands = new ArrayList<>();
                 s.a().stream().limit(BRANDS_SHOWN).forEach(p -> brands.add(new SeniorViews.Brand(p.conceptId(), p.tradeName(), p.batchId(),
-                    displayStatus(p, t.getT3()), "a")));
+                    displayStatus(p, t.getT3(), t.getT4()), "a")));
                 s.b().stream().limit(BRANDS_SHOWN).forEach(p -> brands.add(new SeniorViews.Brand(p.conceptId(), p.tradeName(), p.batchId(),
-                    displayStatus(p, t.getT3()), "b")));
+                    displayStatus(p, t.getT3(), t.getT4()), "b")));
                 Set<String> batches = new HashSet<>();
                 s.a().forEach(p -> batches.add(p.batchId()));
                 s.b().forEach(p -> batches.add(p.batchId()));
@@ -246,7 +283,14 @@ public class SeniorReviewService {
             })
             .flatMap(v -> universe(null).map(u -> {
                 String needle = (String) v[0];
-                Map<String, List<Product>> carrying = carrying(u);
+                // Brands and batches per held substance, in one pass over the held products.
+                Map<String, Integer> brands = new HashMap<>();
+                Map<String, Set<String>> batches = new HashMap<>();
+                for (Product p : u.products())
+                    for (BatchPairs.Substance s : p.substances()) {
+                        brands.merge(s.bdsId(), 1, Integer::sum);
+                        batches.computeIfAbsent(s.bdsId(), k -> new HashSet<>()).add(p.batchId());
+                    }
                 // One pass over the queue: a to-do pair counts once for every held substance either entry is mapped to.
                 Map<String, int[]> todo = new HashMap<>();
                 for (PairQueue.Entry e : u.entries()) {
@@ -261,12 +305,11 @@ public class SeniorReviewService {
                     }
                 }
                 List<SeniorViews.SubstanceRow> rows = new ArrayList<>();
-                for (Map.Entry<String, List<Product>> c : carrying.entrySet()) {
+                for (Map.Entry<String, Integer> c : brands.entrySet()) {
                     String bds = c.getKey(), name = u.substanceNames().getOrDefault(bds, bds);
                     if (!needle.isEmpty() && !name.toLowerCase(Locale.ROOT).contains(needle) && !bds.toLowerCase(Locale.ROOT).contains(needle)) continue;
                     int[] n = todo.getOrDefault(bds, new int[2]);
-                    rows.add(new SeniorViews.SubstanceRow(bds, name, c.getValue().size(),
-                        (int) c.getValue().stream().map(Product::batchId).distinct().count(), n[0], n[1]));
+                    rows.add(new SeniorViews.SubstanceRow(bds, name, c.getValue(), batches.get(bds).size(), n[0], n[1]));
                 }
                 rows.sort(Comparator.comparingInt(SeniorViews.SubstanceRow::pairsToReview).reversed()
                     .thenComparing(r -> r.name().toLowerCase(Locale.ROOT)).thenComparing(SeniorViews.SubstanceRow::bdsId));
@@ -274,11 +317,12 @@ public class SeniorReviewService {
             }));
     }
 
-    /** Held products by substance (bds_id), in the held order. */
-    private static Map<String, List<Product>> carrying(Universe u) {
-        Map<String, List<Product>> out = new LinkedHashMap<>();
-        for (Product p : u.products().values())
-            for (BatchPairs.Substance s : p.substances()) if (s.bdsId() != null) out.computeIfAbsent(s.bdsId(), k -> new ArrayList<>()).add(p);
+    /** The held products carrying one substance, in BRAND_ORDER. */
+    private static List<Product> carrying(Universe u, String bdsId) {
+        List<Product> out = new ArrayList<>();
+        for (Product p : u.products())
+            for (BatchPairs.Substance s : p.substances()) if (bdsId.equals(s.bdsId())) { out.add(p); break; }
+        out.sort(BRAND_ORDER);
         return out;
     }
 
@@ -289,31 +333,31 @@ public class SeniorReviewService {
         return Mono.fromCallable(() -> new Object[]{oneOf(scope, "all", PairQueue.SCOPES, "pairs"),
                 oneOf(severity, null, PairQueue.SEVERITIES, "severity"), paging(page, size)})
             .flatMap(v -> universe(viewerEmail).flatMap(u -> {
-                List<Product> brands = carrying(u).get(bdsId);
-                if (brands == null) return Mono.error(new NotFoundException("bdsId", "No substance with this id is held"));
-                List<Product> sorted = brands.stream().sorted(BRAND_ORDER).toList();
+                List<Product> sorted = carrying(u, bdsId);
+                if (sorted.isEmpty()) return Mono.error(new NotFoundException("bdsId", "No substance with this id is held"));
                 List<PairQueue.Entry> selected = PairQueue.select(u.entries().stream()
                     .filter(e -> involves(u, bdsId, e)).toList(), "all", (String) v[0], (String) v[1]);
                 Set<String> bdc = new HashSet<>();
                 sorted.forEach(p -> { if (p.bdcId() != null) bdc.add(p.bdcId()); });
-                return Mono.zip(port.substance(bdsId), port.strengths(bdc, bdsId),
-                        port.decisions(sorted.stream().map(SeniorReviewService::itemKey).toList()),
+                List<String> keys = sorted.stream().map(SeniorReviewService::itemKey).toList();
+                return Mono.zip(port.substance(bdsId), port.strengths(bdc, bdsId), port.itemStates(keys), port.decisions(keys),
                         views(u, ((Paging) v[2]).slice(selected)))
                     .map(t -> new SeniorViews.SubstanceDetail(bdsId, t.getT1().name(), t.getT1().names(), t.getT1().codes(),
                         t.getT1().coverage(), t.getT1().entries(),
-                        sorted.stream().map(p -> brandRow(p, bdsId, t.getT2(), t.getT3())).toList(),
-                        new SeniorViews.PairList(selected.size(), t.getT4())));
+                        sorted.stream().map(p -> brandRow(p, bdsId, t.getT2(), t.getT3(), t.getT4())).toList(),
+                        new SeniorViews.PairList(selected.size(), t.getT5())));
             }));
     }
 
     private static SeniorViews.BrandRow brandRow(Product p, String bdsId, Map<String, String> strengths,
+                                                 Map<String, SeniorReviewPort.ItemState> states,
                                                  Map<String, List<ReviewDecision>> decisions) {
         BatchPairs.Substance s = p.substances().stream().filter(x -> bdsId.equals(x.bdsId())).findFirst().orElseThrow();
         Optional<RouteRule.Choice> choice = RouteRule.choose(s.codes(), p.route());
         List<SeniorViews.Chosen> chosen = choice.map(c -> c.codes().stream()
             .map(x -> new SeniorViews.Chosen(x.code(), x.routeScope(), c.routeAssumed())).toList()).orElse(List.of());
         String reason = "none".equals(s.coverage()) ? "no_data" : !"full".equals(s.coverage()) ? "not_run" : chosen.isEmpty() ? "no_route" : null;
-        return new SeniorViews.BrandRow(p.conceptId(), p.tradeName(), p.batchId(), displayStatus(p, decisions),
+        return new SeniorViews.BrandRow(p.conceptId(), p.tradeName(), p.batchId(), displayStatus(p, states, decisions),
             p.bdcId() == null ? null : new SeniorViews.Clinical(p.bdcId(), p.clinicalName(), p.route()),
             p.bdcId() == null ? "" : strengths.getOrDefault(p.bdcId(), ""), reason == null ? chosen : List.of(), reason);
     }

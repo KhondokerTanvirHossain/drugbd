@@ -34,9 +34,11 @@ class OtherPairsScaleIntegrationTest {
         .withCommand("postgres", "-c", "fsync=off", "-c", "shared_preload_libraries=pg_stat_statements");
     @DynamicPropertySource static void props(DynamicPropertyRegistry r) { TestSupport.props(r, pg); }
 
-    @BeforeAll static void seed() throws Exception {
-        PilotSeed.migrateAndSeed(pg);
-        exec(pg, """
+    /**
+     * 40,000 held products across 20 batches and W-1 alone in S-0, run after the pilot seed; it ends with ANALYZE.
+     * SeniorReviewScaleIntegrationTest reuses it.
+     */
+    static final String SCALE_SEED = """
             INSERT INTO ops.batch (batch_id, status, item_count, run_at)
               SELECT 'S-' || b, 'in_review', 2000, now() - b * interval '1 hour' FROM generate_series(1, 20) b;
             INSERT INTO curated.brand_product (concept_id, dar_number, trade_name, company, dosage_form, generic_content_raw, bdc_id, parse_status)
@@ -54,8 +56,11 @@ class OtherPairsScaleIntegrationTest {
             INSERT INTO ops.stage_result (batch_id, concept_id, stage, status, note)
               SELECT 'S-0', 'W-1', s, 'ok', '' FROM unnest(ARRAY['dgda','substances','clinical','ddinter']) s;
             ANALYZE;
-            CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
-            """);
+            """;
+
+    @BeforeAll static void seed() throws Exception {
+        PilotSeed.migrateAndSeed(pg);
+        exec(pg, SCALE_SEED + "CREATE EXTENSION IF NOT EXISTS pg_stat_statements;");
     }
 
     @Autowired WebTestClient web;
