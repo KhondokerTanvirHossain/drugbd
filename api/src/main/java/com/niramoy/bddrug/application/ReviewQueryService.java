@@ -13,6 +13,7 @@ import com.niramoy.bddrug.domain.ReviewTriage;
 import com.niramoy.bddrug.domain.ReviewViews;
 import com.niramoy.bddrug.domain.RouteRule;
 import com.niramoy.bddrug.domain.SnapshotDiff;
+import com.niramoy.bddrug.domain.SourceLinks;
 import com.niramoy.bddrug.domain.StageNotes;
 import com.niramoy.bddrug.domain.ReviewViews.BatchSummary;
 import com.niramoy.bddrug.domain.ReviewViews.Counts;
@@ -23,8 +24,6 @@ import com.niramoy.bddrug.domain.ReviewViews.VersionRow;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
@@ -165,17 +164,12 @@ public class ReviewQueryService {
         return n;
     }
 
-    public static final String OCL_CONCEPT = "https://tr.ocl.dghs.gov.bd/#/orgs/MoHFW/sources/DGDA-Drugs/concepts/";
+    public static final String OCL_CONCEPT = SourceLinks.OCL_CONCEPT;
     private static final List<String> STAGES = List.of("dgda", "substances", "clinical", "ddinter");
 
-    /**
-     * The OCL concept URL, as web/lib/evidence.ts builds it with encodeURIComponent. URLEncoder escapes five characters
-     * that encodeURIComponent keeps (! ' ( ) ~) and writes a space as "+", so both are undone here.
-     */
+    /** The OCL concept URL (§7.3 sourceUrl); built by SourceLinks, the one URL builder (§5.6.6). */
     public static String sourceUrl(String conceptId) {
-        String encoded = URLEncoder.encode(conceptId, StandardCharsets.UTF_8).replace("+", "%20")
-            .replace("%21", "!").replace("%27", "'").replace("%28", "(").replace("%29", ")").replace("%7E", "~");
-        return OCL_CONCEPT + encoded + "/";
+        return SourceLinks.oclUrl(conceptId);
     }
 
     private static Assessed find(List<Assessed> all, String conceptId) {
