@@ -39,7 +39,8 @@ export default function StartChapter({ ctx }: { ctx: LearnContext }) {
       <Chapter slug="start" level={2}>
         <Section id="start-what" h={H}>
           <div className={styles.prose}>
-            <p>Start from a brand name a doctor writes, such as Napa. IntelliDrugs finds its DGDA registration, works out that it contains paracetamol 500 mg, and connects paracetamol to the same substance in RxNorm, ATC, DrugBank, SNOMED CT and DDInter 2.0. From there it can show which other substances it interacts with and how DDInter grades each interaction.</p>
+            {/* G3 (§1.2): this Board L sentence names Napa's substance and strength, so it shows only while Napa's example is usable (§6.8 Withdrawn examples); no replacement copy. */}
+            {ctx.usable(P.napa) && <p>Start from a brand name a doctor writes, such as Napa. IntelliDrugs finds its DGDA registration, works out that it contains paracetamol 500 mg, and connects paracetamol to the same substance in RxNorm, ATC, DrugBank, SNOMED CT and DDInter 2.0. From there it can show which other substances it interacts with and how DDInter grades each interaction.</p>}
             <p>The website is <span className="mono">drugdb.eliooo.org</span>. Reviewers work on the batch pages. Doctors, pharmacists and partner systems read only what a pharmacist has approved.</p>
           </div>
         </Section>

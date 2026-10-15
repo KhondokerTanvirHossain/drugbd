@@ -77,6 +77,11 @@ describe("/learn/start: the hero and chapter 1 (§6.8)", () => {
     expect(html).toContain("data-withdrawn");
     expect(html).not.toContain("BDC-000001");
     expect(html).not.toContain("Acetaminophen");
+    // G3 (§1.2): the #start-what prose names Napa's substance and strength, so it goes with the block.
+    expect(html).not.toContain("500 mg");
+    expect(html).not.toContain("contains paracetamol");
+    expect(html).toContain("The website is <span class=\"mono\">drugdb.eliooo.org</span>.");
+    expect(render()).toContain("works out that it contains paracetamol 500 mg, and connects paracetamol");
     expect(html).toContain("A pharmacist checks every record before its contents appear here.");
   });
 });
