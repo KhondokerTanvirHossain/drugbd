@@ -108,15 +108,37 @@ export async function listReviewBatches(): Promise<ReviewBatchSummary[]> {
   return (await reviewData<ReviewBatchSummary[]>("/v1/review/batches")) ?? [];
 }
 
+/** The API's largest items page (`SIZE_MAX`). */
+export const REVIEW_PAGE_MAX = 500;
+
+/**
+ * One page when `page` or `size` is given; otherwise every record in the filter, read page by page, because the desk
+ * lists the whole batch and a batch file may hold more than one page. `total` is always the whole batch's size.
+ */
 export async function getReviewItems(batchId: string, opts: { show?: FilterKey; q?: string; page?: number; size?: number } = {}):
     Promise<ItemsPage | null> {
   const params = new URLSearchParams();
   if (opts.show && opts.show !== "all") params.set("show", opts.show);
   const q = [...(opts.q ?? "").trim()].slice(0, REVIEW_Q_MAX).join("");
   if (q) params.set("q", q);
-  if (opts.page) params.set("page", String(opts.page));
-  params.set("size", String(opts.size ?? 500));
-  return reviewData<ItemsPage>(`/v1/review/batches/${enc(batchId)}/items?${params}`);
+  const one = (page: number, size: number) => {
+    const p = new URLSearchParams(params);
+    if (page) p.set("page", String(page));
+    p.set("size", String(size));
+    return reviewData<ItemsPage>(`/v1/review/batches/${enc(batchId)}/items?${p}`);
+  };
+  if (opts.page !== undefined || opts.size !== undefined) return one(opts.page ?? 0, opts.size ?? REVIEW_PAGE_MAX);
+  const first = await one(0, REVIEW_PAGE_MAX);
+  if (!first) return null;
+  const items = [...(first.items ?? [])];
+  // A filtered list never holds more than the batch, so `total` bounds the loop; a short page is the last one.
+  for (let page = 1, last = items.length; last === REVIEW_PAGE_MAX && items.length < first.total; page++) {
+    const next = await one(page, REVIEW_PAGE_MAX);
+    if (!next) return null;
+    last = next.items?.length ?? 0;
+    items.push(...(next.items ?? []));
+  }
+  return { ...first, items };
 }
 
 export async function getReviewVersions(batchId: string): Promise<VersionRow[] | null> {

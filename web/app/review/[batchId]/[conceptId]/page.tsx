@@ -52,13 +52,14 @@ export default async function RecordPage({ params, searchParams }: {
 
   const toRow = (keepFilter: boolean) => (r: ItemRow): RowRef => ({ ...r, href: recordHref(batchId, r.conceptId, keepFilter ? { show, q } : {}) });
   const rows = visible.items.map(toRow(true));
-  const all = (everything ?? visible).items.map(toRow(false));
+  const whole = everything ?? visible;
+  const all = whole.items.map(toRow(false));
   const k = rows.findIndex((r) => r.conceptId === conceptId);
   const reg: RecordRegistration = {
     batchId, conceptId, tradeName: item.brand?.tradeName ?? conceptId, index: item.index, total: item.total,
     displayStatus: item.displayStatus, version: item.version, stagesBlocked: stagesBlocked(item), sourceUrl: item.sourceUrl,
     show, q, rows, all, requestId: randomUUID(), prevHref: rows[k - 1]?.href ?? null, nextHref: rows[k + 1]?.href ?? null,
-    complete: firstParam(sp.view) === "done" && all.length > 0 && all.every((r) => r.displayStatus === "approved"),
+    complete: firstParam(sp.view) === "done" && all.length > 0 && all.length === whole.total && all.every((r) => r.displayStatus === "approved"),
   };
   const emptyText = rows.length === 0 ? (q ? fill(DESK.noMatch, { q }) : DESK.empty[show]) : null;
   const diff = item.displayStatus === "back_in_review" && item.reopen?.diffAvailable

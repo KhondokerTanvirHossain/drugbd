@@ -37,6 +37,46 @@ describe("review reads (§7.3)", () => {
     expect(f.mock.calls[1][0]).toBe("http://api:8080/v1/review/batches/0001-pilot/items?show=needs&page=2&size=50");
   });
 
+  it("reads every page of a batch larger than one page (the API's size cap is 500)", async () => {
+    const rows = (from: number, n: number) => Array.from({ length: n }, (_, i) => ({ index: from + i, conceptId: `c-${from + i}` }));
+    const counts = { all: 600, needs: 600, warn: 0, issue: 0, approved: 0, nodata: 0 };
+    const f = vi.fn().mockImplementation(async (url: string) => {
+      const p = Number(new URL(url).searchParams.get("page") ?? 0);
+      return ok({ batchId: "big", total: 600, filterCounts: counts, items: p === 0 ? rows(1, 500) : p === 1 ? rows(501, 100) : [] });
+    });
+    vi.stubGlobal("fetch", f);
+    const all = await getReviewItems("big");
+    expect(f.mock.calls.map((c) => c[0])).toEqual([
+      "http://api:8080/v1/review/batches/big/items?size=500", "http://api:8080/v1/review/batches/big/items?page=1&size=500"]);
+    expect(all).toEqual({ batchId: "big", total: 600, filterCounts: counts, items: rows(1, 600) });
+
+    f.mockClear();
+    f.mockImplementation(async (url: string) => {
+      const p = Number(new URL(url).searchParams.get("page") ?? 0);
+      return ok({ batchId: "big", total: 600, filterCounts: counts, items: p === 0 ? rows(1, 500) : [] });
+    });
+    const needs = await getReviewItems("big", { show: "needs" });
+    expect(f.mock.calls.map((c) => c[0])).toEqual([
+      "http://api:8080/v1/review/batches/big/items?show=needs&size=500",
+      "http://api:8080/v1/review/batches/big/items?show=needs&page=1&size=500"]);
+    expect(needs?.items).toHaveLength(500);
+  });
+
+  it("an explicit page or size reads that one page only", async () => {
+    const f = vi.fn().mockImplementation(async () => ok({ total: 600, items: Array.from({ length: 50 }, (_, i) => ({ index: i + 1 })) }));
+    vi.stubGlobal("fetch", f);
+    expect((await getReviewItems("big", { size: 50 }))?.items).toHaveLength(50);
+    expect(f).toHaveBeenCalledTimes(1);
+  });
+
+  it("a batch that disappears between pages is not found", async () => {
+    const f = vi.fn()
+      .mockResolvedValueOnce(ok({ total: 600, items: Array.from({ length: 500 }, (_, i) => ({ index: i + 1 })) }))
+      .mockResolvedValueOnce(new Response("{}", { status: 404 }));
+    vi.stubGlobal("fetch", f);
+    expect(await getReviewItems("big")).toBeNull();
+  });
+
   it("clamps q to 100 characters, counted in code points (Review Focus 5)", async () => {
     const f = vi.fn().mockImplementation(async () => ok({ items: [] })); vi.stubGlobal("fetch", f);
     await getReviewItems("b", { q: "😀".repeat(150) });

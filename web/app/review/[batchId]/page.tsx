@@ -30,6 +30,7 @@ export default async function BatchPage({ params, searchParams }:
   const all = show === "all" && !q ? page : await getReviewItems(batchId);
   const first = page.items[0] ?? all?.items[0];
   if (!first) redirect("/review");
-  const done = !!all && all.items.length > 0 && all.items.every((r) => r.displayStatus === "approved");
+  // Done only from a read of the whole batch: a short read must never claim the unread records are approved.
+  const done = !!all && all.items.length > 0 && all.items.length === all.total && all.items.every((r) => r.displayStatus === "approved");
   redirect(done ? `${recordHref(batchId, first.conceptId)}?view=done` : recordHref(batchId, first.conceptId, { show, q }));
 }

@@ -189,6 +189,22 @@ describe("the batch route and layout", () => {
       .rejects.toThrow(`REDIRECT /review/0001-pilot/${pilotRows()[0].conceptId}?view=done`);
   });
 
+  it("an approved read that is not the whole batch is never the complete view", async () => {
+    const approved = pilotRows().map((r) => ({ ...r, displayStatus: "approved" as const }));
+    getReviewItems.mockResolvedValue({ ...ITEMS, total: 11, items: approved });
+    await expect(BatchPage({ params: Promise.resolve({ batchId: "0001-pilot" }), searchParams: Promise.resolve({}) }))
+      .rejects.toThrow(new RegExp(`REDIRECT /review/0001-pilot/${approved[0].conceptId}$`));
+    getReviewItem.mockResolvedValue(pilotItem("napa", { displayStatus: "approved" }));
+    const regOf = async (total: number) => {
+      getReviewItems.mockResolvedValue({ ...ITEMS, total, items: approved });
+      const out = await RecordPage({ params: Promise.resolve({ batchId: "0001-pilot", conceptId: "186-0030-006--napa" }),
+        searchParams: Promise.resolve({ view: "done" }) });
+      return (out as unknown as { props: { reg: { complete: boolean } } }).props.reg;
+    };
+    expect((await regOf(10)).complete).toBe(true);
+    expect((await regOf(11)).complete).toBe(false);
+  });
+
   it("an unknown batch is not found; the layout gives the desk batch-level props only", async () => {
     await expect(BatchLayout({ children: <p>x</p>, params: Promise.resolve({ batchId: "nope" }) })).rejects.toThrow("NOT_FOUND");
     // The desk renders its slots through the record page's panes (DeskRecordContext), so the child reads them the same way.
