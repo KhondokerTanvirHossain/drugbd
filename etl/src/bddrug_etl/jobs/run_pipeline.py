@@ -4,15 +4,15 @@
 
 Stages always run in the order dgda → substances → clinical → ddinter (default: all four).
 Each stage runs in its own transaction together with its stage results, and is committed
-before the next stage starts. Every stage that processes a record also stamps its
-``ops.batch_item.extracted_at`` and resets its review to ``pending`` in that same transaction, so
-an approval never covers data written after it. The substances and DDInter stages also write rows
-shared by every product with that substance (names, codes, DDInter mappings, coverage, pairs, texts);
-when they really change one, the review of every other product that shows it is re-opened in that same
-transaction (its latest batch item, the one the approval gate reads), and the re-opened records are
-logged. A per-product ``fail`` never stops other products. An exception
-from a stage rolls that stage back, marks every product in it ``fail``, stops the later stages
-and makes the exit code non-zero.
+before the next stage starts.
+Every stage settles the records it processed last in its transaction (spec §8.3.1, ``load.batches.settle``): a record is
+stamped (``extracted_at``, review back to ``pending``) only when something its approval covered changed, or when its DGDA
+load failed or recovered, or it came back into the batch file. The substances and DDInter stages also write rows shared
+by every product with that substance; a product that shows a changed substance-level row is re-checked the same way. A
+product listed again in a new batch with an unchanged view carries its approval. Each stage logs how many records it
+re-opened (``re-opened N record(s)``), any carried approvals, and the ``--reopen`` targets it skipped.
+A per-product ``fail`` never stops other products. An exception from a stage rolls that stage back, marks every
+product in it ``fail``, stops the later stages and makes the exit code non-zero.
 
 The DDInter stage is planned once for the whole run, then commits every ``--ddinter-chunk`` products
 (default 5): each chunk's curated rows, stage results and review stamps go in one transaction. An
@@ -30,9 +30,11 @@ Every run that started a stage appends ``ops.batch_run(batch_id, stages, counts,
 asked, ``counts`` = ``{stage: {ok, warn, fail}}`` for each stage that ran, ``concept_ids`` empty for a full run.
 The final log line is ``batch=<id> dgda=<ok/warn/fail> substances=… clinical=… ddinter=…``.
 
-Every invocation has one ``run_id`` (logged at start). Every stamp of ``extracted_at`` writes an ``ops.item_snapshot``
-row with it, in the stamping transaction, after that stage's results: so the up to four stamps of one run share one
-``run_id``, and a record's history shows one "pipeline re-ran this record" entry per run (spec §5.6.5, §8.1 item 4).
+Every invocation has one ``run_id`` (logged at start). Every stamp writes an ``ops.item_snapshot`` row with it, in the
+stamping transaction, after that stage's results; an unchanged record is not stamped and gets no snapshot.
+
+``--reopen`` stamps the named targets whatever changed, never their dependents, and skips a target that is approved
+(``skipped: approved, --reopen not confirmed``, §13.1 Q12).
 """
 import argparse
 import contextlib
@@ -50,7 +52,7 @@ from psycopg.types.json import Jsonb
 
 from bddrug_etl.ddinter.client import DDInterClient
 from bddrug_etl.http.snapshot import SnapshotHttp
-from bddrug_etl.load.batches import read_batch_file, reopen_review, run_batch, run_batch_items
+from bddrug_etl.load.batches import REOPEN_SKIPPED, Settled, read_batch_file, run_batch, run_batch_items, settle
 from bddrug_etl.ocl.client import OclClient
 from bddrug_etl.rxnav.client import RxNavClient
 from bddrug_etl.stages.clinical import build_clinical_drugs
@@ -157,20 +159,28 @@ def _call_stage(stage: str, conn: psycopg.Connection, clients: Clients, ids: lis
     return build_clinical_drugs(conn, ids)  # product rows and new clinical drugs; never changes an existing one
 
 
-def _reopen(conn: psycopg.Connection, stage: str, batch_id: str, ids: list[str], changes: SharedChanges,
-            run_id: uuid.UUID) -> None:
-    """Re-open ``ids`` and every other product showing a shared row in ``changes`` (last, in the caller's transaction)."""
-    others = reopen_review(conn, batch_id, ids, changes, run_id)
-    if others:
-        log.info("stage %s for batch %s changed shared substance data; re-opened the review of %d other record(s): %s",
-                 stage, batch_id, len(others), ", ".join(f"{b}/{c}" for b, c in others))
+def _log_settled(stage: str, batch_id: str, s: Settled) -> None:
+    reopened = ": " + ", ".join(f"{b}/{c}" for b, c in s.reopened) if s.reopened else ""
+    log.info("stage %s for batch %s re-opened %d record(s)%s", stage, batch_id, len(s.reopened), reopened)
+    if s.carried:
+        log.info("stage %s for batch %s carried the approval of %d record(s): %s", stage, batch_id, len(s.carried),
+                 ", ".join(f"{b}/{c}" for b, c in s.carried))
+    for cid in s.skipped:
+        log.info("stage %s for batch %s: %s %s", stage, batch_id, cid, REOPEN_SKIPPED)
+
+
+def _settle(conn: psycopg.Connection, stage: str, batch_id: str, ids: list[str], changes: SharedChanges,
+            run_id: uuid.UUID, reopen: bool) -> None:
+    """Settle ``ids`` and every other product showing a changed substance row (last, in the caller's transaction)."""
+    _log_settled(stage, batch_id, settle(conn, batch_id, ids, changes, run_id, reopen=reopen))
 
 
 def _run_dgda(conn: psycopg.Connection, clients: Clients, batch_id: str, ids: list[str],
-              subset: bool, run_id: uuid.UUID) -> list[StageResult]:
+              subset: bool, run_id: uuid.UUID, reopen: bool) -> list[StageResult]:
     # one transaction incl. the 'dgda' results and snapshots; commits itself. A subset never goes through run_batch,
     # which would treat every other item as removed from the batch file.
-    (run_batch_items if subset else run_batch)(conn, clients.ocl, batch_id, ids, run_id)
+    stats = (run_batch_items if subset else run_batch)(conn, clients.ocl, batch_id, ids, run_id, reopen=reopen)
+    _log_settled("dgda", batch_id, stats.settled)
     rows = conn.execute(
         """SELECT concept_id, status, note FROM ops.stage_result
            WHERE batch_id = %s AND stage = 'dgda' AND concept_id = ANY(%s)""", (batch_id, ids)
@@ -180,17 +190,18 @@ def _run_dgda(conn: psycopg.Connection, clients: Clients, batch_id: str, ids: li
 
 
 def _run_product_stage(conn: psycopg.Connection, clients: Clients, stage: str, batch_id: str,
-                       targets: list[str], skipped: list[StageResult], run_id: uuid.UUID) -> list[StageResult]:
+                       targets: list[str], skipped: list[StageResult], run_id: uuid.UUID,
+                       reopen: bool) -> list[StageResult]:
     with conn.transaction():  # the stage's own transaction; its per-product savepoints nest inside
         changes = SharedChanges()
         results = _call_stage(stage, conn, clients, targets, changes)
         write_stage_results(conn, batch_id, stage, results + skipped)
-        _reopen(conn, stage, batch_id, targets, changes, run_id)  # last: the approvals covering this data stop counting
+        _settle(conn, stage, batch_id, targets, changes, run_id, reopen)  # last: settle under the reopen rule
     return results + skipped
 
 
 def _run_ddinter(conn: psycopg.Connection, clients: Clients, batch_id: str, targets: list[str],
-                 skipped: list[StageResult], chunk_size: int, run_id: uuid.UUID) -> list[StageResult]:
+                 skipped: list[StageResult], chunk_size: int, run_id: uuid.UUID, reopen: bool) -> list[StageResult]:
     """Plan the whole run once, then commit every ``chunk_size`` products (see the module docstring)."""
     with conn.transaction():  # planning (and the drug-list snapshot) plus the skipped products' results
         plan = plan_ddinter(conn, clients.ddinter, targets) if targets else None
@@ -207,7 +218,7 @@ def _run_ddinter(conn: psycopg.Connection, clients: Clients, batch_id: str, targ
                     chunk_results.append(plan.process(conn, cid, changes))
                 current = None
                 write_stage_results(conn, batch_id, "ddinter", chunk_results)
-                _reopen(conn, "ddinter", batch_id, chunk, changes, run_id)  # last: the approvals covering this data stop counting
+                _settle(conn, "ddinter", batch_id, chunk, changes, run_id, reopen)  # last: settle under the reopen rule
         except Exception as e:
             log.exception("stage ddinter aborted at chunk %d for batch %s", n, batch_id)
             # the product that raised (or the whole chunk, when its bookkeeping raised) gets the error;
@@ -246,11 +257,13 @@ def _record_failure(conn: psycopg.Connection, stage: str, batch_id: str, targets
 def run_pipeline(conn: psycopg.Connection, clients: Clients, batch_id: str, ids: list[str],
                  stages: tuple[str, ...] = STAGES, *, subset: bool = False,
                  ddinter_chunk: int = DDINTER_CHUNK,
-                 run_id: uuid.UUID | None = None) -> tuple[dict[str, list[StageResult]], bool]:
+                 run_id: uuid.UUID | None = None,
+                 reopen: bool = False) -> tuple[dict[str, list[StageResult]], bool]:
     """Run ``stages`` in canonical order, committing after each one (the DDInter stage after each chunk).
 
     ``subset``: ``ids`` are some items of an already loaded batch (``--concept``); only they are touched.
     ``run_id``: shared by every snapshot this call writes (a new one when None).
+    ``reopen``: the engineer's --reopen (§8.3.1 item 5).
     Returns (results of every stage that ran, True when no stage raised).
     """
     run_id = run_id or uuid.uuid4()
@@ -269,16 +282,16 @@ def run_pipeline(conn: psycopg.Connection, clients: Clients, batch_id: str, ids:
         targets, skipped = ids, []
         try:
             if stage == "dgda":
-                done[stage] = _run_dgda(conn, clients, batch_id, ids, subset, run_id)
+                done[stage] = _run_dgda(conn, clients, batch_id, ids, subset, run_id, reopen)
                 continue
             targets = _eligible(conn, batch_id, ids)
             keep = set(targets)
             skipped = [StageResult(cid, "fail", SKIP_NOTE, {}) for cid in ids if cid not in keep]
             conn.commit()  # end the read-only eligibility transaction
             if stage == "ddinter":
-                done[stage] = _run_ddinter(conn, clients, batch_id, targets, skipped, ddinter_chunk, run_id)
+                done[stage] = _run_ddinter(conn, clients, batch_id, targets, skipped, ddinter_chunk, run_id, reopen)
             else:
-                done[stage] = _run_product_stage(conn, clients, stage, batch_id, targets, skipped, run_id)
+                done[stage] = _run_product_stage(conn, clients, stage, batch_id, targets, skipped, run_id, reopen)
         except _StageAborted as a:  # chunked stage: earlier chunks stay committed, results already written
             done[stage] = a.results
             return done, False

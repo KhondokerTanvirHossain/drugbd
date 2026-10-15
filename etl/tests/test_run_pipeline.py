@@ -141,6 +141,25 @@ def url():
         yield u
 
 
+@pytest.fixture(autouse=True)
+def clean(url):
+    """Every test starts from an empty database (P1C: a carried approval, §8.3.1 item 8, would cross tests otherwise)."""
+    with psycopg.connect(url) as c:
+        # V6 snapshots are append-only; only this throwaway test database switches the trigger off to start each test empty.
+        c.execute("ALTER TABLE ops.item_snapshot DISABLE TRIGGER item_snapshot_append_only")
+        c.execute("DELETE FROM ops.item_snapshot")
+        c.execute("ALTER TABLE ops.item_snapshot ENABLE TRIGGER item_snapshot_append_only")
+        for t in ("ops.review_decision", "ops.stage_result", "ops.batch_run", "ops.batch_item", "ops.batch",
+                  "curated.ddinter_pair", "curated.ddinter_interaction_text", "curated.ddinter_disease",
+                  "curated.ddinter_food", "curated.ddinter_drug", "curated.interaction_coverage",
+                  "curated.clinical_drug_ingredient", "curated.brand_product_ingredient"):
+            c.execute(f"DELETE FROM {t}")
+        c.execute("UPDATE curated.brand_product SET bdc_id = NULL")
+        for t in ("curated.clinical_drug", "curated.brand_product", "curated.substance_name",
+                  "curated.substance_code", "curated.substance"):
+            c.execute(f"DELETE FROM {t}")
+
+
 def q(url, sql, params=()):
     """Read through a fresh connection: only committed data is visible."""
     with psycopg.connect(url) as c:
@@ -371,7 +390,7 @@ def test_full_pipeline_twice_mints_no_new_ids_and_replaces_stage_results(url, tm
     assert first[4] == [(12,)]
 
 
-# --- approval gate (Review Focus 3): every stage that rewrites a record re-opens its review -----
+# --- approval gate (Review Focus 3, §8.3.1): a stage re-opens a review only when covered data changed
 
 REVIEWER = "pharm@example.test"
 
@@ -396,30 +415,37 @@ def decisions(url, batch_id):
     return q(url, "SELECT count(*) FROM ops.review_decision WHERE batch_id = %s", (batch_id,))[0][0]
 
 
-def test_stage_only_rerun_after_an_ok_reopens_the_review_and_keeps_history(url, tmp_path):
+def test_stage_only_rerun_without_a_covered_change_keeps_the_approval_and_history(url, tmp_path):
+    """S8 (§8.3.1): a re-run that changes nothing an approval covered leaves every approved record approved."""
     f = batch_file(tmp_path, "0115-stage-rerun", [WARF, ASA, MISSING])
     assert Harness(url).main("--batch", f) == 0
-    decided_at = approve(url, "0115-stage-rerun", WARF)
-    missing_before = item(url, "0115-stage-rerun", MISSING)
+    approve(url, "0115-stage-rerun", WARF)
+    before = {cid: item(url, "0115-stage-rerun", cid) for cid in (WARF, ASA, MISSING)}
     assert Harness(url).main("--batch", f, "--stages", "substances,clinical,ddinter") == 0
-    review, extracted_at = item(url, "0115-stage-rerun", WARF)
-    assert review == "pending"
-    assert extracted_at > decided_at  # the old 'ok' no longer counts under the approval rule
-    assert item(url, "0115-stage-rerun", ASA)[0] == "pending"
-    assert item(url, "0115-stage-rerun", MISSING) == missing_before  # skipped (dgda failed): nothing rewritten
-    assert q(url, "SELECT status FROM ops.batch WHERE batch_id = '0115-stage-rerun'") == [("in_review",)]
+    assert {cid: item(url, "0115-stage-rerun", cid) for cid in (WARF, ASA, MISSING)} == before
     assert decisions(url, "0115-stage-rerun") == 1  # history kept
 
 
 @pytest.mark.parametrize("stage", ["substances", "clinical", "ddinter"])
-def test_each_product_stage_alone_reopens_the_review(url, tmp_path, stage):
+def test_each_product_stage_alone_keeps_an_unchanged_approval(url, tmp_path, stage):
     batch_id = f"0116-only-{stage}"
     f = batch_file(tmp_path, batch_id, [WARF])
     assert Harness(url).main("--batch", f) == 0
-    decided_at = approve(url, batch_id, WARF)
+    approve(url, batch_id, WARF)
+    before = item(url, batch_id, WARF)
     assert Harness(url).main("--batch", f, "--stages", stage) == 0
-    review, extracted_at = item(url, batch_id, WARF)
+    assert item(url, batch_id, WARF) == before
+
+
+def test_a_run_that_changes_covered_data_reopens_the_review(url, tmp_path, monkeypatch):
+    f = batch_file(tmp_path, "0116-changed", [WARF])
+    assert Harness(url).main("--batch", f) == 0
+    decided_at = approve(url, "0116-changed", WARF)
+    monkeypatch.setitem(CONCEPTS, WARF, concept(WARF, "Tablet", "Warfarin Sodium 2 mg", [("XM86W0", "Warfarin")]))
+    assert Harness(url).main("--batch", f) == 0
+    review, extracted_at = item(url, "0116-changed", WARF)
     assert (review, extracted_at > decided_at) == ("pending", True)
+    assert decisions(url, "0116-changed") == 1
 
 
 def test_an_ok_recorded_while_a_later_stage_runs_does_not_approve_its_output(url, tmp_path, monkeypatch):
@@ -455,6 +481,7 @@ def test_an_ok_recorded_while_dgda_loads_does_not_approve_its_output(url, tmp_pa
         seen["decided_at"] = approve(url, "0118-mid-dgda", WARF)
         return stats
     monkeypatch.setattr(batches, "load_products", review_mid_load)
+    monkeypatch.setitem(CONCEPTS, WARF, {**CONCEPTS[WARF], "extras": {**CONCEPTS[WARF]["extras"], "company": "New Co"}})
     assert Harness(url).main("--batch", f, "--stages", "dgda") == 0
     review, extracted_at = item(url, "0118-mid-dgda", WARF)
     assert (review, extracted_at > seen["decided_at"]) == ("pending", True)
@@ -518,8 +545,7 @@ def test_snapshot_written_on_stamp_with_one_run_id_per_invocation(url, tmp_path)
     assert payload["ingredients"][0]["ddinter_chosen"] == ["DDInter1951"]
     assert set(payload["stages"]) == {"dgda", "substances", "clinical", "ddinter"}
 
-    first_run = warf[0][2]
     assert Harness(url).main("--batch", f, "--stages", "ddinter") == 0
     again = q(url, """SELECT reason, run_id FROM ops.item_snapshot WHERE batch_id = '0120-snapshots'
                       AND concept_id = %s ORDER BY extracted_at""", (WARF,))
-    assert len(again) == 5 and again[-1][0] == "rerun" and again[-1][1] != first_run
+    assert again == [(r[1], r[2]) for r in warf]   # §8.3.1: an unchanged re-run stamps nothing and writes no snapshot
