@@ -1,4 +1,3 @@
-import { Fragment } from "react";
 import { SourceOf } from "@/components/ui/SourceLink";
 import { DESK_NEW, P1C_COPY, fill } from "@/lib/copy";
 import { fmtDhaka, fmtUtc } from "@/lib/format";
@@ -68,8 +67,8 @@ export default function EvidenceContent({ item }: { item: ReviewItem }) {
           <dl className="dr-dl">
             {sourceRows(item).map((row) => [
               <dt key={`t${row.label}`}>{row.label}</dt>,
-              <dd key={`d${row.label}`}>{row.links.map((l, i) => (
-                <Fragment key={`${l.code}${l.source.url}`}>{i > 0 && <br />}<span className="mono">{l.code}</span> <SourceOf source={l.source} /></Fragment>
+              <dd key={`d${row.label}`}>{row.links.map((l) => (
+                <span key={`${l.code}${l.source.url}`}><span className="mono">{l.code}</span> <SourceOf source={l.source} /></span>
               ))}</dd>,
             ])}
           </dl>

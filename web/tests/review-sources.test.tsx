@@ -52,7 +52,14 @@ describe("source links on the desk (§5.6.6, §11.2)", () => {
     expect(html).toContain("<h5>Sources</h5><p class=\"dr-note\">Where each value came from. Links open the source&#x27;s own page.</p>");
     for (const label of ["DGDA register (OCL)", "RxNav", "WHO ATC/DDD Index", "DrugBank", "ICD-11", "DDInter 2.0"])
       expect(html).toContain(`<dt>${label}</dt>`);
-    expect(html).toContain(`<span class="mono">161</span> ${link("https://mor.nlm.nih.gov/RxNav/search?searchBy=RXCUI&amp;searchTerm=161", "RxNav")} fetched on 12/10/2026`);
+    // The dd stacks its children (.dr-dl dd is a column flex), so each code is one wrapper element holding its code, its
+    // link and its date; a bare <br /> or loose text would stack as separate fragments.
+    const rxnav = `<span class="mono">161</span> ${link("https://mor.nlm.nih.gov/RxNav/search?searchBy=RXCUI&amp;searchTerm=161", "RxNav")} fetched on 12/10/2026`;
+    const snomed = `<span class="mono">387517004</span> ${link("https://mor.nlm.nih.gov/RxNav/search?searchBy=SNOMEDCT&amp;searchTerm=387517004", "RxNav (SNOMED CT search)")} fetched on 12/10/2026`;
+    const snomed2 = `<span class="mono">90332006</span> ${link("https://mor.nlm.nih.gov/RxNav/search?searchBy=SNOMEDCT&amp;searchTerm=90332006", "RxNav (SNOMED CT search)")} fetched on 12/10/2026`;
+    expect(html).toContain(`<dt>RxNav</dt><dd><span>${rxnav}</span><span>${snomed}</span><span>${snomed2}</span></dd>`);
+    expect(html).toContain(`<dt>DGDA register (OCL)</dt><dd><span><span class="mono">${item.conceptId}</span> `);
+    expect(html).not.toContain("<br/>");
   });
 
   it("without sources from the API nothing links and no Sources section shows (a code that failed its pattern)", () => {
