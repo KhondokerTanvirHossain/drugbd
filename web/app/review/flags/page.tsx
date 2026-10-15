@@ -6,8 +6,8 @@ import { newestInReview } from "@/components/review/ReviewAccount";
 import Announce from "@/components/review/desk/Announce";
 import Banner from "@/components/ui/Banner";
 import { buttonClass } from "@/components/ui/Button";
-import { listFlagPage, listReviewBatches } from "@/lib/api";
-import { DESK_NEW } from "@/lib/copy";
+import { getPairQueue, listFlagPage, listReviewBatches } from "@/lib/api";
+import { DESK_NEW, P1C_COPY, fill } from "@/lib/copy";
 import { KEYS_COOKIE, parseKeys } from "@/lib/desk-settings";
 import { cspNonce } from "@/lib/nonce";
 import { firstParam } from "@/lib/params";
@@ -39,9 +39,13 @@ export default async function FlagsPage({ searchParams }: { searchParams: Promis
   const t = DESK_NEW.reviewLists;
   const code = firstParam(sp.resolve);
   const outcome = code === "resolved" ? (firstParam(sp.kind) === "partner" ? t.requestResolved : t.reportResolved) : RESOLVE_OUTCOME[code];
-  const [reports, partner, batches] = await Promise.all([
+  const [reports, partner, batches, pairIssues] = await Promise.all([
     listFlagPage("reports", paging.rp).catch(() => null), listFlagPage("partner", paging.pp).catch(() => null),
     listReviewBatches().catch(() => []),
+    // §5.16 (P1C): seniors see how many pair issues are open; engineers have no list of them (§5.17).
+    session.role === "senior"
+      ? getPairQueue({ show: "issue", pairs: "all", severity: null, page: 0 }, session.email, 1).then((p) => p.counts.issue).catch(() => 0)
+      : Promise.resolve(0),
   ]);
   const store = await cookies();
   const siteKey = turnstileSiteKey();
@@ -53,6 +57,7 @@ export default async function FlagsPage({ searchParams }: { searchParams: Promis
         keys={parseKeys(store.get(KEYS_COOKIE)?.value)} />
       <main id="content" className={styles.page}>
         <h1>{t.flagsLink}</h1>
+        {pairIssues > 0 && <p><a href="/review/pairs?show=issue">{fill(P1C_COPY.review.flagsLine, { k: pairIssues })}</a></p>}
         {failed ? (
           <>
             {/* §10.2: one polite region per page, no assertive one. On a failed load the page's one Announce carries the

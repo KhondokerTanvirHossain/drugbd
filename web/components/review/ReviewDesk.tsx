@@ -28,7 +28,7 @@ import styles from "./desk.module.css";
 export type ReviewDeskProps = {
   batchId: string; role: ReviewerRole; total: number; counts: { approved: number; issue: number };
   undoSeconds: UndoSeconds; singleKeys: boolean; siteKey: string | null; nonce?: string;
-  account: ReactNode; batchesNav: ReactNode; batchCard: ReactNode; children: ReactNode;
+  account: ReactNode; batchesNav: ReactNode; batchCard: ReactNode; seniorLinks?: ReactNode; children: ReactNode;
 };
 
 const TRANSITION_MS = 300;
@@ -741,7 +741,7 @@ export default function ReviewDesk(props: ReviewDeskProps) {
   const reportErr = machine.report.kind === "netErr" ? machine.report : null;
   const api: DeskApi = {
     ready, batchId, role, total: props.total, singleKeys, undoSeconds, machine, bar, complete, hint, botState, retryBusy,
-    drawerOpen, sheetOpen, reportOpen, note, noteError, dismissOpen, dismissNote, dismissError, diff, diffOpen, slots: { batchesNav: props.batchesNav, batchCard: props.batchCard },
+    drawerOpen, sheetOpen, reportOpen, note, noteError, dismissOpen, dismissNote, dismissError, diff, diffOpen, slots: { batchesNav: props.batchesNav, batchCard: props.batchCard, seniorLinks: props.seniorLinks },
     staleFor: (id) => stale[id] ?? null,
     netErrFor: (id) => (commitErr?.op.conceptId === id ? commitErr.saved : reportErr?.op.conceptId === id ? reportErr.saved : null),
     statusFor: (id, fallback) => overrides[id] ?? fallback,

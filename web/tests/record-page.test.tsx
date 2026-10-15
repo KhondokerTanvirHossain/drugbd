@@ -6,6 +6,7 @@ import { pilotItem, pilotRows } from "./fixtures/pilot";
 const getReviewItems = vi.fn();
 const getReviewItem = vi.fn();
 const getReviewDiff = vi.fn();
+const getPairQueue = vi.fn();
 const listReviewBatches = vi.fn();
 const getSession = vi.fn();
 const logOpenOnRender = vi.fn(async () => {});
@@ -13,7 +14,7 @@ const redirect = vi.fn((u: string) => { throw new Error(`REDIRECT ${u}`); });
 const notFound = vi.fn(() => { throw new Error("NOT_FOUND"); });
 const router = { push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() };
 vi.mock("@/lib/api", () => ({ getReviewItems: (...a: unknown[]) => getReviewItems(...a), getReviewItem: (...a: unknown[]) => getReviewItem(...a),
-  getReviewDiff: (...a: unknown[]) => getReviewDiff(...a), listReviewBatches: () => listReviewBatches() }));
+  getReviewDiff: (...a: unknown[]) => getReviewDiff(...a), getPairQueue: (...a: unknown[]) => getPairQueue(...a), listReviewBatches: () => listReviewBatches() }));
 vi.mock("@/lib/session", () => ({ getSession: () => getSession() }));
 vi.mock("@/lib/desk-core", () => ({ logOpenOnRender: (...a: unknown[]) => logOpenOnRender(...(a as [])) }));
 vi.mock("@/lib/desk-actions", () => ({ decideFormAction: vi.fn(), decide: vi.fn(), logRecordOpen: vi.fn(), logEvidence: vi.fn(), loadDiff: vi.fn() }));
@@ -34,7 +35,7 @@ import { useDesk } from "@/components/review/desk/context";
 
 function SidebarSlots() {
   const { slots } = useDesk();
-  return <aside>{slots.batchesNav}{slots.batchCard}</aside>;
+  return <aside>{slots.batchesNav}{slots.seniorLinks}{slots.batchCard}</aside>;
 }
 
 const PHARMACIST = { email: "pharm@e2e.test", name: "Farhana Islam", role: "pharmacist" as const };
@@ -234,5 +235,30 @@ describe("a senior session on the review pages (§5.13: role passed through unch
     const html = await page("napa", { confirm: "186-0030-006--napa", x, d: "", r: RID });
     expect(html).toContain("Confirming publishes this record.");
     expect(html).not.toContain("Confirming records your check.");
+  });
+});
+
+describe("the desk sidebar for a senior (§5.1)", () => {
+  it("adds Senior review: the pair queue with its count, and Substances; a pharmacist has neither", async () => {
+    getSession.mockResolvedValue({ email: "senior@e2e.test", name: "S", role: "senior" });
+    getPairQueue.mockResolvedValue({ total: 0, counts: { todo: 12, changed: 1, issue: 2, reviewed: 3, all: 15 }, items: [] });
+    const html = renderToStaticMarkup(await BatchLayout({ children: <SidebarSlots />, params: Promise.resolve({ batchId: "0001-pilot" }) }));
+    expect(getPairQueue).toHaveBeenCalledWith({ show: "todo", pairs: "all", severity: null, page: 0 }, "senior@e2e.test", 1);
+    expect(html).toContain('<p class="chrome-heading">Senior review</p>');
+    expect(html).toContain('<a class="filter" href="/review/pairs">Pair queue<span class="filter-n">12</span></a>');
+    expect(html).toContain('<a class="filter" href="/review/substances">Substances</a>');
+    expect(html).toContain('<span class="role-badge">Senior pharmacist</span>');
+  });
+  it("a failed count still shows the links", async () => {
+    getSession.mockResolvedValue({ email: "senior@e2e.test", name: "S", role: "senior" });
+    getPairQueue.mockRejectedValue(new Error("API error 500"));
+    const html = renderToStaticMarkup(await BatchLayout({ children: <SidebarSlots />, params: Promise.resolve({ batchId: "0001-pilot" }) }));
+    expect(html).toContain('<a class="filter" href="/review/pairs">Pair queue</a>');
+  });
+  it("a pharmacist gets no Senior review block and no count read", async () => {
+    getPairQueue.mockClear();
+    const html = renderToStaticMarkup(await BatchLayout({ children: <SidebarSlots />, params: Promise.resolve({ batchId: "0001-pilot" }) }));
+    expect(html).not.toContain("/review/pairs");
+    expect(getPairQueue).not.toHaveBeenCalled();
   });
 });

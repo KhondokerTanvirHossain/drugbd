@@ -38,7 +38,7 @@ export type DeskApi = {
   machine: MachineState; bar: BarCtx; complete: boolean; hint: string | null; botState: "checking" | "passed" | "failed";
   retryBusy: boolean; drawerOpen: boolean; sheetOpen: boolean; reportOpen: boolean; note: string; noteError: boolean;
   dismissOpen: boolean; dismissNote: string; dismissError: boolean;
-  diff: DiffRow[] | null; diffOpen: boolean; slots: { batchesNav: ReactNode; batchCard: ReactNode };
+  diff: DiffRow[] | null; diffOpen: boolean; slots: { batchesNav: ReactNode; batchCard: ReactNode; seniorLinks?: ReactNode };
   staleFor(conceptId: string): "rerun" | "other" | null;
   netErrFor(conceptId: string): "no" | "unknown" | null;
   statusFor(conceptId: string, fallback: DisplayStatus): DisplayStatus;
