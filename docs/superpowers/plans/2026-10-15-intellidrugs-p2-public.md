@@ -4,7 +4,7 @@
 
 **Goal:** A doctor, pharmacist or partner reaches pharmacist-approved medicine data on the public site: the landing page, sign-in and its welcome states, medicine search with synonyms and DAR numbers, approved product pages (with source links and "With other approved medicines" across every batch), hidden-record and removed-record stubs, substance pages, the interaction checker (with "From DDInter 2.0" and the senior-review state on every pair), the partner access request and the privacy page; all served by the §7.4 public endpoints, each applying the one §7.4 visibility rule.
 
-**Architecture:** The Java API (hexagonal) gains the §7.4 public endpoints: `GET /v1/search`, the extended `GET /v1/products/{id}` (approved detail and the reshaped stub), `GET /v1/products/{id}/interactions` across batches grouped by partner substance, `GET /v1/clinical-drugs/{bdcId}`, the extended `GET /v1/substances/{bdsId}`, `GET /v1/substances/{bdsId}/interactions`, `GET /v1/products/suggest` and the extended `POST /v1/interactions/check`. Each new rule is a pure domain class with its own unit test (`PublicProducts`, `PublicPairs`, `SearchPage`, `Suggest`, the rewritten `InteractionCheckService.compute`), fed by set-based R2DBC adapters that read public status only through `ReviewSql.statusOf` or `ReviewSql.LATEST_PUBLIC`; the pair's public senior-review state comes from P1C's `PairReviewRule` through one reader (`PublicPairReviewReader`). The Next.js 15 app renders every public route on the server from those endpoints with `scope=public`; Board P's layout is ported into CSS Modules; the only islands used are the §4.2 ones (`CheckerCombobox`, `Expander`, `ThemeSwitch`, `TurnstileField`, `AccountMenu`, `SignInButton`), and every flow but sign-in and the bot-checked writes works without JavaScript.
+**Architecture:** The Java API (hexagonal) gains the §7.4 public endpoints: `GET /v1/search`, the extended `GET /v1/products/{id}` (approved detail and the reshaped stub), `GET /v1/products/{id}/interactions` across batches grouped by partner substance, `GET /v1/clinical-drugs/{bdcId}`, the extended `GET /v1/substances/{bdsId}`, `GET /v1/substances/{bdsId}/interactions`, `GET /v1/products/suggest` and the extended `POST /v1/interactions/check`. Each new rule is a pure domain class with its own unit test (`PublicProducts`, `PublicPairs`, `SearchPage`, `Suggest`, the rewritten `InteractionCheckService.compute`), fed by set-based R2DBC adapters that read public status only through `ReviewSql.statusOf` or `ReviewSql.LATEST_PUBLIC`; the pair's public senior-review state comes from P1C's one reader of `ops.pair_review` (`PairReviewReader.forCodes`) and P1C's `PairReviewRule.publicReview`, through a pure helper (`PublicPairReviews`) that keys and hashes a page of pairs. The Next.js 15 app renders every public route on the server from those endpoints with `scope=public`; Board P's layout is ported into CSS Modules; the only islands used are the §4.2 ones (`CheckerCombobox`, `Expander`, `ThemeSwitch`, `TurnstileField`, `AccountMenu`, `SignInButton`), and every flow but sign-in and the bot-checked writes works without JavaScript.
 
 **Tech Stack:** Java 21, Spring Boot 3.4.2 (WebFlux, R2DBC), JUnit 5, Testcontainers 1.20.4, Flyway 10.20.1 (tests only) · Next.js 15.5.27 (app router), React 19.0.8, TypeScript 5.7.3, CSS Modules, vitest 2.1.8 (+ jsdom 26.1.0, Testing Library 16.3.3), Stylelint 16 · Playwright 1.64.0 with `@axe-core/playwright` 4.13.0, Lighthouse CI 0.15.1 · PostgreSQL 16.
 
@@ -69,26 +69,29 @@ Five inputs the spec implies but its listed tests do not exercise, most likely t
 
 ## Interfaces consumed from P1C
 
-P1C is merged before P2 starts; this plan was written before its implementation plan existed, so it uses the names the amended spec gives. "Before you start" greps each one. **If a name differs on `main`, use `main`'s name at the call site and keep this plan's behaviour and tests; record the difference in the PR description.** The plan never relies on a P1C name the spec does not state, except the four marked *(assumed)*, whose shape the spec fixes but not the Java signature.
+P1C is merged before P2 starts. Every Java name below is taken from the P1C plan (`docs/superpowers/plans/2026-10-15-intellidrugs-p1c-review-model.md`, the task named in the table) and "Before you start" greps each one on `main`. A grep that prints nothing means P1C did not merge as planned: stop and report it; do not rename at the call site. The web names P1C's plan does not yet spell out (its web tasks) are the ones the amended spec states (§3.4, §3.6, §5.13).
 
-| Name | Where | Used by | Shape this plan relies on |
+| Name | Where (P1C task) | Used by | Shape this plan relies on |
 |---|---|---|---|
 | `ReviewSql.statusOf`, `ReviewSql.LATEST_PUBLIC`, `ReviewSql.REMOVED_NOTE`, `ReviewSql.CURRENT_ITEM` | `$API/adapter/persistence/ReviewSql.java` (P3, on `main`) | every new adapter | as on `main` today (read above) |
-| `PublicStatusGuardTest` | `api/src/test/java/com/niramoy/bddrug/` | Task 15 runs it | scans `adapter/persistence` for `batch_item.review` reads (§11.3) |
-| `Source` record *(assumed)* | `$API/domain/Source.java` | Tasks 3, 6, 7 | `public record Source(String url, String label, String fetchedAt)` (§7.3 `Source = { url, label, fetchedAt: ISO\|null }`) |
-| `SourceLinks` *(assumed)* | `$API/domain/SourceLinks.java` | Tasks 3, 6, 7 | `static Source dgda(String conceptId, Instant fetchedAt)`; `static Optional<Source> code(String system, String code, Instant fetchedAt)`; `static Optional<Source> ddinterPair(String interactionId)` (§5.6.6 table) |
-| `PairContent.hash` | `$API/domain/PairContent.java` | Task 2 | `static String hash(String a, String b, String severity, List<String> actions, String interaction, String management)` (§7.7) |
-| `PairReviewRule` *(assumed)* | `$API/domain/PairReviewRule.java` | Task 2 | `record Decision(long id, String decision, String contentHash, Instant decidedAt, String reviewerEmail, String note)`; `static PairReview state(List<Decision> oldestFirst, String currentHash, String viewerEmail)` |
-| `PairReview` | `$API/domain/PairReview.java` | Task 2 | `record PairReview(String state, Instant at, boolean mine, String note)` (§7.3 `PairReview`) |
-| `IngredientSummary.Code.source()`, `IngredientSummary.Entry.source()` | `$API/domain/IngredientSummary.java` | Task 4 | a `Source` (nullable) as the last component (§7.3 "P1C additions") |
-| `IngredientSummaryReader.read(conceptId, bdcId, route)` | `$API/adapter/persistence/IngredientSummaryReader.java` | Task 4 | fills `source` on codes and entries (P1C) |
-| `ops.pair_review` table | V7 (§7.8) | Task 2 | columns as §7.8 |
-| `FROM_DDINTER`, `PAIR_REVIEWED`, `PAIR_NOT_REVIEWED`, `PROMISE_SENIOR` | `web/lib/copy.ts` | Tasks 25, 27, 29, 33 | strings as §3.6; `PAIR_REVIEWED` holds the `{date}` placeholder |
+| `PublicStatusGuardTest` | `api/src/test/java/com/niramoy/bddrug/` (P1C Task 9) | Task 15 runs it | scans `adapter/persistence` for `batch_item` reads (§11.3) |
+| `SourceLinks.Source` | `$API/domain/SourceLinks.java` (P1C Task 4) | Tasks 3, 6, 7 | nested `public record Source(String url, String label, Instant fetchedAt)` |
+| `SourceLinks.brand`, `SourceLinks.code`, `SourceLinks.pair` | `$API/domain/SourceLinks.java` (P1C Task 4) | Tasks 3, 6, 7 | `static Source brand(String conceptId, Instant fetchedAt)` ("DGDA register (OCL)"); `static Optional<Source> code(String system, String code, Instant fetchedAt)`; `static Optional<Source> pair(String interactionId)` (numeric ids only, `fetchedAt` null) |
+| `PairContent.Content`, `PairContent.hash` | `$API/domain/PairContent.java` (P1C Task 5) | Tasks 2, 7, 8, 9, 11, 15 | `record Content(String severity, List<String> actions, String interaction, String management)` (sorts actions, cleans both texts); `static String hash(String a, String b, Content c)` |
+| `PairReviewRule.Decision`, `PairReviewRule.PublicReview`, `PairReviewRule.publicReview`, `PairReviewRule.NOT_REVIEWED`, `PairReviewRule.REVIEWED` | `$API/domain/PairReviewRule.java` (P1C Task 5) | Tasks 2, 7, 8, 10, 11 | `record Decision(long id, String decision, String note, String contentHash, PairContent.Content content, Instant decidedAt, boolean mine)`; `record PublicReview(String state, Instant reviewedAt)` (`reviewed` or `not_reviewed`); `static PublicReview publicReview(List<Decision> decisions, String currentHash)` |
+| `PairReviewReader.forCodes`, `PairReviewReader.key` | `$API/adapter/persistence/PairReviewReader.java` (P1C Task 7b) | Tasks 2, 7, 11 | `Mono<Map<String, List<PairReviewRule.Decision>>> forCodes(Collection<String> codes, String viewerEmail)`: one query over `ops.pair_review` for every pair whose two entries are both in `codes`, keyed `"{ddinterA}\|{ddinterB}"` (stored order); `viewerEmail` null makes every `mine` false; the email never leaves the method |
+| `CheckQueryPort.CheckData.reviews`, `R2dbcCheckAdapter`'s `pairReviews`, `InteractionAlert`'s `ddinterA`, `ddinterB`, `pairReview` | P1C Task 9 | Tasks 8, 9 | `CheckData(products, ingredients, codesByBds, listedCodes, pairs, Map<String, List<PairReviewRule.Decision>> reviews)` with a five-argument secondary constructor; the adapter zips `pairReviews.forCodes(<loaded codes>, null)` with the pairs; Task 8 deletes `InteractionAlert` (its fields move to `CheckResult.Alert`) |
+| `ApprovalRule.actsAsPharmacist`, `ApprovalRule.DISMISS`, the dismissal boundary | `$API/domain/ApprovalRule.java` (P1C Task 2) | Tasks 4, 15 | a counted `dismiss` is a review boundary: decisions at or before it no longer count, and the item's `review` is `pending` after it |
+| `IngredientSummary.Code.source()`, `IngredientSummary.Entry.source()` | `$API/domain/IngredientSummary.java` (P1C Task 7a) | Task 4 | a `SourceLinks.Source` (nullable) as the last component |
+| `IngredientSummaryReader.read(conceptId, bdcId, route)`, `IngredientSummaryReader.codesSql(String icd11FetchedAt)`, `IngredientSummaryReader.code(Readable)` | `$API/adapter/persistence/IngredientSummaryReader.java` (P1C Task 7a) | Tasks 4, 6 | `read` fills `source` on codes and entries; `codesSql` (package-private) selects `bds_id, system, code, route_scope, method, confidence, fetched_at` for `:ids` with the §5.6.6 "fetched on" rule; `code(r)` maps a row to an `IngredientSummary.Code` with its `SourceLinks.code` link |
+| `ops.pair_review` table, `review_decision_dismiss_by_senior` | V7 (P1C Task 1, §7.8) | Tasks 2, 4, 7, 9, 11, 15, 38 | columns as §7.8; append-only (no UPDATE or DELETE); a `dismiss` decision is a senior's, with a note of 5–1000 characters |
+| `FROM_DDINTER`, `PAIR_REVIEWED`, `PAIR_NOT_REVIEWED`, `PROMISE_SENIOR` | `web/lib/copy.ts` | Tasks 25, 27, 29, 33, 38 | strings as §3.6; `PAIR_REVIEWED` holds the `{date}` placeholder |
 | `SourceLink` | `web/components/ui/SourceLink.tsx` | Tasks 24, 26, 27 | props `url`, `label`, `fetchedAt?: string \| null` (§3.4) |
 | `PairReviewState` | `web/components/ui/PairReviewState.tsx` | Tasks 25, 27, 29 | props `state`, `at?`, `mine?`, `note?`, `surface` (§3.4) |
 | `CodeChip` `source` prop | `web/components/ui/CodeChip.tsx` | Task 24 | `source?: {url, label, fetchedAt}` (§3.4) |
-| `ReviewerRole` with `senior`, `ROLE_LABEL.senior`, `isReviewer` accepting `senior` | `web/lib/reviewers.ts` | Tasks 19, 33 | §11.1 P1C row: "`ROLE_LABEL.senior` … = "Senior pharmacist"; `isReviewer` and `actsAsPharmacist` accept it" |
-| §1.7 P1C rows in `NEW_COPY_ROWS` | `web/lib/copy.ts` | Task 16 | one key per §1.7 row (P1C adds its eight rows; the copy test pins the keys to the §1.7 table) |
+| `ReviewerRole` with `senior`, `ROLE_LABEL.senior`, `isReviewer(session)` accepting `senior` | `web/lib/reviewers.ts` | Tasks 19, 33 | §5.13: "`ROLE_LABEL.senior` = "Senior pharmacist"; `isReviewer()` accepts it"; `isReviewer` takes the session (a type guard), as on `main` today |
+| The account menu's "Senior review" item | `web/components/Header.tsx` (P1C) | Task 19 keeps it | §6.2: ""Senior review" (seniors only, to `/review/pairs`)" |
+| §1.7 P1C rows in `NEW_COPY_ROWS` | `web/lib/copy.ts` | Task 16 | P1C's plan rule: `NEW_COPY` is keyed by the §1.7 row text with `*(P1C)* ` removed (its eight rows include "Product page "With other approved medicines" (cross-batch, grouped by partner substance) and its paging") |
 
 ## Before you start
 
@@ -119,12 +122,18 @@ git commit -m "docs(web): IntelliDrugs P2 implementation plan" \
 grep -n "static String statusOf" api/src/main/java/com/niramoy/bddrug/adapter/persistence/ReviewSql.java
 grep -n "static final String LATEST_PUBLIC" api/src/main/java/com/niramoy/bddrug/adapter/persistence/ReviewSql.java
 grep -rn "class PublicStatusGuardTest" api/src/test/java
-grep -n "record Source(" api/src/main/java/com/niramoy/bddrug/domain/Source.java
-grep -nE "static .*(dgda|code|ddinterPair)\(" api/src/main/java/com/niramoy/bddrug/domain/SourceLinks.java
-grep -n "static String hash(" api/src/main/java/com/niramoy/bddrug/domain/PairContent.java
-grep -nE "record Decision|static PairReview state" api/src/main/java/com/niramoy/bddrug/domain/PairReviewRule.java
-grep -n "record PairReview(" api/src/main/java/com/niramoy/bddrug/domain/PairReview.java
-grep -n "Source source" api/src/main/java/com/niramoy/bddrug/domain/IngredientSummary.java
+grep -n "public record Source(String url, String label, Instant fetchedAt)" api/src/main/java/com/niramoy/bddrug/domain/SourceLinks.java
+grep -nE "public static (Source brand|Optional<Source> code|Optional<Source> pair)\(" api/src/main/java/com/niramoy/bddrug/domain/SourceLinks.java
+grep -nE "public record Content\(|public static String hash\(String a, String b, Content c\)" api/src/main/java/com/niramoy/bddrug/domain/PairContent.java
+grep -nE "public record (Decision|PublicReview)\(|public static PublicReview publicReview\(" api/src/main/java/com/niramoy/bddrug/domain/PairReviewRule.java
+grep -n "public Mono<Map<String, List<PairReviewRule.Decision>>> forCodes(Collection<String> codes, String viewerEmail)" api/src/main/java/com/niramoy/bddrug/adapter/persistence/PairReviewReader.java
+grep -n "Map<String, List<PairReviewRule.Decision>> reviews" api/src/main/java/com/niramoy/bddrug/application/port/CheckQueryPort.java
+grep -n "pairReviews.forCodes" api/src/main/java/com/niramoy/bddrug/adapter/persistence/R2dbcCheckAdapter.java
+grep -nE "public static boolean actsAsPharmacist|DISMISS = \"dismiss\"" api/src/main/java/com/niramoy/bddrug/domain/ApprovalRule.java
+grep -n "SourceLinks.Source source" api/src/main/java/com/niramoy/bddrug/domain/IngredientSummary.java
+grep -nE "static String codesSql\(String icd11FetchedAt\)|static Code code\(" api/src/main/java/com/niramoy/bddrug/adapter/persistence/IngredientSummaryReader.java
+grep -n "private record Use(" api/src/main/java/com/niramoy/bddrug/domain/BatchPairs.java
+grep -n "expectHidden(\"D-1\", \"Motigut\", \"pending\")" api/src/test/java/com/niramoy/bddrug/VisibilityApiIntegrationTest.java
 grep -n "CREATE TABLE ops.pair_review" db/migrations/V7__senior_review.sql
 grep -n "public static final List<String> REASON_ORDER" api/src/main/java/com/niramoy/bddrug/domain/BatchPairs.java
 grep -nE "export const (FROM_DDINTER|PAIR_REVIEWED|PAIR_NOT_REVIEWED|PROMISE_SENIOR)" web/lib/copy.ts
@@ -132,6 +141,8 @@ grep -n "export default function SourceLink" web/components/ui/SourceLink.tsx
 grep -n "export default function PairReviewState" web/components/ui/PairReviewState.tsx
 grep -n "source" web/components/ui/CodeChip.tsx
 grep -n "senior" web/lib/reviewers.ts
+grep -n "/review/pairs" web/components/Header.tsx
+test -f web/e2e/senior.spec.ts && echo "P1C senior e2e present"
 grep -n "export const API_STUB_SHAPE = false" web/components/learn/context.ts
 grep -n "components/check/CheckerCombobox.tsx" web/scripts/check-client-islands.mjs
 grep -n "export function fillNodes" web/lib/review-copy.ts
@@ -143,7 +154,7 @@ grep -n "const LEGACY_EXEMPT" web/tests/copy.test.ts
 grep -n "export async function signInAs" web/e2e/session.ts
 ```
 
-If a P1C line prints nothing, find the name P1C used (`grep -rn "fetched_at" api/src/main/java/com/niramoy/bddrug/domain`, `grep -rn "pair_review" api/src/main/java`) and use it at each call site this plan marks; the "Interfaces consumed from P1C" table lists every one.
+If a P1C line prints nothing, P1C did not merge as its plan says: stop and report which name is missing (the "Interfaces consumed from P1C" table lists every one). `private record Use(` must still print: P1C keeps `BatchPairs.Use` private and Task 10 widens it.
 
 - [ ] Read spec §1.6 on `main` (a P0 docs PR may have changed items 1, 7, 10 or 11 after the production re-run). The checker and product-page tests below that quote pilot counts take `main`'s values:
 
@@ -166,7 +177,7 @@ Expected: every test passes; the build ends with `client island check: … all o
 ```
 api/src/main/java/com/niramoy/bddrug/
   domain/HiddenRecord.java                       MODIFY §7.4 stubs: product {conceptId, tradeName, status, batchId}, substance {bdsId, preferredName}
-  domain/PublicPairReview.java                   CREATE coarse public pair review state (reviewed | not_reviewed)
+  domain/PublicPairReviews.java                  CREATE pure helper: a page of pairs → P1C's PairReviewRule.PublicReview, keyed a|b
   domain/PublicProduct.java                      CREATE approved product detail (verification, provenance, summaries)
   domain/PublicProducts.java                     CREATE pure assembler; filters text-missing pairs to public entries
   domain/ClinicalDrugView.java                   CREATE P8 response
@@ -196,27 +207,26 @@ api/src/main/java/com/niramoy/bddrug/
   application/port/SearchPort.java               CREATE
   application/port/NameIndexPort.java            CREATE
   application/port/SuggestPort.java              CREATE
-  adapter/persistence/PublicPairReviewReader.java       CREATE ops.pair_review → PublicPairReview, one query per page of pairs
   adapter/persistence/R2dbcProductAdapter.java          MODIFY latestItem()
   adapter/persistence/R2dbcProductDetailAdapter.java    CREATE
   adapter/persistence/R2dbcProductInteractionsAdapter.java CREATE
   adapter/persistence/R2dbcClinicalDrugAdapter.java     CREATE
-  adapter/persistence/R2dbcSubstanceAdapter.java        MODIFY entries, clinical drugs, code source links, P9
-  adapter/persistence/SubstanceCodeSources.java         CREATE §5.6.6 "fetched on" times for a substance's codes
-  adapter/persistence/R2dbcCheckAdapter.java            MODIFY names, interactionId, pair reviews
+  adapter/persistence/R2dbcSubstanceAdapter.java        MODIFY entries, clinical drugs, code source links (P1C's codesSql), P9
+  adapter/persistence/R2dbcCheckAdapter.java            MODIFY names, interactionId (P1C already reads the pair reviews)
   adapter/persistence/R2dbcSearchAdapter.java           CREATE search, name index and suggest SQL
   presentation/ProductController.java            MODIFY /{id}/interactions, /suggest
   presentation/SubstanceController.java          MODIFY /{bdsId}/interactions
   presentation/ClinicalDrugController.java       CREATE /v1/clinical-drugs/{bdcId}
   presentation/SearchController.java             CREATE /v1/search
 api/src/test/java/com/niramoy/bddrug/
-  PublicPairReviewTest, PublicProductsTest, PublicPairsTest, SearchPageTest, SuggestTest, NameIndexTest   CREATE unit tests
+  PublicPairReviewsTest, PublicProductsTest, PublicPairsTest, SearchPageTest, SuggestTest, NameIndexTest  CREATE unit tests
   InteractionCheckServiceTest.java, ProductQueryServiceTest.java, DdinterTextTest.java                   MODIFY
-  PublicPairReviewReaderIntegrationTest, ProductDetailApiIntegrationTest, ClinicalDrugApiIntegrationTest,
+  PublicPairReviewsIntegrationTest, ProductDetailApiIntegrationTest, ClinicalDrugApiIntegrationTest,
   SubstanceInteractionsApiIntegrationTest, ProductInteractionsApiIntegrationTest,
   ProductInteractionsScaleIntegrationTest, SearchApiIntegrationTest, SuggestApiIntegrationTest,
   PublicVisibilityMatrixIntegrationTest                                                                  CREATE
-  VisibilityApiIntegrationTest.java, CheckApiIntegrationTest.java, SubstanceApiIntegrationTest.java      MODIFY
+  VisibilityApiIntegrationTest.java, CheckApiIntegrationTest.java, SubstanceApiIntegrationTest.java,
+  PairQueueIntegrationTest.java (run only)                                                               MODIFY
 
 web/
   lib/public-copy.ts                    CREATE Board P strings (client-safe)
@@ -231,6 +241,7 @@ web/
   lib/public-actions.ts                 CREATE "use server": partnerRequestAction
   content/site.ts                       CREATE static register count and its source date
   content/check-scenarios.ts            CREATE the four pilot scenarios
+  lib/check-scenarios.ts                CREATE server-only availableScenarios() (a page module may export only page fields)
   components/Header.tsx                 MODIFY §6.1 navigation, search bar, narrow Menu
   components/Footer.tsx                 MODIFY §6.1 footer
   components/public/*.tsx, *.module.css CREATE landing, hero card, search, product, substance, report form, sign-in parts
@@ -251,6 +262,7 @@ web/
   tests/flag-form.test.tsx, tests/api.test.ts                                     DELETE (Task 36; replaced by Tasks 26 and 17)
   tests/*.test.ts(x)                    CREATE and MODIFY (named in each task)
   e2e/public-1-flows.spec.ts, e2e/public-2-checker.spec.ts, e2e/public-3-a11y.spec.ts, e2e/public-helpers.ts   CREATE
+  e2e/zx-public-pair-review.spec.ts     CREATE PAIR_REVIEWED / PAIR_NOT_REVIEWED on /check; runs after every spec that reads pair reviews
   e2e/lhci-public.sql                   CREATE CI-only approval before the public Lighthouse run (outside e2e/seed/ on purpose)
   lighthouserc.public.json              CREATE
 docs/runbooks/partner-requests.md       CREATE
@@ -407,20 +419,9 @@ public sealed interface HiddenRecord {
 Run: `cd api && ./gradlew test --no-daemon --tests ProductQueryServiceTest`
 Expected: PASS.
 
-- [ ] **Step 5: Update the visibility integration test (the stub fields and a removed product)**
+- [ ] **Step 5: Update the visibility integration test (the stub fields; P1C's removed product)**
 
-In `VisibilityApiIntegrationTest.java`, append to the seed SQL in `seed()`:
-
-```java
-        exec(pg, """
-            INSERT INTO curated.brand_product (concept_id, dar_number, trade_name, company, dosage_form, generic_content_raw, bdc_id, parse_status)
-              VALUES ('P2-REM','011','Removex','Test Pharma','Tablet','Aspirin 75 mg','BDC-000002','parsed');
-            INSERT INTO curated.brand_product_ingredient (concept_id, xm_code, ingredient_name) VALUES ('P2-REM','XM2ZT1','Aspirin');
-            INSERT INTO ops.batch (batch_id, item_count, run_at) VALUES ('V-rem', 1, now() - interval '30 minute');
-            INSERT INTO ops.batch_item (batch_id, source, concept_id, review, note, extracted_at)
-              VALUES ('V-rem','DGDA-Drugs','P2-REM','ok','removed from batch file', now() - interval '30 minute');
-            """);
-```
+P1C (Task 9) already seeds the removed case in `VisibilityApiIntegrationTest`: D-1 (Motigut) is approved and then removed from its batch file in batch `V-rm`, and its `anApprovedThenRemovedProductIsNeverPublicOnAnyEndpoint` calls the three-argument `expectHidden("D-1", "Motigut", "pending")`. This step reuses that fixture (no new seed row, so the stats order, `inReviewProducts` and the `scope=all` loaded-list length that the class pins stay as they are) and moves the case with no batch item to X-NOMAP (Herbex), which no batch holds.
 
 Replace `expectHidden` and `unapprovedProductDetailIsTheHiddenShape`:
 
@@ -443,18 +444,20 @@ Replace `expectHidden` and `unapprovedProductDetailIsTheHiddenShape`:
     @Test void unapprovedProductDetailIsTheHiddenShape() {
         expectHidden("A-1", "Ecosprin", "not_reviewed", "V-1");
         expectHidden("C-EYE", "Optimycin", "not_reviewed", "V-1");      // issue: never named in public
-        expectHidden("D-1", "Motigut", "not_reviewed", null);           // no batch item at all
+        expectHidden("X-NOMAP", "Herbex", "not_reviewed", null);        // no batch item at all
         expectHidden("W-2", "Coumarol", "not_reviewed", "V-new");       // approved before, re-run in a newer batch
-        expectHidden("P2-REM", "Removex", "removed", "V-rem");          // approved, then removed from the batch file
+        expectHidden("D-1", "Motigut", "removed", "V-rm");              // approved, then removed from its batch file (P1C, PO D7)
     }
 ```
 
-In `substanceWithoutAnApprovedProductIsHidden`, change `.jsonPath("$.data.length()").isEqualTo(4)` to `isEqualTo(3)`, delete the `.jsonPath("$.data.reviewStatus").isEqualTo("pending")` line, and add `"reviewStatus"` to the `doesNotContain` list. `P2-REM` also carries Aspirin (`BDS-000002`), and it is not public, so that test's assertions hold unchanged.
+In P1C's `anApprovedThenRemovedProductIsNeverPublicOnAnyEndpoint`, the first line `expectHidden("D-1", "Motigut", "pending");` becomes `expectHidden("D-1", "Motigut", "removed", "V-rm");` (the stub now names the removal, §6.4).
+
+In `substanceWithoutAnApprovedProductIsHidden`, change `.jsonPath("$.data.length()").isEqualTo(4)` to `isEqualTo(3)`, delete the `.jsonPath("$.data.reviewStatus").isEqualTo("pending")` line, and add `"reviewStatus"` to the `doesNotContain` list.
 
 - [ ] **Step 6: Run the integration test**
 
 Run: `cd api && ./gradlew test --no-daemon --tests VisibilityApiIntegrationTest`
-Expected: PASS.
+Expected: PASS, including P1C's `anApprovedThenRemovedProductIsNeverPublicOnAnyEndpoint` with its four-argument call and `statsCountOnlyPublicProductsAndCarryNoClinicalData` and `scopeAllLoadedListHoldsEveryProduct` unchanged (this task adds no fixture).
 
 - [ ] **Step 7: The web types and Learn's switch (§6.8 "Before P2")**
 
@@ -502,54 +505,85 @@ git commit -m "feat(api): §7.4 product and substance stubs, removed records nam
 
 ---
 
-### Task 2: The public pair review state (`PublicPairReview` and its reader)
+### Task 2: The public pair review state of a page of pairs (`PublicPairReviews`, over P1C's reader and rule)
+
+P1C already owns the rule and the reader: `PairReviewRule.publicReview(decisions, currentHash)` gives the coarse public form (`reviewed` with its date, or `not_reviewed` with none, D53), and `PairReviewReader.forCodes(codes, viewerEmail)` reads every pair decision among a set of DDInter entries in one query (§7.7 "no N+1"). P2 adds no second reader of `ops.pair_review` and no second public record. It adds one pure helper that every P2 adapter and service uses the same way: key a page of pairs, hash each pair's current content with `PairContent`, and map P1C's decisions to `PairReviewRule.PublicReview`.
 
 **Files:**
-- Create: `api/src/main/java/com/niramoy/bddrug/domain/PublicPairReview.java`
-- Create: `api/src/main/java/com/niramoy/bddrug/adapter/persistence/PublicPairReviewReader.java`
-- Test: `api/src/test/java/com/niramoy/bddrug/PublicPairReviewTest.java`, `api/src/test/java/com/niramoy/bddrug/PublicPairReviewReaderIntegrationTest.java`
+- Create: `api/src/main/java/com/niramoy/bddrug/domain/PublicPairReviews.java`
+- Test: `api/src/test/java/com/niramoy/bddrug/PublicPairReviewsTest.java`, `api/src/test/java/com/niramoy/bddrug/PublicPairReviewsIntegrationTest.java`
 
 **Interfaces:**
-- Consumes (P1C, see the table above): `PairReview(String state, Instant at, boolean mine, String note)`; `PairReviewRule.Decision(long id, String decision, String contentHash, Instant decidedAt, String reviewerEmail, String note)`; `PairReviewRule.state(List<Decision> oldestFirst, String currentHash, String viewerEmail)`; `PairContent.hash(String a, String b, String severity, List<String> actions, String interaction, String management)`; table `ops.pair_review`.
+- Consumes (P1C, see the table above): `PairContent.Content(String severity, List<String> actions, String interaction, String management)`; `PairContent.hash(String a, String b, PairContent.Content c)`; `PairReviewRule.Decision(long id, String decision, String note, String contentHash, PairContent.Content content, Instant decidedAt, boolean mine)`; `PairReviewRule.PublicReview(String state, Instant reviewedAt)`; `PairReviewRule.publicReview(List<Decision>, String currentHash)`; `PairReviewRule.NOT_REVIEWED`; `PairReviewReader.forCodes(Collection<String> codes, String viewerEmail)` (keyed `"a|b"`, stored order); table `ops.pair_review`.
 - Produces:
-  - `record PublicPairReview(String state, Instant reviewedAt)`; constants `REVIEWED = "reviewed"`, `NOT_REVIEWED = "not_reviewed"`, `NONE`; `static PublicPairReview of(PairReview review)`.
-  - `PublicPairReviewReader.Content(String ddinterA, String ddinterB, String severity, List<String> actions, String interaction, String management)` with `String key()` = `ddinterA + "|" + ddinterB`; `Mono<Map<String, PublicPairReview>> read(Collection<Content> pairs)` (one query; a pair with no decision maps to `NONE`).
+  - `PublicPairReviews.NONE` = `new PairReviewRule.PublicReview("not_reviewed", null)`.
+  - `PublicPairReviews.Pair(String ddinterA, String ddinterB, String severity, List<String> actions, String interaction, String management)` (stored order, `ddinterA < ddinterB`) with `String key()` = `ddinterA + "|" + ddinterB` and `String hash()` = `PairContent.hash(ddinterA, ddinterB, new PairContent.Content(severity, actions, interaction, management))`.
+  - `static Set<String> codes(Collection<Pair> pairs)`: every entry of both sides (what `forCodes` needs, so a pair whose two entries are both in the set is read).
+  - `static Map<String, PairReviewRule.PublicReview> of(Collection<Pair> pairs, Map<String, List<PairReviewRule.Decision>> decisions)`: one entry per distinct key, in input order; a pair with no decision maps to `NONE`.
+  - The call shape every adapter uses: `pairReviews.forCodes(PublicPairReviews.codes(pairs), null).map(d -> PublicPairReviews.of(pairs, d))` (`null`: no viewer, so nothing is `mine`; notes and emails stay in P1C's reader).
 
 - [ ] **Step 1: Write the failing unit test**
 
-`PublicPairReviewTest.java`:
+`PublicPairReviewsTest.java`:
 
 ```java
 package com.niramoy.bddrug;
 
-import com.niramoy.bddrug.domain.PairReview;
-import com.niramoy.bddrug.domain.PublicPairReview;
+import com.niramoy.bddrug.domain.PairContent;
+import com.niramoy.bddrug.domain.PairReviewRule;
+import com.niramoy.bddrug.domain.PairReviewRule.Decision;
+import com.niramoy.bddrug.domain.PublicPairReviews;
+import com.niramoy.bddrug.domain.PublicPairReviews.Pair;
 import org.junit.jupiter.api.Test;
 import java.time.Instant;
+import java.util.List;
+import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /** §7.4 P1C public rules (D53): reviewed with its date, or not_reviewed; changed and issue never leave the API. */
-class PublicPairReviewTest {
+class PublicPairReviewsTest {
     static final Instant AT = Instant.parse("2026-10-16T05:20:00Z");
+    static final Pair WA = new Pair("DDInter1951", "DDInter20", "major", List.of("Monitor", "Avoid"), "Bleeding risk.", "Avoid.");
+    static final Pair AW = new Pair("DDInter14", "DDInter1951", "moderate", List.of(), null, null);
 
-    @Test void reviewedKeepsOnlyItsDate() {
-        assertThat(PublicPairReview.of(new PairReview("reviewed", AT, true, "secret note")))
-            .isEqualTo(new PublicPairReview("reviewed", AT));
+    static Decision d(long id, String decision, String hash, int minutes) {
+        return new Decision(id, decision, "issue".equals(decision) ? "a note" : "", hash, null, AT.plusSeconds(60L * minutes), false);
     }
 
-    @Test void changedIssueAndNotReviewedAreAllNotReviewedWithNoDate() {
-        for (String state : new String[]{"changed", "issue", "not_reviewed", "something-new"})
-            assertThat(PublicPairReview.of(new PairReview(state, AT, true, "note"))).isEqualTo(PublicPairReview.NONE);
-        assertThat(PublicPairReview.of(null)).isEqualTo(PublicPairReview.NONE);
-        assertThat(PublicPairReview.NONE).isEqualTo(new PublicPairReview("not_reviewed", null));
+    @Test void theHashIsPairContentsHashOfTheCleanedContent() {
+        assertThat(WA.hash()).isEqualTo(PairContent.hash("DDInter1951", "DDInter20",
+            new PairContent.Content("major", List.of("Avoid", "Monitor"), "Bleeding risk.", "Avoid.")));
+        // DDInter placeholders hash like no text (PairContent cleans them)
+        assertThat(new Pair("DDInter14", "DDInter1951", "moderate", null, "None", " - ").hash()).isEqualTo(AW.hash());
+        assertThat(WA.key()).isEqualTo("DDInter1951|DDInter20");
     }
 
-    @Test void aReviewedStateWithoutADateIsNotReviewed() {
-        assertThat(PublicPairReview.of(new PairReview("reviewed", null, false, null))).isEqualTo(PublicPairReview.NONE);
+    @Test void codesHoldsBothSidesOfEveryPair() {
+        assertThat(PublicPairReviews.codes(List.of(WA, AW))).containsExactlyInAnyOrder("DDInter1951", "DDInter20", "DDInter14");
+        assertThat(PublicPairReviews.codes(List.of())).isEmpty();
     }
 
-    @Test void carriesNoNoteRoleOrEmail() {
-        assertThat(java.util.Arrays.stream(PublicPairReview.class.getRecordComponents()).map(c -> c.getName()))
+    @Test void reviewedOnlyForACurrentReviewAndNeverAnIssueOrAChange() {
+        Map<String, List<Decision>> decisions = Map.of(
+            WA.key(), List.of(d(1, "reviewed", WA.hash(), 0)),
+            AW.key(), List.of(d(2, "reviewed", AW.hash(), 0), d(3, "issue", AW.hash(), 5)));
+        Map<String, PairReviewRule.PublicReview> m = PublicPairReviews.of(List.of(WA, AW), decisions);
+        assertThat(m.get(WA.key())).isEqualTo(new PairReviewRule.PublicReview("reviewed", AT));
+        assertThat(m.get(AW.key())).as("an issue is never named in public").isEqualTo(PublicPairReviews.NONE);
+        // reviewed, then DDInter changed the pair: the stored hash is stale
+        assertThat(PublicPairReviews.of(List.of(WA), Map.of(WA.key(), List.of(d(1, "reviewed", "0".repeat(64), 0)))).get(WA.key()))
+            .isEqualTo(PublicPairReviews.NONE);
+    }
+
+    @Test void aPairWithNoDecisionIsNotReviewedAndARepeatIsKeptOnce() {
+        Map<String, PairReviewRule.PublicReview> m = PublicPairReviews.of(List.of(WA, WA, AW), Map.of());
+        assertThat(m).containsOnlyKeys(WA.key(), AW.key());
+        assertThat(m.values()).containsOnly(PublicPairReviews.NONE);
+        assertThat(PublicPairReviews.NONE).isEqualTo(new PairReviewRule.PublicReview("not_reviewed", null));
+    }
+
+    @Test void thePublicFormCarriesNoNoteRoleOrEmail() {
+        assertThat(java.util.Arrays.stream(PairReviewRule.PublicReview.class.getRecordComponents()).map(c -> c.getName()))
             .containsExactly("state", "reviewedAt");
     }
 }
@@ -557,50 +591,70 @@ class PublicPairReviewTest {
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `cd api && ./gradlew test --no-daemon --tests PublicPairReviewTest`
-Expected: compilation FAILS (`cannot find symbol: class PublicPairReview`).
+Run: `cd api && ./gradlew test --no-daemon --tests PublicPairReviewsTest`
+Expected: compilation FAILS (`cannot find symbol: class PublicPairReviews`).
 
-- [ ] **Step 3: Write the domain record**
+- [ ] **Step 3: Write the helper**
 
-`PublicPairReview.java`:
+`PublicPairReviews.java`:
 
 ```java
 package com.niramoy.bddrug.domain;
-import java.time.Instant;
+import java.util.*;
 
 /**
- * The coarse public form of a pair's senior-review state (§7.4 P1C public rules, D53). "reviewed" only when the counting
- * pair review's content hash equals the current one (PairReviewRule says "reviewed"); changed, issue and not_reviewed
- * are all "not_reviewed" with no date. No note, role, email or reason, ever. Never a gate: the pair and its text are
- * served whatever this says (G3).
+ * The coarse public pair review state (§7.4 P1C public rules, D53) of a page of pairs. P1C's PairReviewRule decides it
+ * and P1C's PairReviewReader reads ops.pair_review; this helper only keys the pairs, hashes each one's current content
+ * with PairContent and maps the decisions. Pure. Never a gate: the pair and its text are served whatever this says (G3).
  */
-public record PublicPairReview(String state, Instant reviewedAt) {
-    public static final String REVIEWED = "reviewed", NOT_REVIEWED = "not_reviewed";
-    public static final PublicPairReview NONE = new PublicPairReview(NOT_REVIEWED, null);
+public final class PublicPairReviews {
+    private PublicPairReviews() {}
 
-    public static PublicPairReview of(PairReview review) {
-        return review != null && REVIEWED.equals(review.state()) && review.at() != null
-            ? new PublicPairReview(REVIEWED, review.at()) : NONE;
+    public static final PairReviewRule.PublicReview NONE = new PairReviewRule.PublicReview(PairReviewRule.NOT_REVIEWED, null);
+
+    /** A stored DDInter pair (ddinterA < ddinterB, as curated.ddinter_pair and ops.pair_review store it) with its content. */
+    public record Pair(String ddinterA, String ddinterB, String severity, List<String> actions, String interaction,
+                       String management) {
+        public String key() { return ddinterA + "|" + ddinterB; }
+        public String hash() {
+            return PairContent.hash(ddinterA, ddinterB, new PairContent.Content(severity, actions, interaction, management));
+        }
+    }
+
+    /** Both entries of every pair: PairReviewReader.forCodes reads each pair whose two entries are in this set. */
+    public static Set<String> codes(Collection<Pair> pairs) {
+        Set<String> out = new TreeSet<>();
+        for (Pair p : pairs) { out.add(p.ddinterA()); out.add(p.ddinterB()); }
+        return out;
+    }
+
+    /** One public review per distinct pair, in input order; decisions are P1C's, keyed "a|b". */
+    public static Map<String, PairReviewRule.PublicReview> of(Collection<Pair> pairs, Map<String, List<PairReviewRule.Decision>> decisions) {
+        Map<String, PairReviewRule.PublicReview> out = new LinkedHashMap<>();
+        for (Pair p : pairs)
+            if (!out.containsKey(p.key()))
+                out.put(p.key(), PairReviewRule.publicReview(decisions.getOrDefault(p.key(), List.of()), p.hash()));
+        return out;
     }
 }
 ```
 
 - [ ] **Step 4: Run the unit test**
 
-Run: `cd api && ./gradlew test --no-daemon --tests PublicPairReviewTest`
+Run: `cd api && ./gradlew test --no-daemon --tests PublicPairReviewsTest`
 Expected: PASS.
 
-- [ ] **Step 5: Write the failing reader integration test**
+- [ ] **Step 5: Write the integration test (P1C's reader, with no viewer, on real rows)**
 
-`PublicPairReviewReaderIntegrationTest.java`:
+`PublicPairReviewsIntegrationTest.java`:
 
 ```java
 package com.niramoy.bddrug;
 
-import com.niramoy.bddrug.adapter.persistence.PublicPairReviewReader;
-import com.niramoy.bddrug.adapter.persistence.PublicPairReviewReader.Content;
-import com.niramoy.bddrug.domain.PairContent;
-import com.niramoy.bddrug.domain.PublicPairReview;
+import com.niramoy.bddrug.adapter.persistence.PairReviewReader;
+import com.niramoy.bddrug.domain.PairReviewRule;
+import com.niramoy.bddrug.domain.PublicPairReviews;
+import com.niramoy.bddrug.domain.PublicPairReviews.Pair;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -616,142 +670,71 @@ import java.util.Map;
 import static com.niramoy.bddrug.TestSupport.exec;
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** One query per page of pairs (§7.7 "no N+1"); the public form of all four states (§7.4). PilotSeed holds the pairs. */
+/** The call shape every P2 adapter uses: P1C's one query, then the public form of all four states (§7.4). */
 @Testcontainers
 @SpringBootTest
-class PublicPairReviewReaderIntegrationTest {
+class PublicPairReviewsIntegrationTest {
     @Container static PostgreSQLContainer<?> pg = new PostgreSQLContainer<>("postgres:16");
     @DynamicPropertySource static void props(DynamicPropertyRegistry r) { TestSupport.props(r, pg); }
 
     // PilotSeed: DDInter1951+DDInter20 major {Monitor,Avoid} with text IA-1; DDInter1951+DDInter351 moderate {Monitor} IA-2;
     // DDInter14+DDInter1951 moderate, no text; DDInter1951+DDInter999 minor, no text.
-    static final Content WA = new Content("DDInter1951", "DDInter20", "major", List.of("Monitor", "Avoid"),
+    static final Pair WA = new Pair("DDInter1951", "DDInter20", "major", List.of("Monitor", "Avoid"),
         "Aspirin may increase the anticoagulant effect of warfarin and the risk of bleeding.",
         "Avoid the combination unless the benefit outweighs the bleeding risk; monitor INR.");
-    static final Content WC = new Content("DDInter1951", "DDInter351", "moderate", List.of("Monitor"),
+    static final Pair WC = new Pair("DDInter1951", "DDInter351", "moderate", List.of("Monitor"),
         "Chloramphenicol may increase the serum concentration of warfarin.", "Monitor INR.");
-    static final Content AW = new Content("DDInter14", "DDInter1951", "moderate", List.of(), null, null);
-    static final Content WH = new Content("DDInter1951", "DDInter999", "minor", List.of(), null, null);
-
-    static String hash(Content c) {
-        return PairContent.hash(c.ddinterA(), c.ddinterB(), c.severity(), c.actions(), c.interaction(), c.management());
-    }
+    static final Pair AW = new Pair("DDInter14", "DDInter1951", "moderate", List.of(), null, null);
+    static final Pair WH = new Pair("DDInter1951", "DDInter999", "minor", List.of(), null, null);
 
     @BeforeAll static void seed() throws Exception {
         PilotSeed.migrateAndSeed(pg);
-        String stale = "0".repeat(64);
         exec(pg, """
             INSERT INTO ops.pair_review (ddinter_a, ddinter_b, decision, note, content_hash, content, reviewer_email, reviewer_role, decided_at) VALUES
              ('DDInter1951','DDInter20','reviewed','', '%s', '{}', 'senior@example.org', 'senior', '2026-10-16T05:20:00Z'),
              ('DDInter1951','DDInter351','reviewed','', '%s', '{}', 'senior@example.org', 'senior', '2026-10-16T05:21:00Z'),
              ('DDInter14','DDInter1951','reviewed','', '%s', '{}', 'senior@example.org', 'senior', '2026-10-16T05:22:00Z'),
              ('DDInter14','DDInter1951','issue','The text contradicts the severity', '%s', '{}', 'senior@example.org', 'senior', '2026-10-16T05:23:00Z');
-            """.formatted(hash(WA), stale, hash(AW), hash(AW)));
+            """.formatted(WA.hash(), "0".repeat(64), AW.hash(), AW.hash()));
     }
 
-    @Autowired PublicPairReviewReader reader;
+    @Autowired PairReviewReader reader;
+
+    private Map<String, PairReviewRule.PublicReview> read(List<Pair> pairs) {
+        return reader.forCodes(PublicPairReviews.codes(pairs), null).map(d -> PublicPairReviews.of(pairs, d)).block();
+    }
 
     @Test void eachStateHasItsPublicForm() {
-        Map<String, PublicPairReview> m = reader.read(List.of(WA, WC, AW, WH)).block();
+        Map<String, PairReviewRule.PublicReview> m = read(List.of(WA, WC, AW, WH));
         assertThat(m).containsOnlyKeys(WA.key(), WC.key(), AW.key(), WH.key());
-        assertThat(m.get(WA.key())).isEqualTo(new PublicPairReview("reviewed", Instant.parse("2026-10-16T05:20:00Z")));
-        assertThat(m.get(WC.key())).as("reviewed, then DDInter changed it: changed").isEqualTo(PublicPairReview.NONE);
-        assertThat(m.get(AW.key())).as("reviewed, then a pair issue: issue").isEqualTo(PublicPairReview.NONE);
-        assertThat(m.get(WH.key())).as("never reviewed").isEqualTo(PublicPairReview.NONE);
+        assertThat(m.get(WA.key())).isEqualTo(new PairReviewRule.PublicReview("reviewed", Instant.parse("2026-10-16T05:20:00Z")));
+        assertThat(m.get(WC.key())).as("reviewed, then DDInter changed it: changed").isEqualTo(PublicPairReviews.NONE);
+        assertThat(m.get(AW.key())).as("reviewed, then a pair issue: issue").isEqualTo(PublicPairReviews.NONE);
+        assertThat(m.get(WH.key())).as("never reviewed").isEqualTo(PublicPairReviews.NONE);
     }
 
-    @Test void noPairsNoQuery() {
-        assertThat(reader.read(List.of()).block()).isEmpty();
+    @Test void noViewerMeansNothingIsMine() {
+        assertThat(reader.forCodes(PublicPairReviews.codes(List.of(WA, AW)), null).block().values().stream()
+            .flatMap(List::stream)).noneMatch(PairReviewRule.Decision::mine);
     }
 
-    @Test void aRepeatedPairIsReadOnce() {
-        assertThat(reader.read(List.of(WA, WA)).block()).containsOnlyKeys(WA.key());
-    }
-}
-```
-
-- [ ] **Step 6: Run it to verify it fails**
-
-Run: `cd api && ./gradlew test --no-daemon --tests PublicPairReviewReaderIntegrationTest`
-Expected: compilation FAILS (`cannot find symbol: class PublicPairReviewReader`).
-
-- [ ] **Step 7: Write the reader**
-
-`PublicPairReviewReader.java`:
-
-```java
-package com.niramoy.bddrug.adapter.persistence;
-import com.niramoy.bddrug.domain.PairContent;
-import com.niramoy.bddrug.domain.PairReviewRule;
-import com.niramoy.bddrug.domain.PublicPairReview;
-import org.springframework.r2dbc.core.DatabaseClient;
-import org.springframework.stereotype.Component;
-import reactor.core.publisher.Mono;
-import java.time.OffsetDateTime;
-import java.util.*;
-
-/**
- * The public pair review state of a page of pairs (§7.4 P1C public rules): one query over ops.pair_review, then
- * PairReviewRule against each pair's current content hash, then the coarse public form. No viewer, so nothing is "mine";
- * notes and emails are never selected.
- */
-@Component
-public class PublicPairReviewReader {
-    /** A pair as stored (ddinterA < ddinterB) with the content its hash covers. */
-    public record Content(String ddinterA, String ddinterB, String severity, List<String> actions, String interaction,
-                          String management) {
-        public String key() { return ddinterA + "|" + ddinterB; }
-    }
-
-    private record Row(String key, long id, String decision, String hash, OffsetDateTime at) {}
-
-    private final DatabaseClient db;
-    public PublicPairReviewReader(DatabaseClient db) { this.db = db; }
-
-    public Mono<Map<String, PublicPairReview>> read(Collection<Content> pairs) {
-        Map<String, Content> byKey = new LinkedHashMap<>();
-        for (Content c : pairs) byKey.putIfAbsent(c.key(), c);
-        if (byKey.isEmpty()) return Mono.just(Map.of());
-        String[] a = byKey.values().stream().map(Content::ddinterA).toArray(String[]::new);
-        String[] b = byKey.values().stream().map(Content::ddinterB).toArray(String[]::new);
-        return db.sql("""
-                SELECT r.ddinter_a, r.ddinter_b, r.id, r.decision, r.content_hash, r.decided_at
-                FROM ops.pair_review r
-                JOIN unnest(CAST(:a AS text[]), CAST(:b AS text[])) AS k(a, b) ON r.ddinter_a = k.a AND r.ddinter_b = k.b
-                ORDER BY r.ddinter_a, r.ddinter_b, r.decided_at, r.id""")
-            .bind("a", a).bind("b", b)
-            .map(r -> new Row(r.get("ddinter_a", String.class) + "|" + r.get("ddinter_b", String.class), r.get("id", Long.class),
-                r.get("decision", String.class), r.get("content_hash", String.class), r.get("decided_at", OffsetDateTime.class)))
-            .all().collectList()
-            .map(rows -> {
-                Map<String, List<PairReviewRule.Decision>> decisions = new HashMap<>();
-                for (Row r : rows)
-                    decisions.computeIfAbsent(r.key(), k -> new ArrayList<>()).add(
-                        new PairReviewRule.Decision(r.id(), r.decision(), r.hash(), r.at().toInstant(), null, null));
-                Map<String, PublicPairReview> out = new LinkedHashMap<>();
-                byKey.forEach((key, c) -> {
-                    List<PairReviewRule.Decision> list = decisions.get(key);
-                    out.put(key, list == null ? PublicPairReview.NONE : PublicPairReview.of(PairReviewRule.state(list,
-                        PairContent.hash(c.ddinterA(), c.ddinterB(), c.severity(), c.actions(), c.interaction(), c.management()), null)));
-                });
-                return out;
-            });
+    @Test void noPairsNoRows() {
+        assertThat(read(List.of())).isEmpty();
     }
 }
 ```
 
-- [ ] **Step 8: Run both tests**
+- [ ] **Step 6: Run both tests**
 
-Run: `cd api && ./gradlew test --no-daemon --tests PublicPairReviewTest --tests PublicPairReviewReaderIntegrationTest`
-Expected: PASS. If `PairReviewRule.Decision` or `state` has another signature on `main`, adapt only the two lines that build and call them (Interfaces consumed from P1C).
+Run: `cd api && ./gradlew test --no-daemon --tests PublicPairReviewsTest --tests PublicPairReviewsIntegrationTest`
+Expected: PASS (the integration test passes once the unit test does: it exercises P1C's reader, which is on `main`).
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add api/src/main/java/com/niramoy/bddrug/domain/PublicPairReview.java \
-  api/src/main/java/com/niramoy/bddrug/adapter/persistence/PublicPairReviewReader.java \
-  api/src/test/java/com/niramoy/bddrug/PublicPairReviewTest.java api/src/test/java/com/niramoy/bddrug/PublicPairReviewReaderIntegrationTest.java
-git commit -m "feat(api): public pair review state from PairReviewRule, reviewed or not_reviewed only (§7.4, D53)" \
+git add api/src/main/java/com/niramoy/bddrug/domain/PublicPairReviews.java \
+  api/src/test/java/com/niramoy/bddrug/PublicPairReviewsTest.java api/src/test/java/com/niramoy/bddrug/PublicPairReviewsIntegrationTest.java
+git commit -m "feat(api): public pair review state of a page of pairs, over P1C's PairReviewReader and PairReviewRule (§7.4, D53)" \
   -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
 
@@ -765,9 +748,9 @@ git commit -m "feat(api): public pair review state from PairReviewRule, reviewed
 - Test: `api/src/test/java/com/niramoy/bddrug/PublicProductsTest.java`
 
 **Interfaces:**
-- Consumes: `Product`, `ClinicalDrug`, `ClinicalIngredient` (and its `DdinterRef`), `IngredientSummary`, `StageNotes.parse(stage, status, note)` and `StageNotes.TEXT_MISSING`, `Source`, `SourceLinks.dgda(String conceptId, Instant fetchedAt)`.
+- Consumes: `Product`, `ClinicalDrug`, `ClinicalIngredient` (and its `DdinterRef`), `IngredientSummary`, `StageNotes.parse(stage, status, note)` and `StageNotes.TEXT_MISSING`, P1C's `SourceLinks.Source(String url, String label, Instant fetchedAt)` and `SourceLinks.brand(String conceptId, Instant fetchedAt)` ("DGDA register (OCL)").
 - Produces:
-  - `PublicProduct(String conceptId, String darNumber, String tradeName, String company, String dosageForm, String genericContentRaw, String qualityFlag, List<Ingredient> ingredients, String parseStatus, String parseNote, Clinical clinicalDrug, Verification verification, Provenance provenance, int otherBrandsCount)` with nested `Clinical(bdcId, displayName, doseForm, route, List<ClinicalItem> ingredients)`, `ClinicalItem(bdsId, name, strengthValue, strengthUnit, perValue, perUnit, List<ClinicalIngredient.DdinterRef> ddinter, IngredientSummary summary)`, `Verification(String status, String role, Instant approvedAt)`, `Provenance(String batchId, Instant extractedAt, String source, Source sourceLink, List<Stage> stages)`, `Stage(String stage, String status, List<StageNotes.Note> notes, List<TextMissing> textMissing)`, `TextMissing(String ddinterA, String nameA, String ddinterB, String nameB, String severity)`.
+  - `PublicProduct(String conceptId, String darNumber, String tradeName, String company, String dosageForm, String genericContentRaw, String qualityFlag, List<Ingredient> ingredients, String parseStatus, String parseNote, Clinical clinicalDrug, Verification verification, Provenance provenance, int otherBrandsCount)` with nested `Clinical(bdcId, displayName, doseForm, route, List<ClinicalItem> ingredients)`, `ClinicalItem(bdsId, name, strengthValue, strengthUnit, perValue, perUnit, List<ClinicalIngredient.DdinterRef> ddinter, IngredientSummary summary)`, `Verification(String status, String role, Instant approvedAt)`, `Provenance(String batchId, Instant extractedAt, String source, SourceLinks.Source sourceLink, List<Stage> stages)`, `Stage(String stage, String status, List<StageNotes.Note> notes, List<TextMissing> textMissing)`, `TextMissing(String ddinterA, String nameA, String ddinterB, String nameB, String severity)`.
   - `PublicProducts.Facts(String batchId, Instant extractedAt, Instant approvedAt, Instant oclFetchedAt, List<StageRow> stages, Map<String, String> entryNames, Map<String, String> pairSeverity, Set<String> publicEntryIds, int otherBrandsCount, List<IngredientSummary> summaries)`; `PublicProducts.StageRow(String stage, String status, String note, List<String[]> textMissing)`; `static PublicProduct assemble(Product p, Facts f)`; `PublicProducts.SOURCE = "DGDA register"`, `PublicProducts.STAGES`.
 
 - [ ] **Step 1: Write the failing test**
@@ -821,7 +804,8 @@ class PublicProductsTest {
         assertThat(p.provenance().batchId()).isEqualTo("0001-pilot");
         assertThat(p.provenance().extractedAt()).isEqualTo(EXTRACTED);
         assertThat(p.provenance().source()).isEqualTo("DGDA register");
-        assertThat(p.provenance().sourceLink()).isEqualTo(SourceLinks.dgda("186-0030-006--napa", FETCHED));
+        assertThat(p.provenance().sourceLink()).isEqualTo(SourceLinks.brand("186-0030-006--napa", FETCHED));
+        assertThat(p.provenance().sourceLink().label()).isEqualTo("DGDA register (OCL)");
     }
 
     @Test void stagesComeInPipelineOrder() {
@@ -901,7 +885,7 @@ public record PublicProduct(String conceptId, String darNumber, String tradeName
                                String perUnit, List<ClinicalIngredient.DdinterRef> ddinter, IngredientSummary summary) {}
     /** role is always "pharmacist": a senior's approval reads "Approved by a pharmacist" in public (D49). */
     public record Verification(String status, String role, Instant approvedAt) {}
-    public record Provenance(String batchId, Instant extractedAt, String source, Source sourceLink, List<Stage> stages) {}
+    public record Provenance(String batchId, Instant extractedAt, String source, SourceLinks.Source sourceLink, List<Stage> stages) {}
     public record Stage(String stage, String status, List<StageNotes.Note> notes, List<TextMissing> textMissing) {}
     public record TextMissing(String ddinterA, String nameA, String ddinterB, String nameB, String severity) {}
 }
@@ -941,7 +925,7 @@ public final class PublicProducts {
         return new PublicProduct(p.conceptId(), p.darNumber(), p.tradeName(), p.company(), p.dosageForm(), p.genericContentRaw(),
             p.qualityFlag(), p.ingredients(), p.parseStatus(), p.parseNote(), clinical(p.clinicalDrug(), f.summaries()),
             new PublicProduct.Verification("approved", "pharmacist", f.approvedAt()),
-            new PublicProduct.Provenance(f.batchId(), f.extractedAt(), SOURCE, SourceLinks.dgda(p.conceptId(), f.oclFetchedAt()),
+            new PublicProduct.Provenance(f.batchId(), f.extractedAt(), SOURCE, SourceLinks.brand(p.conceptId(), f.oclFetchedAt()),
                 stages(f)),
             f.otherBrandsCount());
     }
@@ -999,14 +983,39 @@ git commit -m "feat(api): public product detail model; text-missing pairs name p
 - Create: `api/src/main/java/com/niramoy/bddrug/application/port/ProductDetailPort.java`
 - Create: `api/src/main/java/com/niramoy/bddrug/adapter/persistence/R2dbcProductDetailAdapter.java`
 - Modify: `api/src/main/java/com/niramoy/bddrug/application/ProductQueryService.java`
+- Modify: `api/src/main/java/com/niramoy/bddrug/domain/PublicProducts.java` (`approvedAt`), `api/src/test/java/com/niramoy/bddrug/PublicProductsTest.java`
 - Modify: `api/src/test/java/com/niramoy/bddrug/ProductQueryServiceTest.java` (constructor), `api/src/test/java/com/niramoy/bddrug/VisibilityApiIntegrationTest.java` (`approvedProductDetailIsFull`)
 - Test: `api/src/test/java/com/niramoy/bddrug/ProductDetailApiIntegrationTest.java`
 
 **Interfaces:**
-- Consumes: Task 1 `LatestItem`, Task 3 `PublicProducts.Facts`, `PublicProducts.assemble`; `IngredientSummaryReader.read(String conceptId, String bdcId, String route)` (P1B, with P1C's sources); `ReviewSql.LATEST_PUBLIC`.
-- Produces: `ProductDetailPort.facts(String conceptId, String bdcId, String route) : Mono<PublicProducts.Facts>`; `ProductQueryService(ProductQueryPort port, ProductDetailPort details)`; public `GET /v1/products/{id}` answers a `PublicProduct` for a public product. `scope=all` keeps answering the internal `Product`.
+- Consumes: Task 1 `LatestItem`, Task 3 `PublicProducts.Facts`, `PublicProducts.assemble`; `IngredientSummaryReader.read(String conceptId, String bdcId, String route)` (P1B, with P1C's sources); `ReviewSql.LATEST_PUBLIC`; `ReviewDecision(long id, String decision, String note, String reviewerEmail, String reviewerRole, Instant decidedAt)`; P1C's `ApprovalRule.OK`, `ApprovalRule.DISMISS`, `ApprovalRule.actsAsPharmacist(String role)`.
+- Produces: `static Instant PublicProducts.approvedAt(List<ReviewDecision> latestItemDecisions, Instant extractedAt)` (the newest ok by a pharmacist or senior among the latest item's decisions after its stamp and after the latest dismissal since it; the stamp when none counts, a carried approval, §8.3.1 item 8); `ProductDetailPort.facts(String conceptId, String bdcId, String route) : Mono<PublicProducts.Facts>`; `ProductQueryService(ProductQueryPort port, ProductDetailPort details)`; public `GET /v1/products/{id}` answers a `PublicProduct` for a public product. `scope=all` keeps answering the internal `Product`.
 
-- [ ] **Step 1: Write the failing integration test**
+- [ ] **Step 1: Write the failing tests**
+
+Append to `PublicProductsTest.java` (add `import java.time.Instant;` if missing):
+
+```java
+    static ReviewDecision rd(long id, String decision, String role, Instant at) {
+        return new ReviewDecision(id, decision, null, null, role, at);
+    }
+
+    // Spec gap 10, §5.2 (D57): the newest counted pharmacist or senior ok of the latest item; a dismissal is a boundary.
+    @Test void theVerificationDateIsTheNewestCountedOkOfTheLatestItem() {
+        Instant t1 = EXTRACTED.plusSeconds(3600), t2 = t1.plusSeconds(600), t3 = t2.plusSeconds(600), t4 = t3.plusSeconds(600);
+        // a pharmacist ok, an issue, a senior's dismissal, then a new ok: the new ok dates it
+        assertThat(PublicProducts.approvedAt(List.of(rd(1, "ok", "pharmacist", t1), rd(2, "issue", "pharmacist", t2),
+            rd(3, "dismiss", "senior", t3), rd(4, "ok", "pharmacist", t4)), EXTRACTED)).isEqualTo(t4);
+        // any input order; an engineer's later ok never dates it; a senior's ok does (D49)
+        assertThat(PublicProducts.approvedAt(List.of(rd(5, "ok", "engineer", t4), rd(4, "ok", "senior", t2)), EXTRACTED)).isEqualTo(t2);
+        // an ok before the dismissal never dates the line
+        assertThat(PublicProducts.approvedAt(List.of(rd(1, "ok", "pharmacist", t1), rd(2, "issue", "pharmacist", t2),
+            rd(3, "dismiss", "senior", t3)), EXTRACTED)).isEqualTo(EXTRACTED);
+        // an ok before the run stamp is an earlier run's: a carried approval counts at the stamp (§8.3.1 item 8)
+        assertThat(PublicProducts.approvedAt(List.of(rd(1, "ok", "pharmacist", EXTRACTED.minusSeconds(60))), EXTRACTED)).isEqualTo(EXTRACTED);
+        assertThat(PublicProducts.approvedAt(List.of(), null)).isNull();
+    }
+```
 
 `ProductDetailApiIntegrationTest.java`:
 
@@ -1029,8 +1038,10 @@ import static com.niramoy.bddrug.TestSupport.*;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * §7.4 P5/P6/P7/P15 against PilotSeed. N-1 (Napa) and W-1 (Warin) are approved in batch D-1; A-1 (Ecosprin) is pending
- * there. Napa's ddinter stage notes text missing with warfarin (public) and with aspirin (A-1 only: never public).
+ * §7.4 P5/P6/P7/P15 against PilotSeed. N-1 (Napa), W-1 (Warin), C-CAP (Chloramex) and N-2 (Ace) are approved in batch
+ * D-1; A-1 (Ecosprin) and N-3 (Fast) are pending there. Napa's ddinter stage notes text missing with warfarin (public) and
+ * with aspirin (A-1 only: never public). W-1 also has an older item in D-0 with a later ok; C-CAP was approved, reported,
+ * dismissed by a senior and approved again. Every row is seeded here, so no test depends on another's order.
  */
 @Testcontainers
 @SpringBootTest
@@ -1043,15 +1054,27 @@ class ProductDetailApiIntegrationTest {
         PilotSeed.migrateAndSeed(pg);
         exec(pg, """
             INSERT INTO raw.ocl_concept (source, concept_id, payload, fetched_at) VALUES ('DGDA-Drugs','N-1','{}','2026-10-11T21:00:00Z');
-            INSERT INTO ops.batch (batch_id, item_count, run_at) VALUES ('D-1', 3, '2026-10-11T21:27:00Z');
+            INSERT INTO curated.brand_product (concept_id, dar_number, trade_name, company, dosage_form, generic_content_raw, bdc_id, parse_status)
+              VALUES ('N-2','012','Ace','Square','Tablet','Paracetamol 500 mg','BDC-000006','parsed'),
+                     ('N-3','013','Fast','Acme','Tablet','Paracetamol 500 mg','BDC-000006','parsed');
+            INSERT INTO ops.batch (batch_id, item_count, run_at) VALUES ('D-0', 1, '2026-10-10T21:27:00Z'), ('D-1', 6, '2026-10-11T21:27:00Z');
             INSERT INTO ops.batch_item (batch_id, source, concept_id, review, extracted_at) VALUES
+             ('D-0','DGDA-Drugs','W-1','ok','2026-10-10T21:28:00Z'),
              ('D-1','DGDA-Drugs','N-1','ok','2026-10-11T21:28:00Z'),
              ('D-1','DGDA-Drugs','W-1','ok','2026-10-11T21:28:00Z'),
-             ('D-1','DGDA-Drugs','A-1','pending','2026-10-11T21:28:00Z');
+             ('D-1','DGDA-Drugs','A-1','pending','2026-10-11T21:28:00Z'),
+             ('D-1','DGDA-Drugs','C-CAP','ok','2026-10-11T21:28:00Z'),
+             ('D-1','DGDA-Drugs','N-2','ok','2026-10-11T21:28:00Z'),
+             ('D-1','DGDA-Drugs','N-3','pending','2026-10-11T21:28:00Z');
             INSERT INTO ops.review_decision (batch_id, concept_id, decision, note, reviewer_email, reviewer_role, decided_at) VALUES
              ('D-1','N-1','ok','','eng@example.org','engineer','2026-10-14T04:00:00Z'),
              ('D-1','N-1','ok','','senior@example.org','senior','2026-10-14T05:20:00Z'),
-             ('D-1','W-1','ok','','pharm@example.org','pharmacist','2026-10-14T06:00:00Z');
+             ('D-1','W-1','ok','','pharm@example.org','pharmacist','2026-10-14T06:00:00Z'),
+             ('D-0','W-1','ok','','pharm@example.org','pharmacist','2026-10-15T09:00:00Z'),
+             ('D-1','C-CAP','ok','','pharm@example.org','pharmacist','2026-10-13T08:00:00Z'),
+             ('D-1','C-CAP','issue','Strength looks wrong','pharm@example.org','pharmacist','2026-10-13T08:30:00Z'),
+             ('D-1','C-CAP','dismiss','The strength matches the register','senior@example.org','senior','2026-10-13T09:00:00Z'),
+             ('D-1','C-CAP','ok','','pharm@example.org','pharmacist','2026-10-13T10:00:00Z');
             INSERT INTO ops.stage_result (batch_id, concept_id, stage, status, note, evidence) VALUES
              ('D-1','N-1','dgda','ok','','{}'), ('D-1','N-1','substances','ok','','{}'), ('D-1','N-1','clinical','ok','','{}'),
              ('D-1','N-1','ddinter','warn','DDInter text not found for DDInter14/DDInter1951; DDInter text not found for DDInter14/DDInter20',
@@ -1080,7 +1103,7 @@ class ProductDetailApiIntegrationTest {
             .jsonPath("$.data.provenance.stages.length()").isEqualTo(4)
             .jsonPath("$.data.provenance.stages[0].stage").isEqualTo("dgda")
             .jsonPath("$.data.provenance.stages[3].stage").isEqualTo("ddinter")
-            .jsonPath("$.data.otherBrandsCount").isEqualTo(0)
+            .jsonPath("$.data.otherBrandsCount").isEqualTo(1)                         // N-2 (approved); never N-3 (pending)
             .jsonPath("$.data.clinicalDrug.ingredients[0].summary.bdsId").isEqualTo("BDS-000005")
             .jsonPath("$.data.clinicalDrug.ingredients[0].summary.coverage.coverage").isEqualTo("full")
             .jsonPath("$.data.clinicalDrug.ingredients[0].summary.ddinter.chosen[0].ddinterId").isEqualTo("DDInter14");
@@ -1102,15 +1125,21 @@ class ProductDetailApiIntegrationTest {
         assertThat(napa()).doesNotContain("DDInter20", "Acetylsalicylic acid", "Aspirin", "Ecosprin", "text_missing");
     }
 
-    @Test void otherBrandsCountsPublicBrandsOfTheSameClinicalDrugOnly() throws Exception {
-        exec(pg, """
-            INSERT INTO curated.brand_product (concept_id, dar_number, trade_name, company, dosage_form, generic_content_raw, bdc_id, parse_status)
-              VALUES ('N-2','012','Ace','Square','Tablet','Paracetamol 500 mg','BDC-000006','parsed'),
-                     ('N-3','013','Fast','Acme','Tablet','Paracetamol 500 mg','BDC-000006','parsed');
-            INSERT INTO ops.batch_item (batch_id, source, concept_id, review, extracted_at) VALUES
-             ('D-1','DGDA-Drugs','N-2','ok','2026-10-11T21:28:00Z'), ('D-1','DGDA-Drugs','N-3','pending','2026-10-11T21:28:00Z');
-            """);
-        web.get().uri("/v1/products/N-1").exchange().expectStatus().isOk().expectBody().jsonPath("$.data.otherBrandsCount").isEqualTo(1);
+    // Spec gap 10: only the latest item's decisions date the line; a later ok on an older batch's item never does
+    @Test void theVerificationDateComesFromTheLatestItemOnly() {
+        web.get().uri("/v1/products/W-1").exchange().expectStatus().isOk().expectBody()
+            .jsonPath("$.data.provenance.batchId").isEqualTo("D-1")
+            .jsonPath("$.data.verification.approvedAt").isEqualTo("2026-10-14T06:00:00Z");
+    }
+
+    // §5.2, D57: approved, reported, dismissed by a senior, approved again: the new approval dates it, and nothing of the
+    // issue or the dismissal is served
+    @Test void afterADismissalTheNewApprovalDatesTheLine() {
+        String body = new String(web.get().uri("/v1/products/C-CAP").exchange().expectStatus().isOk().expectBody()
+            .jsonPath("$.data.verification.status").isEqualTo("approved")
+            .jsonPath("$.data.verification.approvedAt").isEqualTo("2026-10-13T10:00:00Z")
+            .returnResult().getResponseBody(), StandardCharsets.UTF_8);
+        assertThat(body).doesNotContain("dismiss", "Strength looks wrong", "The strength matches the register", "@example.org");
     }
 
     @Test void scopeAllStillAnswersTheInternalProduct() {
@@ -1123,8 +1152,8 @@ class ProductDetailApiIntegrationTest {
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `cd api && ./gradlew test --no-daemon --tests ProductDetailApiIntegrationTest`
-Expected: FAIL (`$.data.verification.status` not found: the public detail is still the internal `Product`).
+Run: `cd api && ./gradlew test --no-daemon --tests PublicProductsTest --tests ProductDetailApiIntegrationTest`
+Expected: compilation FAILS (`cannot find symbol: method approvedAt`); once it compiles, `ProductDetailApiIntegrationTest` FAILS (`$.data.verification.status` not found: the public detail is still the internal `Product`).
 
 - [ ] **Step 3: Write the port and the adapter**
 
@@ -1152,6 +1181,7 @@ import com.niramoy.bddrug.domain.IngredientSummary;
 import com.niramoy.bddrug.domain.PublicProducts;
 import com.niramoy.bddrug.domain.PublicProducts.Facts;
 import com.niramoy.bddrug.domain.PublicProducts.StageRow;
+import com.niramoy.bddrug.domain.ReviewDecision;
 import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
@@ -1161,7 +1191,8 @@ import java.util.*;
 
 /**
  * Facts for an approved product's public detail. Public status is read only through ReviewSql.LATEST_PUBLIC (§7.4); the
- * latest item is read in ReviewSql.statusOf order. Seven queries, none per row.
+ * latest item is read in ReviewSql.statusOf order, and only its decisions date the verification line
+ * (PublicProducts.approvedAt). Eight queries, none per row. Decision notes and emails are never selected.
  */
 @Component
 public class R2dbcProductDetailAdapter implements ProductDetailPort {
@@ -1180,11 +1211,11 @@ public class R2dbcProductDetailAdapter implements ProductDetailPort {
                                      "ORDER BY extracted_at DESC NULLS LAST, batch_id DESC LIMIT 1")
             .bind("c", conceptId)
             .map(r -> new Latest(r.get("batch_id", String.class), instant(r.get("extracted_at", OffsetDateTime.class))))
-            .one().defaultIfEmpty(new Latest(null, null));
-        // The counting approval: pharmacists and seniors publish; an engineer's ok never does (G3, D49).
-        Mono<Optional<Instant>> approvedAt = db.sql("SELECT max(decided_at) AS at FROM ops.review_decision " +
-                                                    "WHERE concept_id = :c AND decision = 'ok' AND reviewer_role IN ('pharmacist','senior')")
-            .bind("c", conceptId).map(r -> Optional.ofNullable(instant(r.get("at", OffsetDateTime.class)))).one();
+            .one().defaultIfEmpty(new Latest(null, null)).cache();
+        // The counting approval of the latest item: after its stamp and after the latest dismissal (§5.2, D57); pharmacists
+        // and seniors publish, an engineer's ok never does (G3, D49). Decisions on other batches' items never count.
+        Mono<Optional<Instant>> approvedAt = latest.flatMap(l -> l.batchId() == null ? Mono.just(Optional.<Instant>empty())
+            : decisions(l.batchId(), conceptId).map(ds -> Optional.ofNullable(PublicProducts.approvedAt(ds, l.extractedAt()))));
         Mono<Optional<Instant>> fetched = db.sql("SELECT max(fetched_at) AS at FROM raw.ocl_concept WHERE concept_id = :c")
             .bind("c", conceptId).map(r -> Optional.ofNullable(instant(r.get("at", OffsetDateTime.class)))).one();
         Mono<Integer> others = bdcId == null ? Mono.just(0) : db.sql("WITH " + ReviewSql.LATEST_PUBLIC + " " +
@@ -1202,6 +1233,14 @@ public class R2dbcProductDetailAdapter implements ProductDetailPort {
                     t.getT2().orElse(null), t.getT3().orElse(null), rows, u.getT1(), u.getT2(), u.getT3(), t.getT4(), t.getT5()));
             });
         });
+    }
+
+    private Mono<List<ReviewDecision>> decisions(String batchId, String conceptId) {
+        return db.sql("SELECT id, decision, reviewer_role, decided_at FROM ops.review_decision WHERE batch_id = :b AND concept_id = :c")
+            .bind("b", batchId).bind("c", conceptId)
+            .map(r -> new ReviewDecision(r.get("id", Long.class), r.get("decision", String.class), null, null,
+                r.get("reviewer_role", String.class), r.get("decided_at", OffsetDateTime.class).toInstant()))
+            .all().collectList();
     }
 
     private Mono<List<StageRow>> stages(String batchId, String conceptId) {
@@ -1263,6 +1302,28 @@ public class R2dbcProductDetailAdapter implements ProductDetailPort {
 
 `ReviewSql.LATEST_PUBLIC` is the CTE `latest AS (…)` without `WITH`, so every query that uses it starts `"WITH " + ReviewSql.LATEST_PUBLIC + " "`.
 
+`PublicProducts.java`: add (imports `java.util.Comparator`; `ApprovalRule` and `ReviewDecision` are in the same package):
+
+```java
+    /**
+     * The verification line's date (§6.5, spec gap 10): the newest ok by a pharmacist or senior pharmacist among the latest
+     * item's counted decisions: those after the item's run stamp and after the latest dismissal since it (§5.2, D57, the
+     * boundary ApprovalRule applies). When none counts, the record is public through an approval carried to this stamp
+     * (§8.3.1 item 8), so the stamp dates it. Pass only the latest item's decisions: other batches' items never date it.
+     */
+    public static Instant approvedAt(List<ReviewDecision> latestItemDecisions, Instant extractedAt) {
+        List<ReviewDecision> since = latestItemDecisions.stream()
+            .filter(d -> extractedAt == null || d.decidedAt().isAfter(extractedAt))
+            .sorted(Comparator.comparing(ReviewDecision::decidedAt).thenComparingLong(ReviewDecision::id)).toList();
+        int start = 0;
+        for (int i = 0; i < since.size(); i++) if (ApprovalRule.DISMISS.equals(since.get(i).decision())) start = i + 1;
+        Instant at = null;
+        for (ReviewDecision d : since.subList(start, since.size()))
+            if (ApprovalRule.OK.equals(d.decision()) && ApprovalRule.actsAsPharmacist(d.reviewerRole())) at = d.decidedAt();
+        return at != null ? at : extractedAt;
+    }
+```
+
 - [ ] **Step 4: Wire the service**
 
 `ProductQueryService.java`: add the field and constructor parameter, and send a public product's detail:
@@ -1304,7 +1365,7 @@ In `VisibilityApiIntegrationTest.approvedProductDetailIsFull`, replace `.jsonPat
 
 - [ ] **Step 5: Run the tests**
 
-Run: `cd api && ./gradlew test --no-daemon --tests ProductDetailApiIntegrationTest --tests ProductQueryServiceTest --tests VisibilityApiIntegrationTest --tests ProductApiIntegrationTest`
+Run: `cd api && ./gradlew test --no-daemon --tests PublicProductsTest --tests ProductDetailApiIntegrationTest --tests ProductQueryServiceTest --tests VisibilityApiIntegrationTest --tests ProductApiIntegrationTest`
 Expected: PASS. (`ProductApiIntegrationTest` reads details with `scope=all` and the token, which still answers the internal `Product`; if one of its tests reads a public detail and asserts `reviewStatus`, change that assertion to `verification.status` = `approved`.)
 
 - [ ] **Step 6: Commit**
@@ -1312,6 +1373,7 @@ Expected: PASS. (`ProductApiIntegrationTest` reads details with `scope=all` and 
 ```bash
 git add api/src/main/java/com/niramoy/bddrug/application/port/ProductDetailPort.java \
   api/src/main/java/com/niramoy/bddrug/adapter/persistence/R2dbcProductDetailAdapter.java \
+  api/src/main/java/com/niramoy/bddrug/domain/PublicProducts.java api/src/test/java/com/niramoy/bddrug/PublicProductsTest.java \
   api/src/main/java/com/niramoy/bddrug/application/ProductQueryService.java \
   api/src/test/java/com/niramoy/bddrug/ProductDetailApiIntegrationTest.java api/src/test/java/com/niramoy/bddrug/ProductQueryServiceTest.java \
   api/src/test/java/com/niramoy/bddrug/VisibilityApiIntegrationTest.java api/src/test/java/com/niramoy/bddrug/ProductApiIntegrationTest.java
@@ -1575,16 +1637,15 @@ git commit -m "feat(api): GET /v1/clinical-drugs/{bdcId}, public brands only, 40
 **Files:**
 - Modify: `api/src/main/java/com/niramoy/bddrug/domain/Substance.java`
 - Modify: `api/src/main/java/com/niramoy/bddrug/domain/SubstanceCode.java`
-- Create: `api/src/main/java/com/niramoy/bddrug/adapter/persistence/SubstanceCodeSources.java`
 - Modify: `api/src/main/java/com/niramoy/bddrug/adapter/persistence/R2dbcSubstanceAdapter.java`
 - Test: `api/src/test/java/com/niramoy/bddrug/SubstancePublicApiIntegrationTest.java`
 
 **Interfaces:**
-- Consumes: `SourceLinks.code(String system, String code, Instant fetchedAt) : Optional<Source>` (P1C); `ReviewSql.LATEST_PUBLIC`; `IngredientSummary.Counts(int major, int moderate, int minor, int unknown, int total)`.
+- Consumes: `SourceLinks.code(String system, String code, Instant fetchedAt) : Optional<SourceLinks.Source>` (P1C Task 4); P1C Task 7a's `IngredientSummaryReader.codesSql(String icd11FetchedAt)` and `IngredientSummaryReader.code(Readable) : IngredientSummary.Code` (package-private, same package as `R2dbcSubstanceAdapter`), the one §5.6.6 "fetched on" rule the desk, the senior substance page and the product page already use; `ReviewSql.LATEST_PUBLIC`; `IngredientSummary.Counts(int major, int moderate, int minor, int unknown, int total)`.
 - Produces:
-  - `SubstanceCode(String system, String code, String routeScope, String source, String method, double confidence, Source sourceLink)` (`source` stays the provenance text such as `rxnav`; `sourceLink` is the §5.6.6 link, null when the code fails its pattern).
-  - `Substance(…, List<Entry> entries, List<ClinicalDrugRef> clinicalDrugs)` appended after `foods`; `Substance.Entry(String ddinterId, String name, String routeScope, IngredientSummary.Counts counts, int diseaseCount, int foodCount, Source sourceLink)`; `Substance.ClinicalDrugRef(String bdcId, String displayName)`.
-  - `SubstanceCodeSources.fetchedAt(List<SubstanceCode> codes) : Mono<Map<String, Instant>>` keyed `system|code`, implementing the §5.6.6 "fetched on from" column.
+  - `SubstanceCode(String system, String code, String routeScope, String source, String method, double confidence, SourceLinks.Source sourceLink)` (`source` stays the provenance text such as `rxnav`; `sourceLink` is the §5.6.6 link, null when the code fails its pattern).
+  - `Substance(…, List<Entry> entries, List<ClinicalDrugRef> clinicalDrugs)` appended after `foods`; `Substance.Entry(String ddinterId, String name, String routeScope, IngredientSummary.Counts counts, int diseaseCount, int foodCount, SourceLinks.Source sourceLink)`; `Substance.ClinicalDrugRef(String bdcId, String displayName)`.
+  - `R2dbcSubstanceAdapter.ICD11_FETCHED_AT`: the ICD-11 "fetched on" subquery for a substance page (the DGDA register's latest fetch of any product carrying the XM code), the same text as P1C's senior substance page.
   - Under public scope, `interactions[].partnerBdsId` is null unless the partner substance is public (§7.4 P9 rule, applied to the existing list too).
 
 - [ ] **Step 1: Write the failing integration test**
@@ -1699,7 +1760,7 @@ package com.niramoy.bddrug.domain;
 
 /** source is where the code came from (dgda-ocl, rxnav, ddinter2); sourceLink is its public page (§5.6.6), null when the code fails its pattern. */
 public record SubstanceCode(String system, String code, String routeScope, String source, String method, double confidence,
-                            Source sourceLink) {}
+                            SourceLinks.Source sourceLink) {}
 ```
 
 `Substance.java`: the record header becomes
@@ -1715,88 +1776,20 @@ and add, next to the other nested records:
 ```java
     /** One DDInter entry of the substance with its severity counts (both sides of every stored pair) and its link (§6.6). */
     public record Entry(String ddinterId, String name, String routeScope, IngredientSummary.Counts counts, int diseaseCount,
-                        int foodCount, Source sourceLink) {}
+                        int foodCount, SourceLinks.Source sourceLink) {}
     /** A clinical drug that contains the substance (public ones only under public scope). */
     public record ClinicalDrugRef(String bdcId, String displayName) {}
 ```
 
-- [ ] **Step 4: Write `SubstanceCodeSources`**
+- [ ] **Step 4: Reuse P1C's "fetched on" rule for the codes**
 
-```java
-package com.niramoy.bddrug.adapter.persistence;
-import com.niramoy.bddrug.domain.SubstanceCode;
-import org.springframework.r2dbc.core.DatabaseClient;
-import org.springframework.stereotype.Component;
-import reactor.core.publisher.Mono;
-import java.time.Instant;
-import java.time.OffsetDateTime;
-import java.util.*;
-
-/**
- * The §5.6.6 "fetched on from" column for one substance's codes, keyed "system|code":
- * ICD11_XM from raw.ocl_concept (the DGDA concepts that list the XM code); RXCUI from the RxNav snapshot
- * GET /REST/rxcui/{c}/properties.json; ATC, DRUGBANK and SNOMEDCT from the RxNav snapshot
- * GET /REST/rxcui/{rxcui}/allProperties.json?prop=codes of the substance's RxCUI; DDINTER from curated.ddinter_drug.
- * If P1C already has a reader with these rules, call it instead and delete this class.
- */
-@Component
-public class SubstanceCodeSources {
-    private final DatabaseClient db;
-    public SubstanceCodeSources(DatabaseClient db) { this.db = db; }
-
-    static String propsKey(String rxcui) { return "GET /REST/rxcui/" + rxcui + "/properties.json"; }
-    static String codesKey(String rxcui) { return "GET /REST/rxcui/" + rxcui + "/allProperties.json?prop=codes"; }
-
-    public Mono<Map<String, Instant>> fetchedAt(List<SubstanceCode> codes) {
-        List<String> xm = new ArrayList<>(), dd = new ArrayList<>(), keys = new ArrayList<>();
-        String rxcui = codes.stream().filter(c -> "RXCUI".equals(c.system())).map(SubstanceCode::code).sorted().findFirst().orElse(null);
-        for (SubstanceCode c : codes) {
-            switch (c.system()) {
-                case "ICD11_XM" -> xm.add(c.code());
-                case "DDINTER" -> dd.add(c.code());
-                case "RXCUI" -> keys.add(propsKey(c.code()));
-                default -> { }
-            }
-        }
-        if (rxcui != null) keys.add(codesKey(rxcui));
-        Mono<Map<String, Instant>> ocl = xm.isEmpty() ? Mono.just(Map.of()) : db.sql("""
-                SELECT bpi.xm_code AS k, max(o.fetched_at) AS at FROM curated.brand_product_ingredient bpi
-                JOIN raw.ocl_concept o ON o.concept_id = bpi.concept_id WHERE bpi.xm_code = ANY(:xm) GROUP BY bpi.xm_code""")
-            .bind("xm", xm.toArray(String[]::new)).map(r -> Map.entry(r.get("k", String.class), at(r.get("at", OffsetDateTime.class))))
-            .all().collectMap(Map.Entry::getKey, Map.Entry::getValue);
-        Mono<Map<String, Instant>> rx = keys.isEmpty() ? Mono.just(Map.of()) : db.sql(
-                "SELECT request_key AS k, fetched_at AS at FROM raw.http_snapshot WHERE source = 'rxnav' AND request_key = ANY(:keys)")
-            .bind("keys", keys.toArray(String[]::new)).map(r -> Map.entry(r.get("k", String.class), at(r.get("at", OffsetDateTime.class))))
-            .all().collectMap(Map.Entry::getKey, Map.Entry::getValue);
-        Mono<Map<String, Instant>> ddi = dd.isEmpty() ? Mono.just(Map.of()) : db.sql(
-                "SELECT ddinter_id AS k, fetched_at AS at FROM curated.ddinter_drug WHERE ddinter_id = ANY(:ids)")
-            .bind("ids", dd.toArray(String[]::new)).map(r -> Map.entry(r.get("k", String.class), at(r.get("at", OffsetDateTime.class))))
-            .all().collectMap(Map.Entry::getKey, Map.Entry::getValue);
-        return Mono.zip(ocl, rx, ddi).map(t -> {
-            Map<String, Instant> out = new HashMap<>();
-            for (SubstanceCode c : codes) {
-                Instant v = switch (c.system()) {
-                    case "ICD11_XM" -> t.getT1().get(c.code());
-                    case "DDINTER" -> t.getT3().get(c.code());
-                    case "RXCUI" -> t.getT2().get(propsKey(c.code()));
-                    case "ATC", "DRUGBANK", "SNOMEDCT" -> rxcui == null ? null : t.getT2().get(codesKey(rxcui));
-                    default -> null;
-                };
-                if (v != null) out.put(c.system() + "|" + c.code(), v);
-            }
-            return out;
-        });
-    }
-
-    private static Instant at(OffsetDateTime t) { return t == null ? null : t.toInstant(); }
-}
-```
+No new reader. P1C's `IngredientSummaryReader.codesSql(icd11FetchedAt)` already holds the §5.6.6 rule (RxCUI from its RxNav properties snapshot; ATC, DrugBank and SNOMED CT from the substance's RxCUI `allProperties` snapshot; DDInter from `curated.ddinter_drug`; ICD-11 from the subquery passed in) and `IngredientSummaryReader.code(r)` builds each code's `SourceLinks.code` link from it, so the product page, the desk, the senior substance page and this page give one "fetched on" date per code. The substance page dates ICD-11 the way P1C's senior substance page does (no single product is in view): the latest DGDA register fetch of any product carrying the XM code. `codesSql` does not select `curated.substance_code.source` (the provenance text this response keeps), so the adapter reads the codes as before and joins the links by `system|code` (Step 5, item 3).
 
 - [ ] **Step 5: Extend the adapter**
 
 In `R2dbcSubstanceAdapter.java`:
 
-1. Add the constructor parameter `SubstanceCodeSources sources` and keep it in a field.
+1. The constructor is unchanged (`R2dbcSubstanceAdapter(DatabaseClient db)`): the code links come from SQL in the same package.
 2. In `find`, pass `approvedOnly` to `interactions`, add `entries(bdsId)` and `clinicalDrugs(bdsId, approvedOnly)`, and attach the code links:
 
 ```java
@@ -1816,20 +1809,28 @@ In `R2dbcSubstanceAdapter.java`:
     private static <T> List<T> cast(Object o) { return (List<T>) o; }
 ```
 
-3. `codes` builds each `SubstanceCode` with its link (the codes query runs first; the fetch times follow in one more round):
+3. `codes` builds each `SubstanceCode` with the link P1C's rule gives it (two queries in parallel: the codes with their provenance text, and `codesSql` for the links):
 
 ```java
+    /** ICD-11 "fetched on" for a substance page: the DGDA register's latest fetch of any product carrying the XM code (as P1C's senior substance page). */
+    static final String ICD11_FETCHED_AT = "SELECT max(rc.fetched_at) FROM curated.brand_product_ingredient bpi " +
+        "JOIN raw.ocl_concept rc ON rc.concept_id = bpi.concept_id WHERE bpi.xm_code = c.code";
+
     private Mono<List<SubstanceCode>> codes(String id) {
-        return db.sql("SELECT system, code, route_scope, source, method, confidence FROM curated.substance_code " +
+        Mono<List<SubstanceCode>> rows = db.sql("SELECT system, code, route_scope, source, method, confidence FROM curated.substance_code " +
                       "WHERE bds_id = :id ORDER BY " + SYSTEM_RANK + ", code")
             .bind("id", id)
             .map(r -> new SubstanceCode(r.get("system", String.class), r.get("code", String.class),
                 r.get("route_scope", String.class), r.get("source", String.class), r.get("method", String.class),
                 r.get("confidence", BigDecimal.class).doubleValue(), null))
-            .all().collectList()
-            .flatMap(list -> sources.fetchedAt(list).map(at -> list.stream().map(c -> new SubstanceCode(c.system(), c.code(),
-                c.routeScope(), c.source(), c.method(), c.confidence(),
-                SourceLinks.code(c.system(), c.code(), at.get(c.system() + "|" + c.code())).orElse(null))).toList()));
+            .all().collectList();
+        Mono<Map<String, SourceLinks.Source>> links = db.sql(IngredientSummaryReader.codesSql(ICD11_FETCHED_AT))
+            .bind("ids", new String[]{id})
+            .map(IngredientSummaryReader::code)
+            .all().filter(c -> c.source() != null)
+            .collectMap(c -> c.system() + "|" + c.code(), IngredientSummary.Code::source);
+        return Mono.zip(rows, links).map(t -> t.getT1().stream().map(c -> new SubstanceCode(c.system(), c.code(), c.routeScope(),
+            c.source(), c.method(), c.confidence(), t.getT2().get(c.system() + "|" + c.code()))).toList());
     }
 ```
 
@@ -1925,7 +1926,7 @@ with these constants next to `MINE` (the existing `MINE` text stays for `disease
     }
 ```
 
-Add imports: `com.niramoy.bddrug.domain.DdinterCode`, `com.niramoy.bddrug.domain.IngredientSummary`, `com.niramoy.bddrug.domain.SourceLinks`, `java.time.OffsetDateTime`.
+Add imports: `com.niramoy.bddrug.domain.DdinterCode`, `com.niramoy.bddrug.domain.IngredientSummary`, `com.niramoy.bddrug.domain.SourceLinks`, `java.time.OffsetDateTime`, `java.util.Map`.
 
 - [ ] **Step 6: Run the substance tests**
 
@@ -1936,7 +1937,6 @@ Expected: PASS (the existing tests read with `scope=all`, or assert fields that 
 
 ```bash
 git add api/src/main/java/com/niramoy/bddrug/domain/Substance.java api/src/main/java/com/niramoy/bddrug/domain/SubstanceCode.java \
-  api/src/main/java/com/niramoy/bddrug/adapter/persistence/SubstanceCodeSources.java \
   api/src/main/java/com/niramoy/bddrug/adapter/persistence/R2dbcSubstanceAdapter.java \
   api/src/test/java/com/niramoy/bddrug/SubstancePublicApiIntegrationTest.java
 git commit -m "feat(api): substance entries with counts, code source links, public clinical drugs; private partners never linked (§6.6, §5.6.6)" \
@@ -1956,9 +1956,9 @@ git commit -m "feat(api): substance entries with counts, code source links, publ
 - Test: `api/src/test/java/com/niramoy/bddrug/SubstanceInteractionsApiIntegrationTest.java`
 
 **Interfaces:**
-- Consumes: Task 2 `PublicPairReviewReader.read(Collection<Content>)`; Task 6 `PUBLIC_SUBSTANCES`, `MINE_CTE`, `entries(...)` counts; `SourceLinks.ddinterPair(String interactionId) : Optional<Source>`.
+- Consumes: Task 2 `PublicPairReviews.Pair`, `PublicPairReviews.codes`, `PublicPairReviews.of`, `PublicPairReviews.NONE`; P1C's `PairReviewReader.forCodes(Collection<String>, String viewerEmail)` and `PairReviewRule.PublicReview`; Task 6 `PUBLIC_SUBSTANCES`, `MINE_CTE`, `entries(...)` counts; P1C's `SourceLinks.pair(String interactionId) : Optional<SourceLinks.Source>`.
 - Produces:
-  - `SubstanceInteractions(String bdsId, List<Substance.Entry> counts, int total, int page, int size, List<Item> items)`; `Item(String partnerName, String partnerBdsId, String ddinterA, String ddinterB, String routeScope, String severity, List<String> actions, String interaction, String management, PublicPairReview pairReview, String sourceUrl)`.
+  - `SubstanceInteractions(String bdsId, List<Substance.Entry> counts, int total, int page, int size, List<Item> items)`; `Item(String partnerName, String partnerBdsId, String ddinterA, String ddinterB, String routeScope, String severity, List<String> actions, String interaction, String management, PairReviewRule.PublicReview pairReview, String sourceUrl)`. Under public scope, an item whose partner substance is not public has `partnerBdsId` null **and** `pairReview` = `not_reviewed` with `reviewedAt` null, whatever `ops.pair_review` holds (§7.4: "served only for pairs between public products"; §2.2 "Pair review state": "pairs between approved products only").
   - `SubstanceQueryPort.isPublic(String bdsId) : Mono<Boolean>`, `SubstanceQueryPort.preferredName(String bdsId) : Mono<String>` (empty when unknown), `SubstanceQueryPort.interactionsPage(String bdsId, String severity, int limit, int offset, boolean publicOnly) : Mono<InteractionsPage>` with `InteractionsPage(int total, List<Substance.Entry> counts, List<SubstanceInteractions.Item> items)`.
   - `SubstanceQueryService.interactions(String bdsId, String severity, int page, int size, Scope scope) : Mono<Object>` (`SubstanceInteractions`, the stub, or 404); `SubstanceQueryService.SEVERITIES`.
   - `GET /v1/substances/{bdsId}/interactions?severity=&page=&size=` (`severity` ∈ major, moderate, minor, unknown, else 400 `field=severity`; `page` 0–10000; `size` 1–50, default 20).
@@ -1970,7 +1970,7 @@ git commit -m "feat(api): substance entries with counts, code source links, publ
 ```java
 package com.niramoy.bddrug;
 
-import com.niramoy.bddrug.domain.PairContent;
+import com.niramoy.bddrug.domain.PublicPairReviews;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -1990,7 +1990,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * §7.4 P9 on PilotSeed. Warfarin (BDS-000001, approved through W-1) pairs with Acetylsalicylic acid (major, IA-1),
  * Acetaminophen and Chloramphenicol (moderate), Some Herb (minor) and Alpha Unknown (unknown). Aspirin's product is
- * pending, so its BDS id is never served; Napa and C-CAP are approved.
+ * pending, so its BDS id is never served, and neither is the senior review of its pair with Warfarin (current, at 05:20);
+ * Napa and C-CAP are approved, and the Warfarin + Acetaminophen pair has a current review (05:22).
  */
 @Testcontainers
 @SpringBootTest
@@ -2001,9 +2002,10 @@ class SubstanceInteractionsApiIntegrationTest {
 
     @BeforeAll static void seed() throws Exception {
         PilotSeed.migrateAndSeed(pg);
-        String hash = PairContent.hash("DDInter1951", "DDInter20", "major", List.of("Monitor", "Avoid"),
+        String warfarinAspirin = new PublicPairReviews.Pair("DDInter1951", "DDInter20", "major", List.of("Monitor", "Avoid"),
             "Aspirin may increase the anticoagulant effect of warfarin and the risk of bleeding.",
-            "Avoid the combination unless the benefit outweighs the bleeding risk; monitor INR.");
+            "Avoid the combination unless the benefit outweighs the bleeding risk; monitor INR.").hash();
+        String warfarinAcetaminophen = new PublicPairReviews.Pair("DDInter14", "DDInter1951", "moderate", List.of(), null, null).hash();
         exec(pg, """
             INSERT INTO ops.batch (batch_id, item_count, run_at) VALUES ('I-1', 4, now());
             INSERT INTO ops.batch_item (batch_id, source, concept_id, review, extracted_at) VALUES
@@ -2011,8 +2013,9 @@ class SubstanceInteractionsApiIntegrationTest {
              ('I-1','DGDA-Drugs','C-CAP','ok', now()), ('I-1','DGDA-Drugs','A-1','pending', now());
             INSERT INTO ops.pair_review (ddinter_a, ddinter_b, decision, note, content_hash, content, reviewer_email, reviewer_role, decided_at) VALUES
              ('DDInter1951','DDInter20','reviewed','', '%s', '{}', 'senior@example.org', 'senior', '2026-10-16T05:20:00Z'),
-             ('DDInter1951','DDInter351','issue','PAIR-NOTE-SECRET', '%s', '{}', 'senior@example.org', 'senior', '2026-10-16T05:21:00Z');
-            """.formatted(hash, "0".repeat(64)));
+             ('DDInter1951','DDInter351','issue','PAIR-NOTE-SECRET', '%s', '{}', 'senior@example.org', 'senior', '2026-10-16T05:21:00Z'),
+             ('DDInter14','DDInter1951','reviewed','', '%s', '{}', 'senior@example.org', 'senior', '2026-10-16T05:22:00Z');
+            """.formatted(warfarinAspirin, "0".repeat(64), warfarinAcetaminophen));
     }
 
     @Autowired WebTestClient web;
@@ -2032,15 +2035,22 @@ class SubstanceInteractionsApiIntegrationTest {
             .jsonPath("$.data.items[0].ddinterB").isEqualTo("DDInter20")
             .jsonPath("$.data.items[0].routeScope").isEqualTo("systemic")
             .jsonPath("$.data.items[0].interaction").isEqualTo("Aspirin may increase the anticoagulant effect of warfarin and the risk of bleeding.")
-            .jsonPath("$.data.items[0].pairReview.state").isEqualTo("reviewed")
-            .jsonPath("$.data.items[0].pairReview.reviewedAt").isEqualTo("2026-10-16T05:20:00Z")
+            // the partner substance is not public: its pair's senior review is never served (§7.4, §2.2)
+            .jsonPath("$.data.items[0].pairReview.state").isEqualTo("not_reviewed")
+            .jsonPath("$.data.items[0].pairReview.reviewedAt").value(v -> assertThat(v).isNull())
             .jsonPath("$.data.items[1].partnerName").isEqualTo("Acetaminophen")
             .jsonPath("$.data.items[1].partnerBdsId").isEqualTo("BDS-000005")
-            .jsonPath("$.data.items[1].pairReview.state").isEqualTo("not_reviewed")
+            .jsonPath("$.data.items[1].pairReview.state").isEqualTo("reviewed")
+            .jsonPath("$.data.items[1].pairReview.reviewedAt").isEqualTo("2026-10-16T05:22:00Z")
             .jsonPath("$.data.items[2].partnerName").isEqualTo("Chloramphenicol")
             .jsonPath("$.data.items[2].pairReview.state").isEqualTo("not_reviewed")   // an issue is never named in public
             .returnResult().getResponseBody(), StandardCharsets.UTF_8);
-        assertThat(body).doesNotContain("\"issue\"", "\"changed\"", "PAIR-NOTE-SECRET", "senior@example.org", "BDS-000002");
+        assertThat(body).doesNotContain("\"issue\"", "\"changed\"", "PAIR-NOTE-SECRET", "senior@example.org", "BDS-000002",
+            "2026-10-16T05:20:00Z");
+        // the token and scope=all read every pair's state, the private partner's too
+        internal(web).get().uri("/v1/substances/BDS-000001/interactions?scope=all").exchange().expectStatus().isOk().expectBody()
+            .jsonPath("$.data.items[0].partnerBdsId").isEqualTo("BDS-000002")
+            .jsonPath("$.data.items[0].pairReview.state").isEqualTo("reviewed");
     }
 
     @Test void severityFilterAndPaging() {
@@ -2099,11 +2109,14 @@ import java.util.List;
 
 /**
  * §7.4 P9: a page of a public substance's DDInter pairs, every entry's counts, and each pair's public review state and
- * DDInter link. partnerBdsId is null when the partner substance is not public (its DDInter name stays: it is DDInter's).
+ * DDInter link. Under public scope, partnerBdsId is null when the partner substance is not public (its DDInter name stays:
+ * it is DDInter's), and then pairReview is not_reviewed with no date: a pair review is served only for pairs between
+ * public products (§7.4).
  */
 public record SubstanceInteractions(String bdsId, List<Substance.Entry> counts, int total, int page, int size, List<Item> items) {
     public record Item(String partnerName, String partnerBdsId, String ddinterA, String ddinterB, String routeScope, String severity,
-                       List<String> actions, String interaction, String management, PublicPairReview pairReview, String sourceUrl) {
+                       List<String> actions, String interaction, String management, PairReviewRule.PublicReview pairReview,
+                       String sourceUrl) {
         public Item {
             interaction = DdinterText.clean(interaction);
             management = DdinterText.clean(management);
@@ -2136,7 +2149,7 @@ public interface SubstanceQueryPort {
 }
 ```
 
-`R2dbcSubstanceAdapter.java`: inject `PublicPairReviewReader reviews` (constructor parameter and field) and add:
+`R2dbcSubstanceAdapter.java`: inject P1C's `PairReviewReader pairReviews` (constructor `R2dbcSubstanceAdapter(DatabaseClient db, PairReviewReader pairReviews)`, field) and add:
 
 ```java
     @Override public Mono<String> preferredName(String bdsId) {
@@ -2182,17 +2195,25 @@ public interface SubstanceQueryPort {
                 r.get("severity", String.class), list(r, "actions"), r.get("interaction_id", String.class),
                 r.get("interaction", String.class), r.get("management", String.class)))
             .all().collectList();
-        return Mono.zip(total, entries(bdsId), rows).flatMap(t -> reviews.read(t.getT3().stream()
-                .map(p -> new PublicPairReviewReader.Content(p.ddinterA(), p.ddinterB(), p.severity(), p.actions(),
-                    DdinterText.clean(p.interaction()), DdinterText.clean(p.management()))).toList())
-            .map(rv -> new InteractionsPage(t.getT1(), t.getT2(), t.getT3().stream().map(p -> new SubstanceInteractions.Item(
-                p.partnerName(), p.partnerBdsId(), p.ddinterA(), p.ddinterB(), p.routeScope(), p.severity(), p.actions(),
-                p.interaction(), p.management(), rv.getOrDefault(p.ddinterA() + "|" + p.ddinterB(), PublicPairReview.NONE),
-                SourceLinks.ddinterPair(p.interactionId()).map(Source::url).orElse(null))).toList())));
+        return Mono.zip(total, entries(bdsId), rows).flatMap(t -> {
+            // §7.4: a pair review is served only for pairs between public products. Under public scope a pair whose partner
+            // substance is not public (partnerBdsId null) is not even read, and reads not_reviewed with no date.
+            List<PublicPairReviews.Pair> pairs = t.getT3().stream().filter(p -> !publicOnly || p.partnerBdsId() != null)
+                .map(p -> new PublicPairReviews.Pair(p.ddinterA(), p.ddinterB(), p.severity(), p.actions(), p.interaction(),
+                    p.management()))
+                .toList();
+            return pairReviews.forCodes(PublicPairReviews.codes(pairs), null).map(d -> PublicPairReviews.of(pairs, d))
+                .map(rv -> new InteractionsPage(t.getT1(), t.getT2(), t.getT3().stream().map(p -> new SubstanceInteractions.Item(
+                    p.partnerName(), p.partnerBdsId(), p.ddinterA(), p.ddinterB(), p.routeScope(), p.severity(), p.actions(),
+                    p.interaction(), p.management(),
+                    publicOnly && p.partnerBdsId() == null ? PublicPairReviews.NONE
+                        : rv.getOrDefault(p.ddinterA() + "|" + p.ddinterB(), PublicPairReviews.NONE),
+                    SourceLinks.pair(p.interactionId()).map(SourceLinks.Source::url).orElse(null))).toList()));
+        });
     }
 ```
 
-Add imports `com.niramoy.bddrug.domain.DdinterText`, `com.niramoy.bddrug.domain.PublicPairReview`, `com.niramoy.bddrug.domain.Source`, `com.niramoy.bddrug.domain.SubstanceInteractions`. The pair-review hash uses the cleaned texts, exactly as `PairContent` defines the content (§7.7: "after `DdinterText.clean`").
+Add imports `com.niramoy.bddrug.domain.PublicPairReviews`, `com.niramoy.bddrug.domain.SubstanceInteractions` (`SourceLinks` came with Task 6). The pair-review hash is `PairContent`'s, whose `Content` cleans the texts (§7.7: "after `DdinterText.clean`").
 
 `SubstanceQueryService.java` (whole file):
 
@@ -2281,11 +2302,11 @@ git commit -m "feat(api): GET /v1/substances/{bdsId}/interactions with text, pub
 - Delete: `api/src/main/java/com/niramoy/bddrug/domain/InteractionAlert.java`
 - Modify: `api/src/main/java/com/niramoy/bddrug/application/port/CheckQueryPort.java`
 - Modify: `api/src/main/java/com/niramoy/bddrug/application/InteractionCheckService.java`
-- Modify: `api/src/main/java/com/niramoy/bddrug/adapter/persistence/R2dbcCheckAdapter.java` (compile only: pass empty names and reviews; Task 9 fills them)
-- Test: `api/src/test/java/com/niramoy/bddrug/CheckComputeTest.java` (new), `api/src/test/java/com/niramoy/bddrug/InteractionCheckServiceTest.java`, `api/src/test/java/com/niramoy/bddrug/DdinterTextTest.java`
+- Modify: `api/src/main/java/com/niramoy/bddrug/adapter/persistence/R2dbcCheckAdapter.java` (compile only: `interactionId` null and empty entry names until Task 9; P1C's pair-review read stays wired, so `pairReview` is right from this task on)
+- Test: `api/src/test/java/com/niramoy/bddrug/CheckComputeTest.java` (new), `api/src/test/java/com/niramoy/bddrug/InteractionCheckServiceTest.java`, `api/src/test/java/com/niramoy/bddrug/DdinterTextTest.java`, `api/src/test/java/com/niramoy/bddrug/VisibilityApiIntegrationTest.java`; run P1C's `PairQueueIntegrationTest`
 
 **Interfaces:**
-- Consumes: `RouteRule.choose`, `BatchPairs.REASON_ORDER` (`["no_data","unmapped","not_run","no_route"]`), `Severity.rank`, Task 2 `PublicPairReview`.
+- Consumes: `RouteRule.choose`, `BatchPairs.REASON_ORDER` (`["no_data","unmapped","not_run","no_route"]`), `Severity.rank`, Task 2 `PublicPairReviews.NONE`; P1C's `PairContent.hash(a, b, PairContent.Content)`, `PairReviewRule.publicReview(List<Decision>, String)`, `PairReviewRule.Decision`, `PairReviewRule.PublicReview`; P1C's `CheckData(products, ingredients, codesByBds, listedCodes, pairs, Map<String, List<PairReviewRule.Decision>> reviews)` and its `R2dbcCheckAdapter`, which already reads the decisions (`pairReviews.forCodes(<loaded codes>, null)`).
 - Produces (§7.4 `CheckResult`, with three additive fields this plan needs: `products[].route`, `notChecked[].side`, and `Side.routeScope` null for a side with no chosen entry):
 
 ```java
@@ -2298,14 +2319,14 @@ SubstanceCoverage(String bdsId, String name, String coverage, List<Chosen> ddint
 Chosen(String ddinterId, String name, String routeScope, boolean routeAssumed)
 Side(String conceptId, String tradeName, String bdsId, String name, String routeScope)
 Alert(String severity, Side a, Side b, List<String> actions, String interaction, String management, boolean routeAssumed,
-      String ddinterA, String ddinterB, String interactionId, String source, PublicPairReview pairReview)
+      String ddinterA, String ddinterB, String interactionId, String source, PairReviewRule.PublicReview pairReview)
 NoInteraction(Side a, Side b, String ddinterA, String ddinterB)
 NotChecked(Side a, Side b, String reason, String side)   // side "a" | "b": whose substance the reason applies to
 Duplicate(String bdsId, String name, List<String> conceptIds)    NoData(String conceptId, String bdsId, String name)
 NotReviewed(String conceptId, String tradeName)
 ```
 
-  `CheckQueryPort.PairRow` gains `String interactionId` (last); `CheckQueryPort.CheckData` gains `Map<String, String> entryNames` and `Map<String, PublicPairReview> reviews` (keyed `"a|b"`, stored order), after `pairs`.
+  `CheckQueryPort.PairRow` gains `String interactionId` (last); `CheckQueryPort.CheckData` keeps P1C's `Map<String, List<PairReviewRule.Decision>> reviews` (keyed `"a|b"`, stored order) and gains `Map<String, String> entryNames` after it; its five-argument constructor stays (no reviews, no names). `InteractionAlert` (P1C's eleven fields) is deleted: `CheckResult.Alert` carries `ddinterA`, `ddinterB` and `pairReview` (computed exactly as P1C's `alertsFor` does: `PairReviewRule.publicReview(decisions, PairContent.hash(a, b, content))`).
 
   Counting (§6.7.2 rule 5): `totalPairs` = substance pairs of two different approved products whose BDS differ; `checkedPairs` = those with a usable entry on both sides; `alertPairs` = checked pairs with at least one stored row; `noInteractionPairs` = `checkedPairs − alertPairs`; `notCheckedPairs` = `totalPairs − checkedPairs`; same-product (`notChecked` reason `same_product`) and same-BDS (`duplicates`) pairs are in no count. `noData` keeps its pre-P2 meaning (every approved product substance that cannot be checked; "kept for compatibility").
 
@@ -2322,7 +2343,9 @@ import com.niramoy.bddrug.application.port.CheckQueryPort.*;
 import com.niramoy.bddrug.domain.CheckResult;
 import com.niramoy.bddrug.domain.CheckResult.*;
 import com.niramoy.bddrug.domain.DdinterCode;
-import com.niramoy.bddrug.domain.PublicPairReview;
+import com.niramoy.bddrug.domain.PairContent;
+import com.niramoy.bddrug.domain.PairReviewRule;
+import com.niramoy.bddrug.domain.PublicPairReviews;
 import com.niramoy.bddrug.domain.Scope;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
@@ -2376,10 +2399,10 @@ class CheckComputeTest {
         "DDInter1951", "Warfarin", "DDInter20", "Acetylsalicylic acid");
     static final Instant AT = Instant.parse("2026-10-16T05:20:00Z");
 
-    static InteractionCheckService service(Map<String, PublicPairReview> reviews) {
+    static InteractionCheckService service(Map<String, List<PairReviewRule.Decision>> reviews) {
         CheckQueryPort port = ids -> Mono.just(new CheckData(
             PRODUCTS.stream().filter(p -> ids.contains(p.conceptId())).toList(),
-            INGREDIENTS.stream().filter(i -> ids.contains(i.conceptId())).toList(), CODES, LISTED, PAIRS, NAMES, reviews));
+            INGREDIENTS.stream().filter(i -> ids.contains(i.conceptId())).toList(), CODES, LISTED, PAIRS, reviews, NAMES));
         return new InteractionCheckService(port);
     }
     static CheckResult run(Scope scope, String... ids) { return service(Map.of()).check(List.of(ids), scope).block(); }
@@ -2411,15 +2434,24 @@ class CheckComputeTest {
         assertThat(a.ddinterB()).isEqualTo("DDInter351");
         assertThat(a.source()).isEqualTo("DDInter 2.0");
         assertThat(a.routeAssumed()).isFalse();
-        assertThat(a.pairReview()).isEqualTo(PublicPairReview.NONE);
+        assertThat(a.pairReview()).isEqualTo(PublicPairReviews.NONE);
         assertThat(r.summary().bySeverity()).isEqualTo(new BySeverity(0, 1, 0, 0));
         assertThat(r.summary().alertPairs()).isEqualTo(1);
     }
 
+    static PairReviewRule.Decision reviewed(String hash) {
+        return new PairReviewRule.Decision(1, "reviewed", "", hash, null, AT, false);
+    }
+
     @Test void theAlertCarriesThePublicPairReviewAndItsInteractionId() {
-        CheckResult r = service(Map.of("DDInter1951|DDInter20", new PublicPairReview("reviewed", AT))).check(List.of("W", "A"), Scope.PUBLIC).block();
-        assertThat(r.alerts().get(0).pairReview()).isEqualTo(new PublicPairReview("reviewed", AT));
+        String current = PairContent.hash("DDInter1951", "DDInter20", new PairContent.Content("major", List.of("Avoid"), "bleeding", "avoid it"));
+        CheckResult r = service(Map.of("DDInter1951|DDInter20", List.of(reviewed(current)))).check(List.of("W", "A"), Scope.PUBLIC).block();
+        assertThat(r.alerts().get(0).pairReview()).isEqualTo(new PairReviewRule.PublicReview("reviewed", AT));
         assertThat(r.alerts().get(0).interactionId()).isEqualTo("3039");
+        // reviewed before DDInter changed the pair: not reviewed, no date, and the alert is still served (G3)
+        CheckResult stale = service(Map.of("DDInter1951|DDInter20", List.of(reviewed("0".repeat(64))))).check(List.of("W", "A"), Scope.PUBLIC).block();
+        assertThat(stale.alerts()).hasSize(1);
+        assertThat(stale.alerts().get(0).pairReview()).isEqualTo(PublicPairReviews.NONE);
     }
 
     @Test void everyNotCheckedReasonNamesTheSideItAppliesTo() {
@@ -2488,7 +2520,7 @@ class CheckComputeTest {
     @Test void anUnlistedChosenEntryIsNotRunNeverNoInteraction() {
         CheckQueryPort port = ids -> Mono.just(new CheckData(PRODUCTS.stream().filter(p -> ids.contains(p.conceptId())).toList(),
             INGREDIENTS.stream().filter(i -> ids.contains(i.conceptId())).toList(), CODES,
-            Set.of("DDInter1951"), PAIRS, NAMES, Map.of()));
+            Set.of("DDInter1951"), PAIRS, Map.of(), NAMES));
         CheckResult r = new InteractionCheckService(port).check(List.of("EYE", "W"), Scope.PUBLIC).block();
         assertThat(r.noInteraction()).isEmpty();
         assertThat(between(r, "EYE", "W")).extracting(NotChecked::reason, NotChecked::side).containsExactly("not_run", "a");
@@ -2497,21 +2529,21 @@ class CheckComputeTest {
 }
 ```
 
-In `InteractionCheckServiceTest.java`: give every `PairRow` in `PAIRS` a seventh argument `null`, and build `CheckData` in `FakePort.load` with `CODES, LISTED, PAIRS, Map.of(), Map.of()` (the two new trailing arguments). Its assertions use accessors that keep their names (`a().conceptId()`, `b().bdsId()`, `severity()`, `routeAssumed()`, `source()`, `noData()`, `duplicates()`, `products().get(i).substances().get(j).coverage()`), so they hold unchanged.
+In `InteractionCheckServiceTest.java`: give every `PairRow` in `PAIRS` a seventh argument `null`; `FakePort.load` keeps the five-argument `CheckData` constructor (P1C left it so: no reviews, no names). Its assertions use accessors that keep their names (`a().conceptId()`, `b().bdsId()`, `severity()`, `routeAssumed()`, `source()`, `noData()`, `duplicates()`, `products().get(i).substances().get(j).coverage()`), so they hold unchanged.
 
 In `DdinterTextTest.java`, replace the `InteractionAlert` lines with
 
 ```java
         var side = new CheckResult.Side("W-1", "Warin", "BDS-000001", "Warfarin", "systemic");
         var alert = new CheckResult.Alert("unknown", side, side, List.of(), "None", " - ", false, "DDInter1951", "DDInter20", null,
-            "DDInter 2.0", PublicPairReview.NONE);
+            "DDInter 2.0", PublicPairReviews.NONE);
         assertThat(alert.interaction()).isNull();
         assertThat(alert.management()).isNull();
         var real = new CheckResult.Alert("major", side, side, List.of(), "Bleeding risk.", "Avoid.", false, "DDInter1951", "DDInter20",
-            null, "DDInter 2.0", PublicPairReview.NONE);
+            null, "DDInter 2.0", PublicPairReviews.NONE);
 ```
 
-(imports `CheckResult`, `PublicPairReview`; drop `InteractionAlert`).
+(imports `CheckResult`, `PublicPairReviews`; drop `InteractionAlert`).
 
 - [ ] **Step 2: Run them to verify they fail**
 
@@ -2545,7 +2577,7 @@ public record CheckResult(Summary summary, List<CheckedProduct> products, List<A
     public record Side(String conceptId, String tradeName, String bdsId, String name, String routeScope) {}
     public record Alert(String severity, Side a, Side b, List<String> actions, String interaction, String management,
                         boolean routeAssumed, String ddinterA, String ddinterB, String interactionId, String source,
-                        PublicPairReview pairReview) {
+                        PairReviewRule.PublicReview pairReview) {
         /** A DDInter placeholder ("None", "-", blank) is no text: null, never shown as if it were advice. */
         public Alert {
             interaction = DdinterText.clean(interaction);
@@ -2574,15 +2606,21 @@ git rm api/src/main/java/com/niramoy/bddrug/domain/InteractionAlert.java
                    String management, String interactionId) {}
     /**
      * pairs holds every stored pair whose two sides are both among the loaded DDInter codes. listedCodes holds the loaded
-     * codes that have a curated.ddinter_drug row (their full pair list is stored, §7.4, §8.1 item 5). entryNames maps a
-     * code to DDInter's own name. reviews maps "a|b" (stored order) to the pair's public review state (§7.4 P1C rules).
+     * codes that have a curated.ddinter_drug row (their full pair list is stored, §7.4, §8.1 item 5). reviews (P1C): the
+     * senior pair decisions among the loaded codes, keyed "a|b" (stored order), for the public pairReview (§7.4).
+     * entryNames maps a code to DDInter's own name.
      */
     record CheckData(List<ProductRow> products, List<IngredientRow> ingredients, Map<String, List<DdinterCode>> codesByBds,
-                     Set<String> listedCodes, List<PairRow> pairs, Map<String, String> entryNames,
-                     Map<String, PublicPairReview> reviews) {}
+                     Set<String> listedCodes, List<PairRow> pairs, Map<String, List<PairReviewRule.Decision>> reviews,
+                     Map<String, String> entryNames) {
+        public CheckData(List<ProductRow> products, List<IngredientRow> ingredients, Map<String, List<DdinterCode>> codesByBds,
+                         Set<String> listedCodes, List<PairRow> pairs) {
+            this(products, ingredients, codesByBds, listedCodes, pairs, Map.of(), Map.of());
+        }
+    }
 ```
 
-(import `com.niramoy.bddrug.domain.PublicPairReview`).
+(P1C's six-argument canonical constructor becomes this seven-argument one; `PairReviewRule` is already imported by P1C.)
 
 - [ ] **Step 4: Rewrite the service's computation**
 
@@ -2599,7 +2637,8 @@ import com.niramoy.bddrug.domain.BatchPairs;
 import com.niramoy.bddrug.domain.CheckResult;
 import com.niramoy.bddrug.domain.CheckResult.*;
 import com.niramoy.bddrug.domain.DdinterCode;
-import com.niramoy.bddrug.domain.PublicPairReview;
+import com.niramoy.bddrug.domain.PairContent;
+import com.niramoy.bddrug.domain.PairReviewRule;
 import com.niramoy.bddrug.domain.RouteRule;
 import com.niramoy.bddrug.domain.Scope;
 import com.niramoy.bddrug.domain.Severity;
@@ -2769,8 +2808,8 @@ public class InteractionCheckService {
         return new Side(p.row().conceptId(), p.row().tradeName(), s.bdsId(), s.name(), scope);
     }
 
-    private static void alertsFor(Prod pa, Sub a, Prod pb, Sub b, Map<String, PairRow> pairs, Map<String, PublicPairReview> reviews,
-                                  List<Alert> out) {
+    private static void alertsFor(Prod pa, Sub a, Prod pb, Sub b, Map<String, PairRow> pairs,
+                                  Map<String, List<PairReviewRule.Decision>> reviews, List<Alert> out) {
         boolean assumed = a.choice().routeAssumed() || b.choice().routeAssumed();
         Set<String> seen = new HashSet<>();
         for (DdinterCode ca : a.choice().codes())
@@ -2779,11 +2818,15 @@ public class InteractionCheckService {
                 String key = pairKey(ca.code(), cb.code());
                 PairRow pair = pairs.get(key);
                 if (pair == null || !seen.add(key)) continue;
+                // P1C's rule, as its alertsFor computed it: the coarse public form against the pair's current content hash
+                String hash = PairContent.hash(pair.ddinterA(), pair.ddinterB(),
+                    new PairContent.Content(pair.severity(), pair.actions(), pair.interaction(), pair.management()));
                 out.add(new Alert(pair.severity(),
                     new Side(pa.row().conceptId(), pa.row().tradeName(), a.bdsId(), a.name(), ca.routeScope()),
                     new Side(pb.row().conceptId(), pb.row().tradeName(), b.bdsId(), b.name(), cb.routeScope()),
                     pair.actions(), pair.interaction(), pair.management(), assumed, pair.ddinterA(), pair.ddinterB(),
-                    pair.interactionId(), SOURCE, reviews.getOrDefault(pair.ddinterA() + "|" + pair.ddinterB(), PublicPairReview.NONE)));
+                    pair.interactionId(), SOURCE,
+                    PairReviewRule.publicReview(reviews.getOrDefault(pair.ddinterA() + "|" + pair.ddinterB(), List.of()), hash)));
             }
     }
 
@@ -2794,12 +2837,25 @@ public class InteractionCheckService {
 }
 ```
 
-In `R2dbcCheckAdapter.java`, make it compile until Task 9: the pairs query maps `new PairRow(…, r.get("management", String.class), null)` and `load` builds `new CheckData(t.getT1(), t.getT2(), codes.byBds(), codes.listed(), pairs, Map.of(), Map.of())`.
+In `R2dbcCheckAdapter.java` (as P1C left it: it injects `PairReviewReader pairReviews` and zips `pairReviews.forCodes(<loaded codes>, null)` with the pairs), make it compile until Task 9 without touching the review read: the pairs query maps `new PairRow(…, r.get("management", String.class), null)`, and the last line of `load` becomes
+
+```java
+            return codes(bds).flatMap(codes -> Mono.zip(pairs(codes.byBds()),
+                    pairReviews.forCodes(codes.byBds().values().stream().flatMap(List::stream).map(DdinterCode::code).toList(), null))
+                .map(p -> new CheckData(t.getT1(), t.getT2(), codes.byBds(), codes.listed(), p.getT1(), p.getT2(), Map.of())));
+```
+
+so every alert keeps its public `pairReview` through this task (P1C's `publicPairReviewIsReviewedOnlyForACurrentReview` and `PairQueueIntegrationTest.changedPairReturnsToQueue` stay green).
 
 - [ ] **Step 5: Run the checker tests**
 
-Run: `cd api && ./gradlew test --no-daemon --tests CheckComputeTest --tests InteractionCheckServiceTest --tests DdinterTextTest --tests CheckApiIntegrationTest --tests VisibilityApiIntegrationTest`
-Expected: PASS. (`VisibilityApiIntegrationTest.publicCheckMovesUnapprovedProductsToNotReviewed` asserts `notReviewed[0].length()` = 1; it becomes 2 (`conceptId`, `tradeName`): change that line to `.jsonPath("$.data.notReviewed[0].tradeName").isEqualTo("Ecosprin")` and remove `"Ecosprin"` from that test's `doesNotContain` list: a not-reviewed product is listed by name (§6.7.3 item 6), never dropped.)
+First make two edits in `VisibilityApiIntegrationTest.java`, because a not-reviewed product is now listed by name (§6.7.3 item 6), never dropped:
+
+1. `publicCheckMovesUnapprovedProductsToNotReviewed` asserts `notReviewed[0].length()` = 1; it becomes 2 (`conceptId`, `tradeName`): change that line to `.jsonPath("$.data.notReviewed[0].tradeName").isEqualTo("Ecosprin")` and remove `"Ecosprin"` from that test's `doesNotContain` list.
+2. P1C's `anApprovedThenRemovedProductIsNeverPublicOnAnyEndpoint`: add `.jsonPath("$.data.notReviewed[0].tradeName").isEqualTo("Motigut")` after its `notReviewed[*].conceptId` line, and change `assertThat(checked).doesNotContain("Motigut", "Domperidone", "BDS-000004");` to `assertThat(checked).doesNotContain("Domperidone", "BDS-000004");` (the trade name is the stub's; the substance and its id stay hidden).
+
+Run: `cd api && ./gradlew test --no-daemon --tests CheckComputeTest --tests InteractionCheckServiceTest --tests DdinterTextTest --tests CheckApiIntegrationTest --tests VisibilityApiIntegrationTest --tests PairQueueIntegrationTest`
+Expected: PASS, P1C's two `pairReview` tests included.
 
 - [ ] **Step 6: Commit**
 
@@ -2815,19 +2871,19 @@ git commit -m "feat(api): checker counting rule, not-checked reasons, no-interac
 
 ---
 
-### Task 9: The checker reads entry names, interaction ids and pair reviews
+### Task 9: The checker reads entry names and interaction ids
 
 **Files:**
 - Modify: `api/src/main/java/com/niramoy/bddrug/adapter/persistence/R2dbcCheckAdapter.java`
 - Test: `api/src/test/java/com/niramoy/bddrug/CheckApiIntegrationTest.java`
 
 **Interfaces:**
-- Consumes: Task 8 `CheckData(…, entryNames, reviews)`, `PairRow(…, interactionId)`; Task 2 `PublicPairReviewReader`.
+- Consumes: Task 8 `CheckData(…, reviews, entryNames)`, `PairRow(…, interactionId)`; P1C's `pairReviews` field of `R2dbcCheckAdapter` (kept as it is: the decisions it reads already feed `pairReview`); Task 2 `PublicPairReviews.Pair` (only to hash the test's row).
 - Produces: `POST /v1/interactions/check` with every §7.4 field filled from the database.
 
 - [ ] **Step 1: Write the failing integration tests**
 
-Append to `CheckApiIntegrationTest.java` (the class reads with `scope=all` and the token through its `check(...)` helper; the public-scope test below seeds its own approvals). Add `import com.niramoy.bddrug.domain.PairContent;` and `import static com.niramoy.bddrug.TestSupport.exec;`.
+Append to `CheckApiIntegrationTest.java`. Its `check(String... ids)` helper (built on `all()`) reads with `scope=all` and the token; the public-scope test below posts without the token and seeds its own approvals. Add `import com.niramoy.bddrug.domain.PublicPairReviews;` and `import static com.niramoy.bddrug.TestSupport.exec;`.
 
 ```java
     // §11.3: eye drops + warfarin: no alert, chloramphenicol not in noData, the chosen entry is DDInter352, the pair is in noInteraction
@@ -2894,9 +2950,9 @@ Append to `CheckApiIntegrationTest.java` (the class reads with `scope=all` and t
              ON CONFLICT DO NOTHING;
             INSERT INTO ops.pair_review (ddinter_a, ddinter_b, decision, note, content_hash, content, reviewer_email, reviewer_role, decided_at)
               VALUES ('DDInter1951','DDInter20','reviewed','','%s','{}','senior@example.org','senior','2026-10-16T05:20:00Z');
-            """.formatted(PairContent.hash("DDInter1951", "DDInter20", "major", List.of("Monitor", "Avoid"),
+            """.formatted(new PublicPairReviews.Pair("DDInter1951", "DDInter20", "major", List.of("Monitor", "Avoid"),
                 "Aspirin may increase the anticoagulant effect of warfarin and the risk of bleeding.",
-                "Avoid the combination unless the benefit outweighs the bleeding risk; monitor INR.")));
+                "Avoid the combination unless the benefit outweighs the bleeding risk; monitor INR.").hash()));
         web.post().uri("/v1/interactions/check").contentType(MediaType.APPLICATION_JSON)
             .bodyValue(Map.of("conceptIds", List.of("W-1", "A-1", "D-1"))).exchange().expectStatus().isOk().expectBody()
             .jsonPath("$.data.notReviewed[0].conceptId").isEqualTo("D-1")
@@ -2908,37 +2964,33 @@ Append to `CheckApiIntegrationTest.java` (the class reads with `scope=all` and t
     }
 ```
 
-If the class's helper is named differently (it is `check(String... ids)` built on `all()` in the current file), use that helper for the `scope=all` tests.
-
 - [ ] **Step 2: Run them to verify they fail**
 
 Run: `cd api && ./gradlew test --no-daemon --tests CheckApiIntegrationTest`
-Expected: FAIL (`ddinter[0].name` is null, `interactionId` is null, `pairReview.state` is `not_reviewed` for the reviewed pair).
+Expected: FAIL (`ddinter[0].name` is null, `interactionId` is null). The `pairReview` assertions already pass: P1C's read has been wired since Task 8.
 
-- [ ] **Step 3: Read names, interaction ids and reviews in the adapter**
+- [ ] **Step 3: Read names and interaction ids in the adapter**
 
 In `R2dbcCheckAdapter.java`:
 
-1. Inject `PublicPairReviewReader reviews` (constructor parameter and field).
+1. The constructor and P1C's `pairReviews` field stay as they are (no second reader of `ops.pair_review`).
 2. The codes query also selects the DDInter name: `SELECT c.bds_id, c.code, c.route_scope, d.ddinter_id IS NOT NULL AS listed, d.name FROM …`; `CodeRow` gains `String name`; `Codes` gains `Map<String, String> names` filled with `if (c.name() != null) names.put(c.code().code(), c.name());`.
 3. The pairs query selects `p.interaction_id` and maps `new PairRow(…, r.get("management", String.class), r.get("interaction_id", String.class))`.
-4. `load` ends with the reviews of the loaded pairs:
+4. The last line of `load` (Task 8's) passes the names in place of `Map.of()`:
 
 ```java
-            return codes(bds).flatMap(codes -> pairs(codes.byBds()).flatMap(pairs -> reviews.read(pairs.stream()
-                    .map(p -> new PublicPairReviewReader.Content(p.ddinterA(), p.ddinterB(), p.severity(), p.actions(),
-                        DdinterText.clean(p.interaction()), DdinterText.clean(p.management())))
-                    .toList())
-                .map(rv -> new CheckData(t.getT1(), t.getT2(), codes.byBds(), codes.listed(), pairs, codes.names(), rv))));
+            return codes(bds).flatMap(codes -> Mono.zip(pairs(codes.byBds()),
+                    pairReviews.forCodes(codes.byBds().values().stream().flatMap(List::stream).map(DdinterCode::code).toList(), null))
+                .map(p -> new CheckData(t.getT1(), t.getT2(), codes.byBds(), codes.listed(), p.getT1(), p.getT2(), codes.names())));
 ```
 
-(`Codes.EMPTY` for no substances becomes `new Codes(Map.of(), Set.of(), Map.of())`; import `com.niramoy.bddrug.domain.DdinterText`.)
+(`Codes.EMPTY` for no substances becomes `new Codes(Map.of(), Set.of(), Map.of())`.)
 
 The check reads every pair among the selected products' entries, and every product in the check is public (unapproved ones never reach `products` under public scope), so `pairReview` is served only for pairs between public products (§7.4).
 
 - [ ] **Step 4: Run the tests**
 
-Run: `cd api && ./gradlew test --no-daemon --tests CheckApiIntegrationTest --tests CheckComputeTest --tests VisibilityApiIntegrationTest`
+Run: `cd api && ./gradlew test --no-daemon --tests CheckApiIntegrationTest --tests CheckComputeTest --tests VisibilityApiIntegrationTest --tests PairQueueIntegrationTest`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -2946,7 +2998,7 @@ Expected: PASS.
 ```bash
 git add api/src/main/java/com/niramoy/bddrug/adapter/persistence/R2dbcCheckAdapter.java \
   api/src/test/java/com/niramoy/bddrug/CheckApiIntegrationTest.java
-git commit -m "feat(api): checker names the chosen entries and serves each alert's interaction id and public review state (§7.4)" \
+git commit -m "feat(api): checker names the chosen entries and serves each alert's interaction id (§7.4)" \
   -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
 
@@ -2960,7 +3012,7 @@ git commit -m "feat(api): checker names the chosen entries and serves each alert
 - Test: `api/src/test/java/com/niramoy/bddrug/PublicPairsTest.java`
 
 **Interfaces:**
-- Consumes: `BatchPairs.Substance(String bdsId, String name, String coverage, List<DdinterCode> codes)`, `BatchPairs.use(Substance, String route, Set<String> complete)` (returns `Use(List<String> chosen, String reason)`), `BatchPairs.REASON_ORDER`, `RouteRule.choose`, `Severity.rank`, `DdinterText.clean`, Task 2 `PublicPairReview`.
+- Consumes: `BatchPairs.Substance(String bdsId, String name, String coverage, List<DdinterCode> codes)`, `BatchPairs.use(Substance, String route, Set<String> complete)` (returns `Use(List<String> chosen, String reason)`), `BatchPairs.REASON_ORDER`, `RouteRule.choose`, `Severity.rank`, `DdinterText.clean`, Task 2 `PublicPairReviews.NONE`, P1C's `PairReviewRule.PublicReview`.
 - Produces (§7.4 P10 shape, with two additive fields on `notChecked`: `route` and `brands`, because the §6.7.3 item 4 lines name a brand and a route):
 
 ```java
@@ -2970,12 +3022,12 @@ PublicPairs.Row(String ddinterA, String ddinterB, String severity, List<String> 
 PublicPairs.SubstanceRef(String bdsId, String name)          PublicPairs.Brand(String conceptId, String tradeName)
 PublicPairs.Pair(SubstanceRef substance, SubstanceRef partnerSubstance, String severity, List<String> actions, String interaction,
                  String management, String ddinterA, String ddinterB, boolean routeAssumed, String source,
-                 PublicPairReview pairReview, List<Brand> brands, int brandCount)
+                 PairReviewRule.PublicReview pairReview, List<Brand> brands, int brandCount)
 PublicPairs.NotChecked(SubstanceRef substance, SubstanceRef partnerSubstance, String reason, String route, List<Brand> brands,
                        int brandCount)
 PublicPairs.Result(String conceptId, int page, int totalPartners, List<Pair> partners, List<NotChecked> notChecked)
 static Result compute(String conceptId, String route, List<BatchPairs.Substance> mine, List<Partner> partners, List<Row> rows,
-                      Set<String> complete, Map<String, PublicPairReview> reviews, int page)
+                      Set<String> complete, Map<String, PairReviewRule.PublicReview> reviews, int page)
 ```
 
 Rules (§6.5 item 6, D60): only this product's substances with a usable entry take part (an unusable one already shows its own no-data, no-route or not-run block); a partner substance is grouped once per (this substance, partner substance), with every public brand that carries it; a stored row gives a pair entry (one per stored row, brands split by the entry their route chose); no stored row between usable sides is "no interaction listed" and is left out (§6.5: dropped from the product page); an unusable partner side gives a not-checked entry with its reason (and, for `no_route`, the brand's route). Groups run Major first (by their most severe pair), then not-checked groups (`no_data` before the other reasons), then by partner substance name; pages hold 20 groups; `totalPartners` counts groups.
@@ -2989,7 +3041,8 @@ package com.niramoy.bddrug;
 
 import com.niramoy.bddrug.domain.BatchPairs;
 import com.niramoy.bddrug.domain.DdinterCode;
-import com.niramoy.bddrug.domain.PublicPairReview;
+import com.niramoy.bddrug.domain.PairReviewRule;
+import com.niramoy.bddrug.domain.PublicPairReviews;
 import com.niramoy.bddrug.domain.PublicPairs;
 import com.niramoy.bddrug.domain.PublicPairs.*;
 import org.junit.jupiter.api.Test;
@@ -3030,7 +3083,7 @@ class PublicPairsTest {
     static final Set<String> COMPLETE = Set.of("DDInter14", "DDInter1951", "DDInter20", "DDInter351", "DDInter352", "DDInter700",
         "DDInter83", "DDInter394", "DDInter500");
 
-    static Result napa(List<Partner> partners, List<Row> rows, Map<String, PublicPairReview> reviews, int page) {
+    static Result napa(List<Partner> partners, List<Row> rows, Map<String, PairReviewRule.PublicReview> reviews, int page) {
         return PublicPairs.compute("NAPA", "systemic", List.of(ACETAMINOPHEN), partners, rows, COMPLETE, reviews, page);
     }
 
@@ -3046,7 +3099,7 @@ class PublicPairsTest {
         assertThat(w.brandCount()).isEqualTo(2);
         assertThat(w.management()).isEqualTo("monitor INR");
         assertThat(w.source()).isEqualTo("DDInter 2.0");
-        assertThat(w.pairReview()).isEqualTo(PublicPairReview.NONE);
+        assertThat(w.pairReview()).isEqualTo(PublicPairReviews.NONE);
         assertThat(w.routeAssumed()).isFalse();
     }
 
@@ -3083,7 +3136,7 @@ class PublicPairsTest {
     }
 
     @Test void theReviewStateComesFromThePairKey() {
-        PublicPairReview reviewed = new PublicPairReview("reviewed", Instant.parse("2026-10-16T05:20:00Z"));
+        PairReviewRule.PublicReview reviewed = new PairReviewRule.PublicReview("reviewed", Instant.parse("2026-10-16T05:20:00Z"));
         assertThat(napa(PARTNERS, ROWS, Map.of("DDInter14|DDInter1951", reviewed), 0).partners().get(0).pairReview()).isEqualTo(reviewed);
     }
 
@@ -3133,7 +3186,7 @@ Expected: compilation FAILS (`cannot find symbol: class PublicPairs`).
 
 - [ ] **Step 3: Share `BatchPairs.use`**
 
-In `BatchPairs.java`, change `private record Use(List<String> chosen, String reason) {}` to `record Use(List<String> chosen, String reason) {}` (package-private, so `PublicPairs` in the same package shares the one rule; §7.3 "the pair and not-checked logic … is shared … so the two never disagree"). If P1C already widened it, leave it.
+In `BatchPairs.java`, change `private record Use(List<String> chosen, String reason) {}` to `record Use(List<String> chosen, String reason) {}` (package-private, so `PublicPairs` in the same package shares the one rule; §7.3 "the pair and not-checked logic … is shared … so the two never disagree"). P1C keeps it private (its Task 6), so this one-word change is P2's.
 
 - [ ] **Step 4: Write `PublicPairs`**
 
@@ -3163,7 +3216,7 @@ public final class PublicPairs {
     public record Brand(String conceptId, String tradeName) {}
     public record Pair(SubstanceRef substance, SubstanceRef partnerSubstance, String severity, List<String> actions, String interaction,
                        String management, String ddinterA, String ddinterB, boolean routeAssumed, String source,
-                       PublicPairReview pairReview, List<Brand> brands, int brandCount) {}
+                       PairReviewRule.PublicReview pairReview, List<Brand> brands, int brandCount) {}
     /** route: the partner brands' route for no_route (they share it), else null. */
     public record NotChecked(SubstanceRef substance, SubstanceRef partnerSubstance, String reason, String route, List<Brand> brands,
                              int brandCount) {}
@@ -3203,7 +3256,7 @@ public final class PublicPairs {
     }
 
     public static Result compute(String conceptId, String route, List<BatchPairs.Substance> mine, List<Partner> partners, List<Row> rows,
-                                 Set<String> complete, Map<String, PublicPairReview> reviews, int page) {
+                                 Set<String> complete, Map<String, PairReviewRule.PublicReview> reviews, int page) {
         Map<String, Row> byKey = new HashMap<>();
         for (Row r : rows) byKey.put(key(r.ddinterA(), r.ddinterB()), r);
         Map<String, Group> groups = new LinkedHashMap<>();
@@ -3250,7 +3303,7 @@ public final class PublicPairs {
                     .thenComparing(p -> p.row.ddinterA()).thenComparing(p -> p.row.ddinterB()))
                 .forEach(p -> pairs.add(new Pair(g.substance, g.partner, p.row.severity(), p.row.actions(), p.row.interaction(),
                     p.row.management(), p.row.ddinterA(), p.row.ddinterB(), p.assumed, SOURCE,
-                    reviews.getOrDefault(p.row.ddinterA() + "|" + p.row.ddinterB(), PublicPairReview.NONE),
+                    reviews.getOrDefault(p.row.ddinterA() + "|" + p.row.ddinterB(), PublicPairReviews.NONE),
                     p.brands.capped(), p.brands.byId.size())));
             g.notChecked.values().stream()
                 .sorted(Comparator.comparingInt((NcAcc n) -> BatchPairs.REASON_ORDER.indexOf(n.reason))
@@ -3290,8 +3343,8 @@ git commit -m "feat(api): public pairs with approved products of every batch, gr
 - Test: `api/src/test/java/com/niramoy/bddrug/ProductInteractionsApiIntegrationTest.java`, `api/src/test/java/com/niramoy/bddrug/ProductInteractionsScaleIntegrationTest.java`
 
 **Interfaces:**
-- Consumes: Task 10 `PublicPairs.compute`, Task 2 `PublicPairReviewReader`, Task 1 `ProductQueryService.stub`, `ReviewSql.LATEST_PUBLIC`.
-- Produces: `ProductInteractionsPort.Facts(String route, List<BatchPairs.Substance> mine, List<PublicPairs.Partner> partners, List<PublicPairs.Row> rows, Set<String> complete, Map<String, PublicPairReview> reviews)`; `ProductInteractionsPort.facts(String conceptId) : Mono<Facts>`; `ProductQueryService(ProductQueryPort, ProductDetailPort, ProductInteractionsPort)`; `ProductQueryService.interactions(String conceptId, int page, Scope scope) : Mono<Object>` (`PublicPairs.Result`, or the stub, or empty when unknown); `GET /v1/products/{id}/interactions?page=` (`page` 0–10000, else 400 `field=page`; 404 when unknown).
+- Consumes: Task 10 `PublicPairs.compute`, Task 2 `PublicPairReviews` (`Pair`, `codes`, `of`), P1C's `PairReviewReader.forCodes(Collection<String>, String viewerEmail)`, Task 1 `ProductQueryService.stub`, `ReviewSql.LATEST_PUBLIC`.
+- Produces: `ProductInteractionsPort.Facts(String route, List<BatchPairs.Substance> mine, List<PublicPairs.Partner> partners, List<PublicPairs.Row> rows, Set<String> complete, Map<String, PairReviewRule.PublicReview> reviews)`; `ProductInteractionsPort.facts(String conceptId) : Mono<Facts>`; `ProductQueryService(ProductQueryPort, ProductDetailPort, ProductInteractionsPort)`; `ProductQueryService.interactions(String conceptId, int page, Scope scope) : Mono<Object>` (`PublicPairs.Result`, or the stub, or empty when unknown); `GET /v1/products/{id}/interactions?page=` (`page` 0–10000, else 400 `field=page`; 404 when unknown).
 
 - [ ] **Step 1: Write the failing integration test**
 
@@ -3300,7 +3353,7 @@ git commit -m "feat(api): public pairs with approved products of every batch, gr
 ```java
 package com.niramoy.bddrug;
 
-import com.niramoy.bddrug.domain.PairContent;
+import com.niramoy.bddrug.domain.PublicPairReviews;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -3346,7 +3399,7 @@ class ProductInteractionsApiIntegrationTest {
              ('X-2','DGDA-Drugs','W-REM','ok','removed from batch file', now() - interval '1 hour');
             INSERT INTO ops.pair_review (ddinter_a, ddinter_b, decision, note, content_hash, content, reviewer_email, reviewer_role, decided_at)
               VALUES ('DDInter14','DDInter1951','reviewed','','%s','{}','senior@example.org','senior','2026-10-16T05:20:00Z');
-            """.formatted(PairContent.hash("DDInter14", "DDInter1951", "moderate", List.of(), null, null)));
+            """.formatted(new PublicPairReviews.Pair("DDInter14", "DDInter1951", "moderate", List.of(), null, null).hash()));
     }
 
     @Autowired WebTestClient web;
@@ -3493,7 +3546,7 @@ Expected: FAIL (404: no handler for `/v1/products/N-1/interactions`).
 ```java
 package com.niramoy.bddrug.application.port;
 import com.niramoy.bddrug.domain.BatchPairs;
-import com.niramoy.bddrug.domain.PublicPairReview;
+import com.niramoy.bddrug.domain.PairReviewRule;
 import com.niramoy.bddrug.domain.PublicPairs;
 import reactor.core.publisher.Mono;
 import java.util.List;
@@ -3503,7 +3556,7 @@ import java.util.Set;
 /** Facts for §7.4 P10: this product, every other public product of any batch, and the stored pairs touching this product. */
 public interface ProductInteractionsPort {
     record Facts(String route, List<BatchPairs.Substance> mine, List<PublicPairs.Partner> partners, List<PublicPairs.Row> rows,
-                 Set<String> complete, Map<String, PublicPairReview> reviews) {}
+                 Set<String> complete, Map<String, PairReviewRule.PublicReview> reviews) {}
     Mono<Facts> facts(String conceptId);
 }
 ```
@@ -3522,7 +3575,7 @@ import java.util.*;
 /**
  * P10 reads, set-based (§7.3 "never one query per batch"): one product-and-ingredient query (this product plus every
  * public product, through ReviewSql.LATEST_PUBLIC), one code query, one pair query restricted to this product's chosen
- * entries, and one pair-review query.
+ * entries, and P1C's one pair-review query (PairReviewReader).
  */
 @Component
 public class R2dbcProductInteractionsAdapter implements ProductInteractionsPort {
@@ -3531,10 +3584,10 @@ public class R2dbcProductInteractionsAdapter implements ProductInteractionsPort 
     private record Code(String bdsId, DdinterCode code, boolean listed) {}
 
     private final DatabaseClient db;
-    private final PublicPairReviewReader reviews;
-    public R2dbcProductInteractionsAdapter(DatabaseClient db, PublicPairReviewReader reviews) {
+    private final PairReviewReader pairReviews;
+    public R2dbcProductInteractionsAdapter(DatabaseClient db, PairReviewReader pairReviews) {
         this.db = db;
-        this.reviews = reviews;
+        this.pairReviews = pairReviews;
     }
 
     @Override public Mono<Facts> facts(String conceptId) {
@@ -3605,14 +3658,17 @@ public class R2dbcProductInteractionsAdapter implements ProductInteractionsPort 
             .map(r -> new PublicPairs.Row(r.get("ddinter_a", String.class), r.get("ddinter_b", String.class), r.get("severity", String.class),
                 R2dbcSubstanceAdapter.list(r, "actions"), r.get("interaction", String.class), r.get("management", String.class)))
             .all().collectList();
-        return rows.flatMap(list -> reviews.read(list.stream().map(r -> new PublicPairReviewReader.Content(r.ddinterA(), r.ddinterB(),
-                r.severity(), r.actions(), r.interaction(), r.management())).toList())
-            .map(rv -> new Facts(me.route(), me.substances(), partners, list, complete, rv)));
+        return rows.flatMap(list -> {
+            List<PublicPairReviews.Pair> pairs = list.stream().map(r -> new PublicPairReviews.Pair(r.ddinterA(), r.ddinterB(),
+                r.severity(), r.actions(), r.interaction(), r.management())).toList();
+            return pairReviews.forCodes(PublicPairReviews.codes(pairs), null).map(d -> PublicPairReviews.of(pairs, d))
+                .map(rv -> new Facts(me.route(), me.substances(), partners, list, complete, rv));
+        });
     }
 }
 ```
 
-The `partners` list includes this product itself; `PublicPairs.compute` skips it by concept id. A pair row's texts are already cleaned by `PublicPairs.Row`'s constructor, so the review hash covers the cleaned content (§7.7).
+The `partners` list includes this product itself; `PublicPairs.compute` skips it by concept id. Every pair `PublicPairs.compute` serves is between this public product and a public partner (the partner list is `LATEST_PUBLIC`), so a `pairReview` is only ever served for pairs between public products (§7.4); the rows read here may also touch non-public entries, but `compute` never emits those. The review hash is `PairContent`'s, which cleans the texts (§7.7).
 
 - [ ] **Step 4: Service and controller**
 
@@ -4719,10 +4775,12 @@ git commit -m "feat(api): GET /v1/products/suggest for the checker, unapproved r
 - Modify: `web/content/learn/partners.tsx` (`ENDPOINTS`, `PLANNED`), `web/tests/learn-partners.test.tsx`
 
 **Interfaces:**
-- Consumes: every endpoint of Tasks 1–14, `GET /v1/stats` (P3), P1C's `PublicStatusGuardTest`.
-- Produces: the §11.3 `VisibilityApiIntegrationTest` matrix for the P2 endpoints, in its own class so it never collides with P1C's edits of `VisibilityApiIntegrationTest`.
+- Consumes: every endpoint of Tasks 1–14, `GET /v1/stats` (P3), P1C's `PublicStatusGuardTest`, Task 2 `PublicPairReviews.Pair`; V7's `review_decision_dismiss_by_senior` (a `dismiss` is a senior's, with a 5–1000 character note).
+- Produces: the §11.3 `VisibilityApiIntegrationTest` matrix for the P2 endpoints, in its own class so it never collides with P1C's edits of `VisibilityApiIntegrationTest`. **The §12.1 phase-2 exit criterion "`VisibilityApiIntegrationTest` matrix green" means both classes green: `VisibilityApiIntegrationTest` (as P1C and Tasks 1, 4 and 8 leave it: the pre-P2 endpoints, the stubs, PO D7) and `PublicVisibilityMatrixIntegrationTest` (every P2 endpoint).** Task 40 names both in the PR.
 
-The fixtures give every non-public state its own product, clinical drug, substance, XM code, DDInter entry and DDInter text, all with markers that appear nowhere else, so a leak of any one of them is a plain substring in a response body. A public product (Pubol, substance Pubolin) has a DDInter pair with every hidden substance's entry, so P10, the checker and P9 would leak if the rule broke. DDInter's own partner names (`DDI-Partner2`…) differ from our substance names (`Secretolin-P`…): DDInter's names are DDInter's public data and may appear on Pubolin's substance page (§7.4 P9), ours may not.
+The fixtures give every non-public state its own product, clinical drug, substance, XM code, DDInter entry and DDInter text, all with markers that appear nowhere else, so a leak of any one of them is a plain substring in a response body. The public product's own XM code (`XM9P01`) lies outside the hidden marker space `XM9M0…`, so the marker never matches public data. A public product (Pubol, substance Pubolin) has a DDInter pair with every hidden substance's entry, so P10, the checker and P9 would leak if the rule broke. DDInter's own partner names (`DDI-Partner2`…) differ from our substance names (`Secretolin-P`…): DDInter's names are DDInter's public data and may appear on Pubolin's substance page (§7.4 P9), ours may not.
+
+The sixth hidden state is a **dismissed issue** (P1C §5.2, §5.10a, D57, §13.1 Q4): a pharmacist approved Hushdis, then reported an issue, then a senior dismissed it. The dismissal is a review boundary, so the item's `review` is `pending` although a pharmacist's `ok` sits in its history; that earlier `ok` must never publish it or date anything. The pair Pubolin + Secretolin-P also carries a **current** senior review (the newest `ops.pair_review` row, with the right content hash), so P9 would leak a reviewed state for a pair with a non-public partner if the §7.4 rule broke (Task 7).
 
 - [ ] **Step 1: Write the matrix**
 
@@ -4746,13 +4804,16 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import com.niramoy.bddrug.domain.PublicPairReviews;
 import static com.niramoy.bddrug.TestSupport.exec;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * §11.3 VisibilityApiIntegrationTest matrix (D28, G3, PO D7) for every public endpoint, with a fixture in each non-public
- * state: pending (Hushpend), engineer checked (Husheng), issue (Hushiss), back in review (Hushback) and approved then
- * removed from the batch file (Hushrem). Pubol is approved and pairs with every hidden substance's DDInter entry.
+ * state: pending (Hushpend), engineer checked (Husheng), issue (Hushiss), back in review (Hushback), approved then
+ * removed from the batch file (Hushrem), and approved, reported, then dismissed by a senior (Hushdis, P1C D57: pending).
+ * Pubol is approved and pairs with every hidden substance's DDInter entry; its pair with Secretolin-P has a current
+ * senior review that must never be served (the partner is not public, §7.4).
  */
 @Testcontainers
 @SpringBootTest
@@ -4761,18 +4822,18 @@ class PublicVisibilityMatrixIntegrationTest {
     @Container static PostgreSQLContainer<?> pg = new PostgreSQLContainer<>("postgres:16");
     @DynamicPropertySource static void props(DynamicPropertyRegistry r) { TestSupport.props(r, pg); }
 
-    /** Our data for hidden records: substance names, BDS/BDC ids, XM codes, strengths, DDInter texts, a pair note. */
+    /** Our data for hidden records: substance names, BDS/BDC ids, XM codes, strengths, DDInter texts, notes. */
     static final List<String> MARKERS = List.of("Secretolin", "BDS-000902", "BDS-000903", "BDS-000904", "BDS-000905", "BDS-000906",
-        "BDC-000902", "BDC-000903", "BDC-000904", "BDC-000905", "BDC-000906", "XM9M0", "77.77", "SECRET-TEXT", "SECRET-MGMT",
-        "PAIR-NOTE-SECRET", "Hush Pharma");
-    static final List<String> HIDDEN = List.of("M-PEND", "M-ENG", "M-ISS", "M-BACK", "M-REM");
+        "BDS-000907", "BDC-000902", "BDC-000903", "BDC-000904", "BDC-000905", "BDC-000906", "BDC-000907", "XM9M0", "77.77",
+        "SECRET-TEXT", "SECRET-MGMT", "PAIR-NOTE-SECRET", "ISSUE-NOTE-SECRET", "DISMISS-NOTE-SECRET", "Hush Pharma");
+    static final List<String> HIDDEN = List.of("M-PEND", "M-ENG", "M-ISS", "M-BACK", "M-REM", "M-DIS");
 
     @BeforeAll static void seed() throws Exception {
         PilotSeed.migrateAndSeed(pg);
         StringBuilder sql = new StringBuilder("""
             INSERT INTO curated.substance (bds_id, preferred_name) VALUES ('BDS-000901','Pubolin');
             INSERT INTO curated.substance_code (bds_id, system, code, route_scope, source, method, confidence) VALUES
-             ('BDS-000901','ICD11_XM','XM9M01','any','dgda-ocl','xm',1.0), ('BDS-000901','DDINTER','DDInter9901','systemic','ddinter2','drugbank',1.0);
+             ('BDS-000901','ICD11_XM','XM9P01','any','dgda-ocl','xm',1.0), ('BDS-000901','DDINTER','DDInter9901','systemic','ddinter2','drugbank',1.0);
             INSERT INTO curated.ddinter_drug (ddinter_id, name, route_scope) VALUES ('DDInter9901','Pubolin','systemic');
             INSERT INTO curated.interaction_coverage (bds_id, coverage, note) VALUES ('BDS-000901','full','x');
             INSERT INTO curated.clinical_drug (bdc_id, signature, display_name, dose_form, route)
@@ -4781,13 +4842,13 @@ class PublicVisibilityMatrixIntegrationTest {
               VALUES ('BDC-000901','BDS-000901',5,'mg','Pubolin 5 mg');
             INSERT INTO curated.brand_product (concept_id, dar_number, trade_name, company, dosage_form, generic_content_raw, bdc_id, parse_status)
               VALUES ('M-PUB','901','Pubol','Open Pharma','Tablet','Pubolin 5 mg','BDC-000901','parsed');
-            INSERT INTO curated.brand_product_ingredient (concept_id, xm_code, ingredient_name) VALUES ('M-PUB','XM9M01','Pubolin');
-            INSERT INTO ops.batch (batch_id, item_count, run_at) VALUES ('M-1', 6, now() - interval '2 hour');
+            INSERT INTO curated.brand_product_ingredient (concept_id, xm_code, ingredient_name) VALUES ('M-PUB','XM9P01','Pubolin');
+            INSERT INTO ops.batch (batch_id, item_count, run_at) VALUES ('M-1', 7, now() - interval '2 hour');
             INSERT INTO ops.batch_item (batch_id, source, concept_id, review, extracted_at) VALUES ('M-1','DGDA-Drugs','M-PUB','ok', now() - interval '2 hour');
             """);
         String[][] hidden = {{"2", "M-PEND", "Hushpend"}, {"3", "M-ENG", "Husheng"}, {"4", "M-ISS", "Hushiss"}, {"5", "M-BACK", "Hushback"},
-            {"6", "M-REM", "Hushrem"}};
-        String suffix = "PEIBR";
+            {"6", "M-REM", "Hushrem"}, {"7", "M-DIS", "Hushdis"}};
+        String suffix = "PEIBRD";
         for (int k = 0; k < hidden.length; k++) {
             String n = hidden[k][0], id = hidden[k][1], trade = hidden[k][2], name = "Secretolin-" + suffix.charAt(k);
             sql.append("""
@@ -4817,15 +4878,21 @@ class PublicVisibilityMatrixIntegrationTest {
              ('M-1','DGDA-Drugs','M-ENG','pending',NULL, now() - interval '2 hour'),
              ('M-1','DGDA-Drugs','M-ISS','issue',NULL, now() - interval '2 hour'),
              ('M-1','DGDA-Drugs','M-BACK','pending',NULL, now() - interval '2 hour'),
-             ('M-1','DGDA-Drugs','M-REM','ok','removed from batch file', now() - interval '2 hour');
+             ('M-1','DGDA-Drugs','M-REM','ok','removed from batch file', now() - interval '2 hour'),
+             ('M-1','DGDA-Drugs','M-DIS','pending',NULL, now() - interval '2 hour');
             INSERT INTO ops.review_decision (batch_id, concept_id, decision, note, reviewer_email, reviewer_role, decided_at) VALUES
              ('M-1','M-ENG','ok','','eng@example.org','engineer', now() - interval '1 hour'),
              ('M-1','M-ISS','issue','Strength looks wrong','pharm@example.org','pharmacist', now() - interval '1 hour'),
              ('M-1','M-BACK','ok','','pharm@example.org','pharmacist', now() - interval '3 hour'),
-             ('M-1','M-REM','ok','','pharm@example.org','pharmacist', now() - interval '1 hour');
-            INSERT INTO ops.pair_review (ddinter_a, ddinter_b, decision, note, content_hash, content, reviewer_email, reviewer_role)
-              VALUES ('DDInter9901','DDInter9902','issue','PAIR-NOTE-SECRET','%s','{}','senior@example.org','senior');
-            """.formatted("0".repeat(64)));
+             ('M-1','M-REM','ok','','pharm@example.org','pharmacist', now() - interval '1 hour'),
+             ('M-1','M-DIS','ok','','pharm@example.org','pharmacist', now() - interval '100 minute'),
+             ('M-1','M-DIS','issue','ISSUE-NOTE-SECRET','pharm@example.org','pharmacist', now() - interval '90 minute'),
+             ('M-1','M-DIS','dismiss','DISMISS-NOTE-SECRET','senior@example.org','senior', now() - interval '60 minute');
+            INSERT INTO ops.pair_review (ddinter_a, ddinter_b, decision, note, content_hash, content, reviewer_email, reviewer_role, decided_at) VALUES
+             ('DDInter9901','DDInter9902','issue','PAIR-NOTE-SECRET','%s','{}','senior@example.org','senior', now() - interval '30 minute'),
+             ('DDInter9901','DDInter9902','reviewed','','%s','{}','senior@example.org','senior', now() - interval '10 minute');
+            """.formatted("0".repeat(64), new PublicPairReviews.Pair("DDInter9901", "DDInter9902", "major", List.of("monitor"),
+                "SECRET-TEXT-2", "SECRET-MGMT-2").hash()));
         exec(pg, sql.toString());
     }
 
@@ -4837,7 +4904,7 @@ class PublicVisibilityMatrixIntegrationTest {
     }
     private static void clean(String body, String where) {
         for (String m : MARKERS) assertThat(body).as(where + " leaks " + m).doesNotContain(m);
-        assertThat(body).as(where).doesNotContain("reviewStatus", "\"issue\"", "\"changed\"", "@example.org");
+        assertThat(body).as(where).doesNotContain("reviewStatus", "\"issue\"", "\"changed\"", "dismiss", "@example.org");
     }
 
     @Test void search() {
@@ -4846,8 +4913,11 @@ class PublicVisibilityMatrixIntegrationTest {
         clean(get("/v1/search?q={q}", "secretolinp"), "search suggestion");
         web.get().uri("/v1/search?q={q}", "hush").exchange().expectBody()
             .jsonPath("$.data.counts.substances").isEqualTo(0)
-            .jsonPath("$.data.products.length()").isEqualTo(5)
+            .jsonPath("$.data.products.length()").isEqualTo(6)
             .jsonPath("$.data.products[*].hidden").value(v -> assertThat(v.toString()).doesNotContain("false"));
+        // no hidden record is ever an approved search row; Hushdis (dismissed) is a stub like the others
+        assertThat(get("/v1/search?q={q}", "hush")).doesNotContain("\"status\":\"approved\"");
+        assertThat(get("/v1/search?q={q}", "hushdis")).contains("\"conceptId\":\"M-DIS\"", "\"status\":\"not_reviewed\"");
         web.get().uri("/v1/search?q={q}", "secretolin").exchange().expectBody().jsonPath("$.data.total").isEqualTo(0);
     }
 
@@ -4860,6 +4930,9 @@ class PublicVisibilityMatrixIntegrationTest {
         }
         assertThat(get("/v1/products/{id}", "M-REM")).contains("\"status\":\"removed\"");
         assertThat(get("/v1/products/{id}", "M-ISS")).contains("\"status\":\"not_reviewed\"");
+        // a dismissed issue is pending: the pre-dismissal ok never publishes it (§5.2, D57)
+        assertThat(get("/v1/products/{id}", "M-DIS")).contains("\"status\":\"not_reviewed\"").doesNotContain("verification");
+        assertThat(get("/v1/products/{id}/interactions", "M-DIS")).contains("\"status\":\"not_reviewed\"").doesNotContain("partners");
         String pub = get("/v1/products/{id}/interactions", "M-PUB");
         clean(pub, "Pubol's interactions");
         web.get().uri("/v1/products/M-PUB/interactions").exchange().expectBody().jsonPath("$.data.totalPartners").isEqualTo(0);
@@ -4867,13 +4940,13 @@ class PublicVisibilityMatrixIntegrationTest {
     }
 
     @Test void clinicalDrugs() {
-        for (int n = 2; n <= 6; n++)
+        for (int n = 2; n <= 7; n++)
             web.get().uri("/v1/clinical-drugs/BDC-00090" + n).exchange().expectStatus().isNotFound();
         clean(get("/v1/clinical-drugs/{id}", "BDC-000901"), "BDC-000901");
     }
 
     @Test void substancesAndTheirInteractions() {
-        for (int n = 2; n <= 6; n++) {
+        for (int n = 2; n <= 7; n++) {
             String stub = get("/v1/substances/{id}", "BDS-00090" + n);
             assertThat(stub).contains("\"hidden\":true").doesNotContain("reviewStatus", "codes", "products", "DDInter", "XM9M0");
             String list = get("/v1/substances/{id}/interactions", "BDS-00090" + n);
@@ -4883,39 +4956,50 @@ class PublicVisibilityMatrixIntegrationTest {
         clean(pubolin, "Pubolin");
         String items = get("/v1/substances/{id}/interactions", "BDS-000901");
         clean(items.replaceAll("SECRET-(TEXT|MGMT)-\\d", "DDINTER-OWN-TEXT"), "Pubolin's pairs");   // DDInter's own text for DDInter's own pairs is public (P9)
+        assertThat(items).doesNotContain("\"state\":\"reviewed\"");
         web.get().uri("/v1/substances/BDS-000901/interactions").exchange().expectBody()
+            .jsonPath("$.data.items.length()").isEqualTo(6)
             .jsonPath("$.data.items[*].partnerBdsId").value(v -> assertThat(v.toString()).doesNotContain("BDS-"))
-            .jsonPath("$.data.items[*].pairReview.state").value(v -> assertThat(v.toString()).doesNotContain("issue"));
+            .jsonPath("$.data.items[*].pairReview.state").value(v -> assertThat(v.toString()).doesNotContain("issue"))
+            // §7.4: Pubolin + Secretolin-P has a current senior review, but its partner is not public: never served
+            .jsonPath("$.data.items[?(@.partnerBdsId == null)].pairReview.state")
+                .value(v -> assertThat((List<?>) v).isNotEmpty().containsOnly("not_reviewed"))
+            .jsonPath("$.data.items[?(@.partnerBdsId == null)].pairReview.reviewedAt")
+                .value(v -> assertThat((List<?>) v).isNotEmpty().allMatch(java.util.Objects::isNull));
     }
 
     @Test void suggest() {
         String hush = get("/v1/products/suggest?q={q}", "hush");
         clean(hush, "suggest hush");
-        assertThat(hush).contains("\"status\":\"not_reviewed\"");
+        assertThat(hush).contains("\"status\":\"not_reviewed\"").doesNotContain("\"status\":\"approved\"");
+        assertThat(get("/v1/products/suggest?q={q}", "hushdis")).contains("\"conceptId\":\"M-DIS\"", "\"status\":\"not_reviewed\"");
         web.get().uri("/v1/products/suggest?q={q}", "secretolin").exchange().expectBody().jsonPath("$.data.length()").isEqualTo(0);
     }
 
     @Test void stats() {
         clean(get("/v1/stats"), "stats");
+        // only Pubol is public: neither the dismissed record nor any other hidden one is counted as approved
+        web.get().uri("/v1/stats").exchange().expectBody().jsonPath("$.data.approvedProducts").isEqualTo(1);
     }
 
     @Test void checker() {
         String body = new String(web.post().uri("/v1/interactions/check").contentType(MediaType.APPLICATION_JSON)
-            .bodyValue(Map.of("conceptIds", List.of("M-PUB", "M-PEND", "M-ENG", "M-ISS", "M-BACK", "M-REM"))).exchange()
+            .bodyValue(Map.of("conceptIds", List.of("M-PUB", "M-PEND", "M-ENG", "M-ISS", "M-BACK", "M-REM", "M-DIS"))).exchange()
             .expectStatus().isOk().expectBody()
             .jsonPath("$.data.products.length()").isEqualTo(1)
             .jsonPath("$.data.alerts.length()").isEqualTo(0)
-            .jsonPath("$.data.notReviewed.length()").isEqualTo(5)
-            .jsonPath("$.data.summary.medicines").isEqualTo(6)
+            .jsonPath("$.data.notReviewed.length()").isEqualTo(6)
+            .jsonPath("$.data.notReviewed[5].conceptId").isEqualTo("M-DIS")
+            .jsonPath("$.data.summary.medicines").isEqualTo(7)
             .returnResult().getResponseBody(), StandardCharsets.UTF_8);
         clean(body, "checker");
     }
 }
 ```
 
-- [ ] **Step 2: Run the matrix and P1C's guard**
+- [ ] **Step 2: Run the §12.1 matrix (both classes) and P1C's guard**
 
-Run: `cd api && ./gradlew test --no-daemon --tests PublicVisibilityMatrixIntegrationTest --tests PublicStatusGuardTest`
+Run: `cd api && ./gradlew test --no-daemon --tests PublicVisibilityMatrixIntegrationTest --tests VisibilityApiIntegrationTest --tests PublicStatusGuardTest`
 Expected: PASS. If `PublicStatusGuardTest` names one of this plan's adapters, that adapter reads `batch_item.review` outside `ReviewSql.statusOf` / `LATEST_PUBLIC`: fix the adapter, never the guard. If a matrix assertion fails, a P2 endpoint leaks: fix the endpoint, never weaken the marker list.
 
 - [ ] **Step 3: Run the whole API suite**
@@ -4952,7 +5036,10 @@ git commit -m "test(api): §11.3 visibility matrix for every public endpoint; Le
 git push -u origin feature/intellidrugs-p2-public
 gh pr create --base phase-2 --title "P2a: public API (§7.4)" --body "$(cat <<'EOF'
 P2a of docs/superpowers/plans/2026-10-15-intellidrugs-p2-public.md: every §7.4 public endpoint with the one visibility rule, the
-§7.4 stubs, the extended CheckResult, the public pair review state and the §11.3 visibility matrix. The pre-P2 pages keep working.
+§7.4 stubs, the extended CheckResult, the public pair review state and the §11.3 visibility matrix
+(PublicVisibilityMatrixIntegrationTest for every P2 endpoint, with VisibilityApiIntegrationTest: together the §12.1
+"VisibilityApiIntegrationTest matrix"; fixtures include P1C's dismissed issue and approved-then-removed states).
+The pre-P2 pages keep working.
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 EOF
@@ -5451,7 +5538,7 @@ export const PUBLIC_BOARD = {
 } as const;
 ```
 
-`OTHER_APPROVED_ROW` fails to compile if P1C's row text differs: then copy P1C's exact row text (it is the §1.7 row, verbatim).
+`OTHER_APPROVED_ROW` is the §1.7 row text with `*(P1C)* ` removed: P1C's plan keys every P1C row of `NEW_COPY` that way (its Global Constraints, "copy keys"), and this row is one of its eight. P1C creates that key with an empty record (it builds no public page); this task fills it (Step 4 above).
 
 In `web/tests/copy.test.ts`, the P1A pins of the `signIn` and `noPhiHelp` rows (`toEqual`) gain the keys above (the `signIn` pin adds the four welcome keys unless P1C holds them; the `noPhiHelp` pin becomes `toMatchObject({ help: copy.NO_PHI_HELP })` plus the two privacy strings).
 
@@ -5971,7 +6058,7 @@ git commit -m "feat(web): defensive public parameters: query, page caps, ix, sev
 - Test: `web/tests/header.test.tsx`, `web/tests/footer.test.tsx` (new), `web/tests/surface.test.ts`, `web/tests/request-log.test.ts`
 
 **Interfaces:**
-- Consumes: Task 16 `NAV`, `FOOTER`; `FOOTER_LINE`; `Wordmark`, `ThemeSwitch`, `AccountMenu`, `buttonClass`; P1C's senior account-menu link (kept where P1C put it).
+- Consumes: Task 16 `NAV`, `FOOTER`; `FOOTER_LINE`; `Wordmark`, `ThemeSwitch`, `AccountMenu`, `buttonClass`; P1C's `Header.tsx` as it is on `main`: its `isReviewer(session)` gate (§5.13: "Every role gate learns `senior` … none may keep its own role list"), its `ROLE_LABEL` badge ("Senior pharmacist" for a senior) and its seniors-only "Senior review" item to `/review/pairs` (§6.2). This task does not reprint or change the account menu.
 - Produces:
   - `Header({ session, theme, batchId, path, q })`: `path` is the request path (from `x-pathname`), `q` the search query on `/search` (from `x-search`). On `/search`, `/products/*`, `/substances/*` and `/check` the bar is the sticky `.material` search bar (`role="search"` GET form to `/search`, placeholder "Brand, substance or DAR number"); elsewhere the plain bar. The current section's link carries `aria-current="page"`. Below 720 px the links fold into a `<details>` "Menu" and "Sign in" becomes plain sm.
   - `navCurrent(path): "medicines" | "checker" | "learn" | "partners" | null`, `hasSearchBar(path): boolean` (exported from `Header.tsx`).
@@ -6032,6 +6119,16 @@ describe("Header (§6.1)", () => {
     const html = renderToStaticMarkup(<Header session={PHARMACIST} theme="system" batchId="0001-pilot" path="/" />);
     expect(html).toContain('<span class="role-badge">Pharmacist</span> Batch <span class="mono">0001-pilot</span>');
   });
+
+  it("a senior pharmacist keeps P1C's menu: the Senior pharmacist badge and Senior review (§6.2, §5.13); a pharmacist has no such link", () => {
+    const html = renderToStaticMarkup(<Header session={{ email: "senior@example.org", name: "Sabina Rahman", role: "senior" }} theme="system" path="/" />);
+    expect(html).toContain('<span class="role-badge">Senior pharmacist</span>');
+    expect(html).toMatch(/<a [^>]*href="\/review\/pairs"[^>]*>Senior review<\/a>/);
+    expect(html).toContain('<a href="/review">Review desk</a>');
+    expect(renderToStaticMarkup(<Header session={PHARMACIST} theme="system" path="/" />)).not.toContain('href="/review/pairs"');
+    expect(renderToStaticMarkup(<Header session={{ email: "eng@example.org", role: "engineer" }} theme="system" path="/" />))
+      .not.toContain('href="/review/pairs"');
+  });
 });
 ```
 
@@ -6075,21 +6172,11 @@ Expected: FAIL (no `href="/search">Medicines</a>`, no `/?q=` redirect, `/partner
 
 - [ ] **Step 3: The header**
 
-`web/components/Header.tsx`: replace everything above and including the `<nav className={styles.nav} aria-label="Main">…</nav>` element, and the `"Sign in"` link, with the code below; keep the `session ? (<AccountMenu>…</AccountMenu>)` block exactly as it is on the branch (P1C's "Senior review" link stays where P1C put it).
+`web/components/Header.tsx`: three edits. **The `session ? (<AccountMenu>…</AccountMenu>)` branch is P1C's and is neither reprinted nor changed**: it already decides reviewer items with `isReviewer(session)` from `lib/reviewers.ts` (never a role list of its own, §5.13), shows `ROLE_LABEL[session.role]` and the seniors-only "Senior review" item (§6.2), and the Step 1 tests pin all three. Check first that P1C's gate is there: `grep -n "isReviewer(" web/components/Header.tsx` prints a line.
+
+1. Keep every existing import and the `initials` helper. Add the import `import { NAV } from "@/lib/public-copy";`, and add after `initials`:
 
 ```tsx
-import AccountMenu from "@/components/AccountMenu";
-import ThemeSwitch from "@/components/ThemeSwitch";
-import { buttonClass } from "@/components/ui/Button";
-import Wordmark from "@/components/ui/Wordmark";
-import { DESK_NEW } from "@/lib/copy";
-import { NAV } from "@/lib/public-copy";
-import { DESK } from "@/lib/review-copy";
-import { ROLE_LABEL } from "@/lib/reviewers";
-import type { Session } from "@/lib/session";
-import type { Theme } from "@/lib/theme";
-import styles from "./Header.module.css";
-
 type Section = "medicines" | "checker" | "learn" | "partners";
 const LINKS: [Section, string, string][] = [
   ["medicines", "/search", NAV.medicines], ["checker", "/check", NAV.checker], ["learn", "/learn", NAV.learn], ["partners", "/partners", NAV.partners],
@@ -6110,9 +6197,6 @@ export function hasSearchBar(path: string): boolean {
   return navCurrent(path) === "medicines" || navCurrent(path) === "checker";
 }
 
-const initials = (s: Session) => ((s.name ?? "").trim() || s.email)
-  .split(/[\s@._-]+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join("");
-
 function Links({ current }: { current: Section | null }) {
   return (
     <ul className={styles.links}>
@@ -6122,15 +6206,14 @@ function Links({ current }: { current: Section | null }) {
     </ul>
   );
 }
+```
 
-/**
- * Site header (§6.1). The owner's own name and email appear only inside their account menu (§2.2); nobody else's email
- * is ever rendered. One <nav aria-label="Main">: the wide link row and the narrow "Menu" <details> are both inside it,
- * and CSS shows one of them (display: none removes the other from the accessibility tree).
- */
+2. The component's signature gains `path` and `q`; its first two body lines (`reviewer` from `isReviewer(session)`, P1C's §5.13 gate, and `displayName`) stay as they are, and two lines are added after them; then the `<header>` opening, the wordmark link and the `<nav>` element (everything from `<header className={styles.bar}>` through `</nav>`) are replaced. The doc comment's last sentence becomes "One <nav aria-label="Main">: the wide link row and the narrow "Menu" <details> are both inside it, and CSS shows one of them (display: none removes the other from the accessibility tree)."
+
+```tsx
 export default function Header({ session, theme, batchId = null, path = "/", q = "" }:
     { session: Session | null; theme: Theme; batchId?: string | null; path?: string; q?: string }) {
-  const reviewer = session?.role === "pharmacist" || session?.role === "engineer" || session?.role === "senior";
+  const reviewer = isReviewer(session);
   const displayName = session ? (session.name ?? "").trim() || session.email : "";
   const current = navCurrent(path);
   const searchBar = hasSearchBar(path);
@@ -6157,35 +6240,15 @@ export default function Header({ session, theme, batchId = null, path = "/", q =
           <div className={styles.menuPanel}><Links current={current} /></div>
         </details>
       </nav>
-      <div className={styles.end}>
-        {session ? (
-          /* ← keep the existing <AccountMenu>…</AccountMenu> block here unchanged (P1A, P1B, P1C) */
-          <AccountMenu>
-            <summary className={styles.avatar}>
-              <span aria-hidden="true">{initials(session)}</span><span className="sr-only">{`Account menu for ${displayName}`}</span>
-            </summary>
-            <div className={styles.panel}>
-              <p className={styles.who}><b>{displayName}</b><span>{session.email}</span></p>
-              {reviewer && (
-                <p><span className="role-badge">{ROLE_LABEL[session.role]}</span>
-                  {batchId && <> {DESK.batchPrefix} <span className="mono">{batchId}</span></>}</p>
-              )}
-              {reviewer && <a href="/review">{DESK.reviewDesk}</a>}
-              {reviewer && <a href="/review/flags">{DESK_NEW.reviewLists.flagsLink}</a>}
-              <ThemeSwitch value={theme} />
-              <form method="post" action="/signout"><button type="submit" className={buttonClass("plain", "sm")}>Sign out</button></form>
-            </div>
-          </AccountMenu>
-        ) : (
+```
+
+3. In the signed-out branch, replace `<a className={buttonClass("tonal", "sm")} href="/signin">Sign in</a>` with:
+
+```tsx
           <>
             <a className={`${buttonClass("tonal", "sm")} signInWide`} href="/signin">{NAV.signIn}</a>
             <a className={`${buttonClass("plain", "sm")} signInNarrow`} href="/signin">{NAV.signIn}</a>
           </>
-        )}
-      </div>
-    </header>
-  );
-}
 ```
 
 The two sign-in links use global class names (`signInWide`, `signInNarrow`) styled in the module with `:global(...)`, so the test sees the exact class list.
@@ -6869,6 +6932,16 @@ describe("loadHero", () => {
     expect(await loadHero()).toEqual(STUB);
     getPublicProduct.mockResolvedValue({ ok: true, data: NAPA });
     expect(await loadHero()).toEqual(NAPA);
+  });
+  it("a dismissed hero (approved, reported, then dismissed by a senior: pending, P1C §5.2) is the stub card, never the approved one", async () => {
+    // the API answers a dismissed record with the plain §7.4 stub; nothing of the issue or the dismissal reaches the web
+    getPublicProduct.mockResolvedValue({ ok: true, data: STUB });
+    const hero = await loadHero();
+    expect(hero).toEqual(STUB);
+    const html = renderToStaticMarkup(<HeroCard hero={hero!} />);
+    expect(html).toContain("Not yet reviewed by a pharmacist");
+    for (const absent of ["rv--approved", "Brand in the DGDA register", "Acetaminophen 500 mg tablet", "issue", "ismiss"])
+      expect(html).not.toContain(absent);
   });
 });
 
@@ -9731,6 +9804,7 @@ git commit -m "feat(web): checker results: labelled severity groups, no interact
 
 **Files:**
 - Rewrite: `web/app/check/page.tsx`
+- Create: `web/lib/check-scenarios.ts` (server-only: `next build` rejects any export of a page module that is not a page field, so `availableScenarios` cannot live in `page.tsx`)
 - Create: `web/components/check/CheckSide.tsx`
 - Create: `web/components/check/CheckerCombobox.tsx` (first version: the no-JavaScript field; Task 32 adds the island behaviour)
 - Modify: `web/lib/check-summary.ts` (`suggestionSub`), `web/tests/copy.test.ts` (`LEGACY_EXEMPT` becomes empty)
@@ -9741,7 +9815,7 @@ git commit -m "feat(web): checker results: labelled severity groups, no interact
 - Produces:
   - `CheckSide({ ids, selected, matches, q, scenarios, atMax })` where `selected: { conceptId: string; tradeName: string; display: string | null }[]` (`display` null = not reviewed) and `matches: SuggestRow[] | null`.
   - `CheckerCombobox({ ids, max, q })` (the field; its server render is the no-JS field: label, input `name="q"`, the "Find" submit, help text; at 20 the input is `aria-disabled="true"` and `readonly` and the help text is `PUBLIC_NEW.checkerMax.help`).
-  - `availableScenarios(): Promise<Scenario[]>` (a scenario renders only when all of its products exist: one `checkPublic` of all scenario ids, dropping each unknown id the API names).
+  - `availableScenarios(): Promise<Scenario[]>` in `lib/check-scenarios.ts` (`import "server-only"`; a scenario renders only when all of its products exist: one `checkPublic` of all scenario ids, dropping each unknown id the API names). `app/check/page.tsx` exports only `default`, `dynamic` and `metadata`.
   - The page: canonical `/check?ids=…` (a `remove`, `clear`, de-duplicated or over-long list redirects to it); reads each selected product (≤ 20, in parallel) for its name and clinical display; drops unknown ids with the info banner (Review Focus 3); checks 2 or more; a 5xx is the crit banner with "Try again".
 
 - [ ] **Step 1: Write the failing test**
@@ -9969,6 +10043,30 @@ export function suggestionSub(r: Pick<SuggestRow, "status" | "clinicalDisplayNam
 
 An unapproved row shows the `NOT_REVIEWED` pill in place of the sub line (§6.7.1).
 
+`web/lib/check-scenarios.ts` (whole file; a page module may export only page fields, so the helper lives here):
+
+```ts
+import "server-only";
+import { SCENARIOS, type Scenario } from "@/content/check-scenarios";
+import { checkPublic } from "@/lib/api";
+
+/** A scenario renders only when all of its products exist (§6.7.1): one check of every scenario id, dropping each unknown one. */
+export async function availableScenarios(): Promise<Scenario[]> {
+  let ids = [...new Set(SCENARIOS.flatMap((s) => s.ids))];
+  const gone = new Set<string>();
+  for (let i = 0; i < 5 && ids.length >= 2; i++) {
+    const r = await checkPublic(ids).catch(() => null);
+    if (!r || r.ok || !r.unknownId) break;
+    const unknown = r.unknownId;
+    gone.add(unknown);
+    ids = ids.filter((id) => id !== unknown);
+  }
+  return SCENARIOS.filter((s) => s.ids.every((id) => !gone.has(id)));
+}
+```
+
+`check-page.test.tsx` covers it through the page render ("scenarios render only when all their products exist"): its `@/lib/api` mock reaches this module too.
+
 `web/app/check/page.tsx` (whole file):
 
 ```tsx
@@ -9978,27 +10076,14 @@ import CheckSide, { type Selected } from "@/components/check/CheckSide";
 import styles from "@/components/check/check.module.css";
 import Banner from "@/components/ui/Banner";
 import { buttonClass } from "@/components/ui/Button";
-import { SCENARIOS, type Scenario } from "@/content/check-scenarios";
 import { checkPublic, getPublicProduct, isStub, suggestProducts } from "@/lib/api";
+import { availableScenarios } from "@/lib/check-scenarios";
 import { DESK_NEW, PUBLIC_NEW } from "@/lib/copy";
 import type { CheckResult, PublicProduct, SuggestRow } from "@/lib/public-types";
 import { CHECK } from "@/lib/public-copy";
 import { CHECK_MAX, checkHref, parseCheckIds, parseQuery } from "@/lib/public-params";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Check interactions · IntelliDrugs" };
-
-/** A scenario renders only when all of its products exist (§6.7.1): one check of every scenario id, dropping each unknown one. */
-export async function availableScenarios(): Promise<Scenario[]> {
-  let ids = [...new Set(SCENARIOS.flatMap((s) => s.ids))];
-  const gone = new Set<string>();
-  for (let i = 0; i < 5 && ids.length >= 2; i++) {
-    const r = await checkPublic(ids).catch(() => null);
-    if (!r || r.ok || !r.unknownId) break;
-    gone.add(r.unknownId);
-    ids = ids.filter((id) => id !== r.unknownId);
-  }
-  return SCENARIOS.filter((s) => s.ids.every((id) => !gone.has(id)));
-}
 
 /** §6.7. Public scope for every session (§2.2); the selection lives only in the URL (§6.7.1). */
 export default async function CheckPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
@@ -10022,7 +10107,8 @@ export default async function CheckPage({ searchParams }: { searchParams: Promis
     let r = await checkPublic(ids);
     if (!r.ok && r.status === 404 && r.unknownId) {   // gone between the two reads
       dropped = true;
-      ids = ids.filter((id) => id !== r.unknownId);
+      const gone = r.unknownId;   // r is reassigned below, so the closure must not read it (TS2339 under next build)
+      ids = ids.filter((id) => id !== gone);
       r = ids.length >= 2 ? await checkPublic(ids) : { ok: false, status: 0, unknownId: null };
     }
     if (r.ok) result = r.data; else failed = ids.length >= 2;
@@ -10053,13 +10139,13 @@ The live region sits outside the form so a re-render of the form never clears it
 
 - [ ] **Step 4: Run the tests**
 
-Run: `cd web && npx vitest run tests/check-page.test.tsx tests/check-results.test.tsx tests/copy.test.ts && npm run lint:css`
-Expected: PASS.
+Run: `cd web && npx vitest run tests/check-page.test.tsx tests/check-results.test.tsx tests/copy.test.ts && npm run lint:css && npx tsc --noEmit -p .`
+Expected: PASS, and `tsc` reports no error (vitest does not type-check, so a closure over a reassigned `let` would only fail `next build`; the page-export rule is Next's own check, which `next build` in Task 32 Step 4 runs, and `page.tsx` now exports only `default`, `dynamic` and `metadata`).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add web/app/check/page.tsx web/components/check/CheckSide.tsx web/components/check/CheckerCombobox.tsx web/lib/check-summary.ts \
+git add web/app/check/page.tsx web/lib/check-scenarios.ts web/components/check/CheckSide.tsx web/components/check/CheckerCombobox.tsx web/lib/check-summary.ts \
   web/tests/check-page.test.tsx web/tests/copy.test.ts
 git commit -m "feat(web): /check side column, canonical URL, unknown ids dropped with a banner, no-JS Find, scenarios (§6.7.1, §4.4, Review Focus 3)" \
   -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
@@ -11664,9 +11750,10 @@ git commit -m "test(web): e2e public flows: landing, search and suggestion, stub
 
 **Files:**
 - Create: `web/e2e/public-2-checker.spec.ts`
+- Create: `web/e2e/zx-public-pair-review.spec.ts` (PAIR_REVIEWED and PAIR_NOT_REVIEWED on the page)
 
 **Interfaces:**
-- Consumes: `publish`, `resetPublic`, `noHorizontalScroll` (Task 37); `PILOT_IDS`; the checker's DOM from Tasks 29–32: the combobox `role="combobox"` named "Add a medicine", options `role="option"`, the selection list `aria-labelledby="sel-h"`, "Remove {brand}" buttons, "Clear all", the summary, the live region `#check-live`.
+- Consumes: `publish`, `resetPublic`, `noHorizontalScroll` (Task 37); `sql` (`e2e/db.ts`); `PILOT_IDS`; P1C's `ops.pair_review` (V7, append-only), `PAIR_REVIEWED` ("Pair reviewed by a senior pharmacist on {date}") and `PAIR_NOT_REVIEWED` ("Pair not yet reviewed by a senior pharmacist") rendered by `PairReviewState` on the checker's pair card (Task 29); the checker's DOM from Tasks 29–32: the combobox `role="combobox"` named "Add a medicine", options `role="option"`, the selection list `aria-labelledby="sel-h"`, "Remove {brand}" buttons, "Clear all", the summary, the live region `#check-live`.
 
 Pilot facts the assertions rest on (seed `10-pilot.sql`, spec §1.5–§1.6): Warfarin + Acetylsalicylic acid is Major; Domperidone has no DDInter data (one hatch block, two not-checked pairs in scenario 1); Chloramphenicol eye drops are checked against `DDInter352` and list no pair with Warfarin.
 
@@ -11784,16 +11871,92 @@ test("without JavaScript: Find lists matches, Add and Remove work by GET, and th
 
 The live-region assertions read the island's text after its 60 ms clear-and-write (§10.2); `toHaveText` retries until it lands.
 
-- [ ] **Step 2: Run it**
+- [ ] **Step 2: The pair's senior-review state on the page (§6.7.3; §11.4 as amended by P1C Task 0)**
 
-Run: `(cd web && E2E_BASE_URL=http://localhost:3000 npx playwright test e2e/public-2-checker.spec.ts)` (stack from Task 37 Step 4)
-Expected: 6 passed. A failure in the first test's option loop means the island marks the active option with something other than `aria-selected="true"` (§6.7.1 ARIA 1.2 combobox): fix the island, not the test.
+P1C pins the checker's `pairReview` at API level and its Task 0 moves the page assertion to P2: "P2's checker e2e asserts `PAIR_REVIEWED` and `PAIR_NOT_REVIEWED` on the page". `ops.pair_review` is append-only (V7 refuses UPDATE and DELETE), so no spec can seed a review and remove it afterwards. This spec therefore lives in its own file whose name sorts after every spec that reads pair reviews (`public-…`, `review-…` and P1C's `senior.spec.ts`; files run in name order with one worker) and before the `zy-`/`zz-` specs, which read none. Its `afterAll` restores the pair text and the approvals; the review row stays on the throwaway CI database. The content hash is computed exactly as `PairContent` does (§7.7), from the row as stored.
 
-- [ ] **Step 3: Commit**
+`web/e2e/zx-public-pair-review.spec.ts`:
+
+```ts
+import { createHash } from "node:crypto";
+import { expect, test } from "@playwright/test";
+import { sql } from "./db";
+import { publish, resetPublic } from "./public-helpers";
+import { PILOT_IDS as P } from "./review-helpers";
+
+/*
+ * PAIR_REVIEWED and PAIR_NOT_REVIEWED on the public checker (§6.7.3, §3.4, G3). Runs after every spec that reads pair
+ * reviews, because ops.pair_review is append-only and this row cannot be removed.
+ */
+test.describe.configure({ mode: "serial", timeout: 120_000 });
+
+const A = "DDInter1951", B = "DDInter20";   // Warfarin + Acetylsalicylic acid: Major in the pilot seed (stored a < b)
+const lit = (s: string) => `'${s.replace(/'/g, "''")}'`;
+const PAIR = `ddinter_a = ${lit(A)} AND ddinter_b = ${lit(B)}`;
+const MARK = "E2E-UPDATED ";
+const textId = () => sql(`SELECT interaction_id FROM curated.ddinter_pair WHERE ${PAIR}`);
+
+/** DdinterText.clean: placeholders and blanks are no text; the rest is stripped. */
+const PLACEHOLDERS = new Set(["none", "null", "n/a", "na", "-", "--", ""]);
+const clean = (v: string | null): string | null => (v === null || PLACEHOLDERS.has(v.trim().toLowerCase()) ? null : v.trim());
+
+/** §7.7 PairContent: SHA-256 hex of the compact UTF-8 JSON [a, b, severity, sorted(actions), interaction|null, management|null]. */
+function current(): { content: { severity: string; actions: string[]; interaction: string | null; management: string | null }; hash: string } {
+  const row = JSON.parse(sql(`SELECT json_build_object('severity', p.severity, 'actions', p.actions,
+      'interaction', t.interaction, 'management', t.management)::text
+    FROM curated.ddinter_pair p LEFT JOIN curated.ddinter_interaction_text t ON t.interaction_id = p.interaction_id
+    WHERE p.ddinter_a = ${lit(A)} AND p.ddinter_b = ${lit(B)}`));
+  const content = { severity: row.severity as string, actions: [...((row.actions as string[] | null) ?? [])].sort(),
+    interaction: clean(row.interaction), management: clean(row.management) };
+  const canonical = JSON.stringify([A, B, content.severity, content.actions, content.interaction, content.management]);
+  return { content, hash: createHash("sha256").update(canonical, "utf8").digest("hex") };
+}
+
+test.beforeAll(() => publish(P.warfarin, P.aspirin));
+test.afterAll(() => {
+  sql(`UPDATE curated.ddinter_interaction_text SET management = substr(management, ${MARK.length + 1})
+       WHERE interaction_id = ${lit(textId())} AND management LIKE ${lit(MARK + "%")}`);
+  resetPublic();
+});
+
+test("a current senior review reads PAIR_REVIEWED as plain text; once DDInter changes the text it reads PAIR_NOT_REVIEWED and the alert stays (§6.7.3, G3)", async ({ page }) => {
+  const { content, hash } = current();
+  sql(`INSERT INTO ops.pair_review (ddinter_a, ddinter_b, decision, note, content_hash, content, reviewer_email, reviewer_role)
+       VALUES (${lit(A)}, ${lit(B)}, 'reviewed', '', ${lit(hash)}, ${lit(JSON.stringify(content))}::jsonb, 'senior@e2e.test', 'senior')`);
+  const date = sql(`SELECT to_char(max(decided_at) AT TIME ZONE 'Asia/Dhaka', 'DD/MM/YYYY') FROM ops.pair_review WHERE ${PAIR}`);
+  const shown = (content.management ?? content.interaction ?? "").slice(0, 40);
+  expect(shown).not.toBe("");
+
+  await page.goto(`/check?ids=${P.warfarin}&ids=${P.aspirin}`);
+  await expect(page.getByRole("heading", { name: /^Major, 1 pair$/ })).toBeVisible();
+  const reviewed = page.getByText(`Pair reviewed by a senior pharmacist on ${date}`);
+  await expect(reviewed).toBeVisible();
+  // plain text: never green and never a review-status pill (§3.4 mark exclusivity)
+  await expect(reviewed.locator("xpath=ancestor-or-self::*[contains(@class, 'rv--')]")).toHaveCount(0);
+  await expect(page.locator("main")).not.toContainText("Pair not yet reviewed by a senior pharmacist");
+
+  // DDInter changes the management text: the hash moves, so the review no longer counts in public; the pair stays (G3)
+  sql(`UPDATE curated.ddinter_interaction_text SET management = ${lit(MARK)} || management WHERE interaction_id = ${lit(textId())}`);
+  await page.goto(`/check?ids=${P.warfarin}&ids=${P.aspirin}`);
+  await expect(page.getByRole("heading", { name: /^Major, 1 pair$/ })).toBeVisible();
+  await expect(page.locator("main")).toContainText(MARK.trim());
+  await expect(page.getByText("Pair not yet reviewed by a senior pharmacist").first()).toBeVisible();
+  await expect(page.locator("main")).not.toContainText(`Pair reviewed by a senior pharmacist on ${date}`);
+});
+```
+
+The pilot pair's management text is DDInter's own (non-null in `10-pilot.sql`), so prefixing it changes the hash and the new start of the text is visible however the card truncates it.
+
+- [ ] **Step 3: Run both**
+
+Run: `(cd web && E2E_BASE_URL=http://localhost:3000 npx playwright test e2e/public-2-checker.spec.ts e2e/zx-public-pair-review.spec.ts)` (stack from Task 37 Step 4)
+Expected: 7 passed. A failure in the first test's option loop means the island marks the active option with something other than `aria-selected="true"` (§6.7.1 ARIA 1.2 combobox): fix the island, not the test. A `PAIR_REVIEWED` failure with the row in place means the hash differs from `PairContent`'s: compare `current().hash` with the API's (`POST /v1/interactions/check` shows `pairReview.state`), and fix the side that departs from §7.7.
+
+- [ ] **Step 4: Commit**
 
 ```bash
-git add web/e2e/public-2-checker.spec.ts
-git commit -m "test(web): e2e checker: keyboard combobox, announcements, Clear all focus, eye drop DDInter352, no-JS flow (§11.4)" \
+git add web/e2e/public-2-checker.spec.ts web/e2e/zx-public-pair-review.spec.ts
+git commit -m "test(web): e2e checker: keyboard combobox, announcements, Clear all focus, eye drop DDInter352, no-JS flow, PAIR_REVIEWED and PAIR_NOT_REVIEWED (§11.4)" \
   -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
 
@@ -12186,15 +12349,36 @@ git commit -m "ci(web): public Lighthouse budget per page group on the median of
   -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
 
-- [ ] **Step 6: Open PR 2 into `phase-2`**
+- [ ] **Step 6: Open PR 2 into `phase-2`, with the §12.1 phase-2 exit criteria as its gate**
+
+§12.1 lists the phase-2 exit criteria, verbatim: "`VisibilityApiIntegrationTest` matrix green; S2, S3, S5 and S6 hold; licence lines confirmed (§13 Q1); no Example marker on any record data". §13.1 Q1 says the licence lines block the phase-2 public launch, and Q10 adds "any line that DrugBank, SNOMED International and WHO require for links". So the footer's "Licence line(s) to confirm" markers (Task 19) ship in PR 2 but must be gone before `phase-2` merges into `main`: the product owner confirms the wording, a §12.2 spec amendment records it, and a follow-up commit on `phase-2` replaces each marker with the confirmed text (and its `footer.test.tsx` pins). This plan does not invent the wording.
 
 ```bash
 git push origin feature/intellidrugs-p2-public
 gh pr create --base phase-2 --title "P2b: public pages (§6.1–§6.7, §6.9)" --body "$(cat <<'EOF'
 P2b of docs/superpowers/plans/2026-10-15-intellidrugs-p2-public.md: the landing page, sign-in card and welcome states,
 search, product and substance pages with their stubs, the interaction checker with its combobox island, /partners,
-/privacy and docs/runbooks/partner-requests.md, on the §7.4 endpoints of P2a. E2E, axe (light, dark, forced colours),
-reflow, 400% zoom and the public Lighthouse budget run in the e2e job.
+/privacy and docs/runbooks/partner-requests.md, on the §7.4 endpoints of P2a. E2E (including PAIR_REVIEWED and
+PAIR_NOT_REVIEWED on /check), axe (light, dark, forced colours), reflow, 400% zoom and the public Lighthouse budget run
+in the e2e job.
+
+Phase-2 exit criteria (spec §12.1, verbatim: "VisibilityApiIntegrationTest matrix green; S2, S3, S5 and S6 hold;
+licence lines confirmed (§13 Q1); no Example marker on any record data"). The phase-complete phase-2 → main PR
+may open only when every box is ticked:
+
+- [ ] Licence lines confirmed (§13.1 Q1, with the link lines of Q10 for DrugBank, SNOMED International and WHO):
+      the PO's wording is in the spec through a §12.2 amendment, and every footer "Licence line(s) to confirm"
+      marker is replaced by it on phase-2. BLOCKS the public launch.
+- [ ] VisibilityApiIntegrationTest matrix green: VisibilityApiIntegrationTest and PublicVisibilityMatrixIntegrationTest
+      (P2's matrix for every §7.4 endpoint, with the pending, engineer-checked, issue, back-in-review, removed and
+      dismissed-issue fixtures) both pass on phase-2.
+- [ ] S2 holds: 5 doctors, landing → "Napa + G Warfarin" result, median under 60 s on a laptop and on a phone (Slow 4G).
+- [ ] S3 holds: axe 0 violations on every §11.4 route and state (public-3-a11y.spec.ts), plus the manual NVDA + Firefox
+      and VoiceOver + Safari pass of the S1 and S2 tasks.
+- [ ] S5 holds: lighthouserc.public.json green (accessibility 100 and every §10.6 budget as errors; performance ≥ 90 read
+      from the median report, since the house rule asserts it as warn).
+- [ ] S6 holds: copy.test.ts and the e2e safety-sentence assertions green.
+- [ ] No Example marker on any record data (hero-card.test.tsx and the public e2e assert it; check the production build).
 
 Spec gaps recorded during P2 are listed in the plan's final section; each needs a §12.2 spec change, not a code change.
 
@@ -12203,7 +12387,7 @@ EOF
 )"
 ```
 
-Expected: CI green (api, web, images, e2e). After review, PR 2 merges into `phase-2`. The phase-complete PR from `phase-2` into `main`, which deploys (D42, §12.3, §12.4), is opened by the product owner once the §1.4 success criteria are checked on the `phase-2` build; this plan does not merge it.
+Expected: CI green (api, web, images, e2e). After review, PR 2 merges into `phase-2`. The phase-complete PR from `phase-2` into `main`, which deploys (D42, §12.3, §12.4), is opened by the product owner once every §12.1 exit criterion above is ticked on the `phase-2` build, the licence lines first; this plan does not merge it. Its body repeats the checklist above, ticked.
 
 ---
 
@@ -12220,7 +12404,8 @@ Each is a place where the spec (as amended for P1C) is silent or self-inconsiste
 7. **Text-missing notes naming private partners (§7.4, §6.5 item 7).** The spec does not say what the public automated-checks card shows for DDInter "text not found" pairs whose partner is carried only by unapproved products. Tasks 3–4 list only pairs between two public entries and never print the raw note (Review Focus 1).
 8. **Unknown id in a checker link (§6.7.3).** The spec says the id is dropped with the info banner and is silent on the URL. Task 30 redirects only for duplicates, blanks and more than 20 ids; an unknown id stays in the URL so the banner shows on that render.
 9. **E2E hero product (§11.4, D26).** The CI compose override passes no `HERO_CONCEPT_ID`, so the e2e landing has no lookup card. Task 37 adds `HERO_CONCEPT_ID: 186-0030-006--napa` to `deploy/docker-compose.ci.yml` only.
-10. **Verification date on the product page (§6.5).** The spec does not say which decision dates the verification line when an item has several `ok` decisions. Task 4 uses the newest `ok` by a pharmacist or senior pharmacist on the latest item.
+10. **Verification date on the product page (§6.5).** The spec does not say which decision dates the verification line when an item has several `ok` decisions. Task 4 (`PublicProducts.approvedAt`) uses the newest `ok` by a pharmacist or senior pharmacist among the latest item's counted decisions: after its run stamp and after the latest dismissal since it (P1C §5.2, D57). Decisions on other batches' items never date it. When no decision counts (an approval carried to this stamp, §8.3.1 item 8), the stamp dates it.
 11. **Pre-P2 public endpoints (§7.4).** `GET /v1/products?q=` and `GET /v1/products/loaded` are not named for removal. Task 36 removes only their web callers; the API keeps them.
 12. **Partner-request runbook (§2.2, §6.9).** The spec names `docs/runbooks/partner-requests.md` and says it "needs database access" but gives no query. Task 35 writes a read-only `psql` query on the host.
 13. **`/privacy` heading (§9.7).** The spec gives the body sentences only. Task 35 uses the footer's link text "Privacy" as the `<h1>`.
+14. **A pair review in the public e2e (§11.4, §7.8).** §11.4 (as amended by P1C) asks the checker e2e to show `PAIR_REVIEWED` and `PAIR_NOT_REVIEWED`, and V7 makes `ops.pair_review` append-only, so the row a test writes cannot be removed. Task 38 writes it in `zx-public-pair-review.spec.ts`, which runs after every spec that reads pair reviews, restores the pair text it changed, and leaves the row on the throwaway CI database.
