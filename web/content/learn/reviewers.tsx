@@ -10,12 +10,22 @@ import NoDataChip from "@/components/ui/NoDataChip";
 import Severity from "@/components/ui/Severity";
 import StageCheck from "@/components/ui/StageCheck";
 import { LEARN_BOARD, NO_DATA_SENTENCE, PROMISE_ENGINEER, PROMISE_PHARMACIST } from "@/lib/copy";
-import { P, PILOT_IDS, PILOT_SNAPSHOT as S, substanceNamed } from "./pilot-snapshot";
+import { P, PILOT_IDS, PILOT_SNAPSHOT as S, type PilotId, substanceNamed } from "./pilot-snapshot";
 
 const H = 2;
 const pairs = (n: number) => `${n} ${n === 1 ? "pair" : "pairs"}`;
 /** Pictures of the desk keep the default 8 seconds (§1.6 item 14). */
 const DESK_DEFAULT_SECONDS = 8;
+
+/**
+ * A warning card's records: its own, then every pilot record whose substance carries an entry of one of its pairs,
+ * in PILOT_IDS order. The card prints those partners' names and DDInter entries, so it is withdrawn with them (G3, §6.8).
+ */
+function cardIds(id: PilotId): PilotId[] {
+  const entries = new Set(S.warnings[id].textMissing.flatMap((t) => [t.ddinterA, t.ddinterB]));
+  const partners = new Set(S.substances.filter((s) => s.entries.some((e) => entries.has(e.id))).map((s) => s.product));
+  return [id, ...PILOT_IDS.filter((p) => p !== id && partners.has(p))];
+}
 
 /** Chapter 7 "For reviewers" (Board L; §1.6 items 6, 7, 12 and 14). */
 export default function ReviewersChapter({ ctx }: { ctx: LearnContext }) {
@@ -76,7 +86,7 @@ export default function ReviewersChapter({ ctx }: { ctx: LearnContext }) {
           {PILOT_IDS.map((id) => {
             const w = S.warnings[id];
             return (
-              <SnapshotBlock key={id} ctx={ctx} ids={[id]}>
+              <SnapshotBlock key={id} ctx={ctx} ids={cardIds(id)}>
                 <StageCheck name={S.records[id].tradeName} status={w.status}>
                   {w.noData && <>
                     <p className="stage-note">{NO_DATA_SENTENCE}</p>

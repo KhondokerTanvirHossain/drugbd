@@ -52,10 +52,10 @@ describe("the pilot snapshot against Board R's pilot export", () => {
     for (const f of files) {
       const src = readFileSync(join(CONTENT, f), "utf8");
       for (const m of src.matchAll(/\bids(?:=\{|:\s*)(\[[^\]]*\]|[A-Za-z_.]+)/g)) {
-        if (m[1] === "PILOT_IDS") continue;
+        if (m[1] === "PILOT_IDS" || m[1] === "cardIds") continue;
         expect(m[1].startsWith("["), `${f}: ids=${m[1]}`).toBe(true);
         expect(m[1].slice(1, -1).trim(), `${f}: empty ids`).not.toBe("");
-        // `id` is allowed only as the loop variable of PILOT_IDS.map((id) => …) (chapter 7's warning cards).
+        // `id` is allowed only as the loop variable of PILOT_IDS.map((id) => …); chapter 7's warning cards use cardIds(id), whose PilotId[] return type keeps them pilot-only.
         for (const el of m[1].slice(1, -1).split(",").map((s) => s.trim()).filter(Boolean)) expect(el, `${f}: ${m[1]}`).toMatch(ELEMENT);
       }
     }

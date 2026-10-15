@@ -49,7 +49,15 @@ describe("chapter 7, For reviewers", () => {
     const html = render(pilotStats({ withdrawn: [P.warfarin] }));
     expect(html).not.toContain("DGDA source beside the extraction");
     expect(card(html, "G Warfarin")).toBe("");
-    expect(html.match(/data-withdrawn/g)).toHaveLength(3);
+    expect(html.match(/data-withdrawn/g)).toHaveLength(4);
+  });
+
+  it("a warning card that prints a partner record's mapping is withdrawn with that partner (G3, §6.8)", () => {
+    const html = render(pilotStats({ withdrawn: [P.amlodipine] }));
+    const warnings = html.slice(html.indexOf('id="rev-warnings"'), html.indexOf('id="rev-issue"'));
+    expect(warnings).not.toContain("DDInter79");
+    for (const name of ["G Warfarin", "Napa", "G-Metformin", "Amoxycillin Clavulanic Acid"]) expect(card(html, name), name).toBe("");
+    expect(card(html, "Chloramphenicol")).toMatch(/^<div class="stage stage--ok">/);
   });
 
   it("the relation legend names pilot records, so it is a snapshot block too", () => {
