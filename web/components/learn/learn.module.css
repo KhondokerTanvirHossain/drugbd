@@ -21,6 +21,14 @@
 
 /* Chapters and sections. On /learn/start the chapter title is an h2 and sections h3; elsewhere h1 and h2 (§6.8). */
 .ch { display: flex; flex-direction: column; gap: 36px; scroll-margin-top: 72px; }
+/*
+ * §10.4 reflow at 320 CSS px. The global .sev chip is nowrap, and "Severity not classified by DDInter 298" is wider than
+ * the 288 px column in a wide font (308 px in DejaVu Sans), so it scrolled the page on /learn/why and /learn/interactions.
+ * In the chapter's flowing text a chip may wrap its words instead, only when it alone would not fit (flex-shrink: 0
+ * keeps nowrap sizing in flex rows). Inside the data tables it stays one line: they scroll in their own region.
+ */
+.ch :global(.sev) { max-width: 100%; flex-shrink: 0; white-space: normal; height: auto; min-height: 24px; padding-block: 3px; line-height: 1.2; }
+.ch td :global(.sev) { white-space: nowrap; }
 .chHead { display: flex; flex-direction: column; gap: 10px; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
 .chHead h1, .chHead h2 { font: var(--t-title1); letter-spacing: var(--tr-title1); font-size: clamp(25px, 3.2vw, 30px); display: flex; align-items: baseline; gap: 14px; }
 .chN { font-weight: 500; color: var(--fg-3); font-variant-numeric: tabular-nums; }

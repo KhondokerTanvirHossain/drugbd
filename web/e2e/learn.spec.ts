@@ -183,7 +183,19 @@ test("reflow at 320 CSS px: no horizontal page scroll on any chapter (§10.4)", 
   await page.setViewportSize({ width: 320, height: 640 });
   for (const slug of CHAPTERS) {
     await page.goto(`/learn/${slug}`);
-    expect(await page.evaluate(() => document.documentElement.scrollWidth), slug).toBeLessThanOrEqual(320);
+    // On failure, name what sticks out: each element past the right edge that no clipping or scrolling ancestor contains.
+    const { width, over } = await page.evaluate(() => {
+      const vw = document.documentElement.clientWidth;
+      const clippedBy = (el: Element) => {
+        for (let a = el.parentElement; a && a !== document.body; a = a.parentElement)
+          if (getComputedStyle(a).overflowX !== "visible" && a.getBoundingClientRect().right <= vw + 0.5) return true;
+        return false;
+      };
+      const over = [...document.querySelectorAll("body *")].filter((el) => el.getBoundingClientRect().right > vw + 0.5 && !clippedBy(el))
+        .slice(0, 5).map((el) => `<${el.tagName.toLowerCase()} class="${el.getAttribute("class") ?? ""}"> right ${Math.round(el.getBoundingClientRect().right)}px: "${el.textContent?.trim().slice(0, 50)}"`);
+      return { width: document.documentElement.scrollWidth, over };
+    });
+    expect(width, `/learn/${slug} scrolls sideways; past 320 px: ${over.join("; ") || "nothing found"}`).toBeLessThanOrEqual(320);
   }
 });
 
