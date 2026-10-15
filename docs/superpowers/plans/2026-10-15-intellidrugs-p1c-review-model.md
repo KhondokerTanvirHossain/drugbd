@@ -61,17 +61,16 @@ Five inputs the spec implies but its listed tests do not exercise, most likely t
 
 ## Before you start
 
-- [ ] Branch from `main` once P3 has merged (the branch may already exist locally, so switch to it and rebase, or create it):
+- [ ] Branch from `origin/main` once P3 has merged. Run every command in this plan from the repository root of the checkout you are executing in, which is normally a worktree made with superpowers:using-git-worktrees, never the shared main checkout (other sessions use it, and a lock-file edit there does not reach your commit). The branch may already exist, so switch to it and rebase, or create it, inside this worktree only:
 
 ```bash
-cd /Users/tanvirhossain/Documents/000_office/umr/gitlab/ddinter2
+cd "$(git rev-parse --show-toplevel)"
 git fetch origin
-git switch main && git pull --ff-only
-test -f web/app/learn/\[chapter\]/page.tsx && grep -q "LATEST_PUBLIC" api/src/main/java/com/niramoy/bddrug/adapter/persistence/ReviewSql.java && echo "P3 is on main"
+git show origin/main:web/app/learn/\[chapter\]/page.tsx >/dev/null && git show origin/main:api/src/main/java/com/niramoy/bddrug/adapter/persistence/ReviewSql.java | grep -q "LATEST_PUBLIC" && echo "P3 is on main"
 git switch feature/intellidrugs-p1c-review-model 2>/dev/null && git rebase origin/main || git switch -c feature/intellidrugs-p1c-review-model origin/main
 ```
 
-Expected: `P3 is on main`, then the branch checked out on top of `origin/main`. If the line is missing, P3 has not merged: stop.
+Expected: `P3 is on main`, then the branch checked out in this worktree on top of `origin/main`. If the line is missing, P3 has not merged: stop. (If the branch is already checked out in another worktree, `git switch` refuses: execute in that worktree instead.)
 
 - [ ] Commit this plan on the branch, so the plan the commits cite is in the history:
 
@@ -119,7 +118,7 @@ Expected: every suite passes; the build ends with `client island check: … all 
 ## File Structure
 
 ```
-docs/superpowers/specs/2026-10-12-intellidrugs-ux-design.md   MODIFY (Task 0) §7.4 checker pairReview in P1C, §11.4, §12.2
+docs/superpowers/specs/2026-10-12-intellidrugs-ux-design.md   MODIFY (Task 0) §7.4 checker pairReview in P1C, §11.4, §12.2, §12.5
 db/migrations/V7__senior_review.sql             CREATE (Task 1) the §7.8 migration, verbatim
 db/migrations.lock                              MODIFY V7 line, header db-schema-v1.2
 docs/design/database.md                         MODIFY V7 change log, rules, tags
@@ -241,7 +240,7 @@ Responsibilities: every rule that decides a state lives in one pure domain funct
 - Modify: `docs/superpowers/specs/2026-10-12-intellidrugs-ux-design.md`
 
 **Interfaces:**
-- Produces: the amended §7.4 P1C rules, §11.4 "Senior pages" bullet, §12.2 P1C and P2 rows. Task 9 implements the checker field; Task 25 implements the amended e2e step.
+- Produces: the amended §7.4 P1C rules, §11.4 "Senior pages" bullet, §12.2 P1C and P2 rows, §12.5 V7 bullet. Task 9 implements the checker field; Task 25 implements the amended e2e step; Task 24 implements the amended §12.5 runbook query.
 
 - [ ] **Step 1: Make the edits** (each `old` string occurs once in the spec; use the Edit tool)
 
@@ -287,6 +286,18 @@ with
 the check result's `pairReview` rendered on the page (P1C ships the API field) and P9;
 ```
 
+4. §12.5, in the V7 bullet, replace
+
+```markdown
+Otherwise a senior re-approves or re-reports those records first.
+```
+
+with
+
+```markdown
+Otherwise a pharmacist re-approves, or anyone re-reports, those records first (amended by the P1C plan, 15/10/2026: a pre-P1C `ApprovalRule` counts an `ok` only from role `pharmacist`, so a senior's re-approval would read as pending under the older image; the runbook query lists a record until a counted `issue`, or a `pharmacist` `ok`, follows its latest dismissal).
+```
+
 - [ ] **Step 2: Check every edit landed**
 
 ```bash
@@ -295,6 +306,7 @@ grep -c "Where it ships (amended by the P1C plan" $S
 grep -c "P1C pins the public \`pairReview\` of the checker at API level" $S
 grep -c "the checker alerts' \`ddinterA\`, \`ddinterB\` and public \`pairReview\`" $S
 grep -c "rendered on the page (P1C ships the API field)" $S
+grep -c "Otherwise a pharmacist re-approves, or anyone re-reports, those records first" $S
 ```
 
 Expected: `1` from every line.
@@ -303,7 +315,7 @@ Expected: `1` from every line.
 
 ```bash
 git add docs/superpowers/specs/2026-10-12-intellidrugs-ux-design.md
-git commit -m "docs(web): spec §7.4, §11.4, §12.2 — the checker's pairReview field ships with P1C (API only)" \
+git commit -m "docs(web): spec §7.4, §11.4, §12.2, §12.5 — the checker's pairReview field ships with P1C (API only); who clears a dismissal before rollback" \
   -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
 
@@ -500,7 +512,7 @@ CREATE UNIQUE INDEX audit_event_pair_decision_request_uq ON ops.audit_event (req
 - [ ] **Step 4: Lock it**
 
 ```bash
-cd /Users/tanvirhossain/Documents/000_office/umr/gitlab/ddinter2
+cd "$(git rev-parse --show-toplevel)"
 sed -i.bak '1s/.*/# Database schema lock — db-schema-v1.2 (V1-V5 approved by the product owner on 2026-10-12; V6 added by the IntelliDrugs P0 plan; V7 by the P1C plan)./' db/migrations.lock && rm db/migrations.lock.bak
 printf '%s  V7__senior_review.sql\n' "$(shasum -a 256 db/migrations/V7__senior_review.sql | cut -d' ' -f1)" >> db/migrations.lock
 ./db/check-migration-lock.sh
@@ -632,7 +644,7 @@ In `docs/design/database.md`:
 - **The change:** widens `review_decision.decision` to `ok | issue | dismiss` and `review_decision.reviewer_role` to `pharmacist | engineer | senior`, and adds `review_decision_dismiss_by_senior` (a dismiss is a senior's, with a 5–1000 character note). Adds the append-only table `ops.pair_review` (one row per senior pair decision, with the content hash and the content reviewed), its index, two triggers on `ops.reject_change()`, and a REVOKE. Widens `audit_event.event` with `pair_decision`, `pair_decision_rejected` and `senior_open`, and `audit_event.actor_role` with `senior`, and adds a partial unique index on `audit_event (request_id) WHERE event = 'pair_decision'`.
 - **Why it is needed:** the product owner's decisions of 15/10/2026 (PO D2, D3, D5, D10) add the senior pharmacist, who dismisses mistaken issues and reviews DDInter pairs across all batches; the V4 checks refuse the new role and decision, no table can hold a pair review with the content it covered, and the new audit events need the V6 checks widened.
 - **What it does to existing rows:** nothing. Every existing row satisfies the widened checks; constraint changes are DDL, so the V6 append-only triggers are not involved. Retention: pair reviews are kept indefinitely.
-- **How to roll it back:** a new migration that drops `ops.pair_review` and restores the narrower checks; it works only while no `senior` or `dismiss` row exists. Otherwise V7 stays: older images never write `senior`, `dismiss` or pair reviews. Before rolling the API below P1C, run the runbook query in `docs/runbooks/reviewer-invite.md` ("Before a rollback below P1C"): a pre-P1C `ApprovalRule` ignores a `dismiss` row, so a counted dismissal must first be followed by a fresh approval or report.
+- **How to roll it back:** a new migration that drops `ops.pair_review` and restores the narrower checks; it works only while no `senior` or `dismiss` row exists. Otherwise V7 stays: older images never write `senior`, `dismiss` or pair reviews. Before rolling the API below P1C, run the runbook query in `docs/runbooks/reviewer-invite.md` ("Before rolling back below P1C"): a pre-P1C `ApprovalRule` ignores a `dismiss` row and counts an `ok` only from role `pharmacist`, so a counted dismissal must first be followed by a pharmacist's approval or by a fresh report.
 ```
 
 In `docs/artifacts/2026-10-12-data-model.html`:
@@ -683,7 +695,7 @@ git commit -m "feat(db): V7 senior review (db-schema-v1.2): dismiss, senior role
   -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
 
-The tag `db-schema-v1.2` is created on the merge commit in Task 26, as `db-schema-v1.1` was for P0.
+The tag `db-schema-v1.2` is created on the merge commit in Task 26 Step 5 ("Tag `db-schema-v1.2`"), as `db-schema-v1.1` was for P0.
 
 ---
 ### Task 2: Approval rule — senior approves, a dismissal is a review boundary, a carried approval counts at the stamp
@@ -1313,13 +1325,19 @@ class SourceLinksTest {
 
     @ParameterizedTest
     @CsvSource(delimiter = '|', value = {
-        "RXCUI|161 ", "RXCUI|12345678901", "RXCUI|16a", "ATC|n02be01", "ATC|N02BE0", "DRUGBANK|DB0031", "DRUGBANK|db00316",
+        // quoted: @CsvSource trims unquoted values, and the trailing space is the point of this case
+        "RXCUI|'161 '", "RXCUI|12345678901", "RXCUI|16a", "ATC|n02be01", "ATC|N02BE0", "DRUGBANK|DB0031", "DRUGBANK|db00316",
         "SNOMEDCT|12345", "ICD11_XM|XM5DJ", "ICD11_XM|xm5dj7", "DDINTER|DDINTER14", "DDINTER|DDInter1234567", "DDINTER|DDInter14/../x",
         "LOINC|1234-5",
     })
     void aCodeThatFailsItsPatternGetsNoLink(String system, String code) {
         assertThat(SourceLinks.code(system, code, AT)).isEmpty();
         assertThat(SourceLinks.code(system, null, AT)).isEmpty();
+    }
+
+    @Test void aPaddedCodeGetsNoLink() {
+        assertThat(SourceLinks.code("RXCUI", "161 ", AT)).isEmpty();
+        assertThat(SourceLinks.code("RXCUI", " 161", AT)).isEmpty();
     }
 
     @Test void thePairLinkNeedsANumericInteractionIdAndHasNoFetchTime() {
@@ -3241,7 +3259,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * §5.17, §7.7 reads (§11.3 PairQueueIntegrationTest). Held: W-1 Warin and N-1 Napa (approved), A-1 Ecosprin, C-EYE
  * Optimycin (eye drop) and D-1 Motigut, all in Q-A. C-CAP's latest item is removed (Q-RM), so the systemic DDInter351 pairs apply to no
  * held product. Pairs between held substances: DDInter1951/DDInter20 (major), DDInter14/DDInter1951 and
- * DDInter1951/DDInter351 (moderate; the second does not apply). The tests that write run last (@Order).
+ * DDInter1951/DDInter351 (moderate; the second does not apply). The tests that write run last, each at its own @Order:
+ * changedPairReturnsToQueue counts todo = 3, so it must run before the pair issue on DDInter1951/DDInter351 is written
+ * (JUnit breaks an @Order tie by its default method order, not by source order).
  */
 @Testcontainers
 @SpringBootTest
@@ -3394,7 +3414,7 @@ class PairQueueIntegrationTest {
     // ---- writes, last
 
     /** §11.3 changedPairReturnsToQueue (queue side; Task 9 adds the public checker's not_reviewed). */
-    @Test @Order(LAST) void changedPairReturnsToQueue() throws Exception {
+    @Test @Order(LAST - 1) void changedPairReturnsToQueue() throws Exception {
         String items = text(pg, "SELECT string_agg(batch_id || concept_id || review || extracted_at, ',' ORDER BY batch_id, concept_id) FROM ops.batch_item");
         exec(pg, """
             INSERT INTO ops.pair_review (ddinter_a, ddinter_b, decision, note, content_hash, content, reviewer_email, reviewer_role)
@@ -7562,6 +7582,34 @@ describe("Dismiss issue on the desk (§5.7, §5.10a, §5.14)", () => {
       expectedLastDecisionId: first.expectedLastDecisionId, turnstileToken: "tok-2" });
   });
 
+  it("a 409 no_issue: the hint and a refresh; when the record comes back pending the panel closes, its draft stays, nothing resends", async () => {
+    const reg = makeReg("napa", { displayStatus: "issue", openIssues: [ISSUE] });
+    const view = render(<Desk reg={reg} role="senior"><DetailTools reg={reg} /><p>napa detail</p></Desk>);
+    await act(async () => {});
+    act(() => turnstile.props!.onToken!("tok-1"));
+    actions.decide.mockResolvedValueOnce({ ok: false, code: "no_issue" });
+    key("d");
+    fireEvent.change(field(), { target: { value: "the register says 500 mg" } });
+    await act(async () => { key("Enter", field(), { ctrlKey: true }); });
+    expect(actions.decide).toHaveBeenCalledTimes(1);
+    expect(hint()).toBe("No issue is open on this record any more. Nothing was saved.");
+    expect(router.refresh).toHaveBeenCalled();
+    // the refresh: another senior dismissed it, so the same record registers again as pending
+    const pending = makeReg("napa", { displayStatus: "pending", openIssues: [] });
+    view.rerender(<Desk reg={pending} role="senior"><DetailTools reg={pending} /><p>napa detail</p></Desk>);
+    await act(async () => {});
+    expect(panel()).toBeNull();
+    expect(button()).toBeNull();
+    expect(sessionStorage.getItem("intellidrugs-dismiss-draft:0001-pilot:186-0030-006--napa")).toBe("the register says 500 mg");
+    expect(document.querySelector('[data-fk="approve"]')!.getAttribute("aria-disabled")).not.toBe("true");
+    actions.decide.mockClear();
+    key("Enter", desk(), { ctrlKey: true });
+    key("d");
+    expect(panel()).toBeNull();
+    expect(hint()).toBe("No issue is open on this record.");
+    expect(actions.decide).not.toHaveBeenCalled();
+  });
+
   it("the shortcuts sheet lists D for a senior only", async () => {
     await mountIssue();
     key("?");
@@ -7935,6 +7983,19 @@ with
     setDismissNoteText(loadDraftAt(dismissDraftKey(batchId, reg.conceptId)));
 ```
 
+and, because the same-record branch returns before that, directly before `if (prev?.conceptId === reg.conceptId) {` add:
+
+```ts
+    // §5.8.2: SEND_DISMISS is allowed only while the record is `issue`. When a refresh shows it no longer is (another senior
+    // dismissed it, a 409 no_issue, a re-run), the panel closes and its draft stays; focus leaves the closed panel.
+    if (dismissRef.current && statusOf(reg.conceptId, reg.displayStatus) !== "issue") {
+      const inPanel = document.getElementById("bar-dismiss")?.contains(document.activeElement) ?? false;
+      setDismiss(false);
+      setDismissError(false);
+      if (inPanel) requestFocus("approve");
+    }
+```
+
 6. Change `newOp`'s `decision` parameter type to `"ok" | "issue" | "dismiss"`.
 7. In `keyReport()`, before `setNoteText(loadDraft(batchId, o.conceptId));` add `if (dismissRef.current) setDismiss(false);   // one panel at a time; the dismiss draft stays (§5.7)`.
 8. After `sendReport()` add:
@@ -7972,6 +8033,14 @@ with
   function sendDismiss() {
     const o = openRef.current;
     if (!o) return;
+    if (barNow().record?.status !== "issue") {
+      // §5.8.2: a dismissal only for an `issue` record; the reducer cannot see the status. The draft stays.
+      showHint(P1C_COPY.dismiss.hintNoIssue);
+      setDismiss(false);
+      setDismissError(false);
+      requestFocus("approve");
+      return;
+    }
     const h = sendDismissHint(barNow());
     if (h) { showHint(h); return; }
     if (noteLength(dismissNote) < NOTE_MIN) {
@@ -8372,7 +8441,11 @@ describe("P1C: In other batches (§5.6.2)", () => {
     expect(html).toContain('<h6 class="pair-names">Acetaminophen + Ibuprofen</h6>');
     expect(html).toContain('id="other-a-DDInter14-DDInter926-text"');
     expect(html).toContain('id="other-n-DDInter14-DDInter926-text"');
-    expect(strip(html)).not.toContain("None of the");
+    // only the In other batches block: the batch block still says "None of the 28 batch pairs … involve Acetaminophen"
+    // (napa's batchPairs.pairs is empty while Acetaminophen has a chosen entry)
+    const otherBlock = html.slice(html.indexOf('<h4 class="subH">In other batches</h4>'));
+    expect(strip(otherBlock)).not.toContain("None of the");
+    expect(strip(otherBlock)).not.toContain("DDInter 2.0 lists no interaction between");
   });
 
   it("partner lines show three, then 'and {k} more'; the details list the five returned and say '{s} of {n} medicines'", () => {
@@ -11720,6 +11793,18 @@ In `web/tests/runbook.test.ts`, add `import { P1C_COPY } from "@/lib/copy";` and
     expect(md).toContain("decision = 'dismiss'");
     expect(md).toContain("d.decided_at > bi.extracted_at");
   });
+
+  it("P1C: a dismissal followed by a counted issue, or by a pharmacist's ok, is no longer listed (§12.5)", () => {
+    const md = readFileSync(path, "utf8");
+    const q = md.slice(md.indexOf("## Before rolling back below P1C"));
+    // the later decision is compared on (decided_at, id), the order ApprovalRule uses
+    expect(q).toContain("AND NOT EXISTS (");
+    expect(q).toContain("(l.decided_at, l.id) > (d.decided_at, d.id)");
+    // an issue from anyone clears it; an ok clears it only from a pharmacist (a pre-P1C ApprovalRule ignores a senior's ok)
+    expect(q).toContain("l.decision = 'issue' OR (l.decision = 'ok' AND l.reviewer_role = 'pharmacist')");
+    expect(q).toContain("a pharmacist re-approves, or anyone re-reports, each listed record");
+    expect(q).not.toContain("a senior re-approves");
+  });
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
@@ -11814,10 +11899,15 @@ JOIN ops.review_decision d ON d.batch_id = bi.batch_id AND d.concept_id = bi.con
 WHERE d.decision = 'dismiss'
   AND (bi.extracted_at IS NULL OR d.decided_at > bi.extracted_at)
   AND bi.note IS DISTINCT FROM 'removed from batch file'
+  AND NOT EXISTS (
+    SELECT 1 FROM ops.review_decision l
+    WHERE l.batch_id = d.batch_id AND l.concept_id = d.concept_id
+      AND (l.decided_at, l.id) > (d.decided_at, d.id)
+      AND (l.decision = 'issue' OR (l.decision = 'ok' AND l.reviewer_role = 'pharmacist')))
 GROUP BY bi.batch_id, bi.concept_id;"
 ```
 
-The query prints ids only, never an email or a note. When it prints nothing, roll back. Otherwise a senior re-approves or re-reports each listed record on the desk first, then run it again.
+The query prints ids only, never an email or a note. A record is listed while no counted `issue`, and no `ok` from a `pharmacist`, follows its latest dismissal: an older image counts an `ok` only from role `pharmacist`, so a senior's re-approval does not clear it. When it prints nothing, roll back. Otherwise a pharmacist re-approves, or anyone re-reports, each listed record on the desk first, then run it again.
 ````
 
 - [ ] **Step 4: Run the tests to verify they pass**
@@ -12133,8 +12223,13 @@ test("review flow (senior): badge and promise; A publishes; R withdraws; D dismi
   await page.keyboard.press("a");
   await expect.poll(() => lastDecision(B, P1C.cafergot), { timeout: 30_000 }).toBe("ok|senior|");
 
-  await page.locator("#desk").focus();
+  // Ibufen 400 and Warin are already approved, so this A approves the whole batch and the desk switches to the
+  // complete view (§5.9 step 1), where R does nothing. Open the record again (no ?view=done) before reporting.
+  await openRecord(page, B, P1C.cafergot);
+  await deskReady(page);
+  await botPassed(page);
   await page.keyboard.press("r");
+  await expect(page.locator("#bar-report")).toBeVisible();
   await page.locator("#note").fill("Strength should read Ergotamine 1 mg");
   await page.keyboard.press("Control+Enter");
   await expect.poll(() => lastDecision(B, P1C.cafergot), { timeout: 30_000 }).toBe("issue|senior|Strength should read Ergotamine 1 mg");
@@ -12342,6 +12437,20 @@ After merge: V7 runs through Flyway on deploy; then the P1C pilot check (§8.3.1
 EOF
 ```
 
-- [ ] **Step 5: After the merge deploys — the P1C pilot check (§8.3.1, S8)**
+- [ ] **Step 5: Tag `db-schema-v1.2` on the merge commit (§7.8, §12.1 exit)**
 
-Run the `load-dgda` workflow for `0001-pilot.txt` with stages `ddinter` and `reopen` left false (GitHub → Actions → load-dgda → Run workflow). Expected in the job log: `stage ddinter for batch 0001-pilot re-opened 0 record(s)`, no `carried` or `skipped` line for an approved record, and every approved pilot record still approved (`/review/0001-pilot` shows the same "{a} of 10 approved" as before the run). Then check that `db-schema-v1.2` is tagged on the merge commit (Task 1) and that a senior has opened `/review/pairs` and reviewed at least the pilot's Major pairs (§12.1 exit). The `medscribe`, `baymax`, `medioo` and `n8n` containers and the Caddy container are never restarted (§12.4).
+Once the PR is merged into `main`:
+
+```bash
+git fetch origin
+MERGE_SHA="$(gh pr view feature/intellidrugs-p1c-review-model --json mergeCommit -q .mergeCommit.oid)"
+git tag -a db-schema-v1.2 -m "Database schema v1.2: V1-V7 (senior role, dismiss, ops.pair_review, P1C audit events)" "$MERGE_SHA"
+git push origin db-schema-v1.2
+git rev-list -n 1 db-schema-v1.2 && git show -s --format=%s db-schema-v1.2^{commit}
+```
+
+Expected: `git push` reports `* [new tag] db-schema-v1.2 -> db-schema-v1.2`; the printed SHA equals `$MERGE_SHA`, and the subject is the P1C merge commit. `git tag -l 'db-schema*'` now lists `db-schema-v1.0`, `db-schema-v1.1` and `db-schema-v1.2`.
+
+- [ ] **Step 6: After the merge deploys — the P1C pilot check (§8.3.1, S8)**
+
+Run the `load-dgda` workflow for `0001-pilot.txt` with stages `ddinter` and `reopen` left false (GitHub → Actions → load-dgda → Run workflow). Expected in the job log: `stage ddinter for batch 0001-pilot re-opened 0 record(s)`, no `carried` or `skipped` line for an approved record, and every approved pilot record still approved (`/review/0001-pilot` shows the same "{a} of 10 approved" as before the run). Then check that `git ls-remote --tags origin db-schema-v1.2` prints the tag created in Step 5 and that a senior has opened `/review/pairs` and reviewed at least the pilot's Major pairs (§12.1 exit). The `medscribe`, `baymax`, `medioo` and `n8n` containers and the Caddy container are never restarted (§12.4).
