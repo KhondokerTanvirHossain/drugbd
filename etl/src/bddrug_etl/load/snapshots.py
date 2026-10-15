@@ -3,7 +3,9 @@
 Every code path that stamps ``ops.batch_item.extracted_at`` writes one snapshot per stamped item, in the same
 transaction, after that stage's results are written. A snapshot records the run stamp, the run it belongs to
 (``run_id``: one per ETL invocation, so the up to four stamps of one run share it) and a payload with the fields the
-API's "See what changed" compares. The table is append-only (V6 triggers): nothing here updates or deletes a row.
+API's "See what changed" compares. The table is append-only (V6 triggers): nothing here updates or deletes a row. Since
+P1C (§8.3.1) the payload (version 2) also records each ingredient's coverage, and ``approval_view`` is the part of it a
+pharmacist's approval covers.
 """
 import uuid
 from datetime import datetime
@@ -15,7 +17,11 @@ from psycopg.types.json import Jsonb
 
 from bddrug_etl.stages.ddinter import choose
 
-PAYLOAD_VERSION = 1
+PAYLOAD_VERSION = 2
+COVERED_SYSTEMS = ("ICD11_XM", "RXCUI", "ATC", "DRUGBANK", "SNOMEDCT")
+BRAND_KEYS = ("dar_number", "trade_name", "company", "dosage_form", "generic_content_raw")
+CLINICAL_KEYS = ("bdc_id", "display_name", "dose_form", "route")
+STRENGTH_KEYS = ("raw", "value", "unit", "per_value", "per_unit")
 STAGES = ("dgda", "substances", "clinical", "ddinter")
 
 
@@ -29,7 +35,8 @@ def _num(value: Decimal | None) -> str | None:
     return None if value is None else format(value.normalize(), "f")
 
 
-def build_payload(conn: psycopg.Connection, batch_id: str, concept_id: str, extracted_at: datetime) -> dict:
+def build_payload(conn: psycopg.Connection, batch_id: str, concept_id: str, extracted_at: datetime | None, *,
+                  carried_from: dict | None = None) -> dict:
     """The record as it stands now: brand, clinical drug, ingredients with codes and chosen DDInter entries, stages."""
     brand = conn.execute(
         """SELECT dar_number, trade_name, company, dosage_form, generic_content_raw, bdc_id
@@ -68,25 +75,32 @@ def build_payload(conn: psycopg.Connection, batch_id: str, concept_id: str, extr
                 if srow:
                     strength = {"raw": srow[0], "value": _num(srow[1]), "unit": srow[2], "per_value": _num(srow[3]),
                                 "per_unit": srow[4]}
+        coverage = None
+        if bds_id:
+            crow = conn.execute("SELECT coverage FROM curated.interaction_coverage WHERE bds_id = %s", (bds_id,)).fetchone()
+            coverage = crow[0] if crow else "not_run"
         ingredients.append({"xm_code": xm_code, "name": name, "bds_id": bds_id, "substance": substance,
                             "strength": strength, "codes": codes, "ddinter_chosen": chosen,
-                            "route_assumed": assumed and bool(chosen)})
+                            "route_assumed": assumed and bool(chosen), "coverage": coverage})
     stages = {stage: {"status": status, "note": note} for stage, status, note in conn.execute(
         "SELECT stage, status, note FROM ops.stage_result WHERE batch_id = %s AND concept_id = %s",
         (batch_id, concept_id)).fetchall()}
-    return {
+    payload = {
         "version": PAYLOAD_VERSION,
-        "extracted_at": extracted_at.isoformat(),
+        "extracted_at": None if extracted_at is None else extracted_at.isoformat(),
         "brand": None if brand is None else {"dar_number": brand[0], "trade_name": brand[1], "company": brand[2],
                                              "dosage_form": brand[3], "generic_content_raw": brand[4]},
         "clinical_drug": clinical,
         "ingredients": ingredients,
         "stages": {s: stages[s] for s in STAGES if s in stages},
     }
+    if carried_from is not None:
+        payload["carried_from"] = carried_from
+    return payload
 
 
 def write_snapshots(conn: psycopg.Connection, items: list[tuple[str, str]], run_id: uuid.UUID, *,
-                    shared: bool = False) -> int:
+                    shared: bool = False, carried_from: dict | None = None) -> int:
     """One snapshot per (batch_id, concept_id) at the item's current ``extracted_at``; returns how many were written.
 
     Reason: ``shared_change`` when ``shared`` (re-opened because shared substance data changed); otherwise ``run`` for
@@ -108,6 +122,54 @@ def write_snapshots(conn: psycopg.Connection, items: list[tuple[str, str]], run_
             """INSERT INTO ops.item_snapshot (batch_id, concept_id, extracted_at, run_id, reason, payload)
                VALUES (%s, %s, %s, %s, %s, %s)""",
             (batch_id, concept_id, extracted_at, run_id, reason,
-             Jsonb(build_payload(conn, batch_id, concept_id, extracted_at))))
+             Jsonb(build_payload(conn, batch_id, concept_id, extracted_at, carried_from=carried_from))))
         written += 1
     return written
+
+
+def approval_view(payload: dict) -> dict:
+    """§8.3.1: what an approval covers, from a snapshot payload. Brand fields, the clinical drug and, per ingredient (by
+    XM code), the substance, its strength, its non-DDInter codes, its chosen DDInter entries with their route scope and
+    whether the route was assumed, and its coverage (version 2 payloads only). Never stage notes, DDInter pairs, texts,
+    diseases, foods, entry names or synonyms."""
+    brand, clinical = payload.get("brand"), payload.get("clinical_drug")
+    ingredients = []
+    for ing in sorted(payload.get("ingredients") or [], key=lambda i: i.get("xm_code") or ""):
+        codes = ing.get("codes") or []
+        scopes = {c.get("code"): c.get("route_scope") for c in codes if c.get("system") == "DDINTER"}
+        strength = ing.get("strength")
+        view = {
+            "xm_code": ing.get("xm_code"), "bds_id": ing.get("bds_id"), "substance": ing.get("substance"),
+            "strength": None if strength is None else {k: strength.get(k) for k in STRENGTH_KEYS},
+            "codes": sorted([c.get("system"), c.get("code")] for c in codes if c.get("system") in COVERED_SYSTEMS),
+            "chosen": sorted([cid, scopes.get(cid)] for cid in ing.get("ddinter_chosen") or []),
+            "route_assumed": bool(ing.get("route_assumed")),
+        }
+        if "coverage" in ing:
+            view["coverage"] = ing["coverage"]
+        ingredients.append(view)
+    return {
+        "brand": None if brand is None else {k: brand.get(k) for k in BRAND_KEYS},
+        "clinical_drug": None if clinical is None else {k: clinical.get(k) for k in CLINICAL_KEYS},
+        "ingredients": ingredients,
+    }
+
+
+def same_view(a: dict, b: dict) -> bool:
+    """Equal approval views. A version-1 payload has no coverage: then coverage is left out of this one comparison, and
+    the chosen entries still catch a full-to-none change (§8.3.1 step 3)."""
+    if any("coverage" not in i for i in a["ingredients"] + b["ingredients"]):
+        def strip(v: dict) -> dict:
+            return {**v, "ingredients": [{k: x for k, x in i.items() if k != "coverage"} for i in v["ingredients"]]}
+        return strip(a) == strip(b)
+    return a == b
+
+
+def view_at(conn: psycopg.Connection, batch_id: str, concept_id: str, extracted_at: datetime | None) -> dict | None:
+    """The approval view of the snapshot written at this stamp; None when there is no stamp or no snapshot at it."""
+    if extracted_at is None:
+        return None
+    row = conn.execute(
+        "SELECT payload FROM ops.item_snapshot WHERE batch_id = %s AND concept_id = %s AND extracted_at = %s",
+        (batch_id, concept_id, extracted_at)).fetchone()
+    return None if row is None else approval_view(row[0])

@@ -131,4 +131,39 @@ class AuditApiIntegrationTest {
             .bodyValue(event("sign_out", "ok", UUID.randomUUID().toString())).exchange().expectStatus().isUnauthorized();
         assertThat(rows()).isEqualTo(before);
     }
+
+    // ---- P1C (§7.5): senior_open, the senior role; pair decisions are the API's own
+
+    @Test void seniorOpenWithEachTargetTypeIs201() throws Exception {
+        for (String[] t : new String[][]{{"substance", "BDS-000001"}, {"pair_queue", "todo"}, {"pair_queue", "issue"}}) {
+            String rid = UUID.randomUUID().toString();
+            Map<String, Object> body = event("senior_open", "shown", rid);
+            body.put("actorEmail", "senior.reviewer@example.org");
+            body.put("actorRole", "senior");
+            body.put("targetType", t[0]);
+            body.put("targetId", t[1]);
+            post(internal(web), body).expectStatus().isCreated();
+            assertThat(text(pg, "SELECT event || '|' || actor_role || '|' || target_type || '|' || target_id FROM ops.audit_event " +
+                "WHERE request_id = '" + rid + "'")).isEqualTo("senior_open|senior|" + t[0] + "|" + t[1]);
+        }
+    }
+
+    @Test void aSeniorSignInIs201() {
+        Map<String, Object> body = event("sign_in", "ok", UUID.randomUUID().toString());
+        body.put("actorEmail", "senior.reviewer@example.org");
+        body.put("actorRole", "senior");
+        post(internal(web), body).expectStatus().isCreated();
+    }
+
+    @Test void pairDecisionsAreNotTheWebsToPost() throws Exception {
+        long before = rows();
+        for (String e : List.of("pair_decision", "pair_decision_rejected"))
+            post(internal(web), event(e, "reviewed", UUID.randomUUID().toString())).expectStatus().isBadRequest()
+                .expectBody().jsonPath("$.errors[0].field").isEqualTo("event");
+        Map<String, Object> body = event("senior_open", "shown", UUID.randomUUID().toString());
+        body.put("targetType", "ddinter_pair");
+        body.put("targetId", "DDInter14/DDInter1951");
+        post(internal(web), body).expectStatus().isBadRequest().expectBody().jsonPath("$.errors[0].field").isEqualTo("targetType");
+        assertThat(rows()).isEqualTo(before);
+    }
 }

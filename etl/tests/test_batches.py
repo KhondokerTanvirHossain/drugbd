@@ -33,16 +33,6 @@ def test_missing_concept_is_recorded_as_issue_and_rest_loads(conn):
     assert note == "not found at source"
     assert conn.execute("SELECT item_count, status FROM ops.batch WHERE batch_id='0001-pilot'").fetchone() == (2, "in_review")
 
-def test_rerun_resets_review_to_pending(conn):
-    conn.execute("UPDATE ops.batch_item SET review='ok' WHERE concept_id=%s", (FIX["id"],))
-    run_batch(conn, FakeClient(), "0001-pilot", [FIX["id"]])
-    assert conn.execute("SELECT review FROM ops.batch_item WHERE batch_id='0001-pilot' AND concept_id=%s",
-                        (FIX["id"],)).fetchall() == [("pending",)]
-    # typo-id left the file but has a snapshot from the first run, so it is kept and marked (§8.1 item 6)
-    assert conn.execute("SELECT review, note FROM ops.batch_item WHERE batch_id='0001-pilot' AND concept_id='typo-id'"
-                        ).fetchall() == [("issue", "removed from batch file")]
-
-
 class MultiClient:
     def __init__(self, payloads):
         self.payloads = payloads
@@ -109,6 +99,19 @@ def test_new_items_get_extracted_at(conn):
     assert conn.execute(
         "SELECT count(*) FROM ops.batch_item WHERE batch_id = '0005-extracted' AND extracted_at IS NULL"
     ).fetchone()[0] == 0
+
+
+def test_unchanged_rerun_keeps_the_review_and_marks_what_left_the_file(conn):
+    """§8.3.1: nothing the approval covered changed, so the review and the stamp stay; the note is still written."""
+    keep = {**FIX, "id": "keep-1"}   # its own product: an approval here must not carry into the other tests' batches
+    run_batch(conn, MultiClient({"keep-1": keep}), "0015-keep", ["keep-1", "keep-gone"])
+    conn.execute("UPDATE ops.batch_item SET review = 'ok' WHERE batch_id = '0015-keep' AND concept_id = 'keep-1'")
+    conn.commit()
+    before = conn.execute("SELECT extracted_at FROM ops.batch_item WHERE batch_id = '0015-keep' AND concept_id = 'keep-1'").fetchone()[0]
+    run_batch(conn, MultiClient({"keep-1": keep}), "0015-keep", ["keep-1"])
+    assert items(conn, "0015-keep") == {"keep-1": ("ok", None), "keep-gone": ("issue", "removed from batch file")}
+    assert conn.execute("SELECT extracted_at FROM ops.batch_item WHERE batch_id = '0015-keep' AND concept_id = 'keep-1'"
+                        ).fetchone()[0] == before
 
 
 def test_rerun_updates_batch_row_and_reopens_review(conn):
@@ -203,4 +206,4 @@ def test_removed_item_readded_to_the_file_is_restamped_with_a_rerun_snapshot(con
     run_batch(conn, MultiClient({FIX["id"]: FIX}), "0014-back", [FIX["id"], "gone-9"])
     assert items(conn, "0014-back")["gone-9"] == ("issue", "not found at source")
     assert snapshot_reasons(conn, "0014-back", "gone-9") == ["run", "rerun"]
-    assert snapshot_reasons(conn, "0014-back", FIX["id"]) == ["run", "rerun", "rerun"]
+    assert snapshot_reasons(conn, "0014-back", FIX["id"]) == ["run"]   # unchanged on both re-runs: no stamp, no snapshot (§8.3.1)

@@ -37,7 +37,7 @@ class ItemHistoryTest {
         assertThat(r.history()).containsExactly(
             new Entry("run", t(0), null, null, null, null, null, null),
             new Entry("extract", t(2), "run", null, null, null, null, null),
-            new Entry("decision", t(10), null, "pharmacist", "ok", "", false, true),
+            new Entry("decision", t(10), null, "pharmacist", "ok", "", false, true, "rerun", null),
             new Entry("extract", t(30), "rerun", null, null, null, null, null));
         assertThat(r.reopen()).isEqualTo(new Reopen("rerun", t(30), t(2), true));
     }
@@ -84,5 +84,31 @@ class ItemHistoryTest {
         List<Decision> ds = List.of(new Decision(1, "ok", "", "pharmacist", t(1), false));
         assertThat(ItemHistory.build(List.of(t(1)), one, ds, null).history())
             .extracting(Entry::kind).containsExactly("run", "extract", "decision");
+    }
+
+    // ---- P1C: why a decision no longer counts (§5.6.5), and the carried approval line (§8.3.1 item 8)
+
+    @Test void decisionsAtOrBeforeTheLatestDismissalNoLongerCountButTheDismissalDoes() {
+        List<Snapshot> one = List.of(new Snapshot(t(1), RUN_1, "run"));
+        List<Decision> ds = List.of(new Decision(1, "ok", "", "pharmacist", t(0), false),
+            new Decision(2, "ok", "", "pharmacist", t(5), false),
+            new Decision(3, "issue", "route should be otic", "engineer", t(6), false),
+            new Decision(4, "dismiss", "the report misread it", "senior", t(7), true),
+            new Decision(5, "issue", "a second report", "pharmacist", t(8), false));
+        List<Entry> h = ItemHistory.build(List.of(), one, ds, t(1)).history().stream().filter(e -> e.kind().equals("decision")).toList();
+        assertThat(h).extracting(Entry::decision, Entry::counts, Entry::uncountedBy).containsExactly(
+            org.assertj.core.groups.Tuple.tuple("ok", false, "rerun"),        // before the stamp: the re-run suffix wins
+            org.assertj.core.groups.Tuple.tuple("ok", false, "dismiss"),
+            org.assertj.core.groups.Tuple.tuple("issue", false, "dismiss"),
+            org.assertj.core.groups.Tuple.tuple("dismiss", true, null),
+            org.assertj.core.groups.Tuple.tuple("issue", true, null));
+        assertThat(h.get(2).note()).isEqualTo("route should be otic");   // the reporter's note stays
+        assertThat(h.get(3).mine()).isTrue();
+    }
+
+    @Test void aCarriedApprovalNamesItsBatchOnTheExtractEntry() {
+        List<Snapshot> snaps = List.of(new Snapshot(t(1), RUN_1, "run", "0001-pilot"));
+        assertThat(ItemHistory.build(List.of(), snaps, List.of(), t(1)).history())
+            .containsExactly(new Entry("extract", t(1), "run", null, null, null, null, null, null, "0001-pilot"));
     }
 }

@@ -3,10 +3,13 @@ import com.niramoy.bddrug.domain.DdinterCode;
 import com.niramoy.bddrug.domain.IngredientSummary;
 import com.niramoy.bddrug.domain.IngredientSummary.*;
 import com.niramoy.bddrug.domain.RouteRule;
+import com.niramoy.bddrug.domain.SourceLinks;
 import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.*;
 
 /**
@@ -24,7 +27,7 @@ public class IngredientSummaryReader {
 
     private record Row(String ingredientName, String bdsId, String preferredName, String raw, BigDecimal value, String unit,
                        BigDecimal per, String perUnit, String coverage, String coverageNote) {}
-    private record EntryRow(String id, String name, int major, int moderate, int minor, int unknown, int total, int disease, int food) {}
+    record EntryRow(String id, String name, int major, int moderate, int minor, int unknown, int total, int disease, int food, Instant fetchedAt) {}
 
     public Mono<List<IngredientSummary>> read(String conceptId, String bdcId, String route) {
         DatabaseClient.GenericExecuteSpec spec = db.sql("""
@@ -50,7 +53,7 @@ public class IngredientSummaryReader {
                 for (Row r : all) if (r.bdsId() == null || seen.add(r.bdsId())) rows.add(r);
                 String[] ids = rows.stream().map(Row::bdsId).filter(Objects::nonNull).toArray(String[]::new);
                 if (ids.length == 0) return Mono.just(assemble(rows, Map.of(), Map.of(), Map.of(), route));
-                return Mono.zip(names(ids), codes(ids)).flatMap(t -> {
+                return Mono.zip(names(ids), codes(conceptId, ids)).flatMap(t -> {
                     String[] dd = t.getT2().values().stream().flatMap(List::stream).filter(c -> "DDINTER".equals(c.system()))
                         .map(Code::code).distinct().toArray(String[]::new);
                     Mono<Map<String, EntryRow>> entries = dd.length == 0 ? Mono.just(Map.of()) : entries(dd);
@@ -68,23 +71,50 @@ public class IngredientSummaryReader {
             .all().collect(LinkedHashMap::new, (m, e) -> m.computeIfAbsent(e.getKey(), k -> new ArrayList<>()).add(e.getValue()));
     }
 
-    private Mono<Map<String, List<Code>>> codes(String[] ids) {
-        return db.sql("SELECT bds_id, system, code, route_scope, method, confidence FROM curated.substance_code " +
-                      "WHERE bds_id = ANY(:ids) ORDER BY bds_id, " + SYSTEM_RANK + ", code")
-            .bind("ids", ids)
-            .map(r -> Map.entry(r.get("bds_id", String.class), new Code(r.get("system", String.class), r.get("code", String.class),
-                r.get("route_scope", String.class), r.get("method", String.class), r.get("confidence", BigDecimal.class).doubleValue())))
+    /**
+     * §5.6.6 "fetched on": RxCUI from its RxNav properties snapshot; ATC, DrugBank and SNOMED CT from the allProperties
+     * snapshot of the substance's RxCUI; DDInter from curated.ddinter_drug; ICD-11 from {@code icd11FetchedAt} (the DGDA
+     * register, raw.ocl_concept). Correlated reads over a handful of codes per record.
+     */
+    static String codesSql(String icd11FetchedAt) {
+        return """
+            SELECT c.bds_id, c.system, c.code, c.route_scope, c.method, c.confidence,
+                   CASE c.system
+                     WHEN 'RXCUI' THEN (SELECT h.fetched_at FROM raw.http_snapshot h
+                                         WHERE h.source = 'rxnav' AND h.request_key = 'GET /REST/rxcui/' || c.code || '/properties.json')
+                     WHEN 'DDINTER' THEN (SELECT d.fetched_at FROM curated.ddinter_drug d WHERE d.ddinter_id = c.code)
+                     WHEN 'ICD11_XM' THEN (%s)
+                     ELSE (SELECT max(h.fetched_at) FROM raw.http_snapshot h
+                             JOIN curated.substance_code rx ON rx.bds_id = c.bds_id AND rx.system = 'RXCUI'
+                            WHERE h.source = 'rxnav' AND h.request_key = 'GET /REST/rxcui/' || rx.code || '/allProperties.json?prop=codes')
+                   END AS fetched_at
+            FROM curated.substance_code c WHERE c.bds_id = ANY(:ids) ORDER BY c.bds_id, %s, c.code"""
+            .formatted(icd11FetchedAt, SYSTEM_RANK);
+    }
+
+    static Code code(io.r2dbc.spi.Readable r) {
+        String system = r.get("system", String.class), code = r.get("code", String.class);
+        OffsetDateTime at = r.get("fetched_at", OffsetDateTime.class);
+        return new Code(system, code, r.get("route_scope", String.class), r.get("method", String.class),
+            r.get("confidence", BigDecimal.class).doubleValue(), SourceLinks.code(system, code, at == null ? null : at.toInstant()).orElse(null));
+    }
+
+    private Mono<Map<String, List<Code>>> codes(String conceptId, String[] ids) {
+        return db.sql(codesSql("SELECT max(rc.fetched_at) FROM raw.ocl_concept rc WHERE rc.concept_id = :c"))
+            .bind("ids", ids).bind("c", conceptId)
+            .map(r -> Map.entry(r.get("bds_id", String.class), code(r)))
             .all().collect(LinkedHashMap::new, (m, e) -> m.computeIfAbsent(e.getKey(), k -> new ArrayList<>()).add(e.getValue()));
     }
 
     /** Pair counts by severity (both sides of the stored pair), disease and food counts, and the DDInter name. */
-    private Mono<Map<String, EntryRow>> entries(String[] ids) {
+    Mono<Map<String, EntryRow>> entries(String[] ids) {
         return db.sql("""
                 WITH e AS (SELECT unnest(CAST(:ids AS text[])) AS id),
                 sides AS (SELECT p.ddinter_a AS id, p.severity FROM curated.ddinter_pair p WHERE p.ddinter_a = ANY(:ids)
                           UNION ALL
                           SELECT p.ddinter_b, p.severity FROM curated.ddinter_pair p WHERE p.ddinter_b = ANY(:ids))
                 SELECT e.id, (SELECT d.name FROM curated.ddinter_drug d WHERE d.ddinter_id = e.id) AS name,
+                       (SELECT d.fetched_at FROM curated.ddinter_drug d WHERE d.ddinter_id = e.id) AS fetched_at,
                        count(s.severity) FILTER (WHERE s.severity = 'major') AS major,
                        count(s.severity) FILTER (WHERE s.severity = 'moderate') AS moderate,
                        count(s.severity) FILTER (WHERE s.severity = 'minor') AS minor,
@@ -96,11 +126,14 @@ public class IngredientSummaryReader {
             .bind("ids", ids)
             .map(r -> new EntryRow(r.get("id", String.class), r.get("name", String.class), n(r.get("major", Long.class)),
                 n(r.get("moderate", Long.class)), n(r.get("minor", Long.class)), n(r.get("unknown", Long.class)),
-                n(r.get("total", Long.class)), n(r.get("disease", Long.class)), n(r.get("food", Long.class))))
+                n(r.get("total", Long.class)), n(r.get("disease", Long.class)), n(r.get("food", Long.class)),
+                at(r.get("fetched_at", OffsetDateTime.class))))
             .all().collectMap(EntryRow::id, e -> e);
     }
 
     private static int n(Long v) { return v == null ? 0 : v.intValue(); }
+
+    private static Instant at(OffsetDateTime t) { return t == null ? null : t.toInstant(); }
 
     private static List<IngredientSummary> assemble(List<Row> rows, Map<String, List<Name>> names, Map<String, List<Code>> codes,
                                                     Map<String, EntryRow> entries, String route) {
@@ -120,7 +153,8 @@ public class IngredientSummaryReader {
             List<Entry> list = dd.stream().map(c -> {
                 EntryRow e = entries.get(c.code());
                 Counts counts = e == null ? new Counts(0, 0, 0, 0, 0) : new Counts(e.major(), e.moderate(), e.minor(), e.unknown(), e.total());
-                return new Entry(c.code(), name(entries, c.code()), c.routeScope(), counts, e == null ? 0 : e.disease(), e == null ? 0 : e.food());
+                return new Entry(c.code(), name(entries, c.code()), c.routeScope(), counts, e == null ? 0 : e.disease(), e == null ? 0 : e.food(),
+                    SourceLinks.code("DDINTER", c.code(), e == null ? null : e.fetchedAt()).orElse(null));
             }).toList();
             Coverage coverage = r.coverage() == null ? new Coverage("not_run", "") : new Coverage(r.coverage(), r.coverageNote() == null ? "" : r.coverageNote());
             out.add(new IngredientSummary(r.bdsId(), r.preferredName(), r.raw() != null ? r.raw() : r.ingredientName(), r.value(),

@@ -10,7 +10,11 @@ import java.util.*;
 @Component
 public class R2dbcCheckAdapter implements CheckQueryPort {
     private final DatabaseClient db;
-    public R2dbcCheckAdapter(DatabaseClient db) { this.db = db; }
+    private final PairReviewReader pairReviews;
+    public R2dbcCheckAdapter(DatabaseClient db, PairReviewReader pairReviews) {
+        this.db = db;
+        this.pairReviews = pairReviews;
+    }
 
     private record CodeRow(String bdsId, DdinterCode code, boolean listed) {}
     private record Codes(Map<String, List<DdinterCode>> byBds, Set<String> listed) {}
@@ -42,8 +46,9 @@ public class R2dbcCheckAdapter implements CheckQueryPort {
         return Mono.zip(products, ingredients).flatMap(t -> {
             String[] bds = t.getT2().stream().map(IngredientRow::bdsId).filter(Objects::nonNull).distinct()
                 .toArray(String[]::new);
-            return codes(bds).flatMap(codes -> pairs(codes.byBds()).map(pairs ->
-                new CheckData(t.getT1(), t.getT2(), codes.byBds(), codes.listed(), pairs)));
+            return codes(bds).flatMap(codes -> Mono.zip(pairs(codes.byBds()),
+                    pairReviews.forCodes(codes.byBds().values().stream().flatMap(List::stream).map(DdinterCode::code).toList(), null))
+                .map(p -> new CheckData(t.getT1(), t.getT2(), codes.byBds(), codes.listed(), p.getT1(), p.getT2())));
         });
     }
 

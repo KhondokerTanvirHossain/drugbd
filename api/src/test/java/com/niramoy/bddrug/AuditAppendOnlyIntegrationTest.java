@@ -12,8 +12,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Spec §7.6: ops.audit_event and ops.item_snapshot are append-only. Every service connects as the owning role, so
- * a REVOKE alone would not hold; the V6 triggers do. Only a reviewed migration that drops them can change past rows.
+ * Spec §7.6, §7.8: ops.audit_event, ops.item_snapshot and ops.pair_review are append-only. Every service connects as
+ * the owning role, so a REVOKE alone would not hold; the V6 triggers do. Only a reviewed migration that drops them can
+ * change past rows.
  */
 @Testcontainers
 class AuditAppendOnlyIntegrationTest {
@@ -30,6 +31,9 @@ class AuditAppendOnlyIntegrationTest {
             INSERT INTO ops.audit_event (event, actor_email, actor_role, target_type, target_id, outcome, request_id)
               VALUES ('decision', 'p@example.org', 'pharmacist', 'batch_item', 'AU/W-1', 'ok',
                       '00000000-0000-4000-8000-000000000002');
+            INSERT INTO ops.pair_review (ddinter_a, ddinter_b, decision, note, content_hash, content, reviewer_email, reviewer_role)
+              VALUES ('DDInter14', 'DDInter1951', 'reviewed', '',
+                      '7e30315f6a7a2b159802317ab92d4b1de80f82517ba6a6af726c3d7a8ecb867f', '{}', 's@example.org', 'senior');
             """);
     }
 
@@ -41,6 +45,9 @@ class AuditAppendOnlyIntegrationTest {
         "UPDATE ops.item_snapshot SET reason = 'rerun'",
         "DELETE FROM ops.item_snapshot",
         "TRUNCATE ops.item_snapshot",
+        "UPDATE ops.pair_review SET note = 'changed'",
+        "DELETE FROM ops.pair_review",
+        "TRUNCATE ops.pair_review",
     })
     void changingPastRowsFailsWithInsufficientPrivilege(String sql) {
         assertThatThrownBy(() -> TestSupport.exec(pg, sql))
@@ -50,5 +57,6 @@ class AuditAppendOnlyIntegrationTest {
     @Test void theRowsAreStillThere() throws Exception {
         assertThat(TestSupport.count(pg, "SELECT count(*) FROM ops.audit_event WHERE target_id = 'AU/W-1'")).isEqualTo(1);
         assertThat(TestSupport.count(pg, "SELECT count(*) FROM ops.item_snapshot WHERE batch_id = 'AU'")).isEqualTo(1);
+        assertThat(TestSupport.count(pg, "SELECT count(*) FROM ops.pair_review")).isEqualTo(1);
     }
 }

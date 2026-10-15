@@ -1,17 +1,48 @@
-"""Batch runs: fetch an explicit list of DGDA concepts, load them, and record per-item review status."""
+"""Batch runs: fetch an explicit list of DGDA concepts, load them, record per-item review status, and settle each item's
+review under the reopen rule (spec §8.3.1): an item is stamped (re-opened) only when something its approval covered
+changed, plus the cases that are always stamped (a DGDA failure, a recovered DGDA load, a return to the batch file after
+removal, and an engineer's --reopen of a non-approved target). --reopen never exempts an approved record from the rule."""
 import pathlib
 import uuid
+from dataclasses import dataclass, field
+from datetime import datetime
 
 import psycopg
 
 from bddrug_etl.load.products import LoadStats, load_products
-from bddrug_etl.load.snapshots import write_snapshots
+from bddrug_etl.load.snapshots import approval_view, build_payload, same_view, view_at, write_snapshots
 from bddrug_etl.ocl.transform import concept_to_product
 from bddrug_etl.stages.results import SharedChanges, StageResult, write_stage_results
 
 OWNER, SOURCE = "MoHFW", "DGDA-Drugs"
 NOT_FOUND, NOT_A_DRUG = "not found at source", "not a registered Drug product"
 REMOVED = "removed from batch file"
+REOPEN_SKIPPED = "skipped: approved, --reopen not confirmed"
+_KEEP = object()
+
+
+@dataclass(frozen=True)
+class DgdaTargets:
+    """What the dgda stage learned while upserting its items (consumed by ``settle``)."""
+    new: frozenset[str] = frozenset()        # no item in this batch before this run
+    readded: frozenset[str] = frozenset()    # back in the batch file after it was marked removed
+    recovered: frozenset[str] = frozenset()  # its previous note was a DGDA failure and it loaded now
+    issues: dict[str, str] = field(default_factory=dict)  # concept_id -> DGDA failure note
+
+
+@dataclass
+class Settled:
+    """What one ``settle`` call wrote: every stamp, the stamps of items that already had one (re-opened), the carried
+    approvals, and the --reopen targets left alone because they are approved."""
+    stamped: list[tuple[str, str]] = field(default_factory=list)
+    reopened: list[tuple[str, str]] = field(default_factory=list)
+    carried: list[tuple[str, str]] = field(default_factory=list)
+    skipped: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class BatchStats(LoadStats):
+    settled: Settled = field(default_factory=Settled)
 
 
 def read_batch_file(path: pathlib.Path) -> list[str]:
@@ -38,35 +69,42 @@ def _dgda_results(concept_ids: list[str], found: list[dict], missing: list[str],
     return out
 
 
-def _upsert_items(cur: psycopg.Cursor, batch_id: str, concept_ids: list[str], issues: dict[str, str]) -> None:
-    """(Re)extract these items now: review ``pending`` (or ``issue`` + reason), ``extracted_at = clock_timestamp()``."""
-    cur.executemany(
-        """INSERT INTO ops.batch_item (batch_id, source, concept_id, review, note, extracted_at)
-           VALUES (%s, %s, %s, %s, %s, clock_timestamp())
-           ON CONFLICT (batch_id, concept_id) DO UPDATE
-           SET source = EXCLUDED.source, review = EXCLUDED.review, note = EXCLUDED.note,
-               extracted_at = clock_timestamp()""",
-        [(batch_id, SOURCE, cid, "issue" if cid in issues else "pending", issues.get(cid)) for cid in concept_ids],
-    )
+def _upsert_items(cur: psycopg.Cursor, batch_id: str, concept_ids: list[str], issues: dict[str, str]) -> DgdaTargets:
+    """Insert the new items (no stamp yet: ``settle`` stamps them) and write the note of the items still in the file.
+
+    §8.3.1 step 2: the note is written whether or not the item is stamped. An item that comes back into the file after it
+    was marked removed keeps its marker here; ``settle`` clears it in the statement that stamps it (§8.3.1 item 5), so the
+    approval made before the removal never counts again without a stamp in between."""
+    cur.execute("SELECT concept_id, note FROM ops.batch_item WHERE batch_id = %s AND concept_id = ANY(%s)", (batch_id, concept_ids))
+    existing = dict(cur.fetchall())
+    new = [cid for cid in concept_ids if cid not in existing]
+    readded = frozenset(cid for cid, note in existing.items() if note == REMOVED)
+    recovered = frozenset(cid for cid, note in existing.items() if note in (NOT_FOUND, NOT_A_DRUG) and cid not in issues)
+    if new:
+        cur.executemany(
+            """INSERT INTO ops.batch_item (batch_id, source, concept_id, review, note, extracted_at)
+               VALUES (%s, %s, %s, 'pending', %s, NULL)""",
+            [(batch_id, SOURCE, cid, issues.get(cid)) for cid in new])
+    kept = [cid for cid in concept_ids if cid in existing and cid not in readded]
+    if kept:
+        cur.executemany("UPDATE ops.batch_item SET source = %s, note = %s WHERE batch_id = %s AND concept_id = %s",
+                        [(SOURCE, issues.get(cid), batch_id, cid) for cid in kept])
+    return DgdaTargets(frozenset(new), readded, recovered, dict(issues))
 
 
-def _upsert_batch(cur: psycopg.Cursor, batch_id: str, concept_ids: list[str], issues: dict[str, str]) -> None:
+def _upsert_batch(cur: psycopg.Cursor, batch_id: str, concept_ids: list[str], issues: dict[str, str]) -> DgdaTargets:
     """Upsert the batch and its items without deleting review history (ops.review_decision).
 
-    Every item in the file is (re)extracted now (``clock_timestamp()``, not the transaction start, so
-    a decision recorded while this transaction was open is older than the stamp): its review goes back to ``pending`` (or ``issue``
-    with the reason when it could not be loaded). Items no longer in the file are deleted only when
-    nobody has reviewed them and they have no snapshot; the others stay, marked ``removed from batch
-    file``. The batch's stage
-    results are cleared, as the old delete-and-recreate did; this run's stages write them again.
+    The batch status is not forced: ``settle`` recomputes it (§8.3.1 item 6). Items no longer in the file are deleted only
+    when nobody has reviewed them and they have no snapshot; the others stay, marked ``removed from batch file``. The
+    batch's stage results are cleared, as the old delete-and-recreate did; this run's stages write them again.
     """
     cur.execute(
         """INSERT INTO ops.batch (batch_id, item_count) VALUES (%s, %s)
-           ON CONFLICT (batch_id) DO UPDATE
-           SET item_count = EXCLUDED.item_count, run_at = now(), status = 'in_review'""",
+           ON CONFLICT (batch_id) DO UPDATE SET item_count = EXCLUDED.item_count, run_at = now()""",
         (batch_id, len(concept_ids)),
     )
-    _upsert_items(cur, batch_id, concept_ids, issues)
+    targets = _upsert_items(cur, batch_id, concept_ids, issues)
     # §8.1 item 6: a snapshot can never be deleted (append-only, NO ACTION foreign key), so an item that has one is
     # kept and marked removed, like an item with decisions.
     cur.execute(
@@ -83,78 +121,158 @@ def _upsert_batch(cur: psycopg.Cursor, batch_id: str, concept_ids: list[str], is
         (REMOVED, batch_id, concept_ids),
     )
     cur.execute("DELETE FROM ops.stage_result WHERE batch_id = %s", (batch_id,))
+    return targets
 
 
-def reopen_review(conn: psycopg.Connection, batch_id: str, concept_ids: list[str],
-                  changes: SharedChanges | None = None, run_id: uuid.UUID | None = None) -> list[tuple[str, str]]:
-    """Stamp ``extracted_at`` and put the items' review back to ``pending`` (Review Focus 3).
-
-    Call it last, inside the same transaction as the curated writes and stage results for ``concept_ids``, so the
-    stamp commits (or rolls back) with them. ``clock_timestamp()`` is used rather than ``now()``: a decision
-    recorded while that transaction was open saw the old data, so it must be older than the stamp.
-    The decision history (``ops.review_decision``) is untouched; the batches go back to ``in_review``.
-
-    ``changes``: the shared rows this transaction changed (``SharedChanges``). Every other product that
-    shows them is re-opened too (``_reopen_dependents``) and returned as (batch_id, concept_id) pairs.
-    All item rows are locked before any ``ops.batch`` row, the same order as the API's decision
-    transaction, so the two cannot deadlock.
-
-    Every stamped item gets a snapshot (V6) with ``run_id`` (one per ETL invocation; a new one when None): the
-    targets with reason ``run``/``rerun``, the re-opened dependents with ``shared_change``.
-    """
-    run_id = run_id or uuid.uuid4()
-    if concept_ids:
-        conn.execute(
-            """UPDATE ops.batch_item SET review = 'pending', extracted_at = clock_timestamp()
-               WHERE batch_id = %s AND concept_id = ANY(%s)""",
-            (batch_id, concept_ids),
-        )
-    others = _reopen_dependents(conn, changes, batch_id, concept_ids) if changes else []
-    batches = sorted(({batch_id} if concept_ids else set()) | {b for b, _ in others})
-    if batches:
-        conn.execute("UPDATE ops.batch SET status = 'in_review' WHERE batch_id = ANY(%s)", (batches,))
-    write_snapshots(conn, [(batch_id, cid) for cid in concept_ids], run_id)
-    write_snapshots(conn, others, run_id, shared=True)
-    return others
+def _stamp(conn: psycopg.Connection, done: Settled, batch_id: str, cid: str, before: datetime | None, run_id: uuid.UUID, *,
+           review: str, note=_KEEP, shared: bool = False, carried: dict | None = None) -> None:
+    """Stamp ``extracted_at`` with ``clock_timestamp()`` (a decision recorded while this transaction was open saw the old
+    data, so it must be older than the stamp), set the review, and write the snapshot, in the caller's transaction.
+    With ``note``, the note is written in the same statement (the return to the file clears its marker here)."""
+    if note is _KEEP:
+        conn.execute("UPDATE ops.batch_item SET review = %s, extracted_at = clock_timestamp() WHERE batch_id = %s AND concept_id = %s",
+                     (review, batch_id, cid))
+    else:
+        conn.execute("""UPDATE ops.batch_item SET review = %s, note = %s, extracted_at = clock_timestamp()
+                        WHERE batch_id = %s AND concept_id = %s""", (review, note, batch_id, cid))
+    write_snapshots(conn, [(batch_id, cid)], run_id, shared=shared, carried_from=carried)
+    done.stamped.append((batch_id, cid))
+    if before is not None:
+        done.reopened.append((batch_id, cid))
+    if carried is not None:
+        done.carried.append((batch_id, cid))
 
 
-def _reopen_dependents(conn: psycopg.Connection, changes: SharedChanges, batch_id: str,
-                       targets: list[str]) -> list[tuple[str, str]]:
-    """Re-open the batch item of every OTHER product that shows a shared row in ``changes`` (items only).
+def _unchanged(conn: psycopg.Connection, batch_id: str, cid: str, at: datetime | None) -> bool:
+    then = view_at(conn, batch_id, cid, at)
+    return then is not None and same_view(then, approval_view(build_payload(conn, batch_id, cid, at)))
 
-    Substance-level rows (names, codes, DDInter mappings, coverage, pairs, texts) are shared by every product
-    with that substance, but approval is per batch record: without this, re-running product Y would change
-    what anonymous visitors see for an approved product X with the same substance, unseen by a pharmacist.
 
-    A product depends on a changed ``bds_id`` through its ICD-11 ingredients, and on a changed DDInter id through
-    its substances' DDINTER mappings. For each dependent product only the item the approval gate reads is
-    re-opened: the latest by ``extracted_at``, then ``batch_id`` (the API's ``ReviewSql.statusOf``). The
-    targets in ``batch_id`` were just stamped by the caller (so that item is their latest) and are skipped.
-    """
-    rows = conn.execute(
-        """WITH subs AS (
-             SELECT unnest(%(bds)s::text[]) AS bds_id
-             UNION
-             SELECT bds_id FROM curated.substance_code WHERE system = 'DDINTER' AND code = ANY(%(dd)s::text[])
-           ), products AS (
+def _approved_elsewhere(conn: psycopg.Connection, batch_id: str, cid: str) -> tuple[str, datetime] | None:
+    """§8.3.1 item 8: the product's latest current item in another batch, when the gate (statusOf) reads it as ok."""
+    row = conn.execute(
+        """SELECT batch_id, extracted_at, review, note FROM ops.batch_item WHERE concept_id = %s AND batch_id <> %s
+           ORDER BY extracted_at DESC NULLS LAST, batch_id DESC LIMIT 1""", (cid, batch_id)).fetchone()
+    if row is None or row[1] is None or row[2] != "ok" or row[3] == REMOVED:
+        return None
+    return row[0], row[1]
+
+
+def _dependents(conn: psycopg.Connection, changes: SharedChanges, batch_id: str,
+                targets: list[str]) -> list[tuple[str, str, datetime | None]]:
+    """The latest current item of every other product whose ingredients carry a changed ``bds_id`` (the item the gate
+    reads, never one marked removed). ``changes.ddinter_ids`` selects no one any more (§8.3.1 step 1): DDInter rows are
+    not covered by an approval."""
+    return conn.execute(
+        """WITH products AS (
              SELECT DISTINCT bpi.concept_id
                FROM curated.brand_product_ingredient bpi
                JOIN curated.substance_code xm ON xm.system = 'ICD11_XM' AND xm.code = bpi.xm_code
-               JOIN subs ON subs.bds_id = xm.bds_id
+              WHERE xm.bds_id = ANY(%(bds)s::text[])
            ), latest AS (
-             SELECT DISTINCT ON (bi.concept_id) bi.batch_id, bi.concept_id
+             SELECT DISTINCT ON (bi.concept_id) bi.batch_id, bi.concept_id, bi.extracted_at, bi.note
                FROM ops.batch_item bi JOIN products p ON p.concept_id = bi.concept_id
               ORDER BY bi.concept_id, bi.extracted_at DESC NULLS LAST, bi.batch_id DESC
            )
-           UPDATE ops.batch_item bi SET review = 'pending', extracted_at = clock_timestamp()
-             FROM latest l
-            WHERE bi.batch_id = l.batch_id AND bi.concept_id = l.concept_id
-              AND NOT (bi.batch_id = %(batch)s AND bi.concept_id = ANY(%(targets)s::text[]))
-           RETURNING bi.batch_id, bi.concept_id""",
-        {"bds": sorted(changes.bds_ids), "dd": sorted(changes.ddinter_ids), "batch": batch_id,
-         "targets": list(targets)},
+           SELECT batch_id, concept_id, extracted_at FROM latest
+            WHERE note IS DISTINCT FROM %(removed)s
+              AND NOT (batch_id = %(batch)s AND concept_id = ANY(%(targets)s::text[]))
+            ORDER BY batch_id, concept_id""",
+        {"bds": sorted(changes.bds_ids), "removed": REMOVED, "batch": batch_id, "targets": list(targets)},
     ).fetchall()
-    return sorted((b, c) for b, c in rows)
+
+
+def _gate_elsewhere(conn: psycopg.Connection, batch_id: str,
+                    unstamped: dict[str, datetime | None]) -> list[tuple[str, str, datetime]]:
+    """For each target this call left unstamped: the product's latest item in another batch, when it is the item the gate
+    (statusOf) reads, i.e. it sorts before the target's item (``extracted_at DESC NULLS LAST, batch_id DESC``) and is not
+    marked removed. One query for every target."""
+    if not unstamped:
+        return []
+    out = []
+    for b, cid, at, item_note in conn.execute(
+            """SELECT DISTINCT ON (concept_id) batch_id, concept_id, extracted_at, note FROM ops.batch_item
+                WHERE concept_id = ANY(%s) AND batch_id <> %s
+                ORDER BY concept_id, extracted_at DESC NULLS LAST, batch_id DESC""",
+            (sorted(unstamped), batch_id)).fetchall():
+        mine = unstamped[cid]
+        if at is None or item_note == REMOVED:
+            continue
+        if mine is None or (at, b) > (mine, batch_id):
+            out.append((b, cid, at))
+    return sorted(out)
+
+
+def _recompute_batches(conn: psycopg.Connection, batch_ids: list[str]) -> None:
+    """§8.3.1 item 6, as the API's recomputeBatch: approved when every current item is ok (and there is one)."""
+    conn.execute(
+        """UPDATE ops.batch b SET status = CASE
+             WHEN EXISTS (SELECT 1 FROM ops.batch_item bi WHERE bi.batch_id = b.batch_id AND bi.note IS DISTINCT FROM %(removed)s)
+              AND NOT EXISTS (SELECT 1 FROM ops.batch_item bi
+                              WHERE bi.batch_id = b.batch_id AND bi.note IS DISTINCT FROM %(removed)s AND bi.review <> 'ok')
+             THEN 'approved' ELSE 'in_review' END
+           WHERE b.batch_id = ANY(%(ids)s)""",
+        {"removed": REMOVED, "ids": batch_ids})
+
+
+def settle(conn: psycopg.Connection, batch_id: str, targets: list[str], changes: SharedChanges | None = None,
+           run_id: uuid.UUID | None = None, *, reopen: bool = False, dgda: DgdaTargets | None = None) -> Settled:
+    """Spec §8.3.1: call it last in each stage's transaction, after that stage's results are written.
+
+    Targets are locked first (items before any ops.batch row, the API's decision order). Per target: a DGDA failure is
+    stamped ``issue`` with its reason; an item back in the file, or whose DGDA load recovered, is stamped ``pending``;
+    with ``reopen`` any target that is not approved is stamped ``pending``. Otherwise (an approved target under
+    ``reopen`` included) the target is stamped only when its approval view differs from the view of its snapshot at its
+    current stamp (or it has no stamp or snapshot there), and a new item of a product approved elsewhere with the same
+    view carries that approval; an approved --reopen target with an unchanged view is skipped (§13.1 Q12). Dependents of
+    ``changes.bds_ids``, and the product's gate item in another batch when it is newer than an unstamped target's item,
+    are stamped ``pending`` (``shared_change``) only when their view changed, with or without ``reopen`` (G3, §12.5).
+    """
+    run_id = run_id or uuid.uuid4()
+    dgda = dgda or DgdaTargets()
+    done = Settled()
+    rows = {cid: (review, at) for cid, review, at in conn.execute(
+        """SELECT concept_id, review, extracted_at FROM ops.batch_item
+           WHERE batch_id = %s AND concept_id = ANY(%s) ORDER BY concept_id FOR UPDATE""",
+        (batch_id, list(targets))).fetchall()}
+    for cid in targets:
+        if cid not in rows:
+            continue
+        review, at = rows[cid]
+        if cid in dgda.issues:
+            _stamp(conn, done, batch_id, cid, at, run_id, review="issue", note=dgda.issues[cid])
+        elif cid in dgda.readded:
+            _stamp(conn, done, batch_id, cid, at, run_id, review="pending", note=None)
+        elif cid in dgda.recovered:
+            _stamp(conn, done, batch_id, cid, at, run_id, review="pending")
+        elif reopen and review != "ok":
+            _stamp(conn, done, batch_id, cid, at, run_id, review="pending")
+        elif not _unchanged(conn, batch_id, cid, at):
+            origin = _approved_elsewhere(conn, batch_id, cid) if cid in dgda.new else None
+            if origin is not None and _unchanged_since(conn, origin, batch_id, cid, at):
+                _stamp(conn, done, batch_id, cid, at, run_id, review="ok",
+                       carried={"batchId": origin[0], "extractedAt": origin[1].isoformat()})
+            else:
+                _stamp(conn, done, batch_id, cid, at, run_id, review="pending")
+        elif reopen:
+            done.skipped.append(cid)
+    if changes is not None and changes.bds_ids:
+        for b, cid, at in _dependents(conn, changes, batch_id, targets):
+            if not _unchanged(conn, b, cid, at):
+                _stamp(conn, done, b, cid, at, run_id, review="pending", shared=True)
+    stamped = set(done.stamped)
+    unstamped = {cid: rows[cid][1] for cid in targets if cid in rows and (batch_id, cid) not in stamped}
+    for b, cid, at in _gate_elsewhere(conn, batch_id, unstamped):
+        if (b, cid) not in stamped and not _unchanged(conn, b, cid, at):
+            _stamp(conn, done, b, cid, at, run_id, review="pending", shared=True)
+    _recompute_batches(conn, sorted({batch_id} | {b for b, _ in done.stamped}))
+    return done
+
+
+def _unchanged_since(conn: psycopg.Connection, origin: tuple[str, datetime], batch_id: str, cid: str, at: datetime | None) -> bool:
+    """The new item's view now equals the view the approved item's snapshot (at its stamp) recorded."""
+    then = view_at(conn, origin[0], cid, origin[1])
+    return then is not None and same_view(then, approval_view(build_payload(conn, batch_id, cid, at)))
 
 
 def _load(conn: psycopg.Connection, client, concept_ids: list[str]):
@@ -170,36 +288,33 @@ def _load(conn: psycopg.Connection, client, concept_ids: list[str]):
 
 
 def run_batch(conn: psycopg.Connection, client, batch_id: str, concept_ids: list[str],
-              run_id: uuid.UUID | None = None) -> LoadStats:
-    """Load the batch and record its items, 'dgda' stage results and snapshots in one transaction (committed here).
+              run_id: uuid.UUID | None = None, *, reopen: bool = False) -> BatchStats:
+    """Load the batch, record its items and 'dgda' stage results, and settle them, in one transaction (committed here).
 
-    Re-running a batch keeps its review history: see ``_upsert_batch``.
+    Re-running a batch keeps its review history: see ``_upsert_batch`` and ``settle``.
     """
     stats, found, missing, not_products, issues = _load(conn, client, concept_ids)
     with conn.cursor() as cur:
-        _upsert_batch(cur, batch_id, concept_ids, issues)
+        targets = _upsert_batch(cur, batch_id, concept_ids, issues)
     write_stage_results(conn, batch_id, "dgda", _dgda_results(concept_ids, found, missing, not_products))
-    write_snapshots(conn, [(batch_id, cid) for cid in concept_ids], run_id or uuid.uuid4())
+    settled = settle(conn, batch_id, concept_ids, None, run_id, reopen=reopen, dgda=targets)
     conn.commit()
-    return stats
+    return BatchStats(stats.seen, stats.loaded, stats.skipped, settled)
 
 
 def run_batch_items(conn: psycopg.Connection, client, batch_id: str, concept_ids: list[str],
-                    run_id: uuid.UUID | None = None) -> LoadStats:
+                    run_id: uuid.UUID | None = None, *, reopen: bool = False) -> BatchStats:
     """Re-load only ``concept_ids`` of an already loaded batch (single-record re-run), committed here.
 
-    Only these items are touched: they are re-extracted (``_upsert_items``), their stage results are
-    cleared and their 'dgda' results and snapshots written, all in one transaction. The other items, the batch's
-    ``item_count`` and ``run_at`` stay as they are; the batch goes back to ``in_review``. Never call
-    ``run_batch`` with a subset: it would treat every other item as removed from the batch file.
+    Only these items are touched: their notes and 'dgda' results are rewritten and they are settled, in one transaction.
+    The other items, the batch's ``item_count`` and ``run_at`` stay as they are. Never call ``run_batch`` with a subset:
+    it would treat every other item as removed from the batch file.
     """
     stats, found, missing, not_products, issues = _load(conn, client, concept_ids)
     with conn.cursor() as cur:
-        _upsert_items(cur, batch_id, concept_ids, issues)
-        cur.execute("UPDATE ops.batch SET status = 'in_review' WHERE batch_id = %s", (batch_id,))
-        cur.execute("DELETE FROM ops.stage_result WHERE batch_id = %s AND concept_id = ANY(%s)",
-                    (batch_id, concept_ids))
+        targets = _upsert_items(cur, batch_id, concept_ids, issues)
+        cur.execute("DELETE FROM ops.stage_result WHERE batch_id = %s AND concept_id = ANY(%s)", (batch_id, concept_ids))
     write_stage_results(conn, batch_id, "dgda", _dgda_results(concept_ids, found, missing, not_products))
-    write_snapshots(conn, [(batch_id, cid) for cid in concept_ids], run_id or uuid.uuid4())
+    settled = settle(conn, batch_id, concept_ids, None, run_id, reopen=reopen, dgda=targets)
     conn.commit()
-    return stats
+    return BatchStats(stats.seen, stats.loaded, stats.skipped, settled)

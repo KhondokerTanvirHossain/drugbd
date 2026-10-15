@@ -33,7 +33,8 @@ class SharedChanges:
 
     Substance-level rows (names, codes, DDInter mappings, coverage) are keyed by ``bds_ids``; DDInter rows
     (drug, pairs, texts, diseases, foods) by ``ddinter_ids``, both sides of a pair. Every product with such a
-    substance shows these rows, so the pipeline re-opens those products' review (``reopen_dependents``).
+    substance shows these rows; since P1C only bds_ids select products to re-check under the reopen rule
+    (load.batches.settle), and ddinter_ids is kept for the run log.
     """
     bds_ids: set[str] = field(default_factory=set)
     ddinter_ids: set[str] = field(default_factory=set)

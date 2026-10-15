@@ -89,4 +89,71 @@ class ApprovalRuleTest {
         // without a run stamp nothing is "before" it
         assertThat(ApprovalRule.displayStatus(List.of(d("ok", "pharmacist", -5)), null, "pending")).isEqualTo("pending");
     }
+
+    // ---- P1C: the senior role, dismissals (§5.2, D57) and carried approvals (§8.3.1 item 8)
+
+    @Test void aSeniorOkApproves() {
+        assertThat(ApprovalRule.review(List.of(d("ok", "senior", 1)), RUN)).contains("ok");
+        assertThat(ApprovalRule.review(List.of(d("ok", "senior", 1), d("issue", "engineer", 2)), RUN)).contains("issue");
+        assertThat(ApprovalRule.actsAsPharmacist("senior")).isTrue();
+        assertThat(ApprovalRule.actsAsPharmacist("pharmacist")).isTrue();
+        assertThat(ApprovalRule.actsAsPharmacist("engineer")).isFalse();
+    }
+
+    @Test void aCarriedApprovalWithNoLaterDecisionApprovesAndAnIssueAfterItIsAnIssue() {
+        assertThat(ApprovalRule.review(List.of(), RUN, true)).contains("ok");
+        assertThat(ApprovalRule.review(List.of(d("issue", "pharmacist", 1)), RUN, true)).contains("issue");
+        // an engineer's check after a carried approval leaves it approved
+        assertThat(ApprovalRule.review(List.of(d("ok", "engineer", 1)), RUN, true)).contains("ok");
+        // a decision before the stamp is not the carried approval
+        assertThat(ApprovalRule.review(List.of(d("issue", "pharmacist", -1)), RUN, true)).contains("ok");
+    }
+
+    @Test void aDismissalAfterAnIssueIsPendingEvenWhenAPharmacistApprovedBeforeTheIssue() {
+        List<ReviewDecision> ds = List.of(d("ok", "pharmacist", 1), d("issue", "engineer", 2), d("dismiss", "senior", 3));
+        assertThat(ApprovalRule.review(ds, RUN)).contains("pending");
+        assertThat(ApprovalRule.displayStatus(ds, RUN, "pending")).isEqualTo("pending");
+    }
+
+    @Test void reviewIsPendingNeverEmptyWhenTheNewestDecisionIsADismissal() {
+        assertThat(ApprovalRule.review(List.of(d("issue", "pharmacist", 1), d("dismiss", "senior", 2)), RUN)).contains("pending");
+    }
+
+    @Test void decisionsAtOrBeforeADismissalDoNotCount() {
+        List<ReviewDecision> ds = List.of(d("issue", "pharmacist", 1), d("dismiss", "senior", 2), d("ok", "engineer", 3));
+        assertThat(ApprovalRule.review(ds, RUN)).contains("pending");
+        assertThat(ApprovalRule.displayStatus(ds, RUN, "pending")).isEqualTo("engineer_checked");
+        // a senior approves again after the dismissal
+        assertThat(ApprovalRule.review(List.of(d("issue", "pharmacist", 1), d("dismiss", "senior", 2), d("ok", "senior", 3)), RUN))
+            .contains("ok");
+    }
+
+    @Test void aNewIssueAfterADismissalIsAnIssue() {
+        List<ReviewDecision> ds = List.of(d("issue", "pharmacist", 1), d("dismiss", "senior", 2), d("issue", "engineer", 3));
+        assertThat(ApprovalRule.review(ds, RUN)).contains("issue");
+        assertThat(ApprovalRule.displayStatus(ds, RUN, "issue")).isEqualTo("issue");
+    }
+
+    @Test void aDismissalNeverShowsBackInReview() {
+        // approved before the latest run, then an issue and its dismissal after it
+        List<ReviewDecision> ds = List.of(d("ok", "pharmacist", -5), d("issue", "pharmacist", 1), d("dismiss", "senior", 2));
+        assertThat(ApprovalRule.displayStatus(ds, RUN, "pending")).isEqualTo("pending");
+    }
+
+    @Test void aDismissalUndoesACarriedApprovalToo() {
+        assertThat(ApprovalRule.review(List.of(d("issue", "pharmacist", 1), d("dismiss", "senior", 2)), RUN, true)).contains("pending");
+    }
+
+    @Test void aDismissalBeforeTheRunStampIsForgottenLikeAnyDecision() {
+        List<ReviewDecision> ds = List.of(d("issue", "pharmacist", -9), d("dismiss", "senior", -8), d("issue", "engineer", 1));
+        assertThat(ApprovalRule.review(ds, RUN)).contains("issue");
+    }
+
+    @Test void openIssuesAreTheCountedIssuesAfterTheLatestDismissal() {
+        List<ReviewDecision> ds = List.of(d("issue", "pharmacist", -3), d("issue", "engineer", 1), d("dismiss", "senior", 2),
+            d("issue", "senior", 3), d("issue", "pharmacist", 4));
+        assertThat(ApprovalRule.openIssues(ds, RUN)).extracting(ReviewDecision::reviewerRole).containsExactly("senior", "pharmacist");
+        assertThat(ApprovalRule.openIssues(List.of(d("issue", "engineer", 1)), RUN)).hasSize(1);
+        assertThat(ApprovalRule.openIssues(List.of(d("issue", "engineer", 1), d("dismiss", "senior", 2)), RUN)).isEmpty();
+    }
 }

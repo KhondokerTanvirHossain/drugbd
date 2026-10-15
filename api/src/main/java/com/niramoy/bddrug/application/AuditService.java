@@ -14,10 +14,12 @@ import java.util.regex.Pattern;
  */
 @Service
 public class AuditService {
+    /** §5.15, §7.5: the web's events. pair_decision and pair_decision_rejected are the API's own (pair decision path). */
     public static final Set<String> WEB_EVENTS =
-        Set.of("sign_in", "sign_in_denied", "sign_out", "review_open", "evidence_open", "decision_denied");
-    public static final Set<String> ROLES = Set.of("pharmacist", "engineer", "user");
-    public static final Set<String> TARGET_TYPES = Set.of("batch_item", "flag");
+        Set.of("sign_in", "sign_in_denied", "sign_out", "review_open", "evidence_open", "decision_denied", "senior_open");
+    public static final Set<String> ROLES = Set.of("pharmacist", "engineer", "senior", "user");
+    /** senior_open targets a substance (`BDS-…`) or the pair queue (its `show` value). ddinter_pair is written by the API only. */
+    public static final Set<String> TARGET_TYPES = Set.of("batch_item", "flag", "substance", "pair_queue");
     public static final int TARGET_ID_MAX = 200;
     /** An id (a flag id, a batch id or a concept id) or a batch item `{batchId}/{conceptId}`; never free text (§5.15). */
     private static final Pattern TARGET_ID =

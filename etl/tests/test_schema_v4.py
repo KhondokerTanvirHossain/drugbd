@@ -133,7 +133,8 @@ def test_deleting_a_batch_item_with_decisions_is_refused(conn):
     assert conn.execute("SELECT count(*) FROM ops.review_decision WHERE batch_id = '0101-fk'").fetchone()[0] == 1
 
 
-def test_rerunning_a_batch_keeps_decision_history_and_resets_review(conn):
+def test_rerunning_a_batch_keeps_decision_history_and_an_unchanged_approval(conn):
+    """§8.3.1: nothing the approval covered changed, so the re-run keeps the review and its stamp."""
     run_batch(conn, FakeClient(), "0102-rerun", [FIX["id"]])
     first = conn.execute(
         "SELECT extracted_at FROM ops.batch_item WHERE batch_id = '0102-rerun' AND concept_id = %s", (FIX["id"],)
@@ -149,8 +150,8 @@ def test_rerunning_a_batch_keeps_decision_history_and_resets_review(conn):
         "SELECT review, note, extracted_at FROM ops.batch_item WHERE batch_id = '0102-rerun' AND concept_id = %s",
         (FIX["id"],),
     ).fetchone()
-    assert (review, note) == ("pending", None)
-    assert second > first
+    assert (review, note) == ("ok", None)
+    assert second == first
     history = conn.execute(
         "SELECT decision, note, reviewer_role FROM ops.review_decision WHERE batch_id = '0102-rerun'"
     ).fetchall()

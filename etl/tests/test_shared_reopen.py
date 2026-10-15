@@ -1,10 +1,6 @@
-"""Approval vs shared rows: a stage that changes substance-level rows (names, codes, DDInter mappings,
-coverage, pairs, texts) for product Y re-opens the review of every OTHER product that shows those rows.
-
-Approval is per batch record, but the substances and DDInter stages write rows keyed by substance /
-DDInter id that every product with that substance shows (product page, substance page, /check alerts and
-"no data"). Without this, re-running a pending product would change what anonymous visitors see for an
-already approved one, with no pharmacist seeing the change (Review Focus 1 and 3).
+"""Approval vs shared rows, under the P1C reopen rule (spec §8.3.1): a stage that changes substance-level rows for product Y
+re-opens another product X only when something X's approval covered changed (codes, chosen DDInter entries, coverage).
+Pairs, texts, diseases, foods and synonyms never re-open a record (PO D5).
 """
 import contextlib
 import logging
@@ -18,7 +14,7 @@ from testcontainers.postgres import PostgresContainer
 from bddrug_etl.ddinter.client import DDInterPairRow, InteractWithList, InteractWithRow
 from bddrug_etl.ddinter.html import DDInterDrug, InteractionText
 from bddrug_etl.jobs import run_pipeline
-from bddrug_etl.load.batches import reopen_review
+from bddrug_etl.load.batches import settle
 from bddrug_etl.stages.results import SharedChanges
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -237,13 +233,15 @@ def test_name_only_ddinter_match_added_through_another_batch_reopens_an_approved
                if r.name == "run_pipeline"), "the re-opened records are logged"
 
 
-def test_a_substances_stage_change_alone_reopens_dependents(url, tmp_path):
+def test_a_new_synonym_alone_reopens_no_dependent(url, tmp_path):
+    """§13.1 Q7: a new dgda_content name for the shared substance is not covered."""
     dd = FakeDDInter(BOTH)
     assert run(Harness(url, dd), tmp_path, "0301-a", [X]) == 0
-    decided = approve(url, "0301-a", X)
-    h = Harness(url, dd, concepts(y_content="Shared-alias 5 mg"))  # a new dgda_content name for the substance
+    approve(url, "0301-a", X)
+    before = item(url, "0301-a", X)
+    h = Harness(url, dd, concepts(y_content="Shared-alias 5 mg"))
     assert run(h, tmp_path, "0301-b", [Y], "--stages", "dgda,substances") == 0
-    assert_reopened(url, "0301-a", X, decided)
+    assert item(url, "0301-a", X) == before
 
 
 @pytest.mark.parametrize("first, second", [({}, BOTH), (BOTH, {})], ids=["none-to-full", "full-to-none"])
@@ -255,15 +253,17 @@ def test_a_coverage_flip_through_another_batch_reopens_an_approved_product(url, 
     assert_reopened(url, "0302-a", X, decided)
 
 
-def test_a_changed_pair_reopens_the_products_on_both_sides(url, tmp_path):
+def test_a_changed_pair_reopens_neither_side(url, tmp_path):
+    """PO D5: a pair change makes the pair "changed" in the senior queue (API); no record re-opens."""
     pair = frozenset((SH, OT))
     assert run(Harness(url, FakeDDInter(BOTH, {pair: "major"})), tmp_path, "0303-a", [X, Z]) == 0
-    decided_x, decided_z = approve(url, "0303-a", X), approve(url, "0303-a", Z)
-    # DDInter downgraded the pair; Y (sharing X's substance) re-stores it
+    approve(url, "0303-a", X)
+    approve(url, "0303-a", Z)
+    before = q(url, "SELECT concept_id, review, extracted_at FROM ops.batch_item WHERE batch_id = '0303-a' ORDER BY 1")
     assert run(Harness(url, FakeDDInter(BOTH, {pair: "minor"})), tmp_path, "0303-b", [Y]) == 0
     assert q(url, "SELECT severity FROM curated.ddinter_pair") == [("minor",)]
-    assert_reopened(url, "0303-a", X, decided_x)
-    assert_reopened(url, "0303-a", Z, decided_z)
+    assert q(url, "SELECT concept_id, review, extracted_at FROM ops.batch_item WHERE batch_id = '0303-a' ORDER BY 1") == before
+    assert batch_status(url, "0303-a") == "approved"
 
 
 def test_an_identical_run_in_another_batch_keeps_approvals(url, tmp_path):
@@ -313,10 +313,10 @@ def test_a_rolled_back_ddinter_chunk_reopens_nothing(url, tmp_path):
     assert item(url, "0307-a", X) == before
 
 
-# --- reopen_review(..., changes) ------------------------------------------------------------------
+# --- settle(..., changes) -------------------------------------------------------------------------
 
 
-def test_reopen_review_with_changes_reopens_dependents_and_returns_them(url, tmp_path):
+def test_settle_stamps_a_dependent_only_when_its_view_changed(url, tmp_path):
     dd = FakeDDInter(BOTH)
     assert run(Harness(url, dd), tmp_path, "0308-a", [X, Z]) == 0
     approve(url, "0308-a", X)
@@ -324,26 +324,22 @@ def test_reopen_review_with_changes_reopens_dependents_and_returns_them(url, tmp
     assert run(Harness(url, dd), tmp_path, "0308-b", [Y]) == 0
     sh = q(url, "SELECT bds_id FROM curated.substance_code WHERE system = 'ICD11_XM' AND code = 'XMSH1'")[0][0]
     with psycopg.connect(url) as c:
-        assert reopen_review(c, "0308-b", [Y]) == []  # no shared change: only the targets
-        assert reopen_review(c, "0308-b", [Y], SharedChanges()) == []
-        assert item(url, "0308-a", X)[0] == "ok"
-    before_y = item(url, "0308-b", Y)[1]
+        # nothing changed: neither the target nor the dependents are stamped; DDInter ids select no one any more
+        s = settle(c, "0308-b", [Y], SharedChanges(bds_ids={sh}, ddinter_ids={OT}))
+        assert (s.stamped, s.reopened) == ([], [])
+    assert item(url, "0308-a", X)[0] == item(url, "0308-a", Z)[0] == "ok"
     with psycopg.connect(url) as c:
-        got = reopen_review(c, "0308-b", [Y], SharedChanges(bds_ids={sh}, ddinter_ids={OT}))
-    # X through the substance, Z through its DDInter id; Y is a target (stamped, not returned)
-    assert got == [("0308-a", X), ("0308-a", Z)]
-    assert item(url, "0308-a", X)[0] == item(url, "0308-a", Z)[0] == "pending"
+        c.execute("DELETE FROM curated.interaction_coverage WHERE bds_id = %s", (sh,))   # coverage full -> not_run: covered
+        s = settle(c, "0308-b", [Y], SharedChanges(bds_ids={sh}))
+    assert s.reopened == [("0308-b", Y), ("0308-a", X)]   # the target first, then the dependent
+    assert item(url, "0308-a", X)[0] == "pending" and item(url, "0308-a", Z)[0] == "ok"
     assert batch_status(url, "0308-a") == "in_review"
-    review_y, stamp_y = item(url, "0308-b", Y)
-    assert review_y == "pending" and stamp_y > before_y
 
 
 def test_a_shared_change_writes_a_shared_change_snapshot_with_the_run_id_of_the_run_that_caused_it(url, tmp_path):
-    dd = FakeDDInter(BOTH)
-    assert run(Harness(url, dd), tmp_path, "0310-a", [X]) == 0
+    assert run(Harness(url, FakeDDInter({})), tmp_path, "0310-a", [X]) == 0
     approve(url, "0310-a", X)
-    h = Harness(url, dd, concepts(y_content="Shared-alias 5 mg"))   # a new dgda_content name for the shared substance
-    assert run(h, tmp_path, "0310-b", [Y], "--stages", "dgda,substances") == 0
+    assert run(Harness(url, FakeDDInter(BOTH)), tmp_path, "0310-b", [Y]) == 0   # coverage none -> full: covered
     reason, run_id = q(url, """SELECT reason, run_id FROM ops.item_snapshot WHERE batch_id = '0310-a' AND concept_id = %s
                                ORDER BY extracted_at DESC LIMIT 1""", (X,))[0]
     y_runs = {r for (r,) in q(url, "SELECT run_id FROM ops.item_snapshot WHERE batch_id = '0310-b' AND concept_id = %s", (Y,))}

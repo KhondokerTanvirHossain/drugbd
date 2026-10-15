@@ -7,6 +7,11 @@ on:
         description: "Optional: comma-separated subset of dgda,substances,clinical,ddinter (empty runs all four), e.g. ddinter"
         required: false
         default: ""
+      reopen:
+        description: "Re-open the batch's records whatever changed (spec §8.3.1 item 5); approved records are skipped"
+        type: boolean
+        required: false
+        default: false
 concurrency: {group: deploy, cancel-in-progress: false}
 jobs:
   load:
@@ -21,12 +26,13 @@ jobs:
         env:
           BATCH: ${{ inputs.batch }}
           STAGES: ${{ inputs.stages }}
+          REOPEN: ${{ inputs.reopen }}
           APP_DIR: /home/ec2-user/drugdb
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          envs: BATCH,STAGES,APP_DIR
+          envs: BATCH,STAGES,REOPEN,APP_DIR
           command_timeout: 60m
           script: |
             set -e
@@ -35,9 +41,11 @@ jobs:
             case "$STAGES" in *[!a-z,]*) echo "bad stages"; exit 1;; esac
             test -f "$APP_DIR/batches/$BATCH" || { echo "batch $BATCH is not on the host; merge it to main and let deploy run first" >&2; exit 1; }
             cd "$APP_DIR/deploy"
+            case "$REOPEN" in true|false) ;; *) echo "bad reopen"; exit 1;; esac
+            REOPEN_FLAG=""; [ "$REOPEN" = "true" ] && REOPEN_FLAG="--reopen"
             # Only the bddrug compose project's etl job runs; no other container is touched. Non-zero exit fails the job.
             if [ -n "$STAGES" ]; then
-              docker-compose --profile jobs run --rm etl --batch "/app/batches/$BATCH" --stages "$STAGES"
+              docker-compose --profile jobs run --rm etl --batch "/app/batches/$BATCH" --stages "$STAGES" $REOPEN_FLAG
             else
-              docker-compose --profile jobs run --rm etl --batch "/app/batches/$BATCH"
+              docker-compose --profile jobs run --rm etl --batch "/app/batches/$BATCH" $REOPEN_FLAG
             fi

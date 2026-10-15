@@ -15,11 +15,11 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
-/** Review decisions: validated here, guarded, appended and applied by the port; every 400 and 409 is audited. */
+/** Review decisions (§7.2): validated here (a dismiss is a senior's, with a 5–1000 character note), guarded, appended and applied by the port; every 400 and 409 is audited. */
 @Service
 public class ReviewService {
     private static final Logger log = LoggerFactory.getLogger(ReviewService.class);
-    public static final Set<String> DECISIONS = Set.of("ok", "issue"), ROLES = Set.of("pharmacist", "engineer");
+    public static final Set<String> DECISIONS = Set.of("ok", "issue", "dismiss"), ROLES = Set.of("pharmacist", "engineer", "senior");
     public static final int ISSUE_NOTE_MIN = 5, NOTE_MAX = 1000;
     private static final Pattern UUID_TEXT =
         Pattern.compile("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$");
@@ -51,9 +51,12 @@ public class ReviewService {
 
     static NewDecision validate(Request r) {
         String decision = Validate.oneOf(r.decision(), DECISIONS, "decision");
-        String note = Validate.text(r.note(), "issue".equals(decision) ? ISSUE_NOTE_MIN : 0, NOTE_MAX, "note");
+        boolean needsNote = "issue".equals(decision) || "dismiss".equals(decision);
+        String note = Validate.text(r.note(), needsNote ? ISSUE_NOTE_MIN : 0, NOTE_MAX, "note");
         String email = Validate.email(r.reviewerEmail(), "reviewerEmail");
         String role = Validate.oneOf(r.reviewerRole(), ROLES, "reviewerRole");
+        if ("dismiss".equals(decision) && !"senior".equals(role))
+            throw new InvalidQueryException("reviewerRole", "Only a senior pharmacist can dismiss an issue");
         Instant extractedAt = runStamp(r);
         Long lastDecisionId = lastDecisionId(r);
         UUID requestId = requestId(r.requestId());
