@@ -8,7 +8,7 @@ import NoDataChip from "@/components/ui/NoDataChip";
 import ReviewStatus from "@/components/ui/ReviewStatus";
 import Severity from "@/components/ui/Severity";
 import { FULL_TEXT, LEARN_BOARD, NOT_REVIEWED, NO_DATA_SENTENCE } from "@/lib/copy";
-import { P, PILOT_SNAPSHOT as S, substanceNamed, substancesOf } from "./pilot-snapshot";
+import { P, PILOT_SNAPSHOT as S, type PilotId, substanceNamed, substancesOf } from "./pilot-snapshot";
 
 const H = 2;
 
@@ -114,8 +114,10 @@ function Code({ label, value }: { label: string; value: unknown }) {
 
 /** Chapter 8 "For partners" (Board L; §1.6 items 13 and 16, §6.8). */
 export default function PartnersChapter({ ctx }: { ctx: LearnContext }) {
-  const napaCaption = ctx.apiStub && ctx.pending(P.napa);
-  const noneApproved = CHECK_IDS.every((id) => ctx.pending(id));
+  // An approval-state sentence prints only for a record /v1/stats reports as not approved, never from a fallback (§6.8).
+  const said = (id: PilotId) => ctx.item(id) !== null && ctx.pending(id);
+  const napaCaption = ctx.apiStub && said(P.napa);
+  const noneApproved = CHECK_IDS.every(said);
   return (
     <Chapter slug="partners" level={1}>
       <Section id="api-status" h={H}>

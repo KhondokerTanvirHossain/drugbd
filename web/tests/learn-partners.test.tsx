@@ -116,6 +116,16 @@ describe("chapter 8: both example bodies match the §7.4 shapes (§11.2)", () =>
     expect(one).not.toContain("None of the three is approved");
   });
 
+  it("no approval-state caption from a fallback: a record /v1/stats does not report says nothing (§6.8)", () => {
+    const gone = decode(render(pilotStats({ batchId: "0002-other" }), true));
+    expect(gone).not.toContain("Napa is not approved yet");
+    expect(gone).not.toContain("None of the three is approved");
+    const napaMissing = decode(render(pilotStats({ missing: [P.napa] }), true));
+    expect(napaMissing).not.toContain("Napa is not approved yet");
+    const domMissing = decode(render(pilotStats({ missing: [P.domperidone] })));
+    expect(domMissing).not.toContain("None of the three is approved");
+  });
+
   it("the reviewer-access panels are withdrawn with their records (§6.8)", () => {
     const napa = render(pilotStats({ withdrawn: [P.napa] }));
     expect(napa).toMatch(/<div id="prod-all"><div class="snap" data-withdrawn="">/);
