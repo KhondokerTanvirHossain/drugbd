@@ -155,6 +155,43 @@ describe("the undo window commits what the reviewer saw (§5.8)", () => {
   });
 });
 
+describe("in-island transitions (§5.12)", () => {
+  it("a transition longer than 300 ms announces 'Loading batch {id}' in the one live region, then 'Batch {id} loaded.'", async () => {
+    const view = await mount();
+    fireEvent.keyDown(desk(), { key: "j" });
+    expect(router.push).toHaveBeenCalledTimes(1);
+    expect(document.querySelector(".decision-promise")!.textContent).toContain("Loading batch 0001-pilot");
+    await settle(250);                                      // a quick transition says nothing
+    expect(live()).toBe("");
+    await settle(200);                                      // past 300 ms, plus the 60 ms the region waits before writing
+    expect(live()).toBe("Loading batch 0001-pilot");
+    expect(document.querySelectorAll("[aria-live]")).toHaveLength(1);
+    view.rerender(<Desk reg={makeReg("clarith")}><p>clarith detail</p></Desk>);
+    await settle(100);
+    expect(live()).toBe("Batch 0001-pilot loaded.");
+  });
+
+  it("a filter or Show all on the open record that takes longer than 300 ms ends with 'Batch {id} loaded.'", async () => {
+    const link = <p><a href={`/review/0001-pilot/${NAPA.conceptId}?show=warn`} data-fk="f-warn">Warnings</a></p>;
+    const view = await mount(NAPA, link);
+    fireEvent.click(screen.getByText("Warnings"));
+    await settle(500);
+    expect(live()).toBe("Loading batch 0001-pilot");
+    view.rerender(<Desk reg={makeReg("napa", { show: "warn" })}>{link}</Desk>);
+    await settle(100);
+    expect(live()).toBe("Batch 0001-pilot loaded.");
+  });
+
+  it("a transition that ends within 300 ms announces neither message", async () => {
+    const view = await mount();
+    fireEvent.keyDown(desk(), { key: "j" });
+    await settle(150);
+    view.rerender(<Desk reg={makeReg("clarith")}><p>clarith detail</p></Desk>);
+    await settle(1_000);
+    expect(live()).toBe("");
+  });
+});
+
 describe("stale detection and held subtrees (§5.11, D45)", () => {
   it("a re-stamp found by the 20 s poll shows the banner, cancels the window and pauses the bar", async () => {
     await mount();

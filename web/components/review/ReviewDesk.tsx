@@ -86,6 +86,8 @@ export default function ReviewDesk(props: ReviewDeskProps) {
   const [resetKey, setResetKey] = useState(0);
   const [botState, setBotState] = useState<"checking" | "passed" | "failed">(props.siteKey ? "checking" : "failed");
   const navStart = useRef<number | null>(null);
+  /** §5.12: a transition longer than TRANSITION_MS announces "Loading batch {id}"; register() cancels it when the record arrives. */
+  const loadTimer = useRef<number | undefined>(undefined);
   /** A record navigation is in flight: the bar is "loading" and A does nothing (§5.7, §5.8.4) until the record registers. */
   const navigating = useRef(false);
   const [, setNavTick] = useState(0);   // a ref alone does not render: this puts the bar into its loading state while the record loads
@@ -311,6 +313,7 @@ export default function ReviewDesk(props: ReviewDeskProps) {
   // ---- records
   function register(reg: RecordRegistration, held: HeldRecord) {
     navigating.current = false;
+    window.clearTimeout(loadTimer.current);
     latest.current.set(reg.conceptId, { version: reg.version, held });
     const entry = viewed.current.get(reg.conceptId);
     if (!entry) viewed.current.set(reg.conceptId, { version: reg.version, held });
@@ -333,7 +336,9 @@ export default function ReviewDesk(props: ReviewDeskProps) {
     setOpen(reg);
     if (prev?.conceptId === reg.conceptId) {
       // Same record, new filter or search (Show all): the list is what changed, so focus goes where navigate() asked.
-      if (focusAfterNav.current !== null && navStart.current !== null) { requestFocus(focusAfterNav.current || "desk"); focusAfterNav.current = null; navStart.current = null; }
+      if (navStart.current !== null && performance.now() - navStart.current > TRANSITION_MS) announce(fill(DESK.loaded, { id: batchId }));
+      if (focusAfterNav.current !== null && navStart.current !== null) { requestFocus(focusAfterNav.current || "desk"); focusAfterNav.current = null; }
+      navStart.current = null;
       return;
     }
     reloading.current.clear();
@@ -363,6 +368,8 @@ export default function ReviewDesk(props: ReviewDeskProps) {
     focusAfterNav.current = focusKey ?? (a && root.current?.contains(a) ? (a.getAttribute("data-fk") ?? "") : null);
     navStart.current = performance.now();
     navigating.current = true;
+    window.clearTimeout(loadTimer.current);
+    loadTimer.current = window.setTimeout(() => { if (navigating.current) announce(fill(DESK.loadingStatus, { id: batchId })); }, TRANSITION_MS);
     setNavTick((n) => n + 1);
     if (url.pathname === window.location.pathname) {
       // Same record, new filter or search (a filter, Show all): Next 15.5's router drops the answer to a push that changes only

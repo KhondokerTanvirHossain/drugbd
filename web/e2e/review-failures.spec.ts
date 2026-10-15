@@ -123,15 +123,18 @@ test.describe("failures and fallbacks (§5.7, §5.8.3, §5.8.6, §5.12)", () => 
     expect(decisions(B, PILOT_IDS.domperidone)).toBe(0);
   });
 
-  // OPEN PRODUCT DEFECT (found by this test): with scripting off the whole desk stays in React's hidden Suspense container
-  // (`<div hidden id="S:0">`, revealed only by a script) because app/review/[batchId]/loading.tsx streams the page, so nothing
-  // but the skeleton is visible. §5.8.6 needs the record readable without JavaScript. Re-enable when that is fixed.
-  test.fixme("without JavaScript the record reads fully, filters are links, and the page says why deciding needs JavaScript", async ({ browser }) => {
+  // §4.4/§5.8.6: with scripting off the record reads fully. app/review has no loading.tsx: a streamed page would sit in
+  // React's hidden Suspense container (<div hidden id="S:0">), which only a script reveals (tests/review-no-streaming.test.ts).
+  test("without JavaScript the record reads fully, filters are links, and the page says why deciding needs JavaScript", async ({ browser }) => {
     const context = await browser.newContext({ javaScriptEnabled: false, baseURL: "http://localhost:3000" });
     await signInAs(context, "pharmacist");
     const page = await context.newPage();
     await page.goto(`/review/${B}/${PILOT_IDS.warfarin}`);
-    await expect(shown(page, "Reviewing needs JavaScript for the bot check. You can still read this record.")).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: /Warfarin/ })).toBeVisible();   // the record itself, not a skeleton
+    await expect(page.getByText("Warfarin + Clarithromycin").first()).toBeVisible();
+    // Playwright's text engine skips <noscript> content, so the notice is read by element, not by getByText.
+    await expect(page.locator("noscript p")).toHaveText("Reviewing needs JavaScript for the bot check. You can still read this record.");
+    await expect(page.locator("noscript p")).toBeVisible();
     await expect(page.locator("details#evidence")).toBeAttached();
     await page.getByRole("link", { name: /^Warnings/ }).first().click();
     await expect(page).toHaveURL(/show=warn/);

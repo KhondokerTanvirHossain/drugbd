@@ -9,6 +9,11 @@ import s from "../sidebar.module.css";
 /**
  * §5.12 loading: 7 skeleton rows, a detail skeleton and a disabled decision bar. "Loading batch {id}" is shown and
  * announced through the desk's live region: §10.2 allows one polite region per page, so this part has no role="status".
+ *
+ * Not mounted by a route. A `loading.tsx` makes Next stream the record page: the whole desk then sits in React's hidden
+ * Suspense container (`<div hidden id="S:n">`) that only a script reveals, so with scripting off nothing but this skeleton
+ * is visible and §5.8.6/§4.4 (the record reads without JavaScript) fails. In-island transitions announce "Loading batch
+ * {id}" from ReviewDesk.navigate() instead; the bar shows the loading state. Kept for an in-island skeleton (§5.12).
  */
 export default function LoadingPanes() {
   const { batchId, announce } = useDesk();

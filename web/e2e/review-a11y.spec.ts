@@ -106,6 +106,8 @@ for (const look of LOOKS) {
     await lp.locator('[data-fk="list"]').focus();
     await lp.keyboard.press("End");
     await expect(lp.locator(".decision-promise")).toContainText(`Loading batch ${B}.`, { timeout: 10_000 });
+    // §5.12: a transition longer than 300 ms is announced through the desk's one polite region.
+    await expect(lp.locator('[data-desk="live"]')).toHaveText(`Loading batch ${B}`, { timeout: 5_000 });
     // The one polite region of the desk (§10.2); Next's own route announcer is injected by the framework after a client navigation.
     expect(await lp.locator('[aria-live]:not(#__next-route-announcer__), [role="status"]').count()).toBe(1);
     await axe(lp, "loading");
