@@ -52,3 +52,9 @@ export function fmtDhakaOn(iso: string): string {
   const z = zoned(iso, "Asia/Dhaka");
   return z ? `on ${z.date}, ${z.time} Dhaka time` : iso;
 }
+
+/** "15/10/2026": the Dhaka date alone, for PAIR_REVIEWED (§3.6) and "fetched on {date}" (§5.6.6). */
+export function fmtDhakaDate(iso: string): string {
+  const z = zoned(iso, "Asia/Dhaka");
+  return z ? z.date : iso;
+}

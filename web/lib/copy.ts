@@ -36,6 +36,19 @@ export const PROMISE_PAUSED = {
 export const NO_PHI_HELP = "Don't include patient names or other personal health details.";
 export const NOT_RUN = "Not checked yet: DDInter mapping has not run";
 
+// ---- §3.6 P1C additions (each pinned by copy.test.ts) ----
+/** Decision bar for role `senior` (§5.7). Same consequence as the pharmacist's: a senior's approval publishes (D49). */
+export const PROMISE_SENIOR = {
+  lead: "You're reviewing as a senior pharmacist.",
+  body: PROMISE_PHARMACIST.body,
+} as const;
+/** The label on every pair card whose text or severity comes from DDInter (§5.6.2, §6.5, §6.6, §6.7.3). */
+export const FROM_DDINTER = "From DDInter 2.0";
+/** `{date}` = DD/MM/YYYY of the counting pair review, Dhaka (fmtDhakaDate). Plain text, never green (§3.4). */
+export const PAIR_REVIEWED = "Pair reviewed by a senior pharmacist on {date}";
+/** Never hides the pair or its text (G3); the copy test allows it next to NOT_REVIEWED: it is not a paraphrase of it. */
+export const PAIR_NOT_REVIEWED = "Pair not yet reviewed by a senior pharmacist";
+
 /** P0 (spec §12.1): what anonymous and `user` sessions see on /batches and /batches/[id]. Both pages import it. */
 export const BATCHES_REVIEWERS_ONLY = "Only pharmacists and engineers can see batches.";
 
@@ -85,7 +98,7 @@ export const NEW_COPY_ROWS = {
   committing: "Decision saving (`committing`): promise and toast",
   deskMisc: "Desk: narrow-screen \"Back to list\", the no-JavaScript notices, loading and loaded announcements",
   deskLoad: "Desk: batch load error, batch not found",
-  history: "History: role variants, the \"No longer counts\" suffix, shared-change entries",
+  history: "History: role variants, the \"No longer counts\" suffix, shared-change entries; the carried-approval line \"Approval carried over from batch {batchId}: nothing it covered changed.\"",
   shortcutsMenuItem: "Account menu item \"Keyboard shortcuts and settings\"",
   reviewLists: "Batch list and problem-report and partner-request lists (`/review`, `/review/flags`)",
   phase0Gate: "Phase-0 `/batches` gate for non-reviewers",
@@ -97,8 +110,171 @@ export const NEW_COPY_ROWS = {
   checker: "Checker: summary segments, \"Other not checked\" count, unknown id (404), check failed (5xx), scenario announcement",
   partnerSent: "Partner request sent",
   routeAssumed: "Route assumed because the product has no route",
+  // P1C (the spec's "*(P1C)* " marker removed from each key: P1C plan rule)
+  seniorRole: "Senior pharmacist role: role badge, promise (`PROMISE_SENIOR`), welcome step, invite role, account-menu and sidebar links",
+  seniorReview: "Senior review: substance list, substance page, pair queue, the scope filter (\"All pairs\", \"Applies to our brands\"), pair row, the non-applying pair line, the brand list cap (\"and {n} more.\", \"All brands of {substance}\"), pair actions and their outcomes, pair history, keyboard sheet, empty, loading, error and not-authorised states, announcements",
+  pairLines: "Pair label and pair review state lines: `FROM_DDINTER`, `PAIR_REVIEWED`, `PAIR_NOT_REVIEWED` (public and reviewer), and the reviewer-only \"changed\" and \"issue\" lines",
+  deskOtherMedicines: "Desk: \"With other medicines\" groups, cross-batch partner lines, the partner `<details>` summaries (\"All {n} medicines\", \"{s} of {n} medicines\"), \"and {k} more.\" and \"See every brand of {partner substance}\", the outside-this-batch text-missing note, the same-product text-missing note, the no-data line for other batches, \"no other batches\" lines",
+  dismissIssue: "Dismiss issue: control, panel, consequence sentence, hints, 409 outcomes, the not-saved and unconfirmed failure banners (report channel), announcements, history entries and the dismissal \"No longer counts\" suffix",
+  sourceLinks: "Source links: link labels, \"fetched on {date}\", the ICD-11 search link, the evidence drawer's \"Sources\" section, the product page's \"Source\" column",
+  productOtherApproved: "Product page \"With other approved medicines\" (cross-batch, grouped by partner substance) and its paging",
 } as const;
 export type NewCopyState = (typeof NEW_COPY_ROWS)[keyof typeof NEW_COPY_ROWS];
+
+// ---- P1C §1.7 rows. Each object is the NEW_COPY entry for its row; P1C_COPY (below) is the typed view. ----
+const SENIOR_ROLE = {
+  badge: "Senior pharmacist",
+  seniorReview: "Senior review",
+  pairQueue: "Pair queue",
+  welcomeHeading: "You're a senior pharmacist reviewer for batch {id}",
+  welcomeStep: "Senior review shows every interaction pair between the medicines we hold, from all batches. Mark each pair reviewed, or report a pair issue.",
+  welcomeLink: "Open the pair queue",
+  invite: "Role: Senior pharmacist. You review batches as a pharmacist, and the interaction pairs of every batch in Senior review. Sign in at drugdb.eliooo.org with this Google account.",
+} as const;
+
+const SENIOR_REVIEW = {
+  pairsToReviewOne: "{t} pair to review",
+  pairsToReviewMany: "{t} pairs to review",
+  queueSub: "Every DDInter 2.0 pair between substances we hold, from all batches. Major first.",
+  showTodo: "To review",
+  showChanged: "Changed since review",
+  showReviewed: "Reviewed",
+  allPairs: "All pairs",
+  emptyTodo: "No pairs to review.",
+  emptyChanged: "No pair changed in DDInter since its review.",
+  emptyIssue: "No pair issues reported.",
+  emptyReviewed: "No pairs reviewed yet.",
+  emptyAll: "No pairs between the substances we hold.",
+  showAllPairs: "Show all pairs",
+  applies: "Applies to our brands",
+  range: "{from}–{to} of {total} pairs",
+  notApplies: "Does not apply to the medicines we hold: none of them is checked against {id} for its route.",
+  eitherId: "{a} or {b}",
+  brandsLine: "{a} {brandsA} of {substanceA} and {b} {brandsB} of {substanceB}, in {k} {batches}.",
+  brands: "Brands",
+  andMore: "and {n} more.",
+  allBrandsOf: "All brands of {substance}",
+  markReviewed: "Mark reviewed",
+  reportPairIssue: "Report pair issue",
+  alreadyReviewed: "This pair is already reviewed.",
+  noteLabel: "What's wrong with this pair? Pharmacists, engineers and senior pharmacists read this note.",
+  notePlaceholder: "For example: the management text says to avoid the combination but the severity is Minor",
+  noteError: "Add at least 5 characters so the team knows what to check.",
+  changedSummary: "What changed in DDInter",
+  atReview: "At review",
+  historySummary: "Pair history",
+  historyReviewed: "Reviewed by a senior pharmacist",
+  historyReviewedMine: "Reviewed by a senior pharmacist (you)",
+  historyChangedAfter: "DDInter data changed after this review",
+  announceReviewed: "Pair {a} + {b} marked reviewed.",
+  announceIssue: "Pair issue reported for {a} + {b}.",
+  contentTitle: "This pair changed in DDInter after you opened the page.",
+  contentBody: "Nothing was saved. Reload to review the latest text.",
+  otherTitle: "Another senior pharmacist decided on this pair after you opened the page.",
+  otherBody: "Nothing was saved. Reload to see their decision.",
+  netTitle: "Couldn't save your pair review.",
+  unconfirmedTitle: "Couldn't confirm your pair review.",
+  unconfirmedBody: "Try again to find out; it will not be saved twice.",
+  substancesSub: "Every substance carried by a medicine we hold, from all batches.",
+  filterLabel: "Filter substances by name or BDS id",
+  filterPlaceholder: "Filter by name or BDS id",
+  noMatch: "No substances match “{q}”.",
+  showAllSubstances: "Show all substances",
+  substancesCaption: "Substances we hold",
+  colPairsToReview: "Pairs to review",
+  colMajorToReview: "Major pairs to review",
+  substanceMeta: "{k} {brands} in {b} {batches}",
+  brandsCaption: "Brands of {name} in every batch",
+  colBrand: "Brand",
+  colChecked: "Checked against",
+  pairsHeading: "Pairs with substances we hold",
+  pairsEmpty: "No stored DDInter pair links {name} with another substance we hold.",
+  notChecked: "Pairs with {name} are not checked.",
+  loading: "Loading senior review",
+  errorTitle: "Couldn't load senior review.",
+  notFound: "No substance with the id {id}.",
+  openSubstances: "Open the substances list",
+  notAuthTitle: "Senior review is for senior pharmacists.",
+  notAuthBody: "Your account reviews batches. Ask the IntelliDrugs team if you need senior access.",
+  regionPlain: "IntelliDrugs senior review.",
+  regionLabel: "IntelliDrugs senior review. Shortcuts work while focus is inside. Press question mark for the list.",
+  lastPair: "This is the last pair on this page.",
+  firstPair: "This is the first pair on this page.",
+  sheetNext: "Next and previous pair",
+  sheetMark: "Mark the pair reviewed",
+  sheetReport: "Report a pair issue",
+  sheetClose: "Close the sheet or the note",
+  sheetEnter: "Never marks a pair reviewed",
+  enterBlocked: "Enter does not mark a pair reviewed. Press M, or Space on this button.",
+  noScript: "Reviewing pairs needs JavaScript for the bot check.",
+  flagsLine: "Pair issues reported by senior pharmacists: {k}",
+} as const;
+
+const PAIR_LINES = {
+  you: " (you)",
+  changed: "Pair changed in DDInter after a senior pharmacist reviewed it on {date}.",
+  issue: "Pair issue reported by a senior pharmacist on {date}{you}. Note:",
+} as const;
+
+const OTHER_MEDICINES = {
+  title: "With other medicines",
+  inBatch: "In batch {batchId}",
+  inOther: "In other batches",
+  withApproved: "With approved medicines",
+  withNotApproved: "With medicines not yet approved",
+  chips: "Pairs with other batches by severity",
+  partnerRef: "{name} (batch {batchId})",
+  andMoreInline: "and {k} more",
+  detailsAll: "All {n} medicines",
+  detailsSome: "{s} of {n} medicines",
+  andMoreList: "and {k} more.",
+  seeEveryBrand: "See every brand of {substance}",
+  noDataOther: "Not checked, {j} {pairs} with medicines in other batches:",
+  noOtherBatches: "There are no other batches yet.",
+  noneOther: "DDInter 2.0 lists no interaction between {name} and the medicines in other batches. This is not a guarantee that they are safe to combine.",
+  textMissingSame: "DDInter text not found for {n} {pairs} between ingredients of this product.",
+  textMissingOther: "DDInter text not found for {n} {pairs} with medicines outside this batch.",
+} as const;
+
+const DISMISS = {
+  button: "Dismiss issue",
+  keyRow: "dismiss issue",
+  sheetRow: "Dismiss an open issue",
+  title: "Dismiss this issue",
+  quote: "Reported by {who} on {date}:",
+  byPharmacist: "a pharmacist",
+  bySenior: "a senior pharmacist",
+  byEngineer: "an engineer",
+  byYou: "you",
+  consequence: `Dismissing records that the report was a mistake. The record goes back to “${NOT_REVIEWED}”, and a pharmacist approves it again. The report stays in the history.`,
+  noteLabel: "Why was the report a mistake? Pharmacists and engineers read this note.",
+  notePlaceholder: "For example: the strength matches the DGDA register; the report misread it",
+  noteError: "Add at least 5 characters so the team knows why the report was dismissed.",
+  busy: "Dismissing",
+  paused: "Dismissing is paused until you reload the record. Your note is kept.",
+  promiseSavingLead: "Dismissing the issue.",
+  promiseSavingBody: "Saving now.",
+  promiseSeniorIssueBody: "If the report was a mistake, dismiss it. Otherwise it returns to review after the fix and re-run.",
+  hintNoIssue: "No issue is open on this record.",
+  hintFinish: "Finish or undo your decision on this record first.",
+  conflictNoIssue: "No issue is open on this record any more. Nothing was saved.",
+  announceDismissed: "Issue dismissed for {name}. The record is back in review for a pharmacist.",
+  failedTitle: "Couldn't send your dismissal.",
+  unconfirmedTitle: "Couldn't confirm your dismissal.",
+  unconfirmedBody: "We couldn't confirm your dismissal was saved. Try again to find out; it will not be saved twice.",
+  historyDismissed: "Issue dismissed by a senior pharmacist. Note:",
+  historyDismissedMine: "Issue dismissed (you). Note:",
+  noLongerCountsDismiss: "No longer counts: a senior pharmacist dismissed the issue after it.",
+} as const;
+
+const SOURCE_LINKS = {
+  fetchedOn: " fetched on {date}",
+  newTab: " (opens in a new tab)",
+  sourcesNote: "Where each value came from. Links open the source's own page.",
+  dgda: "DGDA register (OCL)",
+  rxnav: "RxNav",
+  who: "WHO ATC/DDD Index",
+} as const;
 
 /** Strings per §1.7 state. Empty records are filled by the plan that builds that state (P1B, P2, P3). */
 export const NEW_COPY: Record<NewCopyState, Record<string, string>> = {
@@ -177,6 +353,10 @@ export const NEW_COPY: Record<NewCopyState, Record<string, string>> = {
     issueEngineer: "Issue reported by an engineer. Note:",
     noLongerCounts: "No longer counts: the record was re-run after it.",
     backSharedChange: `Shared substance data for this record changed after a pharmacist approved it. Readers see “${NOT_REVIEWED}” until a pharmacist approves it again.`,
+    carriedOver: "Approval carried over from batch {batchId}: nothing it covered changed.",
+    approvedSenior: "Approved by a senior pharmacist. Published.",
+    approvedSeniorMine: "Approved by a senior pharmacist (you). Published.",
+    issueSenior: "Issue reported by a senior pharmacist. Note:",
   },
   [NEW_COPY_ROWS.shortcutsMenuItem]: { item: "Keyboard shortcuts and settings" },
   [NEW_COPY_ROWS.reviewLists]: {
@@ -237,6 +417,13 @@ export const NEW_COPY: Record<NewCopyState, Record<string, string>> = {
   [NEW_COPY_ROWS.routeAssumed]: {
     noRouteStatement: "Route assumed: this product has no route on record, so the systemic entry {id} is used.",
   },
+  [NEW_COPY_ROWS.seniorRole]: SENIOR_ROLE,
+  [NEW_COPY_ROWS.seniorReview]: SENIOR_REVIEW,
+  [NEW_COPY_ROWS.pairLines]: PAIR_LINES,
+  [NEW_COPY_ROWS.deskOtherMedicines]: OTHER_MEDICINES,
+  [NEW_COPY_ROWS.dismissIssue]: DISMISS,
+  [NEW_COPY_ROWS.sourceLinks]: SOURCE_LINKS,
+  [NEW_COPY_ROWS.productOtherApproved]: {},
 };
 /** Typed shortcut for the sign-in row. */
 export const SIGN_IN_STATES = NEW_COPY[NEW_COPY_ROWS.signIn] as {
@@ -268,7 +455,8 @@ export const DESK_NEW = {
     | "cancel" | "rawDgdaRecord", string>,
   deskLoad: NEW_COPY[NEW_COPY_ROWS.deskLoad] as Record<"errorTitle" | "errorBody" | "notFound", string>,
   history: NEW_COPY[NEW_COPY_ROWS.history] as Record<"run" | "sharedChange" | "engineerChecked" | "engineerCheckedMine"
-    | "issuePharmacist" | "issueEngineer" | "noLongerCounts" | "backSharedChange", string>,
+    | "issuePharmacist" | "issueEngineer" | "noLongerCounts" | "backSharedChange" | "carriedOver" | "approvedSenior"
+    | "approvedSeniorMine" | "issueSenior", string>,
   shortcutsMenuItem: NEW_COPY[NEW_COPY_ROWS.shortcutsMenuItem] as Record<"item", string>,
   reviewLists: NEW_COPY[NEW_COPY_ROWS.reviewLists] as Record<"waitingOne" | "waitingMany" | "noBatches" | "flagsLink" | "reportsHeading"
     | "partnerHeading" | "reported" | "resolve" | "resolving" | "reportResolved" | "requestResolved" | "noReports" | "noRequests"
@@ -278,6 +466,11 @@ export const DESK_NEW = {
     | "notCheckedNoRouteNoRoute" | "notCheckedUnmapped" | "notCheckedSameProduct", string>,
   routeAssumed: NEW_COPY[NEW_COPY_ROWS.routeAssumed] as Record<"noRouteStatement", string>,
   notRun: NEW_COPY[NEW_COPY_ROWS.notRun] as Record<"rowHint" | "notCheckedNotRun", string>,
+} as const;
+
+/** Typed views of the P1C rows (§1.7), so modules never index NEW_COPY by row text. */
+export const P1C_COPY = {
+  senior: SENIOR_ROLE, review: SENIOR_REVIEW, pair: PAIR_LINES, other: OTHER_MEDICINES, dismiss: DISMISS, sources: SOURCE_LINKS,
 } as const;
 
 /** Learn (§6.8): the date suffix after a snapshot-only value, and the footer's batch line. */

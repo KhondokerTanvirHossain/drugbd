@@ -240,3 +240,13 @@ export const APPROVED_TEXT = APPROVED;
 export const REVIEW_LISTS = {
   batchBannerBody: "The batch is approved when every record is approved by a pharmacist.",
 } as const;
+
+/**
+ * Short labels the P1C surfaces need that other modules already print as literals (the substance page, Learn, CodeChip,
+ * the desk). As NEW_COPY values they would fail P1A's retyping guard on those modules, so they are shared words here.
+ */
+export const SHARED_WORDS = {
+  status: "Status", substance: "Substance", substances: "Substances", reload: "Reload", bdsId: "BDS id",
+  ddinterEntries: "DDInter entries", sources: "Sources", names: "Names", codes: "Codes", route: "Route", strength: "Strength",
+  all: "All", ddinter: "DDInter 2.0", drugbank: "DrugBank", icd11: "ICD-11", clinicalDrug: "Clinical drug", severity: "Severity",
+} as const;

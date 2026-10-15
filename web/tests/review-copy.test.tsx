@@ -69,6 +69,10 @@ describe("P1B rows of the §1.7 table", () => {
       issueEngineer: "Issue reported by an engineer. Note:",
       noLongerCounts: "No longer counts: the record was re-run after it.",
       backSharedChange: `Shared substance data for this record changed after a pharmacist approved it. Readers see “${NOT_REVIEWED}” until a pharmacist approves it again.`,
+      carriedOver: "Approval carried over from batch {batchId}: nothing it covered changed.",
+      approvedSenior: "Approved by a senior pharmacist. Published.",
+      approvedSeniorMine: "Approved by a senior pharmacist (you). Published.",
+      issueSenior: "Issue reported by a senior pharmacist. Note:",
     });
     expect(NEW_COPY[NEW_COPY_ROWS.shortcutsMenuItem]).toEqual({ item: "Keyboard shortcuts and settings" });
     expect(NEW_COPY[NEW_COPY_ROWS.reviewLists]).toEqual({
