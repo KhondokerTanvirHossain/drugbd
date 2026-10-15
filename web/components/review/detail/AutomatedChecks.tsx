@@ -1,9 +1,10 @@
+import { Fragment } from "react";
 import Severity from "@/components/ui/Severity";
 import StageCheck from "@/components/ui/StageCheck";
-import { NO_DATA_SENTENCE, fill } from "@/lib/copy";
+import { NO_DATA_SENTENCE, P1C_COPY, fill } from "@/lib/copy";
 import { fmtUtc } from "@/lib/format";
 import { DESK, STAGE_NAME, plural } from "@/lib/review-copy";
-import { STAGE_KEYS, type ReviewItem, type ReviewStage } from "@/lib/review-types";
+import { STAGE_KEYS, type PartnerScope, type ReviewItem, type ReviewStage } from "@/lib/review-types";
 import StagePairs from "../desk/StagePairs";
 import s from "./detail.module.css";
 
@@ -34,28 +35,36 @@ export default function AutomatedChecks({ item }: { item: ReviewItem }) {
   );
 }
 
+/** §5.5.3 (P1C, PO D6): the notes in this order; the web reads partnerScope only, never inBatch. */
+const SCOPES: [PartnerScope, string][] = [
+  ["batch", DESK.textMissing], ["same_product", P1C_COPY.other.textMissingSame], ["other", P1C_COPY.other.textMissingOther],
+];
+
 function body(x: Shown, item: ReviewItem, noData: boolean) {
   if (x.stage === null) return <p className="stage-note">{DESK.noNote}</p>;
   const st = x.stage, ddinter = st.stage === "ddinter";
   const lines = st.notes.filter((n) => !(ddinter && (n.kind === "text_missing" || (noData && n.kind === "no_data"))));
-  const pairs = ddinter ? st.textMissing : [];
-  const listId = `stage-pairs-${item.conceptId}`;
+  const groups = ddinter ? SCOPES.map(([scope, note]) => ({ scope, note, pairs: st.textMissing.filter((p) => p.partnerScope === scope) }))
+    .filter((g) => g.pairs.length > 0) : [];
   return (
     <>
       {ddinter && noData && <p className="stage-note">{NO_DATA_SENTENCE}</p>}
-      {pairs.length > 0 && (
-        <>
-          <p className="stage-note">{fill(DESK.textMissing, { n: pairs.length, pairs: plural(pairs.length, "pair", "pairs") })}</p>
-          <StagePairs targetId={listId} count={pairs.length} />
-          <ul className="stage-pairs" id={listId}>
-            {pairs.map((p) => (
-              <li className="stage-pair" key={`${p.ddinterA}/${p.ddinterB}`}>
-                {p.nameA} + {p.nameB} <span className="mono">{p.ddinterA}/{p.ddinterB}</span>{p.severity !== null && <Severity level={p.severity} />}
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
+      {groups.map(({ scope, note, pairs }) => {
+        const listId = scope === "batch" ? `stage-pairs-${item.conceptId}` : `stage-pairs-${item.conceptId}-${scope}`;
+        return (
+          <Fragment key={scope}>
+            <p className="stage-note">{fill(note, { n: pairs.length, pairs: plural(pairs.length, "pair", "pairs") })}</p>
+            <StagePairs targetId={listId} count={pairs.length} fk={`pairs-${scope}`} />
+            <ul className="stage-pairs" id={listId}>
+              {pairs.map((p) => (
+                <li className="stage-pair" key={`${p.ddinterA}/${p.ddinterB}`}>
+                  {p.nameA} + {p.nameB} <span className="mono">{p.ddinterA}/{p.ddinterB}</span>{p.severity !== null && <Severity level={p.severity} />}
+                </li>
+              ))}
+            </ul>
+          </Fragment>
+        );
+      })}
       {lines.map((n, i) => <p className="stage-note" key={i}>{n.text}</p>)}
     </>
   );

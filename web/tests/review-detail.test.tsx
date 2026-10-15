@@ -122,6 +122,33 @@ describe("AutomatedChecks (§5.5.3)", () => {
     expect(html.match(/<span class="stage-status">Failed<\/span>/g)).toHaveLength(3);
     expect(html.match(/No note/g)).toHaveLength(2);
   });
+
+  it("P1C: text-missing pairs split by partnerScope, each group with its own note and list (§5.5.3)", () => {
+    const base = pilotItem("amoxycillin");
+    const tm = (a: string, b: string, partnerScope: "batch" | "same_product" | "other") =>
+      ({ ddinterA: a, nameA: a, ddinterB: b, nameB: b, severity: "unknown", inBatch: partnerScope === "batch", partnerScope });
+    const item = { ...base, stages: base.stages.map((st) => (st.stage === "ddinter" ? { ...st, textMissing: [
+      tm("DDInter14", "DDInter83", "batch"), tm("DDInter394", "DDInter83", "same_product"),
+      tm("DDInter83", "DDInter926", "other"), tm("DDInter83", "DDInter990", "other")] } : st)) };
+    const html = r(<AutomatedChecks item={item} />);
+    const batch = html.indexOf("DDInter text not found for 1 pair with other medicines in this batch.");
+    const same = html.indexOf("DDInter text not found for 1 pair between ingredients of this product.");
+    const other = html.indexOf("DDInter text not found for 2 pairs with medicines outside this batch.");
+    expect(batch).toBeGreaterThan(-1);
+    expect(same).toBeGreaterThan(batch);
+    expect(other).toBeGreaterThan(same);
+    expect(html.slice(batch, same)).toContain("DDInter14/DDInter83");
+    expect(html.slice(batch, same)).not.toContain("DDInter926");
+    expect(html.slice(other)).toContain("DDInter83/DDInter990");
+    expect(html).toContain(`<ul class="stage-pairs" id="stage-pairs-${base.conceptId}">`);
+    expect(html).toContain(`<ul class="stage-pairs" id="stage-pairs-${base.conceptId}-other">`);
+  });
+
+  it("P1C: a group with no pairs shows no note", () => {
+    const html = r(<AutomatedChecks item={pilotItem("napa")} />);
+    expect(html).not.toContain("between ingredients of this product");
+    expect(html).not.toContain("with medicines outside this batch");
+  });
 });
 
 describe("History (§5.6.5)", () => {
