@@ -42,6 +42,15 @@ describe("reviewer-invite runbook (§5.13)", () => {
     expect(q).not.toContain("a senior re-approves");
   });
 
+  it("P1C: the pre-rollback check runs as the container's database user, read-only, and fails loudly (§12.4, §12.5)", () => {
+    const md = readFileSync(path, "utf8");
+    const q = md.slice(md.indexOf("## Before rolling back below P1C"));
+    // DB_USER lives only in deploy/.env (read by compose, never exported to the host shell); an empty -U would fail with no stdout, read as "prints nothing"
+    expect(q).not.toContain("$DB_USER");
+    expect(q).toContain(`docker-compose exec -T -e PGOPTIONS='-c default_transaction_read_only=on' db sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d bddrug -At' <<'SQL'`);
+    expect(q).toContain("ON_ERROR_STOP=1");
+  });
+
   it("the README links to it and recreates services with --no-deps, as the runbook does", () => {
     const readme = readFileSync(repo("README.md"), "utf8");
     expect(readme).toContain("docs/runbooks/reviewer-invite.md");

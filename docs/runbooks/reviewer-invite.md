@@ -55,7 +55,7 @@ Edit or delete their pair in `REVIEWERS`, then `cd ~/drugdb/deploy && docker-com
 Images before P1C ignore a `dismiss` decision, so a record whose issue a senior dismissed would read as "Issue reported" again, or worse, as approved by an approval the dismissal had set aside. Before setting `IMAGE_TAG` below the P1C release, list every dismissal that still counts on a current item:
 
 ```bash
-cd ~/drugdb/deploy && docker-compose exec -T db psql -U "$DB_USER" -d bddrug -At -c "
+cd ~/drugdb/deploy && docker-compose exec -T -e PGOPTIONS='-c default_transaction_read_only=on' db sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d bddrug -At' <<'SQL'
 SELECT bi.batch_id, bi.concept_id
 FROM ops.batch_item bi
 JOIN ops.review_decision d ON d.batch_id = bi.batch_id AND d.concept_id = bi.concept_id
@@ -67,7 +67,8 @@ WHERE d.decision = 'dismiss'
     WHERE l.batch_id = d.batch_id AND l.concept_id = d.concept_id
       AND (l.decided_at, l.id) > (d.decided_at, d.id)
       AND (l.decision = 'issue' OR (l.decision = 'ok' AND l.reviewer_role = 'pharmacist')))
-GROUP BY bi.batch_id, bi.concept_id;"
+GROUP BY bi.batch_id, bi.concept_id;
+SQL
 ```
 
-The query prints ids only, never an email or a note. A record is listed while no counted `issue`, and no `ok` from a `pharmacist`, follows its latest dismissal: an older image counts an `ok` only from role `pharmacist`, so a senior's re-approval does not clear it. When it prints nothing, roll back. Otherwise a pharmacist re-approves, or anyone re-reports, each listed record on the desk first, then run it again.
+The query prints ids only, never an email or a note. It runs inside the `db` container as `$POSTGRES_USER` (the single quotes keep the host shell from expanding it; `DB_USER` exists only in `.env`, which Compose reads and never exports), in a read-only transaction, and `ON_ERROR_STOP=1` makes a failed query exit non-zero with an error, so an empty answer always means a query that ran. If it prints an error, fix that first: an error is never "prints nothing". A record is listed while no counted `issue`, and no `ok` from a `pharmacist`, follows its latest dismissal: an older image counts an `ok` only from role `pharmacist`, so a senior's re-approval does not clear it. When it prints nothing, roll back. Otherwise a pharmacist re-approves, or anyone re-reports, each listed record on the desk first, then run it again.
