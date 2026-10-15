@@ -151,3 +151,76 @@ export function MatchDiagram() {
     </svg>
   );
 }
+
+/** One box of the swimlane: a title line and a sub line, 9 px in from the left edge (Board L `#dg-swim`). */
+function Lane({ x, y, w, title, sub, keyBox = false }: { x: number; y: number; w: number; title: string; sub: string; keyBox?: boolean }) {
+  return (
+    <>
+      <rect x={x} y={y} width={w} height="46" rx="10" className={keyBox ? s.svgKey : s.svgBox} />
+      <text x={x + 9} y={y + 19} className={s.svgC}>{title}</text>
+      <text x={x + 9} y={y + 36} className={s.svgS}>{sub}</text>
+    </>
+  );
+}
+
+/**
+ * Chapter 4: from batch file to public record (Board L `#dg-swim`). §1.6 item 14 changes the description's
+ * "8-second undo window"; the "A, 8 s undo" box is a picture of the desk default and keeps it.
+ */
+export function SwimlaneDiagram({ notReviewed, undoWindow }: { notReviewed: string; undoWindow: string }) {
+  return (
+    <svg className={s.dgSwim} viewBox="0 0 840 520" role="img" aria-labelledby="dg-swim-t dg-swim-d">
+      <title id="dg-swim-t">From batch file to public record</title>
+      <desc id="dg-swim-d">{`A batch file of 10 concept ids enters the pipeline. Four stages run in order: DGDA load reads the DGDA register, Substances reads NLM RxNav, Clinical drug parses, DDInter reads DDInter 2.0. Every stage keeps its evidence, which signed-in reviewers see on the batch page. An engineer check is recorded but leaves the record hidden as ${notReviewed}. A pharmacist presses A and after the ${undoWindow} the record becomes public on the site, checker and API. An issue or a re-run sends the record back to the pipeline and back to review.`}</desc>
+      <Arrowhead id="ah-s" />
+      <rect x="0" y="0" width="840" height="520" className={s.svgBg} />
+      <rect x="0" y="0" width="840" height="90" className={s.svgBand} />
+      <path d="M0 90H840" className={s.svgSep} />
+      <text x="14" y="43" className={s.svgLt}>Sources</text>
+      <text x="14" y="60" className={s.svgS}>read only</text>
+      <path d="M0 190H840" className={s.svgSep} />
+      <text x="14" y="138" className={s.svgLt}>Pipeline</text>
+      <text x="14" y="155" className={s.svgS}>runs in order</text>
+      <rect x="0" y="190" width="840" height="90" className={s.svgBand} />
+      <path d="M0 280H840" className={s.svgSep} />
+      <text x="14" y="233" className={s.svgLt}>Evidence</text>
+      <text x="14" y="250" className={s.svgS}>kept, reviewers only</text>
+      <path d="M0 380H840" className={s.svgSep} />
+      <text x="14" y="328" className={s.svgLt}>Review</text>
+      <text x="14" y="345" className={s.svgS}>invited people</text>
+      <rect x="0" y="380" width="840" height="90" className={s.svgBand} />
+      <path d="M0 470H840" className={s.svgSep} />
+      <text x="14" y="423" className={s.svgLt}>Public</text>
+      <text x="14" y="440" className={s.svgS}>approved only</text>
+      <path d="M106 0V470" className={s.svgSep} />
+      <Lane x={222} y={22} w={96} title="DGDA register" sub="via OCL" />
+      <Lane x={332} y={22} w={96} title="NLM RxNav" sub="RxCUI, codes" />
+      <Lane x={552} y={22} w={96} title="DDInter 2.0" sub="interactions" />
+      <Lane x={112} y={117} w={96} title="Batch file" sub="10 concept ids" keyBox />
+      <Lane x={222} y={117} w={96} title="DGDA load" sub="stage 1" keyBox />
+      <Lane x={332} y={117} w={96} title="Substances" sub="stage 2" keyBox />
+      <Lane x={442} y={117} w={96} title="Clinical drug" sub="stage 3" keyBox />
+      <Lane x={552} y={117} w={96} title="DDInter" sub="stage 4" keyBox />
+      {["M208 140H222", "M318 140H332", "M428 140H442", "M538 140H552", "M270 68V117", "M380 68V117", "M600 68V117"].map((d) =>
+        <path key={d} d={d} className={s.svgE} markerEnd="url(#ah-s)" />)}
+      <rect x="222" y="212" width="426" height="46" rx="10" className={s.svgBox} />
+      <text x="232" y="231" className={s.svgC}>Evidence for every record</text>
+      <text x="232" y="248" className={s.svgS}>Raw DGDA JSON, every RxNav and DDInter response, stage results</text>
+      {["M270 163V212", "M380 163V212", "M490 163V212", "M600 163V212"].map((d) => <path key={d} d={d} className={s.svgE} markerEnd="url(#ah-s)" />)}
+      <Lane x={661} y={212} w={118} title="Batch page" sub="source + extraction" />
+      <path d="M648 235H661" className={s.svgE} markerEnd="url(#ah-s)" />
+      <Lane x={544} y={307} w={104} title="Engineer" sub="check recorded" />
+      <Lane x={661} y={307} w={118} title="Pharmacist" sub="A, 8 s undo" keyBox />
+      <path d="M720 258V307" className={s.svgE} markerEnd="url(#ah-s)" />
+      <path d="M690 258V284H596V307" className={s.svgE} markerEnd="url(#ah-s)" />
+      <Lane x={270} y={402} w={220} title="Hidden from public" sub={notReviewed} />
+      <Lane x={661} y={402} w={118} title="Public record" sub="site, checker, API" keyBox />
+      <path d="M596 353V425H490" className={s.svgE} markerEnd="url(#ah-s)" />
+      <text x="588" y="398" className={s.svgS} textAnchor="end">engineer OK alone</text>
+      <path d="M720 353V402" className={s.svgE} markerEnd="url(#ah-s)" />
+      <text x="728" y="384" className={s.svgS}>approved</text>
+      <path d="M720 448V500H160V163" className={s.svgLoop} markerEnd="url(#ah-s)" />
+      <text x="440" y="492" className={s.svgS} textAnchor="middle">Issue reported, or the record is re-run: fix, test, run again. It goes back to review.</text>
+    </svg>
+  );
+}
