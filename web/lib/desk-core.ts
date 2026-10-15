@@ -22,7 +22,7 @@ import { verifyTurnstile } from "./turnstile";
  * are personal data and are never logged.
  */
 export type DecideInput = {
-  batchId: string; conceptId: string; decision: "ok" | "issue"; note: string; extractedAt: string | null;
+  batchId: string; conceptId: string; decision: "ok" | "issue" | "dismiss"; note: string; extractedAt: string | null;
   expectedLastDecisionId: number | null; requestId: string; turnstileToken: string;
 };
 export type DecideResult = DecideResultLike;
@@ -56,10 +56,11 @@ function parse(x: unknown): DecideInput | null {
   if (typeof x !== "object" || x === null) return null;
   const i = x as Record<string, unknown>;
   if (!validId(i.batchId) || !validId(i.conceptId)) return null;
-  if (i.decision !== "ok" && i.decision !== "issue") return null;
+  if (i.decision !== "ok" && i.decision !== "issue" && i.decision !== "dismiss") return null;
   if (typeof i.note !== "string") return null;
   const note = i.note.trim();
-  if (codePoints(note) > NOTE_MAX || (i.decision === "issue" && codePoints(note) < ISSUE_MIN)) return null;
+  // A report and a dismissal both need 5 to 1000 code points (§5.10, §5.10a), counted as the API counts them.
+  if (codePoints(note) > NOTE_MAX || (i.decision !== "ok" && codePoints(note) < ISSUE_MIN)) return null;
   if (i.extractedAt !== null && (typeof i.extractedAt !== "string" || i.extractedAt.length === 0 || i.extractedAt.length > STAMP_MAX)) return null;
   const last = i.expectedLastDecisionId;
   if (last !== null && (typeof last !== "number" || !Number.isSafeInteger(last) || last < 1)) return null;
@@ -105,6 +106,11 @@ export async function runDecide(input: unknown): Promise<DecideResult> {
   }
   const d = parse(input);
   if (!d) return { ok: false, code: "invalid" };
+  // §5.10a: only a senior may dismiss. The web refuses other roles itself (the API would answer 400 reviewerRole).
+  if (d.decision === "dismiss" && session.role !== "senior") {
+    await deny("forbidden", session, target);
+    return { ok: false, code: "forbidden" };
+  }
   if (!allowAccountAction("decision", session.email)) {
     await deny("rate_limited", session, target);
     return { ok: false, code: "rate_limited" };
@@ -116,7 +122,8 @@ export async function runDecide(input: unknown): Promise<DecideResult> {
   const r = await postDeskDecision(d.batchId, d.conceptId, { decision: d.decision, note: d.note, reviewerEmail: session.email,
     reviewerRole: session.role, extractedAt: d.extractedAt, expectedLastDecisionId: d.expectedLastDecisionId, requestId: d.requestId });
   if (r.ok) return { ok: true, outcome: r.data };
-  if (r.status === 409) return { ok: false, code: conflictCode(r.field, r.error) };
+  // §5.11: for a dismissal, 409 field=review is the API's step 6d, "No issue is open on this record" (no_issue).
+  if (r.status === 409) return { ok: false, code: d.decision === "dismiss" && r.field === "review" ? "no_issue" : conflictCode(r.field, r.error) };
   if (r.status === 400) return { ok: false, code: "invalid" };
   if (r.status === 404) return { ok: false, code: "removed" };
   return { ok: false, code: "failed" };

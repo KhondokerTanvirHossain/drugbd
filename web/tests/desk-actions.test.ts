@@ -243,3 +243,45 @@ describe("a senior session (§5.13)", () => {
     expect(postDeskDecision.mock.calls[0][2]).toMatchObject({ reviewerRole: "senior", reviewerEmail: "senior@e2e.test" });
   });
 });
+
+describe("dismiss (§5.10a, §7.2 P1C)", () => {
+  const SENIOR = { email: "senior@e2e.test", name: "S", role: "senior" as const };
+  const dismiss = (over = {}) => input({ decision: "dismiss", note: "the register says 500 mg", ...over });
+
+  it("a senior's dismissal goes to the API with decision dismiss, the note and the viewed version", async () => {
+    getSession.mockResolvedValue(SENIOR);
+    expect(await runDecide(dismiss())).toEqual({ ok: true, outcome: OUTCOME });
+    expect(postDeskDecision).toHaveBeenCalledWith("0001-pilot", "186-0030-006--napa", { decision: "dismiss",
+      note: "the register says 500 mg", reviewerEmail: "senior@e2e.test", reviewerRole: "senior",
+      extractedAt: "2026-10-12T09:00:00.123456Z", expectedLastDecisionId: 41, requestId: RID });
+  });
+
+  it("any other role is forbidden in the web, with a decision_denied row and no API call", async () => {
+    for (const role of ["pharmacist", "engineer"] as const) {
+      getSession.mockResolvedValue({ ...PHARMACIST, role });
+      expect(await runDecide(dismiss())).toEqual({ ok: false, code: "forbidden" });
+    }
+    expect(postDeskDecision).not.toHaveBeenCalled();
+    expect(recordAudit).toHaveBeenLastCalledWith(expect.objectContaining({ event: "decision_denied", outcome: "forbidden", actorRole: "engineer",
+      targetType: "batch_item", targetId: "0001-pilot/186-0030-006--napa" }));
+  });
+
+  it("the note is 5 to 1000 code points after trimming", async () => {
+    getSession.mockResolvedValue(SENIOR);
+    expect(await runDecide(dismiss({ note: "  abcd  " }))).toEqual({ ok: false, code: "invalid" });
+    expect(await runDecide(dismiss({ note: "😀😀😀😀" }))).toEqual({ ok: false, code: "invalid" });
+    expect(await runDecide(dismiss({ note: "x".repeat(1001) }))).toEqual({ ok: false, code: "invalid" });
+    expect(await runDecide(dismiss({ note: "অবৈধ রিপোর্ট" }))).toEqual({ ok: true, outcome: OUTCOME });
+  });
+
+  it("a 409 on review is no_issue for a dismissal; the other fields keep their codes", async () => {
+    getSession.mockResolvedValue(SENIOR);
+    postDeskDecision.mockResolvedValueOnce({ ok: false, status: 409, error: "No issue is open on this record", field: "review" });
+    expect(await runDecide(dismiss())).toEqual({ ok: false, code: "no_issue" });
+    postDeskDecision.mockResolvedValueOnce({ ok: false, status: 409, error: "Another reviewer decided", field: "lastDecisionId" });
+    expect(await runDecide(dismiss())).toEqual({ ok: false, code: "stale_decision" });
+    postDeskDecision.mockResolvedValueOnce({ ok: false, status: 409, error: "This record was removed from the batch file", field: "conceptId" });
+    expect(await runDecide(dismiss())).toEqual({ ok: false, code: "removed" });
+    expect(decideStatus({ ok: false, code: "no_issue" })).toBe(409);
+  });
+});

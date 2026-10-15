@@ -322,3 +322,69 @@ describe("one report at a time (§5.8.2 D45, §5.10; Task 10 Ruling)", () => {
     expect(sends(run(r.state, { type: "RETRY_OK", now: 0 }).effects)).toEqual([{ type: "send", channel: "report", op: X }]);
   });
 });
+
+describe("dismissals on the report channel (§5.8.2, §5.10a)", () => {
+  const dop = (over: Partial<Op> = {}): Op => op({ role: "senior", decision: "dismiss", note: "the register says 500 mg",
+    requestId: "7d1e2f3a-4b5c-4d6e-8f70-81a2b3c4d5e6", ...over });
+  const PENDING = { ...OUT, review: "pending", displayStatus: "pending" as const };
+  const sent = () => run(initialMachine(8), { type: "SEND_DISMISS", op: dop(), token: "held" }).state;
+
+  it("sends at once on the report channel: no undo window, and an open window elsewhere is untouched", () => {
+    const armedElsewhere = run(initialMachine(8),
+      { type: "PRESS_A", op: op({ conceptId: "other", name: "Other", role: "senior" }), token: "held", now: 0 }).state;
+    const r = run(armedElsewhere, { type: "SEND_DISMISS", op: dop(), token: "held" });
+    expect(r.state.report).toEqual({ kind: "sending", op: dop() });
+    expect(r.state.commit.kind).toBe("armed");
+    expect(sends(r.effects)).toEqual([{ type: "send", channel: "report", op: dop() }]);
+  });
+
+  it("only a senior's dismiss op, and only while the report channel is idle (a report blocks it, and the reverse)", () => {
+    expect(run(initialMachine(8), { type: "SEND_DISMISS", op: dop({ role: "pharmacist" }), token: "held" }).state.report.kind).toBe("idle");
+    expect(run(initialMachine(8), { type: "SEND_DISMISS", op: dop({ decision: "issue" }), token: "held" }).state.report.kind).toBe("idle");
+    const reporting = run(initialMachine(8), { type: "SEND_REPORT", op: op({ decision: "issue", note: "wrong strength" }), token: "held" }).state;
+    expect(run(reporting, { type: "SEND_DISMISS", op: dop(), token: "held" }).state).toEqual(reporting);
+    expect(run(sent(), { type: "SEND_REPORT", op: op({ decision: "issue", note: "wrong strength" }), token: "held" }).state).toEqual(sent());
+  });
+
+  it("OK: saved on the report channel, announced with the dismissal sentence, and the outcome becomes the viewed version", () => {
+    const r = run(sent(), { type: "RESULT", channel: "report", result: { type: "OK", outcome: PENDING } });
+    expect(r.state.report).toEqual({ kind: "idle" });
+    const saved = r.effects.find((e) => e.type === "saved")!;
+    expect(saved).toEqual({ type: "saved", channel: "report", op: dop(), outcome: PENDING });
+    expect(texts(r.effects, "announce")).toEqual(["Issue dismissed for Napa. The record is back in review for a pharmacist."]);
+    expect(applySaved({}, saved)).toEqual({ [dop().conceptId]: PENDING.version });
+  });
+
+  it("409 no_issue gives its hint and a refresh; the stale codes give the stale banner", () => {
+    const r = run(sent(), { type: "RESULT", channel: "report", result: toOutcome({ ok: false, code: "no_issue" }) });
+    expect(texts(r.effects, "hint")).toEqual(["No issue is open on this record any more. Nothing was saved."]);
+    expect(r.effects).toContainEqual({ type: "refresh" });
+    const removed = run(sent(), { type: "RESULT", channel: "report", result: toOutcome({ ok: false, code: "removed" }) });
+    expect(texts(removed.effects, "hint")).toEqual(["This record was removed from the batch file. Nothing was saved."]);
+    const s = run(sent(), { type: "RESULT", channel: "report", result: toOutcome({ ok: false, code: "stale_decision" }) });
+    expect(s.effects).toContainEqual({ type: "stale", conceptId: dop().conceptId, reason: "other", cancelled: true });
+  });
+
+  it("captcha: the report channel's bot hold keeps the dismiss op, and Retry check resends it with the same requestId", () => {
+    const held = run(initialMachine(8), { type: "SEND_DISMISS", op: dop(), token: "failed" }).state;
+    expect(held.report).toEqual({ kind: "botHold", op: dop() });
+    expect(sends(run(held, { type: "RETRY_OK", now: 5 }).effects)).toEqual([{ type: "send", channel: "report", op: dop() }]);
+    const viaCaptcha = run(sent(), { type: "RESULT", channel: "report", result: { type: "CAPTCHA" } }).state;
+    expect(viaCaptcha.report).toEqual({ kind: "botHold", op: dop() });
+  });
+
+  it("429 is netErr saved:no and a lost answer saved:unknown, with the dismissal copy; TRY_AGAIN resends the same op, never an approval", () => {
+    const no = run(sent(), { type: "RESULT", channel: "report", result: toOutcome({ ok: false, code: "rate_limited" }) });
+    expect(no.state.report).toEqual({ kind: "netErr", op: dop(), saved: "no" });
+    expect(texts(no.effects, "announce")).toEqual(["Couldn't send your dismissal. Nothing was saved. Check your connection and try again."]);
+    const unknown = run(sent(), { type: "RESULT", channel: "report", result: toOutcome("network") });
+    expect(unknown.state.report).toEqual({ kind: "netErr", op: dop(), saved: "unknown" });
+    expect(texts(unknown.effects, "announce")).toEqual([
+      "Couldn't confirm your dismissal. We couldn't confirm your dismissal was saved. Try again to find out; it will not be saved twice."]);
+    expect(unknown.state.commit).toEqual({ kind: "idle" });
+    expect(unconfirmedOn(unknown.state, dop().conceptId)).toBe(true);
+    const again = run(unknown.state, { type: "TRY_AGAIN", channel: "report" });
+    expect(sends(again.effects)).toEqual([{ type: "send", channel: "report", op: dop() }]);
+    expect(run(unknown.state, { type: "TRY_AGAIN", channel: "commit" }).effects).toEqual([]);
+  });
+});

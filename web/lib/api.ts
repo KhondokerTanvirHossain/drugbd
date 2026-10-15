@@ -276,7 +276,7 @@ async function write<T>(path: string, payload: unknown): Promise<WriteResult<T>>
 }
 
 export type DecisionRequest = {
-  decision: "ok" | "issue"; note: string; reviewerEmail: string; reviewerRole: ReviewerRole;
+  decision: "ok" | "issue" | "dismiss"; note: string; reviewerEmail: string; reviewerRole: ReviewerRole;
   /** The version the page showed (spec §7.2): both required by the API, null when the item has none. */
   extractedAt: string | null;
   expectedLastDecisionId: number | null;
