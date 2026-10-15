@@ -99,12 +99,13 @@ describe("chapter 10, FAQ", () => {
   });
 
   it("the Napa answer only while no pilot record is approved (Review Focus 5)", () => {
-    for (const stats of [pilotStats({ approved: [P.napa] }), pilotStats({ approved: [P.napa, P.aspirin, P.warfarin, P.domperidone] }),
-      { ...pilotStats(), batches: [] }]) {
+    // With the batch unreported no record is usable, so the Domperidone and Napa-name answers go too (Task 12 G3 ruling).
+    for (const [stats, n] of [[pilotStats({ approved: [P.napa] }), 9], [pilotStats({ approved: [P.napa, P.aspirin, P.warfarin, P.domperidone] }), 9],
+      [{ ...pilotStats(), batches: [] }, 7]] as const) {
       const html = faq(stats);
       expect(html).not.toContain("Why can&#x27;t I see Napa on the public site?");
       expect(html).not.toContain("Every pilot record is");
-      expect(html.match(/<details/g)).toHaveLength(9);
+      expect(html.match(/<details/g)).toHaveLength(n);
       expect(html).toContain("<details open=\"\"><summary>No alerts came back. Is the combination safe?</summary>");
     }
   });
@@ -115,7 +116,35 @@ describe("chapter 10, FAQ", () => {
       const html = faq(stats);
       expect(html).not.toContain("Why can&#x27;t I see Napa on the public site?");
       expect(html).not.toContain("Every pilot record is");
-      expect(html.match(/<details/g)).toHaveLength(9);
+      // The unreported record's own answer goes too (Task 12 G3 ruling), so 8.
+      expect(html.match(/<details/g)).toHaveLength(8);
+      expect(html).toContain("<details open=\"\"><summary>No alerts came back. Is the combination safe?</summary>");
+    }
+  });
+
+  // Ruling (Task 12, G3 §1.2 / §6.8 Withdrawn examples): the Domperidone coverage and Napa substance answers state pilot record values.
+  it("withdraws the Domperidone and Napa-name answers once that record has an issue or leaves the batch", () => {
+    for (const [stats, gone] of [[pilotStats({ withdrawn: [P.domperidone] }), "domperidone"], [pilotStats({ missing: [P.napa] }), "napa"]] as const) {
+      const html = faq(stats);
+      if (gone === "domperidone") {
+        expect(html).not.toContain("coverage: none");
+        expect(html).not.toContain("Why does Domperidone show no interaction data?");
+        expect(html).toContain("DGDA&#x27;s ICD-11 mapping");
+      } else {
+        expect(html).not.toContain("DGDA&#x27;s ICD-11 mapping");
+        expect(html).not.toContain("Why does Napa say Acetaminophen, not Paracetamol?");
+        expect(html).toContain("coverage: none");
+      }
+      // A withdrawn record is still reported as not reviewed, so the Napa visibility question stays the open first one there.
+      const first = gone === "domperidone" ? "Why can&#x27;t I see Napa on the public site?" : "No alerts came back. Is the combination safe?";
+      expect(html).toContain(`<div class="faq"><details open=""><summary>${first}</summary>`);
+      expect(html.match(/<details open/g)).toHaveLength(1);
+      expect(html).toContain("<summary>No alerts came back. Is the combination safe?</summary>");
+    }
+    for (const stats of [pilotStats({ withdrawn: [P.domperidone], missing: [P.napa] }), { ...pilotStats(), batches: [] }]) {
+      const html = faq(stats);
+      expect(html).not.toContain("coverage: none");
+      expect(html).not.toContain("DGDA&#x27;s ICD-11 mapping");
       expect(html).toContain("<details open=\"\"><summary>No alerts came back. Is the combination safe?</summary>");
     }
   });
