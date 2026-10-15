@@ -63,5 +63,6 @@ jobs:
       - run: cd web && E2E_BASE_URL=http://localhost:3000 npx playwright test
       - run: cd web && npx lhci autorun
       - run: cd web && npx lhci autorun --config=./lighthouserc.review.json
+      - run: cd web && npx lhci autorun --config=./lighthouserc.learn.json
       - if: failure()
         run: $COMPOSE logs --no-color web api | tail -n 300
