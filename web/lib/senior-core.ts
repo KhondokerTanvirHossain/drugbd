@@ -8,14 +8,15 @@ import { accountKey, clientIp } from "./rate-limit";
 import { requestId } from "./request-id";
 import { logRequest } from "./request-log";
 import { PAIR_SHOWS, type PairDecideInput, type PairDecideResult } from "./senior-types";
-import { getSession } from "./session";
+import { getSession, type Session } from "./session";
 import { verifyTurnstile } from "./turnstile";
 
 /*
  * The pair decision action behind the senior pages (§5.17.2, §7.7). In order: the session (none: unauthenticated; not a
  * senior: forbidden), input bounds, the per-account decision budget shared with record decisions (§9.3), the bot check
  * (action "decision", §9.2), then the API with the session's own email and role. The API writes pair_decision and
- * pair_decision_rejected (§5.15). Emails and notes are personal data and are never logged.
+ * pair_decision_rejected (§5.15); the four refusals stopped here, before any API call, write decision_denied (§5.15, §9.3).
+ * Emails and notes are personal data and are never logged.
  */
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ID_RE = /^DDInter[0-9]{1,6}$/;
@@ -45,14 +46,26 @@ const CONFLICT: Record<string, "content_changed" | "other_senior" | "already_rev
   contentHash: "content_changed", lastPairReviewId: "other_senior", state: "already_reviewed",
 };
 
+type Denied = "unauthenticated" | "forbidden" | "rate_limited" | "captcha";
+
+/**
+ * §5.15 decision_denied for a pair decision stopped in the web layer. No target: the web may not post `ddinter_pair`
+ * (§7.5), as in desk-core's null-target fallback. Best effort: an audit outage never changes the answer.
+ */
+async function deny(code: Denied, s: Session | null): Promise<PairDecideResult> {
+  await recordAudit({ event: "decision_denied", outcome: code, actorEmail: s?.email ?? null, actorRole: s?.role ?? null,
+    targetType: null, targetId: null }).catch(() => false);
+  return { ok: false, code };
+}
+
 export async function runPairDecide(input: unknown): Promise<PairDecideResult> {
   const session = await getSession();
-  if (!session) return { ok: false, code: "unauthenticated" };
-  if (session.role !== "senior") return { ok: false, code: "forbidden" };
+  if (!session) return deny("unauthenticated", null);
+  if (session.role !== "senior") return deny("forbidden", session);
   const d = parse(input);
   if (!d) return { ok: false, code: "invalid" };
-  if (!allowAccountAction("decision", session.email)) return { ok: false, code: "rate_limited" };
-  if (!(await verifyTurnstile(d.turnstileToken, clientIp(await headers()), "decision"))) return { ok: false, code: "captcha" };
+  if (!allowAccountAction("decision", session.email)) return deny("rate_limited", session);
+  if (!(await verifyTurnstile(d.turnstileToken, clientIp(await headers()), "decision"))) return deny("captcha", session);
   const r = await postPairDecision(d.ddinterA, d.ddinterB, { decision: d.decision, note: d.note, reviewerEmail: session.email,
     reviewerRole: "senior", expectedContentHash: d.expectedContentHash, expectedLastPairReviewId: d.expectedLastPairReviewId,
     requestId: d.requestId });

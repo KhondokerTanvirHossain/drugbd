@@ -69,6 +69,33 @@ describe("the pair decision action (§5.17.2, §7.7, §9.2, §9.3)", () => {
     verifyTurnstile.mockResolvedValueOnce(false);
     expect(await runPairDecide(input())).toEqual({ ok: false, code: "captcha" });
   });
+  it("each web-layer refusal writes one decision_denied row with no target; invalid input writes none (§5.15, §9.3)", async () => {
+    const PHARM = { ...SENIOR, email: "pharm@e2e.test", role: "pharmacist" as const };
+    getSession.mockResolvedValueOnce(null);
+    await runPairDecide(input());
+    getSession.mockResolvedValueOnce(PHARM);
+    await runPairDecide(input());
+    allowAccountAction.mockReturnValueOnce(false);
+    await runPairDecide(input());
+    verifyTurnstile.mockResolvedValueOnce(false);
+    await runPairDecide(input());
+    await runPairDecide(input({ requestId: "nope" }));
+    const row = (outcome: string, actorEmail: string | null, actorRole: string | null) =>
+      ({ event: "decision_denied", outcome, actorEmail, actorRole, targetType: null, targetId: null });
+    expect(recordAudit.mock.calls.map((c) => c[0])).toEqual([
+      row("unauthenticated", null, null),
+      row("forbidden", "pharm@e2e.test", "pharmacist"),
+      row("rate_limited", "senior@e2e.test", "senior"),
+      row("captcha", "senior@e2e.test", "senior"),
+    ]);
+    expect(postPairDecision).not.toHaveBeenCalled();
+  });
+  it("an audit outage never changes the refusal", async () => {
+    recordAudit.mockRejectedValueOnce(new Error("api down"));
+    getSession.mockResolvedValueOnce(null);
+    expect(await runPairDecide(input())).toEqual({ ok: false, code: "unauthenticated" });
+    expect(recordAudit).toHaveBeenCalledTimes(1);
+  });
   it.each([
     [{ ok: false, status: 409, error: "x", field: "contentHash" }, "content_changed"],
     [{ ok: false, status: 409, error: "x", field: "lastPairReviewId" }, "other_senior"],
