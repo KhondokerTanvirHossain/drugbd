@@ -265,4 +265,24 @@ class VisibilityApiIntegrationTest {
             web.get().uri(uri).exchange().expectStatus().isUnauthorized()
                 .expectBody().jsonPath("$.errors[0].code").isEqualTo("UNAUTHORIZED");
     }
+
+    // ---- stats (§7.4; the /v1/stats row of the §11.3 matrix)
+
+    @Test void statsCountOnlyPublicProductsAndCarryNoClinicalData() {
+        String body = str(web.get().uri("/v1/stats").exchange().expectStatus().isOk()
+            .expectBody()
+            .jsonPath("$.data.approvedProducts").isEqualTo(3)
+            .jsonPath("$.data.inReviewProducts").isEqualTo(3)
+            .jsonPath("$.data.batches[0].batchId").isEqualTo("V-new")
+            .jsonPath("$.data.batches[0].items[0].conceptId").isEqualTo("C-CAP")
+            .jsonPath("$.data.batches[0].items[0].status").isEqualTo("approved")
+            .jsonPath("$.data.batches[0].items[1].conceptId").isEqualTo("W-2")
+            .jsonPath("$.data.batches[0].items[1].status").isEqualTo("not_reviewed")
+            .jsonPath("$.data.batches[2].batchId").isEqualTo("V-old")
+            .jsonPath("$.data.batches[2].items[1].conceptId").isEqualTo("W-2")
+            .jsonPath("$.data.batches[2].items[1].status").isEqualTo("not_reviewed")
+            .returnResult().getResponseBody());
+        assertThat(body).doesNotContain("Warfarin", "Test Pharma", "BDS-", "BDC-", "XM5S93", "DDInter", "genericContentRaw",
+            "reviewStatus", "\"issue\"", "company", "strength");
+    }
 }
