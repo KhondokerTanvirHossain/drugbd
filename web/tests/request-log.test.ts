@@ -11,6 +11,8 @@ describe("routeTemplate", () => {
     ["/products/186-0030-006--napa", "/products/[id]"], ["/substances/BDS-000010", "/substances/[id]"],
     ["/batches/0001-pilot", "/batches/[id]"], ["/review/0001-pilot", "/review/[batchId]"],
     ["/review/0001-pilot/N-1", "/review/[batchId]/[conceptId]"], ["/review/0001-pilot/versions", "/review/[batchId]/versions"],
+    ["/review/pairs", "/review/pairs"], ["/review/substances", "/review/substances"],
+    ["/review/substances/BDS-000003", "/review/substances/[bdsId]"],
     ["/review/flags", "/review/flags"], ["/__/auth/handler", "/__/auth/[...path]"], ["/", "/"], ["/api/session", "/api/session"],
   ])("%s is logged as %s", (path, template) => {
     expect(routeTemplate(path)).toBe(template);

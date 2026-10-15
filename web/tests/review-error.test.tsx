@@ -46,4 +46,11 @@ describe("review error boundary (§5.12, §10.2 one polite region, no assertive 
     expect(regions[0].textContent).toBe(expected);
     expect(container.querySelector('[role="alert"]')).toBeNull();
   });
+
+  it.each(["/review/pairs", "/review/substances", "/review/substances/BDS-000003"])("on %s: Couldn't load senior review. (§5.17.5)", (p) => {
+    pathname = p;
+    const { container } = render(<ReviewError error={new Error("boom")} reset={() => {}} />);
+    expect(container.querySelector(".banner-title")?.textContent).toBe("Couldn't load senior review.");
+    expect(container.querySelector(".banner-body")?.textContent).toBe("Nothing was changed. Check your connection and try again.");
+  });
 });
