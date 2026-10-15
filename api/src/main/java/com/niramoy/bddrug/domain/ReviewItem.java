@@ -8,7 +8,8 @@ public record ReviewItem(String batchId, String conceptId, int index, int total,
                          ReviewViews.Version version, BatchInfo batch, Brand brand, List<DgdaIngredient> dgdaIngredients,
                          Clinical clinicalDrug, List<IngredientSummary> ingredients, List<Stage> stages,
                          BatchPairs.Result batchPairs, @JsonRawValue String sourceJson, String sourceUrl,
-                         List<ItemHistory.Entry> history, ItemHistory.Reopen reopen, List<OpenIssue> openIssues) {
+                         List<ItemHistory.Entry> history, ItemHistory.Reopen reopen, List<OpenIssue> openIssues,
+                         BatchPairs.OtherResult otherPairs) {
     public record BatchInfo(Instant runAt, int itemCount, String status) {}
     public record Brand(String conceptId, String darNumber, String tradeName, String company, String dosageForm,
                         String genericContentRaw, String qualityFlag, String parseStatus, String parseNote,

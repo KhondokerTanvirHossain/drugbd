@@ -7,6 +7,8 @@ import com.niramoy.bddrug.domain.ApprovalRule;
 import com.niramoy.bddrug.domain.BatchPairs;
 import com.niramoy.bddrug.domain.DdinterCode;
 import com.niramoy.bddrug.domain.ItemHistory;
+import com.niramoy.bddrug.domain.PairContent;
+import com.niramoy.bddrug.domain.PairReviewRule;
 import com.niramoy.bddrug.domain.ReviewDecision;
 import com.niramoy.bddrug.domain.ReviewItem;
 import com.niramoy.bddrug.domain.ReviewTriage;
@@ -187,20 +189,21 @@ public class ReviewQueryService {
                     String route = d.clinical() == null ? null : d.clinical().route();
                     return Mono.zip(port.ingredients(conceptId, d.bdcId(), route), pairs(batchId, conceptId), port.snapshots(batchId, conceptId),
                             port.fullRuns(batchId))
-                        .flatMap(t -> stages(me, t.getT2().products(), conceptId).map(stages -> {
-                            List<Instant> runs = t.getT4().isEmpty() ? List.of(batch.runAt()) : t.getT4();
-                            List<ItemHistory.Decision> decisions = me.facts().decisions().stream().map(x -> new ItemHistory.Decision(
-                                x.id(), x.decision(), x.note(), x.reviewerRole(), x.decidedAt(),
-                                isMine(x.reviewerEmail(), viewerEmail))).toList();
-                            ItemHistory.Result history = ItemHistory.build(runs, t.getT3(), decisions, me.facts().extractedAt());
-                            List<ReviewItem.OpenIssue> openIssues = ApprovalRule.openIssues(me.facts().decisions(), me.facts().extractedAt())
-                                .stream().map(x -> new ReviewItem.OpenIssue(x.reviewerRole(), x.decidedAt(), x.note(),
-                                    isMine(x.reviewerEmail(), viewerEmail))).toList();
-                            return new ReviewItem(batchId, conceptId, me.index(), all.size(), me.displayStatus(), me.facts().review(),
-                                me.version(), new ReviewItem.BatchInfo(batch.runAt(), all.size(), batch.status()), d.brand(),
-                                d.dgdaIngredients(), d.clinical(), t.getT1(), stages, t.getT2().result(), d.sourceJson(),
-                                sourceUrl(conceptId), history.history(), history.reopen(), openIssues);
-                        }));
+                        .flatMap(t -> Mono.zip(stages(me, t.getT2().products(), conceptId),
+                                crossBatch(batchId, conceptId, t.getT2(), viewerEmail))
+                            .map(u -> {
+                                List<Instant> runs = t.getT4().isEmpty() ? List.of(batch.runAt()) : t.getT4();
+                                List<ItemHistory.Decision> decisions = me.facts().decisions().stream().map(x -> new ItemHistory.Decision(
+                                    x.id(), x.decision(), x.note(), x.reviewerRole(), x.decidedAt(), isMine(x.reviewerEmail(), viewerEmail))).toList();
+                                ItemHistory.Result history = ItemHistory.build(runs, t.getT3(), decisions, me.facts().extractedAt());
+                                List<ReviewItem.OpenIssue> openIssues = ApprovalRule.openIssues(me.facts().decisions(), me.facts().extractedAt())
+                                    .stream().map(x -> new ReviewItem.OpenIssue(x.reviewerRole(), x.decidedAt(), x.note(),
+                                        isMine(x.reviewerEmail(), viewerEmail))).toList();
+                                return new ReviewItem(batchId, conceptId, me.index(), all.size(), me.displayStatus(), me.facts().review(),
+                                    me.version(), new ReviewItem.BatchInfo(batch.runAt(), all.size(), batch.status()), d.brand(),
+                                    d.dgdaIngredients(), d.clinical(), t.getT1(), u.getT1(), u.getT2().batch(), d.sourceJson(),
+                                    sourceUrl(conceptId), history.history(), history.reopen(), openIssues, u.getT2().other());
+                            }));
                 });
         }));
     }
@@ -221,6 +224,43 @@ public class ReviewQueryService {
             return Mono.zip(port.pairRows(ids), port.entryNames(ids))
                 .map(t -> new PairsAndProducts(products, BatchPairs.compute(conceptId, products, t.getT1(), t.getT2().keySet())));
         });
+    }
+
+    /** batchPairs and otherPairs with each pair's link and senior-review state, from one pair-review query. */
+    private record Cross(BatchPairs.Result batch, BatchPairs.OtherResult other) {}
+
+    private Mono<Cross> crossBatch(String batchId, String conceptId, PairsAndProducts inBatch, String viewerEmail) {
+        BatchPairs.Product me = inBatch.products().stream().filter(p -> p.conceptId().equals(conceptId)).findFirst().orElse(null);
+        if (me == null) return Mono.just(new Cross(inBatch.result(), new BatchPairs.OtherResult(List.of(), List.of(), 0)));
+        Set<String> mine = new HashSet<>();
+        for (BatchPairs.Substance s : me.substances()) for (DdinterCode c : s.codes()) mine.add(c.code());
+        return port.otherProducts(batchId).flatMap(partners -> {
+            Set<String> theirs = new HashSet<>();
+            for (BatchPairs.OtherProduct q : partners)
+                for (BatchPairs.Substance s : q.substances()) for (DdinterCode c : s.codes()) theirs.add(c.code());
+            Set<String> every = new HashSet<>(mine);
+            every.addAll(theirs);
+            for (BatchPairs.Pair p : inBatch.result().pairs()) { every.add(p.ddinterA()); every.add(p.ddinterB()); }
+            return Mono.zip(port.pairRowsTouching(mine, theirs), port.entryNames(every), port.pairReviews(every, viewerEmail))
+                .map(t -> {
+                    BatchPairs.OtherResult other = BatchPairs.computeFor(me, partners, t.getT1(), t.getT2().keySet());
+                    Map<String, List<PairReviewRule.Decision>> reviews = t.getT3();
+                    List<BatchPairs.Pair> batchPairs = inBatch.result().pairs().stream().map(p -> p.with(
+                        SourceLinks.pair(p.interactionId()).orElse(null),
+                        reviewOf(reviews, p.ddinterA(), p.ddinterB(), p.severity(), p.actions(), p.interaction(), p.management()))).toList();
+                    List<BatchPairs.OtherPair> otherPairs = other.pairs().stream().map(p -> p.with(
+                        SourceLinks.pair(p.interactionId()).orElse(null),
+                        reviewOf(reviews, p.ddinterA(), p.ddinterB(), p.severity(), p.actions(), p.interaction(), p.management()))).toList();
+                    return new Cross(new BatchPairs.Result(inBatch.result().totalBatchPairs(), batchPairs, inBatch.result().notChecked()),
+                        new BatchPairs.OtherResult(otherPairs, other.notChecked(), other.otherBatches()));
+                });
+        });
+    }
+
+    static PairReviewRule.Review reviewOf(Map<String, List<PairReviewRule.Decision>> reviews, String a, String b, String severity,
+                                          List<String> actions, String interaction, String management) {
+        String hash = PairContent.hash(a, b, new PairContent.Content(severity, actions, interaction, management));
+        return PairReviewRule.review(reviews.getOrDefault(a + "|" + b, List.of()), hash);
     }
 
     /** The ids each product checks with (RouteRule on its own route). */

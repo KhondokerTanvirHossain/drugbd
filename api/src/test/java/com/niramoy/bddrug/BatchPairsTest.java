@@ -186,6 +186,26 @@ class BatchPairsTest {
         assertThat(r.otherBatches()).isEqualTo(3);
     }
 
+    /** Many partners share one substance list (the reader shares it); each still counts once, apart by route and status. */
+    @Test void partnersSharingSubstancesStayApartByRouteAndStatus() {
+        List<Substance> chloramphenicol = List.of(CHLORAMPHENICOL), mupirocin = List.of(MUPIROCIN);
+        List<OtherProduct> partners = List.of(
+            new OtherProduct("CAP1", "Cap 1", "B-2", false, "systemic", chloramphenicol),
+            new OtherProduct("CAP2", "Cap 2", "B-2", false, "systemic", chloramphenicol),
+            new OtherProduct("EYE1", "Eye 1", "B-2", false, "ophthalmic", chloramphenicol),
+            new OtherProduct("CAP3", "Cap 3", "B-3", true, "systemic", chloramphenicol),
+            new OtherProduct("N1", "Nasal 1", "B-2", false, "nasal", mupirocin),
+            new OtherProduct("N2", "Nasal 2", "B-3", false, "nasal", mupirocin));
+        OtherResult r = BatchPairs.computeFor(BATCH.get(0), partners, ROWS, COMPLETE);
+        assertThat(r.pairs()).extracting(BatchPairs.OtherPair::ddinterB, BatchPairs.OtherPair::partnerCount,
+                p -> p.partners().stream().map(BatchPairs.OtherPartner::conceptId).toList())
+            .containsExactly(org.assertj.core.groups.Tuple.tuple("DDInter351", 1, List.of("CAP3")),
+                org.assertj.core.groups.Tuple.tuple("DDInter351", 2, List.of("CAP1", "CAP2")));
+        assertThat(r.notChecked()).extracting(BatchPairs.OtherNotChecked::partnerSubstance, BatchPairs.OtherNotChecked::route,
+                BatchPairs.OtherNotChecked::partnerCount, n -> n.partners().stream().map(BatchPairs.OtherPartner::conceptId).toList())
+            .containsExactly(org.assertj.core.groups.Tuple.tuple("Mupirocin", "nasal", 2, List.of("N1", "N2")));
+    }
+
     @Test void noPartnersMeansNoPairsAndNoOtherBatches() {
         OtherResult r = BatchPairs.computeFor(BATCH.get(0), List.of(), ROWS, COMPLETE);
         assertThat(r.pairs()).isEmpty();

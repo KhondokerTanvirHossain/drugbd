@@ -2,6 +2,7 @@ package com.niramoy.bddrug.domain;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -172,6 +173,11 @@ public final class BatchPairs {
         return new Result(batch.size(), List.copyOf(sorted), List.copyOf(notChecked.values()));
     }
 
+    /** What one walk of a partner signature reaches: a pair (keyed by entries and status) or a not-checked line. */
+    private record Touch(boolean pair, String key, PairRow row, Substance mine, Substance theirs, String reason, String side,
+                         String route) {}
+    private record Signature(String route, List<Substance> substances, boolean approved) {}
+
     /** A pair or line of {@link #computeFor} while it collects its partners (all of one status). */
     private static final class Acc {
         final PairRow row; final Substance mine, theirs; final String reason, side, route; final boolean approved;
@@ -198,20 +204,29 @@ public final class BatchPairs {
     public static OtherResult computeFor(Product me, List<OtherProduct> partners, List<PairRow> rows, Set<String> complete) {
         Map<String, PairRow> byKey = byKey(rows);
         Map<String, Acc> pairs = new LinkedHashMap<>(), lines = new LinkedHashMap<>();
+        // The walk depends only on the partner's route, substances and status, so partners that share them share one walk
+        // (the §7.3 scale test has 40,000 partners and a handful of signatures). Still linear: one lookup per partner.
+        Map<Signature, List<Touch>> walks = new HashMap<>();
         for (OtherProduct q : partners) {
             OtherPartner ref = new OtherPartner(q.conceptId(), q.tradeName(), q.batchId(), q.approved());
-            walk(me, q.route(), q.substances(), byKey, complete, new Visitor() {
-                @Override public void pair(PairRow row, Substance s, Substance t) {
-                    pairs.computeIfAbsent(key(row.ddinterA(), row.ddinterB()) + "|" + q.approved(),
-                        k -> new Acc(row, s, t, null, null, null, q.approved())).add(ref);
-                }
-                @Override public void notChecked(Substance s, Substance t, String reason, boolean thisSide, String route) {
-                    String side = thisSide ? "this" : "partner";
-                    String k = s.name() + "|" + t.name() + "|" + reason + "|" + side + (thisSide ? "" : "|" + String.valueOf(route))
-                        + "|" + q.approved();
-                    lines.computeIfAbsent(k, x -> new Acc(null, s, t, reason, side, route, q.approved())).add(ref);
-                }
+            List<Touch> touches = walks.computeIfAbsent(new Signature(q.route(), q.substances(), q.approved()), sig -> {
+                List<Touch> out = new ArrayList<>();
+                walk(me, q.route(), q.substances(), byKey, complete, new Visitor() {
+                    @Override public void pair(PairRow row, Substance s, Substance t) {
+                        out.add(new Touch(true, key(row.ddinterA(), row.ddinterB()) + "|" + q.approved(), row, s, t, null, null, null));
+                    }
+                    @Override public void notChecked(Substance s, Substance t, String reason, boolean thisSide, String route) {
+                        String side = thisSide ? "this" : "partner";
+                        String k = s.name() + "|" + t.name() + "|" + reason + "|" + side + (thisSide ? "" : "|" + String.valueOf(route))
+                            + "|" + q.approved();
+                        out.add(new Touch(false, k, null, s, t, reason, side, route));
+                    }
+                });
+                return List.copyOf(out);
             });
+            for (Touch x : touches)
+                (x.pair() ? pairs : lines).computeIfAbsent(x.key(),
+                    k -> new Acc(x.row(), x.mine(), x.theirs(), x.reason(), x.side(), x.route(), q.approved())).add(ref);
         }
         List<OtherPair> outPairs = pairs.values().stream()
             .map(a -> new OtherPair(a.row.ddinterA(), a.row.ddinterB(), a.row.nameA(), a.row.nameB(), a.mine.name(), a.theirs.name(),

@@ -159,4 +159,58 @@ class ReviewQueryCrossBatchIntegrationTest {
             .jsonPath("$.data.ingredients[0].codes[?(@.system == 'ATC')].source.label").isEqualTo(List.of("WHO ATC/DDD Index"))
             .jsonPath("$.data.ingredients[0].codes[?(@.system == 'ICD11_XM')].source.label").isEqualTo(List.of("Search ICD-11 for XM6XF8"));
     }
+
+    // ---- §7.3 otherPairs
+
+    @Test void otherPairsCoverEveryOtherBatchSplitByThePartnersStatus() {
+        item("K-THIS", "W-1")
+            .jsonPath("$.data.otherPairs.pairs[*].ddinterB").isEqualTo(List.of("DDInter20", "DDInter20", "DDInter1951", "DDInter351"))
+            .jsonPath("$.data.otherPairs.pairs[*].severity").isEqualTo(List.of("major", "major", "moderate", "moderate"))
+            .jsonPath("$.data.otherPairs.pairs[0].partners[*].conceptId").isEqualTo(List.of("A-1"))
+            .jsonPath("$.data.otherPairs.pairs[0].partners[0].approved").isEqualTo(true)
+            .jsonPath("$.data.otherPairs.pairs[0].partners[0].batchId").isEqualTo("K-OLD")
+            .jsonPath("$.data.otherPairs.pairs[0].management")
+                .isEqualTo("Avoid the combination unless the benefit outweighs the bleeding risk; monitor INR.")
+            .jsonPath("$.data.otherPairs.pairs[0].partnerBdsId").isEqualTo("BDS-000002")
+            .jsonPath("$.data.otherPairs.pairs[2].partners[*].conceptId").isEqualTo(List.of("COMBO-1"))
+            .jsonPath("$.data.otherPairs.pairs[3].partners[*].conceptId").isEqualTo(List.of("C-CAP"))
+            .jsonPath("$.data.otherPairs.notChecked.length()").isEqualTo(1)
+            .jsonPath("$.data.otherPairs.notChecked[0].partnerSubstance").isEqualTo("Domperidone")
+            .jsonPath("$.data.otherPairs.notChecked[0].reason").isEqualTo("no_data")
+            .jsonPath("$.data.otherPairs.notChecked[0].side").isEqualTo("partner")
+            .jsonPath("$.data.otherPairs.notChecked[0].partnerBdsId").isEqualTo("BDS-000004")
+            .jsonPath("$.data.otherPairs.notChecked[0].partners[*].conceptId").isEqualTo(List.of("D-1"));
+    }
+
+    @Test void overFivePartnersSendsTheFirstFiveInBatchThenNameOrderAndTheTotal() {
+        item("K-THIS", "W-1")
+            .jsonPath("$.data.otherPairs.pairs[1].partnerCount").isEqualTo(7)
+            .jsonPath("$.data.otherPairs.pairs[1].partners.length()").isEqualTo(5)
+            .jsonPath("$.data.otherPairs.pairs[1].partners[*].tradeName")
+                .isEqualTo(List.of("Asprin Plus", "Aspra 2", "Aspra 3", "Aspra 4", "Aspra 5"))
+            .jsonPath("$.data.otherPairs.pairs[1].partners[0].batchId").isEqualTo("K-NEW")
+            .jsonPath("$.data.otherPairs.pairs[1].partners[0].approved").isEqualTo(false);
+    }
+
+    @Test void aRemovedProductAndAProductAlsoInThisBatchAreNeverPartners() {
+        byte[] body = item("K-THIS", "W-1").returnResult().getResponseBody();
+        String json = new String(body, StandardCharsets.UTF_8);
+        String others = json.substring(json.indexOf("\"otherPairs\""));
+        assertThat(others).doesNotContain("C-EYE", "Optimycin", "\"N-1\"", "W-2");
+    }
+
+    /** Review Focus 2: K-TWIN holds only N-1, which is in this batch; K-RM holds only a removed item. */
+    @Test void otherBatchesCountsOnlyBatchesWithAPartner() {
+        item("K-THIS", "W-1").jsonPath("$.data.otherPairs.otherBatches").isEqualTo(4);
+    }
+
+    @Test void everyPairCarriesItsReviewStateAndItsLinkOnlyForANumericInteractionId() {
+        item("K-THIS", "W-1")
+            .jsonPath("$.data.otherPairs.pairs[0].pairReview.state").isEqualTo("reviewed")
+            .jsonPath("$.data.otherPairs.pairs[0].pairReview.at").isEqualTo("2026-10-15T08:00:00Z")
+            .jsonPath("$.data.otherPairs.pairs[0].pairReview.mine").isEqualTo(true)
+            .jsonPath("$.data.otherPairs.pairs[0].source").isEmpty()           // interaction id IA-1 is not numeric
+            .jsonPath("$.data.batchPairs.pairs[0].pairReview.state").isEqualTo("not_reviewed")
+            .jsonPath("$.data.batchPairs.pairs[0].pairReview.mine").isEqualTo(false);
+    }
 }
