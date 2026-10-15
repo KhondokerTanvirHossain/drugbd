@@ -99,7 +99,7 @@ export async function runDecide(input: unknown): Promise<DecideResult> {
     await deny("unauthenticated", null, target);
     return { ok: false, code: "unauthenticated" };
   }
-  if (!isReviewer(session) || (session.role !== "pharmacist" && session.role !== "engineer")) {
+  if (!isReviewer(session)) {
     await deny("forbidden", session, target);
     return { ok: false, code: "forbidden" };
   }

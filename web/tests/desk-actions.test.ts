@@ -233,3 +233,13 @@ describe("audit of reads (§5.15)", () => {
     expect(await loadDiff("0001-pilot", "napa", "2026-10-12T09:00:00Z")).toBeNull();
   });
 });
+
+describe("a senior session (§5.13)", () => {
+  it("decides like a pharmacist, with reviewerRole senior sent unchanged", async () => {
+    getSession.mockResolvedValue({ email: "senior@e2e.test", name: "S", role: "senior" });
+    postDeskDecision.mockResolvedValue({ ok: true, data: OUTCOME });
+    const r = await runDecide(input());
+    expect(r).toEqual({ ok: true, outcome: OUTCOME });
+    expect(postDeskDecision.mock.calls[0][2]).toMatchObject({ reviewerRole: "senior", reviewerEmail: "senior@e2e.test" });
+  });
+});

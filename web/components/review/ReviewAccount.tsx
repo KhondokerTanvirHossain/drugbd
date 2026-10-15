@@ -1,10 +1,11 @@
 import AccountMenu from "@/components/AccountMenu";
 import ThemeSwitch from "@/components/ThemeSwitch";
 import { buttonClass } from "@/components/ui/Button";
-import { DESK_NEW } from "@/lib/copy";
+import { DESK_NEW, P1C_COPY } from "@/lib/copy";
 import type { KeysSetting } from "@/lib/desk-settings";
 import { DESK, ROLE_LABEL_DESK } from "@/lib/review-copy";
 import type { ReviewBatchSummary } from "@/lib/review-types";
+import { isReviewer } from "@/lib/reviewers";
 import type { Session } from "@/lib/session";
 import type { Theme } from "@/lib/theme";
 import KeysSwitch from "./desk/KeysSwitch";
@@ -25,7 +26,7 @@ export function newestInReview(batches: ReviewBatchSummary[]): string | null {
  */
 export default function ReviewAccount({ session, theme, batchId, keys, shortcutsItem }:
     { session: Session; theme: Theme; batchId: string | null; keys: KeysSetting; shortcutsItem: boolean }) {
-  const reviewer = session.role === "pharmacist" || session.role === "engineer";
+  const reviewer = isReviewer(session);
   const name = (session.name ?? "").trim() || session.email;
   return (
     <AccountMenu>
@@ -34,10 +35,11 @@ export default function ReviewAccount({ session, theme, batchId, keys, shortcuts
       </summary>
       <div className={styles.panel}>
         <p className={styles.who}><b>{name}</b><span>{session.email}</span></p>
-        {reviewer && <p><span className="role-badge">{ROLE_LABEL_DESK[session.role as "pharmacist" | "engineer"]}</span>
+        {reviewer && <p><span className="role-badge">{ROLE_LABEL_DESK[session.role]}</span>
           {batchId && <> {DESK.batchPrefix} <span className="mono">{batchId}</span></>}</p>}
         {reviewer && <a className={styles.menuLink} href="/review">{DESK.reviewDesk}</a>}
         {reviewer && <a className={styles.menuLink} href="/review/flags">{DESK_NEW.reviewLists.flagsLink}</a>}
+        {reviewer && session.role === "senior" && <a className={styles.menuLink} href="/review/pairs">{P1C_COPY.senior.seniorReview}</a>}
         {reviewer && shortcutsItem && (
           <button type="button" className={buttonClass("plain", "sm")} data-desk-open="sheet" hidden>{DESK_NEW.shortcutsMenuItem.item}</button>
         )}

@@ -218,3 +218,21 @@ describe("the batch route and layout", () => {
     expect(html).not.toContain("sourceJson");
   });
 });
+
+describe("a senior session on the review pages (§5.13: role passed through unchanged)", () => {
+  const SENIOR = { email: "senior@e2e.test", name: "S", role: "senior" as const };
+  it("/review/{b} opens an engineer-checked record first, as for a pharmacist", async () => {
+    getSession.mockResolvedValue(SENIOR);
+    const items = pilotRows().map((r, i) => ({ ...r, displayStatus: i === 2 ? "engineer_checked" as const : "approved" as const }));
+    getReviewItems.mockResolvedValue({ ...ITEMS, items });
+    await expect(BatchPage({ params: Promise.resolve({ batchId: "0001-pilot" }), searchParams: Promise.resolve({}) }))
+      .rejects.toThrow(`REDIRECT /review/0001-pilot/${items[2].conceptId}`);
+  });
+  it("the no-JavaScript confirm step says that confirming publishes", async () => {
+    getSession.mockResolvedValue(SENIOR);
+    const x = pilotItem("napa").version.extractedAt!;
+    const html = await page("napa", { confirm: "186-0030-006--napa", x, d: "", r: RID });
+    expect(html).toContain("Confirming publishes this record.");
+    expect(html).not.toContain("Confirming records your check.");
+  });
+});

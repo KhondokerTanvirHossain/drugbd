@@ -1,3 +1,4 @@
+import { DESK_NEW, fill } from "@/lib/copy";
 import { fmtDhaka, fmtUtc } from "@/lib/format";
 import { DESK, historyText } from "@/lib/review-copy";
 import type { ReviewItem } from "@/lib/review-types";
@@ -12,7 +13,9 @@ export default function History({ item }: { item: ReviewItem }) {
         {item.history.map((e, i) => (
           <li key={i}>
             <span className={s.histT}>{fmtUtc(e.at)}<span>{fmtDhaka(e.at)}</span></span>
-            <span>{historyText(e, item.batchId)}{e.kind === "decision" && e.note ? <> <span className="raw">{e.note}</span></> : null}</span>
+            <span>{historyText(e, item.batchId)}{e.kind === "extract" && e.carriedFrom ? (
+              <span className={s.histSub}>{fill(DESK_NEW.history.carriedOver, { batchId: e.carriedFrom })}</span>
+            ) : null}{e.kind === "decision" && e.note ? <> <span className="raw">{e.note}</span></> : null}</span>
           </li>
         ))}
       </ol>

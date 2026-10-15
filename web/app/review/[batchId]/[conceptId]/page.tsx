@@ -72,7 +72,7 @@ export default async function RecordPage({ params, searchParams }: {
       filters={<ShowFilters batchId={batchId} conceptId={conceptId} show={show} q={q} counts={visible.filterCounts} />}
       evidence={<EvidenceContent item={item} />}
       fallbackWidget={<Turnstile action="decision" nonce={nonce} />}
-      confirm={confirming ? <ConfirmPanel item={item} role={session.role === "engineer" ? "engineer" : "pharmacist"} x={firstParam(sp.x)}
+      confirm={confirming ? <ConfirmPanel item={item} role={session.role} x={firstParam(sp.x)}
         d={firstParam(sp.d)} r={firstParam(sp.r)} error={firstParam(sp.e) || null} nonce={nonce} /> : null}>
       <RecordHeader item={item} tools={<DetailTools reg={reg} />} backHref={recordHref(batchId, conceptId, { show, q, pane: "list" })} />
       {item.displayStatus === "back_in_review" && <BackInReviewCard item={item} diff={diff} />}

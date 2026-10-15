@@ -2,9 +2,9 @@ import AccountMenu from "@/components/AccountMenu";
 import ThemeSwitch from "@/components/ThemeSwitch";
 import { buttonClass } from "@/components/ui/Button";
 import Wordmark from "@/components/ui/Wordmark";
-import { DESK_NEW } from "@/lib/copy";
+import { DESK_NEW, P1C_COPY } from "@/lib/copy";
 import { DESK } from "@/lib/review-copy";
-import { ROLE_LABEL } from "@/lib/reviewers";
+import { ROLE_LABEL, isReviewer } from "@/lib/reviewers";
 import type { Session } from "@/lib/session";
 import type { Theme } from "@/lib/theme";
 import styles from "./Header.module.css";
@@ -18,7 +18,7 @@ const initials = (s: Session) => ((s.name ?? "").trim() || s.email)
  * is ever rendered. Reviewers reach the review surface from the account menu (§6.2); P2 replaces the navigation (§6.1).
  */
 export default function Header({ session, theme, batchId = null }: { session: Session | null; theme: Theme; batchId?: string | null }) {
-  const reviewer = session?.role === "pharmacist" || session?.role === "engineer";
+  const reviewer = isReviewer(session);
   const displayName = session ? (session.name ?? "").trim() || session.email : "";
   return (
     <header className={styles.bar}>
@@ -41,6 +41,7 @@ export default function Header({ session, theme, batchId = null }: { session: Se
               )}
               {reviewer && <a href="/review">{DESK.reviewDesk}</a>}
               {reviewer && <a href="/review/flags">{DESK_NEW.reviewLists.flagsLink}</a>}
+              {reviewer && session.role === "senior" && <a href="/review/pairs">{P1C_COPY.senior.seniorReview}</a>}
               <ThemeSwitch value={theme} />
               <form method="post" action="/signout"><button type="submit" className={buttonClass("plain", "sm")}>Sign out</button></form>
             </div>

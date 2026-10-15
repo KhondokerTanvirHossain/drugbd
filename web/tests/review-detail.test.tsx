@@ -139,6 +139,20 @@ describe("History (§5.6.5)", () => {
     expect(html).toContain('Issue reported (you). Note: <span class="raw">strength should read 5 mg</span>');
     expect(html).not.toContain("@");
   });
+  it("P1C: a carried approval adds its second line; a dismissal keeps the reporter's note and marks it", () => {
+    const item = pilotItem("napa", { history: [
+      { kind: "extract", at: "2026-10-15T08:00:00Z", reason: "run", carriedFrom: "0001-pilot" },
+      { kind: "decision", at: "2026-10-15T09:00:00Z", decision: "issue", role: "pharmacist", note: "strength should read 5 mg",
+        counts: false, uncountedBy: "dismiss", mine: false },
+      { kind: "decision", at: "2026-10-15T09:30:00Z", decision: "dismiss", role: "senior", note: "the register says 500 mg",
+        counts: true, mine: true },
+    ] });
+    const html = r(<History item={item} />);
+    expect(html).toContain('Pipeline extracted this record<span class="histSub">Approval carried over from batch 0001-pilot: nothing it covered changed.</span>');
+    expect(html).toContain('Issue reported by a pharmacist. Note: No longer counts: a senior pharmacist dismissed the issue after it. <span class="raw">strength should read 5 mg</span>');
+    expect(html).toContain('Issue dismissed (you). Note: <span class="raw">the register says 500 mg</span>');
+    expect(html).not.toContain("@");
+  });
 });
 
 describe("EvidenceContent (§5.6.3)", () => {

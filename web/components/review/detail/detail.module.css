@@ -41,6 +41,8 @@
 .hist li:first-child { border-top: 0; }
 .histT { font-size: 12.5px; color: var(--fg-2); font-variant-numeric: tabular-nums; }
 .histT span { display: block; }
+/* §5.6.5: a carried approval's second line. */
+.histSub { display: block; margin-top: 2px; font-size: 12.5px; color: var(--fg-2); }
 .diffFoot { font-size: 13px; color: var(--fg-2); }
 .chg { background: var(--warn-soft); }
 @media (max-width: 1023px) {

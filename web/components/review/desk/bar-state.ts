@@ -1,6 +1,6 @@
-import { DESK_NEW, PROMISE_ENGINEER, PROMISE_PAUSED, PROMISE_PHARMACIST, fill } from "@/lib/copy";
+import { DESK_NEW, PROMISE_ENGINEER, PROMISE_PAUSED, PROMISE_PHARMACIST, PROMISE_SENIOR, fill } from "@/lib/copy";
 import { DESK } from "@/lib/review-copy";
-import type { DisplayStatus, ReviewerRole } from "@/lib/review-types";
+import { actsAsPharmacist, type DisplayStatus, type ReviewerRole } from "@/lib/review-types";
 import { windowOn, type MachineState } from "./commit-machine";
 
 /** Everything the decision bar's words and states depend on (§5.7, §5.8.4). Pure. */
@@ -22,7 +22,7 @@ const netErrHere = (ctx: BarCtx) => ctx.machine.commit.kind === "netErr" && onRe
   ? ctx.machine.commit.saved : null;
 
 export function promise(ctx: BarCtx): { lead: string; body: string } {
-  const c = ctx.machine.commit, r = ctx.record, pharmacist = ctx.role === "pharmacist";
+  const c = ctx.machine.commit, r = ctx.record, pharmacist = actsAsPharmacist(ctx.role);
   if (ctx.loading) return p(fill(DESK.promiseLoading, { id: ctx.batchId }), DESK.promiseLoadingBody);
   if (ctx.complete) return p(fill(DESK.promiseComplete, { id: ctx.batchId }), DESK.promiseCompleteBody);
   if (ctx.stale) return p(PROMISE_PAUSED.lead, PROMISE_PAUSED.body);
@@ -37,6 +37,7 @@ export function promise(ctx: BarCtx): { lead: string; body: string } {
   if (r?.status === "approved") return p(DESK.promiseApproved, DESK.promiseApprovedBody);
   if (r?.status === "issue") return p(DESK.promiseIssue, DESK.promiseIssueBody);
   if (!pharmacist && r?.status === "engineer_checked") return p(DESK.promiseChecked, DESK.promiseCheckedBody);
+  if (ctx.role === "senior") return p(PROMISE_SENIOR.lead, PROMISE_SENIOR.body(ctx.undoSeconds));
   return pharmacist ? p(PROMISE_PHARMACIST.lead, PROMISE_PHARMACIST.body(ctx.undoSeconds)) : p(PROMISE_ENGINEER.lead, PROMISE_ENGINEER.body);
 }
 

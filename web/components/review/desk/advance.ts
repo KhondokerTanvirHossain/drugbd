@@ -1,12 +1,12 @@
 import { fill } from "@/lib/copy";
 import { DESK } from "@/lib/review-copy";
-import type { DisplayStatus, ReviewerRole } from "@/lib/review-types";
+import { actsAsPharmacist, type DisplayStatus, type ReviewerRole } from "@/lib/review-types";
 
 export type AdvanceRow = { conceptId: string; name: string; index: number; status: DisplayStatus };
 
 /** §5.9: what still needs this role's review. An engineer's own check is done for engineers. */
 export function needsFor(role: ReviewerRole, status: DisplayStatus): boolean {
-  return status === "pending" || status === "back_in_review" || (role === "pharmacist" && status === "engineer_checked");
+  return status === "pending" || status === "back_in_review" || (actsAsPharmacist(role) && status === "engineer_checked");
 }
 
 export type Advance =

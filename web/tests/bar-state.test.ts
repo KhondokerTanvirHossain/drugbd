@@ -34,6 +34,8 @@ describe("the promise, first match wins (§5.7)", () => {
     [{ role: "engineer", record: rec({ status: "engineer_checked" }) }, ["Your check is recorded.", "A pharmacist still needs to approve."]],
     [{}, ["You're reviewing as a pharmacist.", '"Looks correct" publishes this record after an 8-second undo window.']],
     [{ undoSeconds: 60 }, ["You're reviewing as a pharmacist.", '"Looks correct" publishes this record after an 60-second undo window.']],
+    [{ role: "senior" }, ["You're reviewing as a senior pharmacist.", '"Looks correct" publishes this record after an 8-second undo window.']],
+    [{ role: "senior", machine: machine({ commit: { kind: "committing", op: op({ role: "senior" }) } }) }, ["Marked correct.", "Publishing now."]],
     [{ role: "engineer" }, ["You're reviewing as an engineer.", '"Looks correct" records your check. It does not publish; a pharmacist still needs to approve.']],
   ] as [Partial<BarCtx>, [string, string]][])("%j", (over, [lead, body]) => {
     expect(promise(ctx(over))).toEqual({ lead, body });

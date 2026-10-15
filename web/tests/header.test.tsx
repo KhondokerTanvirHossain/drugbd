@@ -69,3 +69,15 @@ describe("RootLayout chrome", () => {
     expect(html.match(/pharm@example\.org/g)).toHaveLength(1);
   });
 });
+
+describe("Header for a senior pharmacist (§6.2)", () => {
+  it("the badge reads Senior pharmacist, and the menu adds Senior review", () => {
+    const html = renderToStaticMarkup(<Header session={{ email: "s@example.org", name: "S", role: "senior" }} theme="light" />);
+    expect(html).toContain('<span class="role-badge">Senior pharmacist</span>');
+    expect(html).toContain('<a href="/review">Review desk</a>');
+    expect(html).toContain('<a href="/review/pairs">Senior review</a>');
+  });
+  it("a pharmacist has no Senior review item", () => {
+    expect(renderToStaticMarkup(<Header session={PHARMACIST} theme="light" />)).not.toContain("/review/pairs");
+  });
+});

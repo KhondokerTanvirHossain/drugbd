@@ -206,3 +206,10 @@ describe("server action log line (§5.15, §9.7)", () => {
     log.mockRestore();
   });
 });
+
+describe("a senior session resolves flags (§5.13)", () => {
+  it("is a reviewer for submitResolve", async () => {
+    getSession.mockResolvedValue({ email: "senior@example.org", role: "senior" });
+    expect(await submitResolve(form({ flagId: "12", "cf-turnstile-response": "ts-token" }))).toEqual({ status: 200, code: "resolved" });
+  });
+});

@@ -1,6 +1,6 @@
 import "server-only";
 import type {
-  DeskOutcome, FilterKey, FlagItem, FlagPage, ItemsPage, ReviewBatchSummary, ReviewDiff, ReviewItem, VersionRow,
+  DeskOutcome, FilterKey, FlagItem, FlagPage, ItemsPage, ReviewBatchSummary, ReviewDiff, ReviewItem, ReviewerRole, VersionRow,
 } from "./review-types";
 import { parseStats, type SiteStats } from "./stats";
 
@@ -276,7 +276,7 @@ async function write<T>(path: string, payload: unknown): Promise<WriteResult<T>>
 }
 
 export type DecisionRequest = {
-  decision: "ok" | "issue"; note: string; reviewerEmail: string; reviewerRole: "pharmacist" | "engineer";
+  decision: "ok" | "issue"; note: string; reviewerEmail: string; reviewerRole: ReviewerRole;
   /** The version the page showed (spec §7.2): both required by the API, null when the item has none. */
   extractedAt: string | null;
   expectedLastDecisionId: number | null;

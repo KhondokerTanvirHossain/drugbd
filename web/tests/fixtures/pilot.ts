@@ -190,7 +190,7 @@ function stages(p: Pilot): ReviewStage[] {
     { stage: "substances", status: "ok", notes: [], textMissing: [], evidence: {} },
     { stage: "clinical", status: "ok", notes: [], textMissing: [], evidence: {} },
     { stage: "ddinter", status: p.ddinter.status, notes: notes(p.ddinter.status, p.ddinter.note),
-      textMissing: missing.map((m) => ({ ddinterA: m[1], nameA: m[1], ddinterB: m[2], nameB: m[2], severity: "unknown", inBatch: true })),
+      textMissing: missing.map((m) => ({ ddinterA: m[1], nameA: m[1], ddinterB: m[2], nameB: m[2], severity: "unknown", inBatch: true, partnerScope: "batch" as const })),
       evidence: { text_missing: missing.map((m) => [m[1], m[2]]) } },
   ];
 }
@@ -217,6 +217,7 @@ export function pilotItem(key: string, over: Partial<ReviewItem> = {}): ReviewIt
       { kind: "extract", at: p.extractedAt, reason: "run" },
     ],
     reopen: null,
+    otherPairs: { pairs: [], notChecked: [], otherBatches: 0 }, openIssues: [],
     ...over,
   };
 }

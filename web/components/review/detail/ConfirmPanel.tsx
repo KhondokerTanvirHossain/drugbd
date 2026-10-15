@@ -4,7 +4,7 @@ import { buttonClass } from "@/components/ui/Button";
 import { DESK_NEW, STALE_TITLE, fill } from "@/lib/copy";
 import { decideFormAction } from "@/lib/desk-actions";
 import { DESK } from "@/lib/review-copy";
-import type { ReviewItem, ReviewerRole } from "@/lib/review-types";
+import { actsAsPharmacist, type ReviewItem, type ReviewerRole } from "@/lib/review-types";
 import { recordHref } from "../desk/hrefs";
 import s from "./detail.module.css";
 
@@ -33,7 +33,7 @@ export default function ConfirmPanel({ item, role, x, d, r, error, nonce }:
         <Banner tone="crit" title={DESK.netTitle} body={fill(DESK.netBody, { name })} />}
       {error && REFUSED[error] && <Banner tone="info" title={REFUSED[error]} />}
       <Banner tone="info" title={fill(m.confirmTitle, { name })}
-        body={`${m.confirmBody} ${role === "pharmacist" ? m.confirmPharmacist : m.confirmEngineer}`} />
+        body={`${m.confirmBody} ${actsAsPharmacist(role) ? m.confirmPharmacist : m.confirmEngineer}`} />
       <form action={decideFormAction} className={s.chipRow}>
         <input type="hidden" name="batchId" value={item.batchId} />
         <input type="hidden" name="conceptId" value={item.conceptId} />

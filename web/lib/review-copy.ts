@@ -1,6 +1,6 @@
 import { Fragment, createElement, type ReactNode } from "react";
-import { APPROVED, DESK_NEW, UNCLASSIFIED_NOT_LOW_RISK, fill } from "./copy";
-import type { HistoryEntry, ReviewerRole, StageKey } from "./review-types";
+import { APPROVED, DESK_NEW, P1C_COPY, UNCLASSIFIED_NOT_LOW_RISK, fill } from "./copy";
+import { actsAsPharmacist, type HistoryEntry, type ReviewerRole, type StageKey } from "./review-types";
 
 /*
  * Board R wording for the review workspace (docs/artifacts/2026-10-12-intellidrugs-reviewer.html). Client-safe.
@@ -170,7 +170,7 @@ export const DESK = {
   emptyView: "No records in this view. Show all {n} records to move.",
   noAuthAnnounce: "Your account can't review this batch. Your decision on {name} was not saved.",
   doneTitle: "Batch {id} approved. {n} records are now public.",
-  doneBody: "Each record was approved by a pharmacist. If the pipeline re-runs a record, it goes back in review and leaves public view until a pharmacist approves it again.",
+  doneBody: "Each record was approved by a pharmacist. If the pipeline changes data a record's approval covered, it goes back in review and leaves public view until a pharmacist approves it again.",
   openRecord1: "Open record 1",
   loadingStatus: "Loading batch {id}",
   loaded: "Batch {id} loaded.",
@@ -185,7 +185,7 @@ export const DESK = {
   reviewDesk: "Review desk",
 } as const;
 
-export const ROLE_LABEL_DESK: Record<ReviewerRole, string> = { pharmacist: "Pharmacist", engineer: "Engineer" };
+export const ROLE_LABEL_DESK: Record<ReviewerRole, string> = { pharmacist: "Pharmacist", engineer: "Engineer", senior: P1C_COPY.senior.badge };
 export const STAGE_NAME: Record<StageKey, string> = { dgda: "DGDA load", substances: "Substances", clinical: "Clinical drug", ddinter: "DDInter" };
 
 /** The key row under the decision bar (Board R), as [keys, words] pairs. */
@@ -204,11 +204,12 @@ export const SHEET_ROWS = (n: number): [string, string][] => [
 
 export const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 
+/** A senior's toast and saved text are a pharmacist's (§5.13): a senior's approval publishes. */
 export const toastSub = (role: ReviewerRole, n: number) =>
-  role === "pharmacist" ? `Publishes in ${n} seconds.` : `Your check saves in ${n} seconds. It does not publish.`;
+  actsAsPharmacist(role) ? `Publishes in ${n} seconds.` : `Your check saves in ${n} seconds. It does not publish.`;
 
 export const savedText = (role: ReviewerRole, name: string) =>
-  role === "pharmacist" ? `Saved. ${name} is approved by a pharmacist and published.` : `Saved. Your check on ${name} is recorded. It does not publish.`;
+  actsAsPharmacist(role) ? `Saved. ${name} is approved by a pharmacist and published.` : `Saved. Your check on ${name} is recorded. It does not publish.`;
 
 /** Substitutes placeholders with nodes (mono ids), keeping the text around them. */
 export function fillNodes(template: string, values: Record<string, ReactNode>): ReactNode[] {
@@ -218,19 +219,24 @@ export function fillNodes(template: string, values: Record<string, ReactNode>): 
   });
 }
 
-/** One history line (§5.6.5). The note itself is rendered separately, in .raw. */
+/** One history line (§5.6.5). The note itself is rendered separately, in .raw; a carried approval's line by History. */
 export function historyText(e: HistoryEntry, batchId: string): string {
-  const h = DESK_NEW.history;
+  const h = DESK_NEW.history, d = P1C_COPY.dismiss;
   let text: string;
   if (e.kind === "run") return fill(h.run, { id: batchId });
   if (e.kind === "extract") return e.reason === "shared_change" ? h.sharedChange : e.reason === "rerun" ? DESK.reran : DESK.extracted;
-  if (e.decision === "ok") {
-    if (e.role === "pharmacist") text = e.mine ? DESK.approvedHistoryMine : DESK.approvedHistory;
+  if (e.decision === "dismiss") {
+    text = e.mine ? d.historyDismissedMine : d.historyDismissed;
+  } else if (e.decision === "ok") {
+    if (e.role === "senior") text = e.mine ? h.approvedSeniorMine : h.approvedSenior;
+    else if (e.role === "pharmacist") text = e.mine ? DESK.approvedHistoryMine : DESK.approvedHistory;
     else text = e.mine ? h.engineerCheckedMine : h.engineerChecked;
   } else {
-    text = e.mine ? DESK.issueMine : e.role === "pharmacist" ? h.issuePharmacist : h.issueEngineer;
+    text = e.mine ? DESK.issueMine : e.role === "senior" ? h.issueSenior : e.role === "pharmacist" ? h.issuePharmacist : h.issueEngineer;
   }
-  return e.counts === false ? `${text} ${h.noLongerCounts}` : text;
+  if (e.counts !== false) return text;
+  // §5.6.5: when a decision is at or before both a dismissal and the current stamp, the re-run suffix wins (the API sends "rerun").
+  return `${text} ${e.uncountedBy === "dismiss" ? d.noLongerCountsDismiss : h.noLongerCounts}`;
 }
 
 /** The approved pill's wording, for the "done" view (rendered through ReviewStatus elsewhere). */

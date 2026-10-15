@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { isReviewer, parseReviewers, roleFor } from "../lib/reviewers";
+import { ROLES, ROLE_LABEL, actsAsPharmacist, isReviewer, parseReviewers, roleFor } from "../lib/reviewers";
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -59,5 +59,23 @@ describe("isReviewer", () => {
     expect(isReviewer({ role: "user" })).toBe(false);
     expect(isReviewer(null)).toBe(false);
     expect(isReviewer(undefined)).toBe(false);
+  });
+});
+
+describe("the senior pharmacist role (§5.13, P1C)", () => {
+  it("parses as a role, in any case, and is in ROLES with its label", () => {
+    expect([...parseReviewers("s@x.org:Senior,p@x.org:pharmacist").entries()]).toEqual([["s@x.org", "senior"], ["p@x.org", "pharmacist"]]);
+    expect(ROLES).toEqual(["pharmacist", "engineer", "senior", "user"]);
+    expect(ROLE_LABEL.senior).toBe("Senior pharmacist");
+    expect(roleFor("s@x.org", "s@x.org:senior")).toBe("senior");
+  });
+  it("any other role token is still skipped", () => {
+    expect(parseReviewers("a@x.org:seniorpharmacist,b@x.org:admin,c@x.org:senior ").size).toBe(1);
+  });
+  it("isReviewer accepts it; actsAsPharmacist is true for pharmacist and senior only", () => {
+    expect(isReviewer({ role: "senior" })).toBe(true);
+    expect(actsAsPharmacist("senior")).toBe(true);
+    expect(actsAsPharmacist("pharmacist")).toBe(true);
+    for (const r of ["engineer", "user", null, undefined]) expect(actsAsPharmacist(r)).toBe(false);
   });
 });

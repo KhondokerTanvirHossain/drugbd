@@ -129,3 +129,16 @@ describe("getSession", () => {
     expect(await getSession()).toBeNull();
   });
 });
+
+describe("a senior session (§5.13: ROLES includes senior, or it decodes to null)", () => {
+  it("decodes to role senior while REVIEWERS lists the email as senior", async () => {
+    vi.stubEnv("REVIEWERS", "senior@example.org:senior");
+    const token = await createSessionCookie({ email: "senior@example.org", name: "S", role: "senior" });
+    expect(await verifySessionToken(token)).toMatchObject({ email: "senior@example.org", role: "senior" });
+  });
+  it("falls back to user when the list no longer names the email as senior", async () => {
+    vi.stubEnv("REVIEWERS", "senior@example.org:pharmacist");
+    const token = await createSessionCookie({ email: "senior@example.org", name: "S", role: "senior" });
+    expect(await verifySessionToken(token)).toMatchObject({ role: "user" });
+  });
+});

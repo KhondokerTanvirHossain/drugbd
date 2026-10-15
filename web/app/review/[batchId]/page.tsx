@@ -22,10 +22,9 @@ export default async function BatchPage({ params, searchParams }:
   // The page checks the role itself: on a client navigation only this segment renders, so no layout gate runs (§2.3).
   const session = await getSession();
   if (!session || !isReviewer(session)) notFound();
-  const role = session.role === "engineer" ? "engineer" : "pharmacist";
   const page = await getReviewItems(batchId, { show, q });
   if (!page) notFound();
-  const needed = page.items.find((r) => needsFor(role, r.displayStatus));
+  const needed = page.items.find((r) => needsFor(session.role, r.displayStatus));
   if (needed) redirect(recordHref(batchId, needed.conceptId, { show, q }));
   const all = show === "all" && !q ? page : await getReviewItems(batchId);
   const first = page.items[0] ?? all?.items[0];

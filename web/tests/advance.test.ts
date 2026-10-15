@@ -11,6 +11,8 @@ describe("auto-advance (§5.9)", () => {
     expect(needsFor("engineer", "engineer_checked")).toBe(false);
     expect(needsFor("engineer", "back_in_review")).toBe(true);
     expect(needsFor("pharmacist", "issue")).toBe(false);
+    expect(needsFor("senior", "engineer_checked")).toBe(true);
+    expect(needsFor("senior", "issue")).toBe(false);
   });
 
   it("opens the next record that needs review in the visible order, wrapping", () => {
