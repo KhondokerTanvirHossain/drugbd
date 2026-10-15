@@ -380,3 +380,32 @@ def test_reopen_run_reopens_an_approved_dependent_whose_view_changed(url, tmp_pa
     assert review == "pending" and stamp > decided
     assert latest_reason(url, "0421-a", X) == "shared_change"
     assert not public(url, X)
+
+
+# --- the engineer's override (§8.3.1 item 5, §13.1 Q12) ----------------------------------------------
+
+def test_reopen_flag_stamps_targets_only(url, tmp_path, caplog):
+    caplog.set_level(logging.INFO)
+    dd = FakeDDInter(BOTH)
+    assert run(Harness(url, dd), tmp_path, "0416-a", [X, Z]) == 0
+    assert run(Harness(url, dd), tmp_path, "0416-b", [Y]) == 0
+    approve(url, "0416-a", X)
+    with psycopg.connect(url) as c:   # a reviewer reported an issue on Z
+        c.execute("""INSERT INTO ops.review_decision (batch_id, concept_id, decision, note, reviewer_email, reviewer_role)
+                     VALUES ('0416-a', %s, 'issue', 'strength is wrong', 'eng@example.test', 'engineer')""", (Z,))
+        c.execute("UPDATE ops.batch_item SET review = 'issue' WHERE batch_id = '0416-a' AND concept_id = %s", (Z,))
+    x_before, z_before, y_before = item(url, "0416-a", X), item(url, "0416-a", Z), item(url, "0416-b", Y)
+    assert run(Harness(url, dd), tmp_path, "0416-a", [X, Z], "--reopen") == 0
+    assert item(url, "0416-a", X) == x_before                     # approved: skipped until the PO confirms (§13.1 Q12)
+    review, stamp = item(url, "0416-a", Z)
+    assert review == "pending" and stamp > z_before[1]           # the open issue goes back to review after the fix
+    assert item(url, "0416-b", Y) == y_before                     # never a dependent
+    assert any(f"{X} skipped: approved, --reopen not confirmed" in r.getMessage() for r in caplog.records if r.name == "run_pipeline")
+
+
+def test_no_code_path_deletes_ddinter_pair():
+    """§7.8: ops.pair_review references curated.ddinter_pair (NO ACTION), so the ETL only ever inserts or updates pairs."""
+    import pathlib
+    src = pathlib.Path(__file__).resolve().parents[1] / "src"
+    hits = [str(p) for p in src.rglob("*.py") if "delete from curated.ddinter_pair" in p.read_text().lower()]
+    assert hits == []

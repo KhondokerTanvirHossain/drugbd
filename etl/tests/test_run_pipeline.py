@@ -525,6 +525,8 @@ def test_default_clients_wire_snapshot_http_with_polite_intervals(url):
 def test_workflow_command_is_unchanged():
     wf = (ROOT / ".github/workflows/load-dgda.yml").read_text()
     assert 'docker-compose --profile jobs run --rm etl --batch "/app/batches/$BATCH"' in wf
+    assert "reopen:" in wf and "--reopen" in wf          # §8.3.1 item 5: the override is reachable from GitHub Actions
+    assert 'case "$REOPEN" in true|false) ;;' in wf      # the host repeats the check
 
 
 def test_snapshot_written_on_stamp_with_one_run_id_per_invocation(url, tmp_path):

@@ -1,6 +1,6 @@
 """CLI: run the pipeline stages for one batch, or for some of its items.
 
-    bddrug-etl --batch FILE [--stages dgda,substances,clinical,ddinter] [--concept ID ...] [--ddinter-chunk N]
+    bddrug-etl --batch FILE [--stages dgda,substances,clinical,ddinter] [--concept ID ...] [--ddinter-chunk N] [--reopen]
 
 Stages always run in the order dgda → substances → clinical → ddinter (default: all four).
 Each stage runs in its own transaction together with its stage results, and is committed
@@ -124,6 +124,9 @@ def _parser() -> argparse.ArgumentParser:
                         help="re-run only this item of the (already loaded) batch; repeatable")
     parser.add_argument("--ddinter-chunk", type=_positive_int, default=DDINTER_CHUNK, metavar="N",
                         help=f"commit the DDInter stage every N products (default {DDINTER_CHUNK})")
+    parser.add_argument("--reopen", action="store_true",
+                        help="re-open the named records whatever changed (never their dependents; approved records are "
+                             "skipped until the product owner confirms, spec §13.1 Q12)")
     return parser
 
 
@@ -357,7 +360,8 @@ def main(argv: list[str] | None = None, *,
     connect = connect or (lambda: psycopg.connect(os.environ.get("DATABASE_URL", "")))
     with connect() as conn, client_factory(conn) as clients:
         done, ok = run_pipeline(conn, clients, batch_id, selected or ids, args.stages,
-                                subset=bool(selected), ddinter_chunk=args.ddinter_chunk, run_id=run_id)
+                                subset=bool(selected), ddinter_chunk=args.ddinter_chunk, run_id=run_id,
+                                reopen=args.reopen)
         if done:  # a run refused before any stage started (batch or item not loaded) is not history
             ok = record_batch_run(conn, batch_id, args.stages, done, selected) and ok
     log.info("%s", summary_line(batch_id, done))
