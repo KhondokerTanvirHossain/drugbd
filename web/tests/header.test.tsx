@@ -19,6 +19,7 @@ describe("Header", () => {
     const html = renderToStaticMarkup(<Header session={null} theme="system" />);
     expect(html).toMatch(/<a class="home" href="\/"><span class="wordmark s20"/);
     expect(html).toContain('<a href="/check">Interaction checker</a>');
+    expect(html).toContain('<a href="/learn">Learn</a>');
     expect(html).toContain('<a class="btn btn--tonal btn--sm" href="/signin">Sign in</a>');
     expect(html).not.toContain("<details");
     expect(html).not.toContain("/batches");

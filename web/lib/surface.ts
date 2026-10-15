@@ -1,7 +1,15 @@
 /** Which surface a path belongs to, and the routing rules of spec §2.3. Pure; used by the middleware and the root layout. */
+import { CHAPTER_SLUGS } from "@/content/learn/chapters";
 
 export function isReviewSurface(pathname: string): boolean {
   return pathname === "/review" || pathname.startsWith("/review/");
+}
+
+const LEARN = new RegExp(`^/learn/(${CHAPTER_SLUGS.join("|")})$`);
+
+/** A Learn chapter page (§2.1): it brings its own toolbar, skip link and <main> (§6.8). /learn itself only redirects. */
+export function isLearnSurface(pathname: string): boolean {
+  return LEARN.test(pathname);
 }
 
 const BATCH = /^\/batches\/([^/]+)\/?$/;

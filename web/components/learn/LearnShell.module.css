@@ -1,0 +1,59 @@
+/*
+ * Board L's shell (.d-* rules), ported with the same values (spec §3.1, §6.8). The sticky toolbar and the narrow
+ * sticky chapter row set scroll-padding-top on <html>, only on pages that render this shell (§6.1, §10.4, WCAG 2.4.11):
+ * Board L's 72 px (toolbar) and 116 px (toolbar plus nav row) below 860 px.
+ */
+:global(html):has(.shell) { scroll-padding-top: 72px; }
+@media (prefers-reduced-motion: no-preference) { :global(html):has(.shell) { scroll-behavior: smooth; } }
+@media (max-width: 860px) { :global(html):has(.shell) { scroll-padding-top: 116px; } }
+
+.shell { min-height: 100vh; }
+.skip { position: absolute; left: 16px; top: -80px; z-index: 60; padding: 10px 14px; border-radius: var(--r-ctl); background: var(--surface); color: var(--fg); box-shadow: var(--shadow-2); font-weight: 600; text-decoration: none; }
+.skip:focus { top: 10px; }
+
+/* Toolbar */
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 40; }
+.brand { display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 24px; color: inherit; text-decoration: none; }
+.brand svg { flex: none; }
+.site { font-size: 12.5px; color: var(--fg-2); white-space: nowrap; }
+.theme { margin-left: auto; flex: none; }
+@media (max-width: 640px) {
+  .site { display: none; }
+  .theme :global(.seg) button { padding: 0 9px; }
+}
+@media (max-width: 380px) { .brand svg { display: none; } }
+
+/* Shell */
+.layout { display: grid; grid-template-columns: 256px minmax(0, 1fr) 216px; max-width: 1480px; margin-inline: auto; }
+.nav { position: sticky; top: 52px; align-self: start; height: calc(100vh - 52px); overflow-y: auto; z-index: 20; }
+.nav ol { display: flex; flex-direction: column; gap: 2px; }
+.nl { position: relative; isolation: isolate; display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 6px; align-items: baseline; min-height: 34px; padding: 7px 10px; border-radius: 8px; color: var(--fg); text-decoration: none; font: 400 13.5px/1.3 var(--font-ui); }
+.nl::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; background: var(--fg); opacity: 0; transition: opacity var(--dur-state) var(--ease-std); }
+.nl:hover::before { opacity: var(--sl-hover); }
+.nl:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.n { font-size: 12px; color: var(--fg-2); font-variant-numeric: tabular-nums; }
+.nl[aria-current="page"] { background: var(--surface); box-shadow: var(--shadow-1); font-weight: 600; }
+.navNote { margin-top: auto; padding: 12px 10px 4px; font-size: 12px; color: var(--fg-2); display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--line); }
+.navNote :global(.rv) { max-width: 100%; align-self: flex-start; white-space: normal; height: auto; min-height: 24px; padding-block: 3px; line-height: 1.25; }
+.main { min-width: 0; padding-inline: clamp(16px, 4vw, 56px); padding-block: 40px 120px; }
+.col { max-width: 860px; margin-inline: auto; display: flex; flex-direction: column; gap: 104px; }
+.rail { position: sticky; top: 52px; align-self: start; max-height: calc(100vh - 52px); overflow-y: auto; padding: 44px 16px 24px 4px; display: flex; flex-direction: column; gap: 10px; }
+.rail h2 { font: 600 12.5px/1.3 var(--font-ui); color: var(--fg-2); padding-left: 12px; }
+.rail ol { display: flex; flex-direction: column; gap: 1px; border-left: 1px solid var(--line); }
+.rail a { display: block; padding: 5px 10px 5px 12px; margin-left: -1px; border-left: 2px solid transparent; font-size: 13px; line-height: 1.35; color: var(--fg-2); text-decoration: none; }
+.rail a:hover { color: var(--fg); }
+.rail a:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; border-radius: 4px; }
+.rail a[aria-current="true"] { color: var(--fg); font-weight: 600; border-left-color: var(--accent); }
+.railCh { font-size: 13px; font-weight: 600; color: var(--fg); padding-left: 12px; }
+@media (max-width: 1180px) {
+  .layout { grid-template-columns: 236px minmax(0, 1fr); }
+  .rail { display: none; }
+}
+@media (max-width: 860px) {
+  .layout { display: block; }
+  .nav { position: sticky; top: 52px; height: auto; flex-direction: row; align-items: center; gap: 8px; padding: 8px 16px; border-right: 0; border-bottom: 1px solid var(--line); overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; }
+  .nav :global(.chrome-heading), .navNote { display: none; }
+  .nav ol { flex-direction: row; flex-wrap: nowrap; gap: 4px; }
+  .nl { white-space: nowrap; min-height: 32px; padding: 6px 10px; grid-template-columns: auto auto; }
+  .main { padding-block: 28px 96px; }
+}

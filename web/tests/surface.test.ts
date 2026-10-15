@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { isReviewSurface, legacyRedirect, reviewGate } from "@/lib/surface";
+import { CHAPTER_SLUGS } from "@/content/learn/chapters";
+import { isLearnSurface, isReviewSurface, legacyRedirect, reviewGate } from "@/lib/surface";
 
 const u = (path: string) => new URL(`http://localhost${path}`);
 
@@ -37,5 +38,11 @@ describe("the anonymous gate (§2.3)", () => {
   it("knows the review surface", () => {
     for (const p of ["/review", "/review/", "/review/flags", "/review/0001-pilot/napa"]) expect(isReviewSurface(p)).toBe(true);
     for (const p of ["/", "/reviews", "/search", "", "/signin"]) expect(isReviewSurface(p)).toBe(false);
+  });
+
+  it("isLearnSurface accepts the ten exact chapter paths only (Review Focus 4)", () => {
+    for (const slug of CHAPTER_SLUGS) expect(isLearnSurface(`/learn/${slug}`)).toBe(true);
+    for (const p of ["/learn", "/learn/", "/learn/Start", "/learn/START", "/learn/start%20", "/learn/start/", "/learn/start.html",
+      "/learn/glossary/extra", "/learning/start", "/review/start", "/learn/startx", ""]) expect(isLearnSurface(p)).toBe(false);
   });
 });

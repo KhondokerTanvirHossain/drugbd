@@ -8,7 +8,7 @@ import { listReviewBatches } from "@/lib/api";
 import { ONEST_URL } from "@/lib/fonts";
 import { isReviewer } from "@/lib/reviewers";
 import { getSession } from "@/lib/session";
-import { isReviewSurface } from "@/lib/surface";
+import { isLearnSurface, isReviewSurface } from "@/lib/surface";
 import { THEME_COOKIE, htmlThemeAttr, parseTheme } from "@/lib/theme";
 import styles from "./layout.module.css";
 
@@ -19,9 +19,10 @@ export const metadata = { title: "IntelliDrugs", robots: { index: false, follow:
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const theme = parseTheme((await cookies()).get(THEME_COOKIE)?.value);
-  // /review/* brings its own toolbar, skip links and <main> (spec §5.1, §5.16).
-  const review = isReviewSurface((await headers()).get("x-pathname") ?? "");
-  const session = review ? null : await getSession();
+  // /review/* and the Learn chapters bring their own toolbar, skip links and <main> (spec §5.1, §5.16, §6.8).
+  const path = (await headers()).get("x-pathname") ?? "";
+  const ownShell = isReviewSurface(path) || isLearnSurface(path);
+  const session = ownShell ? null : await getSession();
   // The account menu names the newest batch in review (§6.2); a failed read only leaves the name out.
   const batchId = isReviewer(session) ? newestInReview(await listReviewBatches().catch(() => [])) : null;
   return (
@@ -30,7 +31,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <link rel="preload" href={ONEST_URL} as="font" type="font/woff2" crossOrigin="" />
       </head>
       <body>
-        {review ? children : (
+        {ownShell ? children : (
           <>
             <a className={styles.skipLink} href="#content">Skip to content</a>
             <Header session={session} theme={theme} batchId={batchId} />
