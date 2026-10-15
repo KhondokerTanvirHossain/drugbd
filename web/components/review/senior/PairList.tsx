@@ -17,28 +17,26 @@ export default function PairList({ items, total, page, heading, emptyText, empty
   pageHref: (page: number) => string; desk: Omit<SeniorDeskProps, "pairs" | "children" | "role">;
 }) {
   const r = P1C_COPY.review, t = DESK_NEW.reviewLists;
-  if (total === 0) {
-    return (
-      <div className={s.empty}>
-        <p>{emptyText}</p>
-        {emptyLink && <a className={buttonClass("tonal", "sm")} href={emptyLink}>{r.showAllPairs}</a>}
-      </div>
-    );
-  }
   const last = Math.max(0, Math.ceil(total / SENIOR_PAGE_SIZE) - 1);
-  const prev = items.length === 0 ? Math.min(last, page - 1) : page > 0 ? page - 1 : null;
+  const prev = total === 0 ? null : items.length === 0 ? Math.min(last, page - 1) : page > 0 ? page - 1 : null;
   const next = (page + 1) * SENIOR_PAGE_SIZE < total && items.length > 0 ? page + 1 : null;
+  // SeniorDesk is mounted on every senior pair page, rows or none: its mount logs senior_open (§5.15).
   return (
     <>
       {items.length > 0 && (
-        <>
-          <p className={s.range}>{fill(r.range, { from: page * SENIOR_PAGE_SIZE + 1, to: page * SENIOR_PAGE_SIZE + items.length, total })}</p>
-          <SeniorDesk role="senior" {...desk} pairs={items.map(toRef)}>
-            <div className={s.rows}>{items.map((p) => <PairRow key={pairKey(p.ddinterA, p.ddinterB)} p={p} heading={heading} />)}</div>
-          </SeniorDesk>
-          <noscript><p>{r.noScript}</p></noscript>
-        </>
+        <p className={s.range}>{fill(r.range, { from: page * SENIOR_PAGE_SIZE + 1, to: page * SENIOR_PAGE_SIZE + items.length, total })}</p>
       )}
+      <SeniorDesk role="senior" {...desk} pairs={items.map(toRef)}>
+        {total === 0 ? (
+          <div className={s.empty}>
+            <p>{emptyText}</p>
+            {emptyLink && <a className={buttonClass("tonal", "sm")} href={emptyLink}>{r.showAllPairs}</a>}
+          </div>
+        ) : items.length > 0 ? (
+          <div className={s.rows}>{items.map((p) => <PairRow key={pairKey(p.ddinterA, p.ddinterB)} p={p} heading={heading} />)}</div>
+        ) : null}
+      </SeniorDesk>
+      {items.length > 0 && <noscript><p>{r.noScript}</p></noscript>}
       {(prev !== null || next !== null) && (
         <p className={s.paging}>
           {prev !== null && <a href={pageHref(prev)}>{t.previousPage}</a>}

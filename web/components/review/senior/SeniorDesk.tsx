@@ -311,6 +311,9 @@ export default function SeniorDesk(props: SeniorDeskProps) {
     tryAgain: (key) => { fire({ type: "TRY_AGAIN", key }); if (rowStatus(m.current, key).kind !== "netErr") focusRow(key); }, reload,
   };
   const r = P1C_COPY.review;
+  // A senior page with no pair row (an empty filter, a page past the end, a substance with no pair or with coverage none):
+  // the island only logs senior_open (§5.15). No row region, no bot check and no Turnstile widget, since no decision can start.
+  if (pairs.length === 0) return <>{props.children}</>;
   const botHold = Object.values(machine.rows).some((x) => x.kind === "botHold");
   const here = typeof window !== "undefined" ? `${window.location.pathname}${window.location.search}` : "/review/pairs";
   return (

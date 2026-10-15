@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { Fragment } from "react";
 import { ScopeAndSeverity } from "@/components/review/senior/PairFilters";
 import PairList from "@/components/review/senior/PairList";
+import SeniorDesk from "@/components/review/senior/SeniorDesk";
 import SeniorShell, { NotSenior } from "@/components/review/senior/SeniorShell";
 import s from "@/components/review/senior/pages.module.css";
 import { recordHref } from "@/components/review/desk/hrefs";
@@ -59,6 +60,8 @@ export default async function SubstancePage({ params, searchParams }: {
   if (!d) notFound();
   const r = P1C_COPY.review;
   const batches = new Set(d.brands.map((b) => b.batchId)).size;
+  const desk = { kind: "substance" as const, target: { type: "substance" as const, id: d.bdsId }, singleKeys: keys === "on",
+    siteKey: turnstileSiteKey(), nonce: await cspNonce() };
   return (
     <SeniorShell session={session} theme={theme} keys={keys} current="substances" toReview={null}>
       <h1>{d.name} <span className="mono">{d.bdsId}</span></h1>
@@ -123,14 +126,15 @@ export default async function SubstancePage({ params, searchParams }: {
 
       <section className={s.section} aria-labelledby="sub-pairs">
         <h2 id="sub-pairs">{r.pairsHeading}</h2>
-        {d.coverage === "none" ? <p>{fill(r.notChecked, { name: d.name })}</p> : (
+        {d.coverage === "none" ? (
+          // No pair list, but the page is shown: SeniorDesk with no pair logs senior_open (§5.15).
+          <SeniorDesk role="senior" {...desk} pairs={[]}><p>{fill(r.notChecked, { name: d.name })}</p></SeniorDesk>
+        ) : (
           <>
             <ScopeAndSeverity pairs={q.pairs} severity={q.severity} scopeHref={(pairs) => substanceHref(d.bdsId, { ...q, pairs, page: 0 })}
               severityHref={(severity) => substanceHref(d.bdsId, { ...q, severity, page: 0 })} />
             <PairList items={d.pairs.items} total={d.pairs.total} page={q.page} heading="h3" emptyText={fill(r.pairsEmpty, { name: d.name })}
-              emptyLink={null} pageHref={(page) => substanceHref(d.bdsId, { ...q, page })}
-              desk={{ kind: "substance", target: { type: "substance", id: d.bdsId }, singleKeys: keys === "on", siteKey: turnstileSiteKey(),
-                nonce: await cspNonce() }} />
+              emptyLink={null} pageHref={(page) => substanceHref(d.bdsId, { ...q, page })} desk={desk} />
           </>
         )}
       </section>
