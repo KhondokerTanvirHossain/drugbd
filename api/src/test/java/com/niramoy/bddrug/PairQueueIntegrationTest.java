@@ -177,6 +177,37 @@ class PairQueueIntegrationTest {
 
     // ---- writes, last
 
+    /**
+     * Spec §5.17: a pair is credited to every held substance its entries are mapped to (V3 lets one DDInter code sit under
+     * several bds_ids). DDInter20 is mapped to Domperidone too for this test only: both substance pages list
+     * DDInter1951/DDInter20 and both substances count it; the queue still holds each stored pair once, labelled with the
+     * smallest mapped bds_id. The mapping is removed afterwards, so the later writes see the seed's three pairs.
+     */
+    @Test @Order(LAST - 2) void aCodeMappedToTwoHeldSubstancesCountsForBoth() throws Exception {
+        exec(pg, "INSERT INTO curated.substance_code (bds_id, system, code, route_scope, source, method, confidence) "
+               + "VALUES ('BDS-000004','DDINTER','DDInter20','systemic','ddinter2','name',0.7)");
+        try {
+            ok("/v1/review/pairs")
+                .jsonPath("$.data.total").isEqualTo(3)
+                .jsonPath("$.data.items[0].ddinterB").isEqualTo("DDInter20")
+                .jsonPath("$.data.items[0].substanceB.bdsId").isEqualTo("BDS-000002")
+                .jsonPath("$.data.items[0].entryB.routeScope").isEqualTo("systemic");
+            for (String bds : List.of("BDS-000002", "BDS-000004"))
+                ok("/v1/review/substances/" + bds)
+                    .jsonPath("$.data.pairs.total").isEqualTo(1)
+                    .jsonPath("$.data.pairs.items[0].ddinterA").isEqualTo("DDInter1951")
+                    .jsonPath("$.data.pairs.items[0].ddinterB").isEqualTo("DDInter20");
+            ok("/v1/review/substances")
+                .jsonPath("$.data.items[?(@.bdsId == 'BDS-000004')].pairsToReview").isEqualTo(List.of(1))
+                .jsonPath("$.data.items[?(@.bdsId == 'BDS-000004')].majorPairsToReview").isEqualTo(List.of(1))
+                .jsonPath("$.data.items[?(@.bdsId == 'BDS-000002')].pairsToReview").isEqualTo(List.of(1))
+                .jsonPath("$.data.items[?(@.bdsId == 'BDS-000002')].majorPairsToReview").isEqualTo(List.of(1))
+                .jsonPath("$.data.items[?(@.bdsId == 'BDS-000001')].pairsToReview").isEqualTo(List.of(3));
+        } finally {
+            exec(pg, "DELETE FROM curated.substance_code WHERE bds_id = 'BDS-000004' AND system = 'DDINTER' AND code = 'DDInter20'");
+        }
+    }
+
     /** §11.3 changedPairReturnsToQueue (queue side; Task 9 adds the public checker's not_reviewed). */
     @Test @Order(LAST - 1) void changedPairReturnsToQueue() throws Exception {
         String items = text(pg, "SELECT string_agg(batch_id || concept_id || review || extracted_at, ',' ORDER BY batch_id, concept_id) FROM ops.batch_item");
