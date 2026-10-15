@@ -5,7 +5,7 @@ import { accountKey, clientIp, secondsUntilDhakaMidnight } from "@/lib/rate-limi
 import { logRequest, routeTemplate } from "@/lib/request-log";
 import { AUTH_PROXY_PREFIX, nextWithSecurityHeaders } from "@/lib/security-headers";
 import { LEGACY_SESSION_COOKIE, decryptSession, sessionCookieName } from "@/lib/session-crypto";
-import { legacyRedirect, reviewGate } from "@/lib/surface";
+import { isLearnMiss, legacyRedirect, reviewGate } from "@/lib/surface";
 
 const NO_STORE = "private, no-store";
 const VERSIONS = /^\/review\/[^/]+\/versions$/;
@@ -64,7 +64,8 @@ export function createMiddleware(limits: Limits, now: () => number = Date.now) {
       if (!allowed) return tooMany(secondsUntilDhakaMidnight(now()));
     }
 
-    const res = nextWithSecurityHeaders(request);
+    // Review Focus 4: an almost-right chapter is Next's /_not-found page, server-rendered inside the site chrome.
+    const res = nextWithSecurityHeaders(request, isLearnMiss(path) ? "/_not-found" : undefined);
     if (request.cookies.has(LEGACY_SESSION_COOKIE)) res.cookies.set(LEGACY_SESSION_COOKIE, "", { path: "/", maxAge: 0 });
     return res;
   };
@@ -72,9 +73,9 @@ export function createMiddleware(limits: Limits, now: () => number = Date.now) {
   return async function middleware(request: NextRequest): Promise<NextResponse> {
     const started = performance.now();
     const res = await handle(request);
-    // Responses the middleware ends itself (429s; P1B's redirects) are logged here. A passed-on request
-    // (x-middleware-next: 1) is logged by its route handler or server action, if at all.
-    if (res.headers.get("x-middleware-next") !== "1") {
+    // Responses the middleware ends itself (429s; P1B's redirects) are logged here. A passed-on or rewritten request
+    // (x-middleware-next: 1, x-middleware-rewrite) is logged by its route handler or server action, if at all.
+    if (res.headers.get("x-middleware-next") !== "1" && !res.headers.has("x-middleware-rewrite")) {
       logRequest({ route: routeTemplate(request.nextUrl.pathname), method: request.method, status: res.status,
         ms: performance.now() - started, requestId: crypto.randomUUID() });
     }

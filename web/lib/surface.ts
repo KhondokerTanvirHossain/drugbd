@@ -27,6 +27,16 @@ export function isLearnSurface(pathname: string): boolean {
   return (CHAPTER_SLUGS as readonly string[]).includes(slug);
 }
 
+/**
+ * A one-segment /learn/{x} that is not a chapter ("/learn/Start", "/learn/start.html"): a 404 (Review Focus 4). The
+ * middleware sends it to Next's own /_not-found page, because a page-level notFound() aborts Next 15's server-rendered
+ * shell and answers with a bare <html id="__next_error__"> whose chrome appears only after hydration (§4.4, §10.1).
+ * Two or more segments already match no route and get the same page from Next.
+ */
+export function isLearnMiss(pathname: string): boolean {
+  return LEARN.test(pathname) && !isLearnSurface(pathname);
+}
+
 const BATCH = /^\/batches\/([^/]+)\/?$/;
 
 /** §2.3 (308): /batches → /review, /batches/{id}[?item={c}] → /review/{id}[/{c}] (outcome query dropped), /flags → /review/flags. */

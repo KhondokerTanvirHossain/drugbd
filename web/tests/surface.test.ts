@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CHAPTER_SLUGS } from "@/content/learn/chapters";
-import { isLearnSurface, isReviewSurface, legacyRedirect, reviewGate } from "@/lib/surface";
+import { isLearnMiss, isLearnSurface, isReviewSurface, legacyRedirect, reviewGate } from "@/lib/surface";
 
 const u = (path: string) => new URL(`http://localhost${path}`);
 
@@ -47,5 +47,14 @@ describe("the anonymous gate (§2.3)", () => {
     for (const p of ["/learn", "/learn/", "/learn/Start", "/learn/START", "/learn/start%20", "/learn/start/", "/learn/start.html",
       "/learn/glossary/extra", "/learning/start", "/review/start", "/learn/startx", "", "/learn/start%2F", "/learn/start%2Fx",
       "/learn/%E0%A4%A"]) expect(isLearnSurface(p)).toBe(false);
+  });
+
+  it("isLearnMiss: a one-segment /learn/{x} that is not one of the ten chapters (Review Focus 4)", () => {
+    for (const p of ["/learn/Start", "/learn/START", "/learn/start%20", "/learn/start.html", "/learn/nope", "/learn/startx",
+      "/learn/start%2F", "/learn/start%2Fx", "/learn/%E0%A4%A"]) expect(isLearnMiss(p), p).toBe(true);
+    for (const slug of CHAPTER_SLUGS) expect(isLearnMiss(`/learn/${slug}`)).toBe(false);
+    // /learn redirects, a trailing slash is Next's own redirect, and two segments match no route already.
+    for (const p of ["/learn/st%61rt", "/learn", "/learn/", "/learn/start/", "/learn/glossary/extra", "/learning/start", "/review/start"])
+      expect(isLearnMiss(p), p).toBe(false);
   });
 });

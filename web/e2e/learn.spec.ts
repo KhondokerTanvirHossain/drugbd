@@ -27,6 +27,26 @@ test("an almost-right chapter URL is a 404 inside the site chrome (Review Focus 
   await expect(page.locator("header").getByRole("link", { name: "Learn" })).toHaveAttribute("href", "/learn");
 });
 
+test("the 404 chrome is in the server HTML, so it holds without JavaScript (Review Focus 4, §4.4, §10.1)", async ({ browser }) => {
+  const ctx = await browser.newContext({ javaScriptEnabled: false });
+  const page = await ctx.newPage();
+  for (const path of ["/learn/Start", "/learn/START", "/learn/start%20", "/learn/nope", "/learn/start.html", "/learn/glossary/extra"]) {
+    const res = await page.goto(path);
+    expect(res?.status(), path).toBe(404);
+    await expect(page.locator("main#content"), path).toHaveCount(1);
+    await expect(page.locator('a[href="#content"]'), path).toHaveText("Skip to content");
+    await expect(page.locator("header").getByRole("link", { name: "Learn", exact: true }), path).toHaveAttribute("href", "/learn");
+    await expect(page.locator("h1"), path).toHaveCount(1);
+  }
+  // Next decodes the slug, so this one is the start chapter in the Learn shell: one <main>, one <h1> (Task 13b ruling).
+  const res = await page.goto("/learn/st%61rt");
+  expect(res?.status()).toBe(200);
+  await expect(page.locator("main")).toHaveCount(1);
+  await expect(page.locator("main#main h1")).toHaveText("Learn IntelliDrugs");
+  await expect(page.locator("h1")).toHaveCount(1);
+  await ctx.close();
+});
+
 test("every chapter: one h1, its nav link current, no withdrawn example, Board L's footer, no CSP violation", async ({ page }) => {
   const violations: string[] = [];
   page.on("console", (m) => { if (/Content Security Policy/i.test(m.text())) violations.push(m.text()); });
