@@ -54,6 +54,7 @@ describe("the pilot snapshot against Board R's pilot export", () => {
       for (const m of src.matchAll(/\bids(?:=\{|:\s*)(\[[^\]]*\]|[A-Za-z_.]+)/g)) {
         if (m[1] === "PILOT_IDS") continue;
         expect(m[1].startsWith("["), `${f}: ids=${m[1]}`).toBe(true);
+        expect(m[1].slice(1, -1).trim(), `${f}: empty ids`).not.toBe("");
         // `id` is allowed only as the loop variable of PILOT_IDS.map((id) => …) (chapter 7's warning cards).
         for (const el of m[1].slice(1, -1).split(",").map((s) => s.trim()).filter(Boolean)) expect(el, `${f}: ${m[1]}`).toMatch(ELEMENT);
       }

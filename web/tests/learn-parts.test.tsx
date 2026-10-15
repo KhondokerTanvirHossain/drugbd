@@ -85,6 +85,11 @@ describe("SnapshotBlock: frozen examples and live pills (§6.8)", () => {
       expect(out).toMatch(new RegExp(`<li><b>Napa</b><span class="rv rv--pending">${NOT_REVIEWED}</span></li>`));
     }
   });
+
+  it("refuses an empty ids list: a block keyed by no record would show unchecked and without a pill (§6.8)", () => {
+    expect(() => html(<SnapshotBlock ctx={learnContext(pilotStats())} ids={[]}>{SECRET}</SnapshotBlock>))
+      .toThrow("Learn: SnapshotBlock needs ids");
+  });
 });
 
 describe("live pieces", () => {

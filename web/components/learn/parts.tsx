@@ -105,6 +105,8 @@ export function AsStored() {
 export function SnapshotBlock({ ctx, ids, pills = "row", className, children }: {
   ctx: LearnContext; ids: readonly PilotId[]; pills?: "row" | "inline"; className?: string; children: ReactNode;
 }) {
+  // An empty list is keyed by no record: `[].every` would pass it unchecked and the pill row would be empty (§6.8).
+  if (ids.length === 0) throw new Error("Learn: SnapshotBlock needs ids");
   const cls = className ? `${styles.snap} ${className}` : styles.snap;
   if (!ids.every((id) => ctx.usable(id))) {
     return (
