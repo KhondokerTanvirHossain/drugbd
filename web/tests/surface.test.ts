@@ -42,7 +42,10 @@ describe("the anonymous gate (§2.3)", () => {
 
   it("isLearnSurface accepts the ten exact chapter paths only (Review Focus 4)", () => {
     for (const slug of CHAPTER_SLUGS) expect(isLearnSurface(`/learn/${slug}`)).toBe(true);
+    // The page decodes the [chapter] param, so an encoded unreserved character is the same chapter (RFC 3986).
+    for (const p of ["/learn/st%61rt", "/learn/%73tart"]) expect(isLearnSurface(p)).toBe(true);
     for (const p of ["/learn", "/learn/", "/learn/Start", "/learn/START", "/learn/start%20", "/learn/start/", "/learn/start.html",
-      "/learn/glossary/extra", "/learning/start", "/review/start", "/learn/startx", ""]) expect(isLearnSurface(p)).toBe(false);
+      "/learn/glossary/extra", "/learning/start", "/review/start", "/learn/startx", "", "/learn/start%2F", "/learn/start%2Fx",
+      "/learn/%E0%A4%A"]) expect(isLearnSurface(p)).toBe(false);
   });
 });

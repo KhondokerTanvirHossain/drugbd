@@ -96,6 +96,13 @@ describe("the root layout on Learn pages", () => {
     expect(getSession).not.toHaveBeenCalled();
   });
 
+  it("adds no site chrome around a chapter path with an encoded unreserved character, as the page renders it", async () => {
+    requestHeaders.set("x-pathname", "/learn/st%61rt");
+    const html = await layout();
+    expect(html).toContain("<body><p>learn page</p></body>");
+    expect(getSession).not.toHaveBeenCalled();
+  });
+
   it("keeps the site chrome for anything that is not a chapter, so a 404 there has a header and <main>", async () => {
     requestHeaders.set("x-pathname", "/learn/Start");
     const html = await layout();

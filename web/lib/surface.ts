@@ -5,11 +5,26 @@ export function isReviewSurface(pathname: string): boolean {
   return pathname === "/review" || pathname.startsWith("/review/");
 }
 
-const LEARN = new RegExp(`^/learn/(${CHAPTER_SLUGS.join("|")})$`);
+const LEARN = /^\/learn\/([^/]+)$/;
 
-/** A Learn chapter page (§2.1): it brings its own toolbar, skip link and <main> (§6.8). /learn itself only redirects. */
+/**
+ * A Learn chapter page (§2.1): it brings its own toolbar, skip link and <main> (§6.8). /learn itself only redirects.
+ * The layout must decide exactly as the page does, or a chapter renders inside the site chrome (two <main>, two skip
+ * links). Next decodes the [chapter] param from the raw segment, so this decodes only the slug segment of the raw path
+ * and checks it against the ten exact slugs: '/learn/st%61rt' is chapter 1, while '/learn/start%2Fx' (one segment that
+ * decodes to a slash) and a malformed escape are not chapters. The whole path is never decoded: '/learn%2Fstart' is one
+ * segment to Next and a 404, which must keep the site chrome.
+ */
 export function isLearnSurface(pathname: string): boolean {
-  return LEARN.test(pathname);
+  const m = LEARN.exec(pathname);
+  if (!m) return false;
+  let slug: string;
+  try {
+    slug = decodeURIComponent(m[1]);
+  } catch {
+    return false;
+  }
+  return (CHAPTER_SLUGS as readonly string[]).includes(slug);
 }
 
 const BATCH = /^\/batches\/([^/]+)\/?$/;
