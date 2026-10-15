@@ -116,7 +116,10 @@ public class InteractionCheckService {
         return new CheckResult(checked, alerts, duplicates, noData, notReviewed);
     }
 
-    /** One entry per substance: rows without a substance stay separate (by XM code); missing coverage counts as none. */
+    /**
+     * One entry per substance: rows without a substance stay separate (by XM code). A substance with no coverage row is
+     * not_run (§7.3): DDInter was never asked about it. It stays in noData until P2's notChecked list (§7.4) replaces it.
+     */
     private static List<SubstanceCoverage> substances(List<IngredientRow> rows) {
         Map<String, SubstanceCoverage> byKey = new LinkedHashMap<>();
         for (IngredientRow r : rows) {
@@ -125,7 +128,7 @@ public class InteractionCheckService {
             else
                 byKey.putIfAbsent("bds:" + r.bdsId(), new SubstanceCoverage(r.bdsId(),
                     r.preferredName() != null ? r.preferredName() : r.ingredientName(),
-                    r.coverage() != null ? r.coverage() : "none"));
+                    r.coverage() != null ? r.coverage() : "not_run"));
         }
         List<SubstanceCoverage> out = new ArrayList<>(byKey.values());
         out.sort(BY_NAME);

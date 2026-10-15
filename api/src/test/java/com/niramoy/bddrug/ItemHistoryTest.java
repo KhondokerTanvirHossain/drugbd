@@ -1,0 +1,88 @@
+package com.niramoy.bddrug;
+
+import com.niramoy.bddrug.domain.ItemHistory;
+import com.niramoy.bddrug.domain.ItemHistory.Decision;
+import com.niramoy.bddrug.domain.ItemHistory.Entry;
+import com.niramoy.bddrug.domain.ItemHistory.Reopen;
+import com.niramoy.bddrug.domain.ItemHistory.Snapshot;
+import org.junit.jupiter.api.Test;
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
+import static org.assertj.core.api.Assertions.assertThat;
+
+/** Spec §5.6.5: one extract entry per run_id, at the last stamp of that run; reopen from the last two groups. */
+class ItemHistoryTest {
+    static final Instant T0 = Instant.parse("2026-10-11T21:27:17Z");
+    static Instant t(int minutes) { return T0.plusSeconds(60L * minutes); }
+    static final UUID RUN_1 = UUID.fromString("00000000-0000-0000-0000-000000000001");
+    static final UUID RUN_2 = UUID.fromString("00000000-0000-0000-0000-000000000002");
+    static final UUID RUN_3 = UUID.fromString("00000000-0000-0000-0000-000000000003");
+
+    @Test void aFullRunWritesFourSnapshotsAndShowsOneExtractEntry() {
+        List<Snapshot> four = List.of(new Snapshot(t(1), RUN_1, "run"), new Snapshot(t(2), RUN_1, "rerun"),
+            new Snapshot(t(3), RUN_1, "rerun"), new Snapshot(t(4), RUN_1, "rerun"));
+        ItemHistory.Result r = ItemHistory.build(List.of(t(0)), four, List.of(), t(4));
+        assertThat(r.history()).containsExactly(
+            new Entry("run", t(0), null, null, null, null, null, null),
+            new Entry("extract", t(4), "run", null, null, null, null, null));
+        assertThat(r.reopen()).isNull();
+    }
+
+    @Test void aLaterRunIsARerunAndReopensTheRecord() {
+        List<Snapshot> snaps = List.of(new Snapshot(t(1), RUN_1, "run"), new Snapshot(t(2), RUN_1, "rerun"),
+            new Snapshot(t(30), RUN_2, "rerun"));
+        List<Decision> decisions = List.of(new Decision(7, "ok", "", "pharmacist", t(10), true));
+        ItemHistory.Result r = ItemHistory.build(List.of(t(0)), snaps, decisions, t(30));
+        assertThat(r.history()).containsExactly(
+            new Entry("run", t(0), null, null, null, null, null, null),
+            new Entry("extract", t(2), "run", null, null, null, null, null),
+            new Entry("decision", t(10), null, "pharmacist", "ok", "", false, true),
+            new Entry("extract", t(30), "rerun", null, null, null, null, null));
+        assertThat(r.reopen()).isEqualTo(new Reopen("rerun", t(30), t(2), true));
+    }
+
+    @Test void aGroupOfSharedChangesKeepsThatReason() {
+        List<Snapshot> snaps = List.of(new Snapshot(t(1), RUN_1, "run"), new Snapshot(t(20), RUN_2, "shared_change"));
+        ItemHistory.Result r = ItemHistory.build(List.of(), snaps, List.of(), t(20));
+        assertThat(r.history().get(1)).isEqualTo(new Entry("extract", t(20), "shared_change", null, null, null, null, null));
+        assertThat(r.reopen()).isEqualTo(new Reopen("shared_change", t(20), t(1), true));
+    }
+
+    @Test void aMixedGroupIsARerun() {
+        List<Snapshot> snaps = List.of(new Snapshot(t(1), RUN_1, "run"),
+            new Snapshot(t(20), RUN_3, "shared_change"), new Snapshot(t(21), RUN_3, "rerun"));
+        assertThat(ItemHistory.build(List.of(), snaps, List.of(), t(21)).reopen().reason()).isEqualTo("rerun");
+    }
+
+    @Test void decisionsAfterTheStampCountAndOnlyTheViewersAreMine() {
+        List<Snapshot> one = List.of(new Snapshot(t(1), RUN_1, "run"));
+        List<Decision> ds = List.of(new Decision(1, "ok", "", "engineer", t(5), false),
+            new Decision(2, "issue", "strength should read 5 mg", "pharmacist", t(6), true));
+        List<Entry> h = ItemHistory.build(List.of(), one, ds, t(1)).history();
+        assertThat(h).extracting(Entry::kind).containsExactly("extract", "decision", "decision");
+        assertThat(h.get(1).counts()).isTrue();
+        assertThat(h.get(1).mine()).isFalse();
+        assertThat(h.get(2).note()).isEqualTo("strength should read 5 mg");
+        assertThat(h.get(2).mine()).isTrue();
+    }
+
+    @Test void anItemWithAStampButNoSnapshotShowsOneExtractEntry() {
+        ItemHistory.Result r = ItemHistory.build(List.of(), List.of(), List.of(), t(3));
+        assertThat(r.history()).containsExactly(new Entry("extract", t(3), "run", null, null, null, null, null));
+        assertThat(r.reopen()).isNull();
+    }
+
+    @Test void diffIsUnavailableWhenTheCurrentStampHasNoSnapshot() {
+        List<Snapshot> snaps = List.of(new Snapshot(t(1), RUN_1, "run"), new Snapshot(t(9), RUN_2, "rerun"));
+        assertThat(ItemHistory.build(List.of(), snaps, List.of(), t(12)).reopen())
+            .isEqualTo(new Reopen("rerun", t(12), t(1), false));
+    }
+
+    @Test void entriesAtTheSameInstantKeepRunExtractDecisionOrder() {
+        List<Snapshot> one = List.of(new Snapshot(t(1), RUN_1, "run"));
+        List<Decision> ds = List.of(new Decision(1, "ok", "", "pharmacist", t(1), false));
+        assertThat(ItemHistory.build(List.of(t(1)), one, ds, null).history())
+            .extracting(Entry::kind).containsExactly("run", "extract", "decision");
+    }
+}

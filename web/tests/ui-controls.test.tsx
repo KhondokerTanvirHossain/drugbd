@@ -69,6 +69,10 @@ describe("ProgressMeter", () => {
   it("shows 0% for an empty batch", () => {
     expect(r(<ProgressMeter approved={0} issue={0} total={0} />)).toContain('style="--w:0%"');
   });
+  it("the batch card's wide meter carries its own label", () => {
+    expect(r(<ProgressMeter approved={1} issue={2} total={10} wide label="1 approved, 2 with an issue, 7 need review" />))
+      .toContain('class="prog prog--wide" role="img" aria-label="1 approved, 2 with an issue, 7 need review"');
+  });
 });
 
 describe("BotCheck and ExampleMarker", () => {

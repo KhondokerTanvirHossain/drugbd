@@ -20,4 +20,12 @@ describe("PairCard (§3.4)", () => {
     expect(html).not.toContain("pair-text");
     expect(html).toContain(`<p class="pair-source">${UNKNOWN_PAIR_LINE.replace(/"/g, "&quot;")}</p>`);
   });
+
+  it("renders the names as an h4 and both footers, so CSS can switch between truncated and in full", () => {
+    const html = r(<PairCard id="p3" severity="moderate" names="Warfarin + Aspirin" heading="h4" meta={<>With Aspirin. <span className="mono">a/b</span></>}
+      text={{ kind: "management", body: "Monitor INR." }} source="Management, truncated." sourceOpen="Management, in full." surface="reviewer" />);
+    expect(html).toContain('<h4 class="pair-names">Warfarin + Aspirin</h4>');
+    expect(html).toContain('<p class="pair-meta">With Aspirin. <span class="mono">a/b</span></p>');
+    expect(html).toContain('<span class="whenClosed">Management, truncated.</span><span class="whenOpen">Management, in full.</span>');
+  });
 });

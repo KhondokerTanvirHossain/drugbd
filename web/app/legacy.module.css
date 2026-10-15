@@ -1,11 +1,6 @@
 /* Styles moved out of inline style objects on the pre-IntelliDrugs pages (§3.1).
-   P1B deletes the /batches and /flags pages and P2 rewrites the others; the last one removes this file. */
+   P1B deleted the batch and flag pages; P2 rewrites the others and removes this file. */
 .table { border-collapse: collapse; width: 100%; }
-.collapse { border-collapse: collapse; }
-.stageTable { border-collapse: collapse; width: 100%; margin-top: var(--s2); }
-.cell { vertical-align: top; border: 1px solid var(--line-strong); padding: var(--s2); width: 50%; }
-.stageCell { vertical-align: top; border: 1px solid var(--line-strong); padding: 6px; }
-.pre { white-space: pre-wrap; }
 .box { border: 1px solid var(--line-strong); border-radius: var(--r-card); padding: var(--s3); margin: var(--s2) 0; }
 .bannerWarn { padding: var(--s3); border-radius: var(--r-card); background: var(--warn-soft); box-shadow: inset 0 0 0 1px var(--warn-line); }
 .bannerInfo { padding: var(--s3); border-radius: var(--r-card); background: var(--info-soft); box-shadow: inset 0 0 0 1px var(--info-line); }

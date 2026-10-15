@@ -114,4 +114,24 @@ describe("TurnstileField island (§4.2)", () => {
     rerender(<TurnstileField siteKey="k" action="signin" onError={onError} resetKey={1} />);
     await waitFor(() => expect(document.head.querySelectorAll(sel)).toHaveLength(1));
   });
+
+  it("passes interaction-only appearance and auto refresh, can hide its status, and reuses a script already on the page", async () => {
+    render(<TurnstileField siteKey="k" action="decision" appearance="interaction-only" refreshExpired="auto" hideStatus />);
+    await waitFor(() => expect(api.render).toHaveBeenCalled());
+    expect(opts()).toMatchObject({ appearance: "interaction-only", "refresh-expired": "auto" });
+    expect(screen.queryByText("Checking")).toBeNull();
+  });
+
+  it("waits for an implicit Turnstile script that is still loading instead of adding a second one", async () => {
+    delete (window as unknown as { turnstile?: unknown }).turnstile;
+    document.head.querySelectorAll('script[src^="https://challenges.cloudflare.com/turnstile/"]').forEach((s) => s.remove());
+    const implicit = document.createElement("script");
+    implicit.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
+    document.head.appendChild(implicit);
+    render(<TurnstileField siteKey="k" action="decision" />);
+    expect(document.head.querySelectorAll('script[src^="https://challenges.cloudflare.com/turnstile/"]')).toHaveLength(1);
+    (window as unknown as { turnstile?: typeof api }).turnstile = api;
+    implicit.dispatchEvent(new Event("load"));
+    await waitFor(() => expect(api.render).toHaveBeenCalled());
+  });
 });

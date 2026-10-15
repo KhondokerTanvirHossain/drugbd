@@ -514,6 +514,9 @@ a{color:var(--accent);text-underline-offset:2px}
   .ico,.rv::before,.stage-status::before,.banner::before,.rec-hint::before,.botcheck::before,.search::before,.field-error::before,.sev::before{forced-color-adjust:none;background:CanvasText}
   .sev--unclassified::before{background:transparent;color:CanvasText}
   .sev,.rv,.stage,.banner,.code,.toast{border:1px solid CanvasText}
+  .toast,.toast-sub,.toast-undo{background:Canvas;color:CanvasText}
+  .toast-bar{background:Canvas}
+  .toast-bar i{background:CanvasText}
   .search:focus-within,.input:focus-visible,.textarea:focus-visible,.input.is-focus,.textarea.is-focus{outline:2px solid Highlight}
   .rec[aria-selected="true"],.rec.is-selected,.s-opt[aria-selected="true"],.filter[aria-current="true"],.seg button[aria-pressed="true"]{forced-color-adjust:none;background:Highlight;color:HighlightText}
   .rec[aria-selected="true"] .rec-ix,.rec[aria-selected="true"] .rec-sub,.rec[aria-selected="true"] .rec-hint,.rec[aria-selected="true"] .rv,.filter[aria-current="true"] .filter-n{color:HighlightText;border-color:HighlightText}

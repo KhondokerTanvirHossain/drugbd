@@ -52,7 +52,7 @@ One-time setup:
    ```
    Caddy gets the certificate once DNS resolves. Until the first deploy, the site answers 502.
 
-Run order: merge to `main` → `ci` green → `deploy` runs by itself → run `load-dgda` manually (Actions tab) with `batch=0001-pilot.txt` → open `https://drugdb.eliooo.org/batches/0001-pilot`. A new batch file has to be merged and deployed before `load-dgda` can use it.
+Run order: merge to `main` → `ci` green → `deploy` runs by itself → run `load-dgda` manually (Actions tab) with `batch=0001-pilot.txt` → open `https://drugdb.eliooo.org/review/0001-pilot`. A new batch file has to be merged and deployed before `load-dgda` can use it.
 
 ### Re-run one stage (the pilot DDInter re-run, spec §8.3)
 
@@ -120,10 +120,12 @@ Where each value lives:
 ```bash
 cd ~/drugdb/deploy
 vi .env                      # edit the REVIEWERS line
-docker-compose up -d web     # recreates web with the new list; api and db keep running
+docker-compose up -d --no-deps web     # recreates only web with the new list; api, db and flyway are not touched
 ```
 
-A removed reviewer loses review rights on their next request. A reviewer whose role changed signs out and in again. Rotating `SESSION_SECRET` signs everyone out (`docker-compose up -d web`). Rotating `INTERNAL_API_TOKEN` needs both services: `docker-compose up -d api web`.
+To invite a new pharmacist or engineer (the email template and the exact host steps), follow [`docs/runbooks/reviewer-invite.md`](docs/runbooks/reviewer-invite.md). Reviewers work on `/review`; the old `/batches` and `/flags` addresses redirect there.
+
+A removed reviewer loses review rights on their next request. A reviewer whose role changed signs out and in again. Rotating `SESSION_SECRET` signs everyone out (`docker-compose up -d --no-deps web`). Rotating `INTERNAL_API_TOKEN` needs both services: `docker-compose up -d --no-deps api web`.
 
 ### Firebase auth domain (before the P1A deploy, in this order)
 
