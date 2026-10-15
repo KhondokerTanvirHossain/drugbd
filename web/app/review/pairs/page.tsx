@@ -8,7 +8,7 @@ import { P1C_COPY } from "@/lib/copy";
 import { KEYS_COOKIE, parseKeys } from "@/lib/desk-settings";
 import { cspNonce } from "@/lib/nonce";
 import { isReviewer } from "@/lib/reviewers";
-import { pairsHref, parsePairQuery } from "@/lib/senior-params";
+import { DEFAULT_PAIR_QUERY, pairsHref, parsePairQuery } from "@/lib/senior-params";
 import type { PairShow } from "@/lib/senior-types";
 import { getSession } from "@/lib/session";
 import { THEME_COOKIE, parseTheme } from "@/lib/theme";
@@ -28,9 +28,11 @@ export default async function PairQueuePage({ searchParams }: { searchParams: Pr
   if (session.role !== "senior")
     return <SeniorShell session={session} theme={theme} keys={keys} current="queue" toReview={null}><NotSenior heading={P1C_COPY.senior.pairQueue} /></SeniorShell>;
   const q = parsePairQuery(await searchParams);
-  const data = await getPairQueue(q, session.email);
+  // The toolbar counts the default queue. The counts follow only the scope, so over all pairs this page's own are the same.
+  const [data, defaultTodo] = await Promise.all([getPairQueue(q, session.email),
+    q.pairs === DEFAULT_PAIR_QUERY.pairs ? null : getPairQueue(DEFAULT_PAIR_QUERY, session.email, 1).then((d) => d.counts.todo)]);
   return (
-    <SeniorShell session={session} theme={theme} keys={keys} current="queue" toReview={data.counts.todo}>
+    <SeniorShell session={session} theme={theme} keys={keys} current="queue" toReview={defaultTodo ?? data.counts.todo}>
       <h1>{P1C_COPY.senior.pairQueue}</h1>
       <p className={s.sub}>{r.queueSub}</p>
       <ShowLinks show={q.show} counts={data.counts} href={(show) => pairsHref({ ...q, show, page: 0 })} />

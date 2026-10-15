@@ -12,7 +12,8 @@ import s from "./pages.module.css";
 
 /**
  * §5.17: the reviewer toolbar with "Senior review" and "{t} pair[s] to review" in place of the batch centre, the nav row,
- * and one column of at most 960 px. `toReview` is null when the page has no count to show (and for non-seniors).
+ * and one column of at most 960 px. `toReview` is the default queue's to-review count on every senior page; null for
+ * pharmacists and engineers, whose pages read no data.
  */
 export default function SeniorShell({ session, theme, keys, current, toReview, children }: {
   session: Session; theme: Theme; keys: KeysSetting; current: "queue" | "substances" | null; toReview: number | null; children: ReactNode;

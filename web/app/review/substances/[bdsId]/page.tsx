@@ -13,14 +13,14 @@ import NoDataChip from "@/components/ui/NoDataChip";
 import ReviewStatus from "@/components/ui/ReviewStatus";
 import Severity from "@/components/ui/Severity";
 import { SourceOf } from "@/components/ui/SourceLink";
-import { getSeniorSubstance } from "@/lib/api";
+import { getPairQueue, getSeniorSubstance } from "@/lib/api";
 import { DESK_NEW, NOT_RUN, P1C_COPY, fill } from "@/lib/copy";
 import { KEYS_COOKIE, parseKeys } from "@/lib/desk-settings";
 import { cspNonce } from "@/lib/nonce";
 import { NAME_TYPE_LABEL } from "@/lib/relations";
 import { DESK, SHARED_WORDS, plural } from "@/lib/review-copy";
 import { isReviewer } from "@/lib/reviewers";
-import { parseSubstanceQuery, substanceHref } from "@/lib/senior-params";
+import { DEFAULT_PAIR_QUERY, parseSubstanceQuery, substanceHref } from "@/lib/senior-params";
 import type { SubstanceBrand } from "@/lib/senior-types";
 import { getSession } from "@/lib/session";
 import { SEVERITIES } from "@/lib/severity";
@@ -56,14 +56,15 @@ export default async function SubstancePage({ params, searchParams }: {
   const { bdsId } = await params;
   if (bdsId.length > 64) notFound();
   const q = parseSubstanceQuery(await searchParams);
-  const d = await getSeniorSubstance(bdsId, q, session.email);
+  const [d, toReview] = await Promise.all([getSeniorSubstance(bdsId, q, session.email),
+    getPairQueue(DEFAULT_PAIR_QUERY, session.email, 1).then((p) => p.counts.todo)]);   // the toolbar's count (§5.17)
   if (!d) notFound();
   const r = P1C_COPY.review;
   const batches = new Set(d.brands.map((b) => b.batchId)).size;
   const desk = { kind: "substance" as const, target: { type: "substance" as const, id: d.bdsId }, singleKeys: keys === "on",
     siteKey: turnstileSiteKey(), nonce: await cspNonce() };
   return (
-    <SeniorShell session={session} theme={theme} keys={keys} current="substances" toReview={null}>
+    <SeniorShell session={session} theme={theme} keys={keys} current="substances" toReview={toReview}>
       <h1>{d.name} <span className="mono">{d.bdsId}</span></h1>
       <p className={s.sub}>{fill(r.substanceMeta, { k: d.brands.length, brands: plural(d.brands.length, "brand", "brands"), b: batches,
         batches: plural(batches, "batch", "batches") })}</p>

@@ -11,6 +11,9 @@ const PAGE_MAX = 10_000, Q_MAX = 100;
 const page = (v: string) => (/^\d{1,5}$/.test(v) && Number(v) <= PAGE_MAX ? Number(v) : 0);
 const severity = (v: string): SeverityFilter | null => ((SEVERITY_FILTERS as readonly string[]).includes(v) ? (v as SeverityFilter) : null);
 
+/** The queue with no parameter: what the toolbar's "{t} pair[s] to review" counts on every senior page (§5.17). */
+export const DEFAULT_PAIR_QUERY: PairQuery = { show: "todo", pairs: "all", severity: null, page: 0 };
+
 export function parsePairQuery(sp: SP): PairQuery {
   return { show: oneOf<PairShow>(first(sp.show), PAIR_SHOWS, "todo"), pairs: oneOf<PairScope>(first(sp.pairs), PAIR_SCOPES, "all"),
     severity: severity(first(sp.severity)), page: page(first(sp.page)) };

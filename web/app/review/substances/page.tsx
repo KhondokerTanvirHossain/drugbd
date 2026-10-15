@@ -1,12 +1,12 @@
 import { cookies } from "next/headers";
 import SeniorShell, { NotSenior } from "@/components/review/senior/SeniorShell";
 import s from "@/components/review/senior/pages.module.css";
-import { listSeniorSubstances } from "@/lib/api";
+import { getPairQueue, listSeniorSubstances } from "@/lib/api";
 import { DESK_NEW, P1C_COPY, fill } from "@/lib/copy";
 import { KEYS_COOKIE, parseKeys } from "@/lib/desk-settings";
 import { DESK, SHARED_WORDS } from "@/lib/review-copy";
 import { isReviewer } from "@/lib/reviewers";
-import { parseSubstancesQuery, substanceHref, substancesHref } from "@/lib/senior-params";
+import { DEFAULT_PAIR_QUERY, parseSubstancesQuery, substanceHref, substancesHref } from "@/lib/senior-params";
 import { SENIOR_PAGE_SIZE } from "@/lib/senior-types";
 import { getSession } from "@/lib/session";
 import { THEME_COOKIE, parseTheme } from "@/lib/theme";
@@ -22,11 +22,12 @@ export default async function SubstancesPage({ searchParams }: { searchParams: P
   if (session.role !== "senior")
     return <SeniorShell session={session} theme={theme} keys={keys} current="substances" toReview={null}><NotSenior heading={SHARED_WORDS.substances} /></SeniorShell>;
   const { q, page } = parseSubstancesQuery(await searchParams);
-  const data = await listSeniorSubstances(q, page);
+  const [data, toReview] = await Promise.all([listSeniorSubstances(q, page),
+    getPairQueue(DEFAULT_PAIR_QUERY, session.email, 1).then((d) => d.counts.todo)]);   // the toolbar's count (§5.17)
   const r = P1C_COPY.review, t = DESK_NEW.reviewLists;
   const next = (page + 1) * SENIOR_PAGE_SIZE < data.total ? page + 1 : null;
   return (
-    <SeniorShell session={session} theme={theme} keys={keys} current="substances" toReview={null}>
+    <SeniorShell session={session} theme={theme} keys={keys} current="substances" toReview={toReview}>
       <h1>{SHARED_WORDS.substances}</h1>
       <p className={s.sub}>{r.substancesSub}</p>
       <form method="get" action="/review/substances" role="search">

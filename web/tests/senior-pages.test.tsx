@@ -166,6 +166,41 @@ describe("the pair queue (§5.17.1, §5.17.2)", () => {
   });
 });
 
+describe("the toolbar's \"{t} pair[s] to review\" (§5.17): one count, the default queue's, on every senior page", () => {
+  const DEFAULTS = { show: "todo", pairs: "all", severity: null, page: 0 };
+  const toolbar = (html: string) => strip(html.slice(html.indexOf("<header"), html.indexOf("</header>")));
+  const counted = (todo: number) => pairsPage([pairView()], { counts: { todo, changed: 0, issue: 0, reviewed: 0, all: todo } });
+
+  it("substances: reads the default queue for its count only (one row), and shows it", async () => {
+    getPairQueue.mockResolvedValue(counted(7));
+    const html = renderToStaticMarkup(await SubstancesPage({ searchParams: sp() }));
+    expect(getPairQueue).toHaveBeenCalledTimes(1);
+    expect(getPairQueue).toHaveBeenCalledWith(DEFAULTS, "senior@e2e.test", 1);
+    expect(toolbar(html)).toContain("Senior review7 pairs to review");
+  });
+  it("the substance page: the same count, whatever its own scope", async () => {
+    getPairQueue.mockResolvedValue(counted(1));
+    const html = await substancePage({ pairs: "applies" });
+    expect(getPairQueue).toHaveBeenCalledTimes(1);
+    expect(getPairQueue).toHaveBeenCalledWith(DEFAULTS, "senior@e2e.test", 1);
+    expect(toolbar(html)).toContain("Senior review1 pair to review");
+  });
+  it("the queue scoped to applies: the toolbar keeps the default count, read once more for it", async () => {
+    getPairQueue.mockImplementation(async (q: { pairs: string }) => counted(q.pairs === "applies" ? 2 : 9));
+    const html = await queue({ pairs: "applies" });
+    expect(getPairQueue).toHaveBeenCalledTimes(2);
+    expect(getPairQueue).toHaveBeenCalledWith({ ...DEFAULTS, pairs: "applies" }, "senior@e2e.test");
+    expect(getPairQueue).toHaveBeenCalledWith(DEFAULTS, "senior@e2e.test", 1);
+    expect(toolbar(html)).toContain("Senior review9 pairs to review");
+  });
+  it("the queue over all pairs: its own counts already are the default ones (they follow only the scope), so one read", async () => {
+    getPairQueue.mockResolvedValue(counted(4));
+    const html = await queue({ show: "issue", severity: "major", page: "2" });
+    expect(getPairQueue).toHaveBeenCalledTimes(1);
+    expect(toolbar(html)).toContain("Senior review4 pairs to review");
+  });
+});
+
 describe("substances (§5.17.3)", () => {
   it("the list: filter, table with its caption and columns, linked names", async () => {
     const html = renderToStaticMarkup(await SubstancesPage({ searchParams: sp({ q: " war " }) }));
