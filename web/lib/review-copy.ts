@@ -201,13 +201,21 @@ export function keyRow(role: ReviewerRole, status: DisplayStatus | undefined): [
   return [...KEY_ROW.slice(0, at), [["D"], P1C_COPY.dismiss.keyRow], ...KEY_ROW.slice(at)];
 }
 
+const THIS_SHEET = "This sheet";
+const SEND_IN_FIELD = "Send the report, inside the note field";
 /** The shortcuts sheet rows (Board R); the first uses the reviewer's undo window. A senior also gets D (§5.14 P1C). */
 export const SHEET_ROWS = (n: number, role: ReviewerRole = "pharmacist"): [string, string][] => [
   ["A", `Looks correct, then an ${n}-second undo window`], ["U", "Undo during the window"], ["R", "Report an issue"],
   ...(role === "senior" ? [["D", P1C_COPY.dismiss.sheetRow] as [string, string]] : []),
   ["J K", "Next and previous record"], ["E", "Evidence: raw DGDA row and pipeline notes"], ["S", "Open the DGDA source"],
-  ["?", "This sheet"], ["Esc", "Close the sheet, the evidence or the note"], ["SEND", "Send the report, inside the note field"],
+  ["?", THIS_SHEET], ["Esc", "Close the sheet, the evidence or the note"], ["SEND", SEND_IN_FIELD],
   ["Enter", "Never approves"],
+];
+
+/** §5.17.5 senior shortcuts sheet. "SEND" is the platform's Ctrl/Cmd Enter. */
+export const SENIOR_SHEET_ROWS: [string, string][] = [
+  ["J K", P1C_COPY.review.sheetNext], ["M", P1C_COPY.review.sheetMark], ["R", P1C_COPY.review.sheetReport], ["?", THIS_SHEET],
+  ["Esc", P1C_COPY.review.sheetClose], ["SEND", SEND_IN_FIELD], ["Enter", P1C_COPY.review.sheetEnter],
 ];
 
 export const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
