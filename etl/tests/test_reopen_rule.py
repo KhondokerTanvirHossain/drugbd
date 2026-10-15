@@ -6,10 +6,13 @@ import logging
 import psycopg
 from psycopg.types.json import Jsonb
 
+from bddrug_etl.jobs import run_pipeline
 from bddrug_etl.rxnav.client import RxCodes
 from test_shared_reopen import (  # noqa: F401  (url and clean are fixtures)
     ALIAS, BOTH, OT, SH, X, Y, Z, FakeDDInter, FakeRxNav, Harness, approve, batch_status, clean, concept, concepts, coverage,
     ddinter_codes, item, q, run, url)
+
+REMOVED = "removed from batch file"
 
 
 def snapshots(url, batch_id, cid):
@@ -62,6 +65,35 @@ def with_content(cid, content):
     c = table[cid]
     table[cid] = {**c, "extras": {**c["extras"], "generic_content_raw": content}}
     return table
+
+
+def with_company(cid, company):
+    table = concepts()
+    c = table[cid]
+    table[cid] = {**c, "extras": {**c["extras"], "company": company}}
+    return table
+
+
+def run_reopen(h, batch_id, ids):
+    """An engineer's --reopen run of every stage (§8.3.1 item 5); True when no stage raised."""
+    with h.connect() as conn, h.clients(conn) as clients:
+        return run_pipeline.run_pipeline(conn, clients, batch_id, ids, reopen=True)[1]
+
+
+def gate(url, cid):
+    """The item the API's statusOf reads for the product: (batch_id, review, note)."""
+    return q(url, """SELECT batch_id, review, note FROM ops.batch_item WHERE concept_id = %s
+                     ORDER BY extracted_at DESC NULLS LAST, batch_id DESC LIMIT 1""", (cid,))[0]
+
+
+def public(url, cid):
+    _, review, latest_note = gate(url, cid)
+    return review == "ok" and latest_note != REMOVED
+
+
+def latest_reason(url, batch_id, cid):
+    return q(url, """SELECT reason FROM ops.item_snapshot WHERE batch_id = %s AND concept_id = %s
+                     ORDER BY extracted_at DESC LIMIT 1""", (batch_id, cid))[0][0]
 
 
 def with_form(cid, form):
@@ -272,3 +304,79 @@ def test_relisted_product_with_changed_view_is_pending(url, tmp_path):
     assert run(Harness(url, dd, with_content(X, "Sharedium 10 mg")), tmp_path, "0415-b", [X]) == 0
     assert item(url, "0415-b", X)[0] == "pending"
     assert q(url, "SELECT count(*) FROM ops.item_snapshot WHERE batch_id = '0415-b' AND payload ? 'carried_from'")[0][0] == 0
+
+
+def test_removed_product_relisted_in_a_new_batch_is_not_carried(url, tmp_path):
+    """§8.3.1 item 8 carries only from the item statusOf reads as ok; a removed item reads pending (PO D7)."""
+    dd = FakeDDInter(BOTH)
+    assert run(Harness(url, dd), tmp_path, "0417-a", [X, Z]) == 0
+    approve(url, "0417-a", X)
+    assert run(Harness(url, dd), tmp_path, "0417-a", [Z]) == 0
+    assert (item(url, "0417-a", X)[0], note(url, "0417-a", X)) == ("ok", REMOVED)
+    assert not public(url, X)
+    assert run(Harness(url, dd), tmp_path, "0417-b", [X]) == 0   # the same view, listed in a new batch
+    assert item(url, "0417-b", X)[0] == "pending"
+    assert q(url, "SELECT count(*) FROM ops.item_snapshot WHERE batch_id = '0417-b' AND payload ? 'carried_from'")[0][0] == 0
+    assert not public(url, X)
+
+
+def test_an_issue_origin_is_not_carried(url, tmp_path):
+    dd = FakeDDInter(BOTH)
+    assert run(Harness(url, dd), tmp_path, "0418-a", [X]) == 0
+    with psycopg.connect(url) as c:   # a reviewer reported an issue on X
+        c.execute("""INSERT INTO ops.review_decision (batch_id, concept_id, decision, note, reviewer_email, reviewer_role)
+                     VALUES ('0418-a', %s, 'issue', 'strength is wrong', 'eng@example.test', 'engineer')""", (X,))
+        c.execute("UPDATE ops.batch_item SET review = 'issue' WHERE batch_id = '0418-a' AND concept_id = %s", (X,))
+    assert run(Harness(url, dd), tmp_path, "0418-b", [X]) == 0   # the same view, listed in a new batch
+    assert item(url, "0418-b", X)[0] == "pending"
+    assert q(url, "SELECT count(*) FROM ops.item_snapshot WHERE batch_id = '0418-b' AND payload ? 'carried_from'")[0][0] == 0
+    assert not public(url, X)
+
+
+# --- the same product's gate item in another batch (§8.3.1, G3) ------------------------------------
+
+def test_a_brand_revert_in_an_older_batch_reopens_the_newer_batchs_approved_item(url, tmp_path):
+    """X approved in A with company Co, then in B with New Co; A re-run with Co matches A's own snapshot, but the public
+    record (B's item, the gate) was approved for New Co: it goes back to review (shared_change)."""
+    dd = FakeDDInter(BOTH)
+    assert run(Harness(url, dd), tmp_path, "0419-a", [X]) == 0
+    approve(url, "0419-a", X)
+    assert run(Harness(url, dd, with_company(X, "New Co")), tmp_path, "0419-b", [X]) == 0
+    assert item(url, "0419-b", X)[0] == "pending"                # not carried: the view changed
+    decided = approve(url, "0419-b", X)
+    assert gate(url, X)[:2] == ("0419-b", "ok") and public(url, X)
+    a_before = item(url, "0419-a", X)
+    assert run(Harness(url, dd, with_company(X, "Co")), tmp_path, "0419-a", [X]) == 0
+    assert item(url, "0419-a", X) == a_before                    # A's own view is unchanged: no stamp
+    review, stamp = item(url, "0419-b", X)
+    assert review == "pending" and stamp > decided
+    assert latest_reason(url, "0419-b", X) == "shared_change"
+    assert batch_status(url, "0419-b") == "in_review"
+    assert not public(url, X)
+
+
+# --- the engineer's --reopen (§8.3.1 item 5, §13.1 Q12, G3) -----------------------------------------
+
+def test_reopen_run_with_a_covered_change_reopens_an_approved_target(url, tmp_path, caplog):
+    caplog.set_level(logging.INFO)
+    dd = FakeDDInter(BOTH)
+    assert run(Harness(url, dd), tmp_path, "0420-a", [X]) == 0
+    decided = approve(url, "0420-a", X)
+    caplog.clear()
+    assert run_reopen(Harness(url, dd, with_content(X, "Sharedium 10 mg")), "0420-a", [X])
+    review, stamp = item(url, "0420-a", X)
+    assert review == "pending" and stamp > decided
+    assert batch_status(url, "0420-a") == "in_review"
+    assert not public(url, X)
+    assert not any("--reopen not confirmed" in r.getMessage() for r in caplog.records if r.name == "run_pipeline")
+
+
+def test_reopen_run_reopens_an_approved_dependent_whose_view_changed(url, tmp_path):
+    dd = FakeDDInter(BOTH)
+    assert run(Harness(url, dd), tmp_path, "0421-a", [X]) == 0
+    decided = approve(url, "0421-a", X)
+    assert run_reopen(Harness(url, dd, rxnav=RxWithAtc()), "0421-b", [Y])   # Y brings an ATC code for the shared substance
+    review, stamp = item(url, "0421-a", X)
+    assert review == "pending" and stamp > decided
+    assert latest_reason(url, "0421-a", X) == "shared_change"
+    assert not public(url, X)

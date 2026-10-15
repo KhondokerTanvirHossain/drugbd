@@ -8,9 +8,10 @@ before the next stage starts.
 Every stage settles the records it processed last in its transaction (spec §8.3.1, ``load.batches.settle``): a record is
 stamped (``extracted_at``, review back to ``pending``) only when something its approval covered changed, or when its DGDA
 load failed or recovered, or it came back into the batch file. The substances and DDInter stages also write rows shared
-by every product with that substance; a product that shows a changed substance-level row is re-checked the same way. A
-product listed again in a new batch with an unchanged view carries its approval. Each stage logs how many records it
-re-opened (``re-opened N record(s)``), any carried approvals, and the ``--reopen`` targets it skipped.
+by every product with that substance; a product that shows a changed substance-level row is re-checked the same way, as
+is a target's item in another batch when that item is newer (the one the approval gate reads). A product listed again
+in a new batch with an unchanged view carries its approval. Each stage logs how many records it re-opened
+(``re-opened N record(s)``), any carried approvals, and the ``--reopen`` targets it skipped.
 A per-product ``fail`` never stops other products. An exception from a stage rolls that stage back, marks every
 product in it ``fail``, stops the later stages and makes the exit code non-zero.
 
@@ -33,8 +34,10 @@ The final log line is ``batch=<id> dgda=<ok/warn/fail> substances=… clinical=�
 Every invocation has one ``run_id`` (logged at start). Every stamp writes an ``ops.item_snapshot`` row with it, in the
 stamping transaction, after that stage's results; an unchanged record is not stamped and gets no snapshot.
 
-``--reopen`` stamps the named targets whatever changed, never their dependents, and skips a target that is approved
-(``skipped: approved, --reopen not confirmed``, §13.1 Q12).
+``--reopen`` stamps the named targets that are not approved whatever changed, and never forces a dependent. An approved
+target, a dependent, and a product's newer item in another batch still follow the rule above: re-opened when their view
+changed (G3). An approved target whose view is unchanged is skipped (``skipped: approved, --reopen not confirmed``,
+§13.1 Q12).
 """
 import argparse
 import contextlib

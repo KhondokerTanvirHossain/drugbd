@@ -1,7 +1,7 @@
 """Batch runs: fetch an explicit list of DGDA concepts, load them, record per-item review status, and settle each item's
 review under the reopen rule (spec §8.3.1): an item is stamped (re-opened) only when something its approval covered
-changed, plus the three cases that are always stamped (a DGDA failure, a return to the batch file after removal, and an
-engineer's --reopen of a non-approved target)."""
+changed, plus the cases that are always stamped (a DGDA failure, a recovered DGDA load, a return to the batch file after
+removal, and an engineer's --reopen of a non-approved target). --reopen never exempts an approved record from the rule."""
 import pathlib
 import uuid
 from dataclasses import dataclass, field
@@ -182,6 +182,27 @@ def _dependents(conn: psycopg.Connection, changes: SharedChanges, batch_id: str,
     ).fetchall()
 
 
+def _gate_elsewhere(conn: psycopg.Connection, batch_id: str,
+                    unstamped: dict[str, datetime | None]) -> list[tuple[str, str, datetime]]:
+    """For each target this call left unstamped: the product's latest item in another batch, when it is the item the gate
+    (statusOf) reads, i.e. it sorts before the target's item (``extracted_at DESC NULLS LAST, batch_id DESC``) and is not
+    marked removed. One query for every target."""
+    if not unstamped:
+        return []
+    out = []
+    for b, cid, at, item_note in conn.execute(
+            """SELECT DISTINCT ON (concept_id) batch_id, concept_id, extracted_at, note FROM ops.batch_item
+                WHERE concept_id = ANY(%s) AND batch_id <> %s
+                ORDER BY concept_id, extracted_at DESC NULLS LAST, batch_id DESC""",
+            (sorted(unstamped), batch_id)).fetchall():
+        mine = unstamped[cid]
+        if at is None or item_note == REMOVED:
+            continue
+        if mine is None or (at, b) > (mine, batch_id):
+            out.append((b, cid, at))
+    return sorted(out)
+
+
 def _recompute_batches(conn: psycopg.Connection, batch_ids: list[str]) -> None:
     """§8.3.1 item 6, as the API's recomputeBatch: approved when every current item is ok (and there is one)."""
     conn.execute(
@@ -200,10 +221,12 @@ def settle(conn: psycopg.Connection, batch_id: str, targets: list[str], changes:
 
     Targets are locked first (items before any ops.batch row, the API's decision order). Per target: a DGDA failure is
     stamped ``issue`` with its reason; an item back in the file, or whose DGDA load recovered, is stamped ``pending``;
-    with ``reopen`` an approved target is skipped (§13.1 Q12) and any other stamped ``pending``; otherwise the target is
-    stamped only when its approval view differs from the view of its snapshot at its current stamp (or it has no stamp or
-    snapshot there), and a new item of a product approved elsewhere with the same view carries that approval. Dependents
-    of ``changes.bds_ids`` are stamped ``pending`` (``shared_change``) only when their view changed; never with ``reopen``.
+    with ``reopen`` any target that is not approved is stamped ``pending``. Otherwise (an approved target under
+    ``reopen`` included) the target is stamped only when its approval view differs from the view of its snapshot at its
+    current stamp (or it has no stamp or snapshot there), and a new item of a product approved elsewhere with the same
+    view carries that approval; an approved --reopen target with an unchanged view is skipped (§13.1 Q12). Dependents of
+    ``changes.bds_ids``, and the product's gate item in another batch when it is newer than an unstamped target's item,
+    are stamped ``pending`` (``shared_change``) only when their view changed, with or without ``reopen`` (G3, §12.5).
     """
     run_id = run_id or uuid.uuid4()
     dgda = dgda or DgdaTargets()
@@ -222,11 +245,8 @@ def settle(conn: psycopg.Connection, batch_id: str, targets: list[str], changes:
             _stamp(conn, done, batch_id, cid, at, run_id, review="pending", note=None)
         elif cid in dgda.recovered:
             _stamp(conn, done, batch_id, cid, at, run_id, review="pending")
-        elif reopen:
-            if review == "ok":
-                done.skipped.append(cid)
-            else:
-                _stamp(conn, done, batch_id, cid, at, run_id, review="pending")
+        elif reopen and review != "ok":
+            _stamp(conn, done, batch_id, cid, at, run_id, review="pending")
         elif not _unchanged(conn, batch_id, cid, at):
             origin = _approved_elsewhere(conn, batch_id, cid) if cid in dgda.new else None
             if origin is not None and _unchanged_since(conn, origin, batch_id, cid, at):
@@ -234,10 +254,17 @@ def settle(conn: psycopg.Connection, batch_id: str, targets: list[str], changes:
                        carried={"batchId": origin[0], "extractedAt": origin[1].isoformat()})
             else:
                 _stamp(conn, done, batch_id, cid, at, run_id, review="pending")
-    if changes is not None and changes.bds_ids and not reopen:
+        elif reopen:
+            done.skipped.append(cid)
+    if changes is not None and changes.bds_ids:
         for b, cid, at in _dependents(conn, changes, batch_id, targets):
             if not _unchanged(conn, b, cid, at):
                 _stamp(conn, done, b, cid, at, run_id, review="pending", shared=True)
+    stamped = set(done.stamped)
+    unstamped = {cid: rows[cid][1] for cid in targets if cid in rows and (batch_id, cid) not in stamped}
+    for b, cid, at in _gate_elsewhere(conn, batch_id, unstamped):
+        if (b, cid) not in stamped and not _unchanged(conn, b, cid, at):
+            _stamp(conn, done, b, cid, at, run_id, review="pending", shared=True)
     _recompute_batches(conn, sorted({batch_id} | {b for b, _ in done.stamped}))
     return done
 
