@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import CodeChip from "@/components/ui/CodeChip";
 import MatchRelation from "@/components/ui/MatchRelation";
 import NoDataChip from "@/components/ui/NoDataChip";
+import { SourceOf } from "@/components/ui/SourceLink";
 import { DESK_NEW, NO_DATA_SENTENCE, NOT_RUN, fill } from "@/lib/copy";
 import {
   NAME_TYPE_LABEL, formRelation, genericRelation, nameRelation, strengthRelation, strengthText, xmRelation, type Relation,
@@ -27,7 +28,7 @@ function mapping(g: IngredientSummary): ReactNode {
   const dd = g.codes.filter((c) => c.system === "DDINTER");
   return (
     <>
-      <div className={`codes ${s.codesTight}`}>{dd.map((c) => <CodeChip key={c.code} system={c.system} code={c.code} meta={meta(c)} />)}</div>
+      <div className={`codes ${s.codesTight}`}>{dd.map((c) => <CodeChip key={c.code} system={c.system} code={c.code} meta={meta(c)} source={c.source} />)}</div>
       <span className="cmp-sub">{DESK.dataFound}</span>
       {g.ddinter.chosen.map((c) => (
         <span className="cmp-sub" key={c.ddinterId}>
@@ -51,7 +52,7 @@ export default function ComparisonTable({ item }: { item: ReviewItem }) {
       <div className="cmp-wrap" tabIndex={0} role="region" aria-labelledby="sec-cmp">
         <table className="cmp">
           <caption className="sr-only">{fill(DESK.cmpCaption, { name: b?.tradeName ?? item.conceptId })}</caption>
-          <thead><tr><th scope="col">{DESK.cmpField}</th><th scope="col" className={`cmp-src ${s.srcHead}`}>{DESK.cmpSource}</th>
+          <thead><tr><th scope="col">{DESK.cmpField}</th><th scope="col" className={`cmp-src ${s.srcHead}`}>{DESK.cmpSource}{b?.source && <> <SourceOf source={b.source} /></>}</th>
             <th scope="col">{DESK.cmpRelation}</th><th scope="col">{DESK.cmpExtracted}</th></tr></thead>
           <tbody>
             {b && <Row th="Trade name" src={b.tradeName} rel={copied} ext={<>{b.tradeName}<span className="cmp-sub mono">{item.conceptId}</span></>} />}
@@ -71,8 +72,10 @@ export default function ComparisonTable({ item }: { item: ReviewItem }) {
             })}
             {item.dgdaIngredients.map((x) => {
               const { relation, match } = xmRelation(x.xmCode, ings);
+              const xmSource = ings.flatMap((g) => g.codes).find((c) => c.system === "ICD11_XM" && c.code === x.xmCode)?.source ?? null;
               return (
-                <Row key={x.xmCode} th="DGDA ingredient code" src={<><span className="mono">{x.xmCode}</span><span className="cmp-sub">{x.name}</span></>}
+                <Row key={x.xmCode} th="DGDA ingredient code"
+                  src={<><span className="mono">{x.xmCode}</span>{xmSource && <> <SourceOf source={xmSource} /></>}<span className="cmp-sub">{x.name}</span></>}
                   rel={<Rel r={relation} />}
                   ext={match ? <><span className="mono">{match.bdsId}</span> {match.name}<span className={s.cmpNames}>{fill(DESK.names, {
                     names: match.names.map((nm) => `${nm.name} (${NAME_TYPE_LABEL[nm.type] ?? nm.type})`).join(", ") })}</span></>
@@ -86,7 +89,7 @@ export default function ComparisonTable({ item }: { item: ReviewItem }) {
               const codes = g.codes.filter((c) => c.system !== "DDINTER");
               return <Row key={`c${g.bdsId}`} th={`Codes${n(ings.indexOf(g))}`} src={notInRegister}
                 rel={<Rel r={{ kind: "added", sub: fill(DESK.codesFor, { k: codes.length, name: g.name }) }} />}
-                ext={<div className={`codes ${s.codesTight}`}>{codes.map((c) => <CodeChip key={`${c.system}${c.code}`} system={c.system} code={c.code} meta={meta(c)} />)}</div>} />;
+                ext={<div className={`codes ${s.codesTight}`}>{codes.map((c) => <CodeChip key={`${c.system}${c.code}`} system={c.system} code={c.code} meta={meta(c)} source={c.source} />)}</div>} />;
             })}
             {mapped.map((g) => <Row key={`d${g.bdsId}`} th={`DDInter mapping${n(ings.indexOf(g))}`} src={notInRegister}
               rel={<Rel r={{ kind: "added" }} />} ext={mapping(g)} />)}
