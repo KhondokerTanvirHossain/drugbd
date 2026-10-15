@@ -23,7 +23,8 @@ export const ISLANDS = [
 export const ISLAND_DIRS = ["components/review/desk/"];
 export const FORBIDDEN_IMPORTS = ["@/lib/api", "@/lib/session", "server-only", "next/headers"];
 
-const SCAN = ["app", "components", "lib"];
+/** P3: Learn chapters live in content/ (§6.8); none may be an island. */
+const SCAN = ["app", "components", "lib", "content"];
 const SOURCE = /\.(tsx?|jsx?|mjs)$/;
 const USE_CLIENT = /^(?:\s|\/\/[^\n]*\n|\/\*[\s\S]*?\*\/)*["']use client["']/;
 const IMPORT = /\bimport\s+(?:type\s+)?(?:[^'"()]*?\sfrom\s+)?["']([^"']+)["']|\bexport\s+[^'";]*?\sfrom\s+["']([^"']+)["']|\bimport\(\s*["']([^"']+)["']\s*\)/g;

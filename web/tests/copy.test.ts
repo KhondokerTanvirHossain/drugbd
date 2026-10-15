@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -21,6 +21,7 @@ const SPEC_ROWS = [
   "Maximum of 20 medicines reached in the checker",
   "Landing hero card while the hero product is not approved; its `aria-label` in both states",
   "Learn: snapshot-value date suffix \"as stored on {date}\"",
+  "Learn: chapter not shown because the live numbers did not load",
   "Decision saving (`committing`): promise and toast",
   "Desk: narrow-screen \"Back to list\", the no-JavaScript notices, loading and loaded announcements",
   "Desk: batch load error, batch not found",
@@ -119,6 +120,28 @@ describe("§1.7 new copy", () => {
       continueInTab: "Continue in this tab",
     });
   });
+
+  it("pins the Learn strings P3 ships (§6.8 snapshot suffix and stats failure, Board L guarded sentences, §1.6 item 14)", () => {
+    expect(copy.NEW_COPY[copy.NEW_COPY_ROWS.learnSnapshotDate]).toEqual({ asStored: "as stored on {date}" });
+    expect(copy.LEARN_NEW.asStored).toBe("as stored on {date}");
+    expect(copy.fill(copy.LEARN_NEW.asStored, { date: "13/10/2026" })).toBe("as stored on 13/10/2026");
+    expect(copy.NEW_COPY[copy.NEW_COPY_ROWS.learnStatsFailed]).toEqual({
+      failTitle: "Couldn't load this chapter.",
+      failBody: "The live pilot numbers did not load, so no example is shown. Nothing was changed.",
+      retry: "Try again",
+    });
+    expect(copy.LEARN_FAIL).toBe(copy.NEW_COPY[copy.NEW_COPY_ROWS.learnStatsFailed]);
+    expect(copy.LEARN_BOARD).toEqual({
+      unclassifiedLegend: "DDInter lists the pair but gives no grade. It is not low risk and is never counted with Minor.",
+      unclassifiedGlossary: "DDInter lists the pair without a grade. Not low risk, never merged with Minor.",
+      unclassifiedMust: 'Never "low risk", never merged with Minor.',
+      checkerNeverSays: 'The checker never says "no interactions found" for this list. It reports one Major pair and two pairs it could not check. Chapter 8 shows the same check as an API response.',
+      undoWindowDetail: "(8 seconds by default; 20 or 60 in desk settings)",
+      undoWindow: "undo window (8 seconds by default; 20 or 60 in desk settings)",
+      undoWindowFaq: "(8 seconds unless you lengthened it)",
+    });
+    expect(copy.LEARN_BOARD.undoWindow.endsWith(copy.LEARN_BOARD.undoWindowDetail)).toBe(true);
+  });
 });
 
 // ---- Paraphrase guard (§3.6, §11.1) ----
@@ -137,7 +160,9 @@ const stripComments = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(
 const LEGACY_EXEMPT = ["app/check/page.tsx", "app/page.tsx"];
 /** Files that may hold the compact pill's short form (§3.4). */
 const SHORT_FORM_ALLOWED = ["components/ui/ReviewStatus.tsx"];
-const scanned = () => ["app", "components", "lib"].flatMap((d) => [...sources(join(WEB, d))])
+/** P3 adds content/ (Learn chapters, §6.8): Learn copy is held to the same rules as every page. */
+const scanned = () => ["app", "components", "lib", "content"].filter((d) => existsSync(join(WEB, d)))
+  .flatMap((d) => [...sources(join(WEB, d))])
   .filter((f) => f !== "lib/copy.ts" && !LEGACY_EXEMPT.includes(f));
 const text = (f: string) => stripComments(readFileSync(join(WEB, f), "utf8"));
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -193,5 +218,9 @@ describe("no paraphrase or retyping of the safety sentences", () => {
   it("the short form 'Not yet reviewed' appears only in the compact pill", () => {
     const short = /Not yet reviewed(?! by a pharmacist)/;
     expect(scanned().filter((f) => !SHORT_FORM_ALLOWED.includes(f) && short.test(text(f)))).toEqual([]);
+  });
+
+  it("no file but lib/copy.ts holds an em dash (§3.5: only the stale-page title has one)", () => {
+    expect(scanned().filter((f) => /—/.test(text(f)))).toEqual([]);
   });
 });

@@ -81,6 +81,7 @@ export const NEW_COPY_ROWS = {
   checkerMax: "Maximum of 20 medicines reached in the checker",
   heroCard: "Landing hero card while the hero product is not approved; its `aria-label` in both states",
   learnSnapshotDate: "Learn: snapshot-value date suffix \"as stored on {date}\"",
+  learnStatsFailed: "Learn: chapter not shown because the live numbers did not load",
   committing: "Decision saving (`committing`): promise and toast",
   deskMisc: "Desk: narrow-screen \"Back to list\", the no-JavaScript notices, loading and loaded announcements",
   deskLoad: "Desk: batch load error, batch not found",
@@ -137,7 +138,12 @@ export const NEW_COPY: Record<NewCopyState, Record<string, string>> = {
   [NEW_COPY_ROWS.removedStub]: {},
   [NEW_COPY_ROWS.checkerMax]: {},
   [NEW_COPY_ROWS.heroCard]: {},
-  [NEW_COPY_ROWS.learnSnapshotDate]: {},
+  [NEW_COPY_ROWS.learnSnapshotDate]: { asStored: "as stored on {date}" },
+  [NEW_COPY_ROWS.learnStatsFailed]: {
+    failTitle: "Couldn't load this chapter.",
+    failBody: "The live pilot numbers did not load, so no example is shown. Nothing was changed.",
+    retry: "Try again",
+  },
   [NEW_COPY_ROWS.committing]: {
     lead: "Marked correct.", pharmacistBody: "Publishing now.", engineerBody: "Saving your check now.", toastSaving: "saving.",
   },
@@ -272,4 +278,28 @@ export const DESK_NEW = {
     | "notCheckedNoRouteNoRoute" | "notCheckedUnmapped" | "notCheckedSameProduct", string>,
   routeAssumed: NEW_COPY[NEW_COPY_ROWS.routeAssumed] as Record<"noRouteStatement", string>,
   notRun: NEW_COPY[NEW_COPY_ROWS.notRun] as Record<"rowHint" | "notCheckedNotRun", string>,
+} as const;
+
+/** Learn (§6.8): the date suffix after a snapshot-only value, and the footer's batch line. */
+export const LEARN_NEW = NEW_COPY[NEW_COPY_ROWS.learnSnapshotDate] as Record<"asStored", string>;
+
+/** Learn (§6.8 "Stats unavailable"): the banner shown in place of a chapter when GET /v1/stats fails. */
+export const LEARN_FAIL = NEW_COPY[NEW_COPY_ROWS.learnStatsFailed] as Record<"failTitle" | "failBody" | "retry", string>;
+
+/** §1.6 item 14's parenthetical, held once: the glossary prints it alone, the gate table and keys inside `undoWindow`. */
+const UNDO_WINDOW_DETAIL = "(8 seconds by default; 20 or 60 in desk settings)";
+
+/**
+ * Board L sentences that name a phrase the paraphrase guard bans elsewhere ("low risk", "no interactions"), and §1.6
+ * item 14's undo-window wording, which Learn repeats in five places. Learn imports them; copy.test.ts pins them.
+ */
+export const LEARN_BOARD = {
+  unclassifiedLegend: "DDInter lists the pair but gives no grade. It is not low risk and is never counted with Minor.",
+  unclassifiedGlossary: "DDInter lists the pair without a grade. Not low risk, never merged with Minor.",
+  unclassifiedMust: 'Never "low risk", never merged with Minor.',
+  checkerNeverSays: 'The checker never says "no interactions found" for this list. It reports one Major pair and two pairs it could not check. Chapter 8 shows the same check as an API response.',
+  undoWindowDetail: UNDO_WINDOW_DETAIL,
+  undoWindow: `undo window ${UNDO_WINDOW_DETAIL}`,
+  /** The FAQ's shorter form of the same window (§1.6 item 14). */
+  undoWindowFaq: "(8 seconds unless you lengthened it)",
 } as const;

@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -11,7 +11,8 @@ function* files(dir: string, ext: RegExp): Generator<string> {
     else if (ext.test(name)) yield relative(WEB, p).split("\\").join("/");
   }
 }
-const all = (ext: RegExp) => [...files(join(WEB, "app"), ext), ...files(join(WEB, "components"), ext)];
+const all = (ext: RegExp) => ["app", "components", "content"].filter((d) => existsSync(join(WEB, d)))
+  .flatMap((d) => [...files(join(WEB, d), ext)]);
 const read = (f: string) => readFileSync(join(WEB, f), "utf8");
 /** Strings that look like class lists: className="…", className={`…`}, class names inside quotes. */
 const classStrings = (src: string) => [...src.matchAll(/className=(?:"([^"]*)"|\{`([^`]*)`\})/g)].map((m) => m[1] ?? m[2]);

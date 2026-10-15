@@ -41,6 +41,11 @@ describe("client-island allowlist (§4.2)", () => {
     expect(checkIslands(root)).toEqual(['components/Rogue.tsx: "use client" file is not in the island allowlist (spec §4.2)']);
   });
 
+  it("scans content/ too: a 'use client' Learn chapter is not on the list", () => {
+    const root = fixture({ "content/learn/x.tsx": '"use client";\nexport default 1;\n' });
+    expect(checkIslands(root)).toEqual(['content/learn/x.tsx: "use client" file is not in the island allowlist (spec §4.2)']);
+  });
+
   it("allows any file under components/review/desk/", () => {
     expect(checkIslands(fixture({ "components/review/desk/commit-machine.ts": '"use client";\nexport const x = 1;\n' }))).toEqual([]);
   });
