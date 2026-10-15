@@ -171,7 +171,7 @@ export function SwimlaneDiagram({ notReviewed, undoWindow }: { notReviewed: stri
   return (
     <svg className={s.dgSwim} viewBox="0 0 840 520" role="img" aria-labelledby="dg-swim-t dg-swim-d">
       <title id="dg-swim-t">From batch file to public record</title>
-      <desc id="dg-swim-d">{`A batch file of 10 concept ids enters the pipeline. Four stages run in order: DGDA load reads the DGDA register, Substances reads NLM RxNav, Clinical drug parses, DDInter reads DDInter 2.0. Every stage keeps its evidence, which signed-in reviewers see on the batch page. An engineer check is recorded but leaves the record hidden as ${notReviewed}. A pharmacist presses A and after the ${undoWindow} the record becomes public on the site, checker and API. An issue or a re-run sends the record back to the pipeline and back to review.`}</desc>
+      <desc id="dg-swim-d">{`A batch file of 10 concept ids enters the pipeline. Four stages run in order: DGDA load reads the DGDA register, Substances reads NLM RxNav, Clinical drug parses, DDInter reads DDInter 2.0. Every stage keeps its evidence, which signed-in reviewers see on the batch page. An engineer check is recorded but leaves the record hidden as ${notReviewed}. A pharmacist presses A and after an ${undoWindow} the record becomes public on the site, checker and API. An issue or a re-run sends the record back to the pipeline and back to review.`}</desc>
       <Arrowhead id="ah-s" />
       <rect x="0" y="0" width="840" height="520" className={s.svgBg} />
       <rect x="0" y="0" width="840" height="90" className={s.svgBand} />

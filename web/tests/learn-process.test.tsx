@@ -13,7 +13,7 @@ describe("chapter 4, The process", () => {
   it("the swimlane is an image whose description carries the §1.6 item 14 undo window and the NOT_REVIEWED sentence", () => {
     const html = render();
     expect(html).toContain('<title id="dg-swim-t">From batch file to public record</title>');
-    expect(html).toContain(`leaves the record hidden as ${NOT_REVIEWED}. A pharmacist presses A and after the ${UNDO} the record becomes public`);
+    expect(html).toContain(`leaves the record hidden as ${NOT_REVIEWED}. A pharmacist presses A and after an ${UNDO} the record becomes public`);
     expect(html).not.toContain("8-second undo window");
     expect(html).toContain(">A, 8 s undo</text>");
   });

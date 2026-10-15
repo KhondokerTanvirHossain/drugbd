@@ -3554,7 +3554,7 @@ describe("chapter 4, The process", () => {
   it("the swimlane is an image whose description carries the §1.6 item 14 undo window and the NOT_REVIEWED sentence", () => {
     const html = render();
     expect(html).toContain('<title id="dg-swim-t">From batch file to public record</title>');
-    expect(html).toContain(`leaves the record hidden as ${NOT_REVIEWED}. A pharmacist presses A and after the ${UNDO} the record becomes public`);
+    expect(html).toContain(`leaves the record hidden as ${NOT_REVIEWED}. A pharmacist presses A and after an ${UNDO} the record becomes public`);
     expect(html).not.toContain("8-second undo window");
     expect(html).toContain(">A, 8 s undo</text>");
   });
@@ -3647,7 +3647,7 @@ export function SwimlaneDiagram({ notReviewed, undoWindow }: { notReviewed: stri
   return (
     <svg className={s.dgSwim} viewBox="0 0 840 520" role="img" aria-labelledby="dg-swim-t dg-swim-d">
       <title id="dg-swim-t">From batch file to public record</title>
-      <desc id="dg-swim-d">{`A batch file of 10 concept ids enters the pipeline. Four stages run in order: DGDA load reads the DGDA register, Substances reads NLM RxNav, Clinical drug parses, DDInter reads DDInter 2.0. Every stage keeps its evidence, which signed-in reviewers see on the batch page. An engineer check is recorded but leaves the record hidden as ${notReviewed}. A pharmacist presses A and after the ${undoWindow} the record becomes public on the site, checker and API. An issue or a re-run sends the record back to the pipeline and back to review.`}</desc>
+      <desc id="dg-swim-d">{`A batch file of 10 concept ids enters the pipeline. Four stages run in order: DGDA load reads the DGDA register, Substances reads NLM RxNav, Clinical drug parses, DDInter reads DDInter 2.0. Every stage keeps its evidence, which signed-in reviewers see on the batch page. An engineer check is recorded but leaves the record hidden as ${notReviewed}. A pharmacist presses A and after an ${undoWindow} the record becomes public on the site, checker and API. An issue or a re-run sends the record back to the pipeline and back to review.`}</desc>
       <Arrowhead id="ah-s" />
       <rect x="0" y="0" width="840" height="520" className={s.svgBg} />
       <rect x="0" y="0" width="840" height="90" className={s.svgBand} />
