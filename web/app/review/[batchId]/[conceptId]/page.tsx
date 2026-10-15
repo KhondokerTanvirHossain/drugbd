@@ -79,7 +79,7 @@ export default async function RecordPage({ params, searchParams }: {
       {item.displayStatus === "back_in_review" && <BackInReviewCard item={item} diff={diff} />}
       <ComparisonTable item={item} />
       <AutomatedChecks item={item} />
-      <Interactions item={item} />
+      <Interactions item={item} role={session.role} />
       <History item={item} />
     </DeskRecordContext>
   );
