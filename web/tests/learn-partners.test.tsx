@@ -35,12 +35,18 @@ describe("chapter 8: the endpoint table comes from the API controllers (§6.8)",
     expect(tableRoutes()).toContain("GET /v1/stats");
   });
 
-  it("access matches §2.2: batch evidence and /v1/review/* are Reviewer, writes are Token, stats are Public", () => {
+  it("access matches §2.2: batch evidence and /v1/review/* reads are Reviewer, writes are Token, stats are Public", () => {
     for (const e of ENDPOINTS) {
-      if (e.path.startsWith("/v1/review/") || (e.method === "GET" && e.path.startsWith("/v1/batches"))) expect(e.access).toEqual(["Reviewer"]);
+      if (e.method === "GET" && (e.path.startsWith("/v1/review/") || e.path.startsWith("/v1/batches"))) expect(e.access).toEqual(["Reviewer"]);
       if (e.method === "POST" && !e.path.startsWith("/v1/interactions")) expect(e.access).toEqual(["Token"]);
     }
     expect(ENDPOINTS.find((e) => e.path === "/v1/stats")!.access).toEqual(["Public"]);
+  });
+
+  it("the senior review routes (§7.7) are listed: pair queue, substances, substance page, and the token-only pair decision", () => {
+    const at = (method: string, path: string) => ENDPOINTS.find((e) => e.method === method && e.path.split("?")[0] === path);
+    for (const p of ["/v1/review/pairs", "/v1/review/substances", "/v1/review/substances/{bdsId}"]) expect(at("GET", p)?.access).toEqual(["Reviewer"]);
+    expect(at("POST", "/v1/review/pairs/{a}/{b}/decisions")?.access).toEqual(["Token"]);
   });
 
   it("the access legend's All row is §1.6 item 13's", () => {
