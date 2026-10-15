@@ -204,14 +204,15 @@ public class R2dbcReviewQueryAdapter implements ReviewQueryPort {
         if (ids.isEmpty()) return Mono.just(List.of());
         String[] arr = ids.stream().distinct().toArray(String[]::new);
         return db.sql("""
-                SELECT p.ddinter_a, p.ddinter_b, p.partner_name_a, p.partner_name_b, p.severity, p.actions, t.interaction, t.management
+                SELECT p.ddinter_a, p.ddinter_b, p.partner_name_a, p.partner_name_b, p.severity, p.actions, t.interaction, t.management,
+                       p.interaction_id
                 FROM curated.ddinter_pair p LEFT JOIN curated.ddinter_interaction_text t ON t.interaction_id = p.interaction_id
                 WHERE p.ddinter_a = ANY(:ids) AND p.ddinter_b = ANY(:ids)""")
             .bind("ids", arr)
             .map(r -> new BatchPairs.PairRow(r.get("ddinter_a", String.class), r.get("ddinter_b", String.class),
                 r.get("partner_name_a", String.class), r.get("partner_name_b", String.class), r.get("severity", String.class),
                 R2dbcSubstanceAdapter.list(r, "actions"), DdinterText.clean(r.get("interaction", String.class)),
-                DdinterText.clean(r.get("management", String.class))))
+                DdinterText.clean(r.get("management", String.class)), r.get("interaction_id", String.class)))
             .all().collectList();
     }
 
