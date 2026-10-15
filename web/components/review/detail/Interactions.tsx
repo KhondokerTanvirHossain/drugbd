@@ -105,7 +105,6 @@ function Ingredient({ g, item, route, brand }: { g: IngredientSummary; item: Rev
 const recordsOf = (p: { partners: { tradeName: string; index: number }[] }): ReactNode =>
   p.partners.map((x) => fill(DESK.record, { name: x.tradeName, k: x.index })).join(", ");
 const ref = (x: OtherPartner) => fillNodes(o.partnerRef, { name: x.tradeName, batchId: mono(x.batchId) });
-const refText = (x: OtherPartner) => fill(o.partnerRef, { name: x.tradeName, batchId: x.batchId });
 
 function inlinePartners(partners: OtherPartner[], count: number): ReactNode {
   const shown = partners.slice(0, 3);
@@ -179,20 +178,31 @@ function NoText<P extends AnyPair>({ pairs, withOf, detailsOf }: { pairs: P[]; w
 }
 
 type Line = { substance: string; partnerSubstance: string; reason: string; side: "this" | "partner"; route: string | null };
-function reasonLine(n: Line, brand: string, substance: string): string {
+/** The §6.7.3 item 4 template for a not-checked reason, and its values. */
+function reasonOf<B>(n: Line, brand: B, substance: string): [string, Record<string, B | string>] {
   return n.reason === "no_route"
-    ? (n.route === null ? fill(ra.notCheckedNoRouteNoRoute, { brand, substance }) : fill(ra.notCheckedNoRoute, { brand, route: n.route, substance }))
-    : n.reason === "unmapped" ? fill(ra.notCheckedUnmapped, { ingredient: substance, brand })
-    : fill(DESK_NEW.notRun.notCheckedNotRun, { substance, brand });
+    ? (n.route === null ? [ra.notCheckedNoRouteNoRoute, { brand, substance }] : [ra.notCheckedNoRoute, { brand, route: n.route, substance }])
+    : n.reason === "unmapped" ? [ra.notCheckedUnmapped, { ingredient: substance, brand }]
+    : [DESK_NEW.notRun.notCheckedNotRun, { substance, brand }];
 }
+const reasonLine = (n: Line, brand: string, substance: string): string => fill(...reasonOf(n, brand, substance));
 function otherLines(n: NotCheckedPair, brand: string): string[] {
   const brands = n.side === "this" ? [brand] : n.partners.map((p) => p.tradeName);
   return brands.map((b) => reasonLine(n, b, n.side === "this" ? n.substance : n.partnerSubstance));
 }
-function crossLines(n: OtherNotChecked, brand: string): string[] {
-  if (n.side === "this") return [reasonLine(n, brand, n.substance)];
-  const lines = n.partners.map((x) => reasonLine(n, refText(x), n.partnerSubstance));
-  return n.partnerCount > n.partners.length ? [...lines, fill(o.andMoreList, { k: n.partnerCount - n.partners.length })] : lines;
+/**
+ * §5.6.2: a cross-batch line whose reason is the partner's names its partners as a pair does: at most 3, then
+ * "and {k} more.", then the `<details>` of the partners the API returned. Each line keeps its own count.
+ */
+function PartnerLines({ n, senior }: { n: OtherNotChecked; senior: boolean }) {
+  const shown = n.partners.slice(0, 3);
+  return (
+    <div className={s.ncOther}>
+      {shown.map((x) => <p className={s.ingQ} key={`${x.batchId}/${x.conceptId}`}>{fillNodes(...reasonOf(n, ref(x), n.partnerSubstance))}</p>)}
+      {n.partnerCount > shown.length && <p className={s.ingQ}>{fill(o.andMoreList, { k: n.partnerCount - shown.length })}</p>}
+      <PartnerList partners={n.partners} count={n.partnerCount} substance={n.partnerSubstance} bdsId={n.partnerBdsId} senior={senior} />
+    </div>
+  );
 }
 
 function NoDataLines({ list }: { list: Line[] }) {
@@ -253,7 +263,10 @@ function OtherGroup({ item, brand, approved, senior }: { item: ReviewItem; brand
   const details = (p: OtherPair) => <PartnerList partners={p.partners} count={p.partnerCount} substance={p.partnerSubstance}
     bdsId={p.partnerBdsId} senior={senior} />;
   const noData = nc.filter((n) => n.reason === "no_data");
-  const others = [...new Set(nc.filter((n) => n.reason !== "no_data").flatMap((n) => crossLines(n, brand)))];
+  const reasons = nc.filter((n) => n.reason !== "no_data");
+  // Only this record's own lines can repeat (one per pair, same text); a partner line is never merged with another's.
+  const own = [...new Set(reasons.filter((n) => n.side === "this").map((n) => reasonLine(n, brand, n.substance)))];
+  const theirs = reasons.filter((n) => n.side === "partner");
   return (
     <div className={s.sec}>
       <h5 className={s.subH}>{approved ? o.withApproved : o.withNotApproved}</h5>
@@ -268,7 +281,8 @@ function OtherGroup({ item, brand, approved, senior }: { item: ReviewItem; brand
         <NoText pairs={pairs.filter((p) => !hasText(p))} withOf={(p) => inlinePartners(p.partners, p.partnerCount)} detailsOf={details} />
       )}
       {noData.length > 0 && <NoDataLines list={noData} />}
-      {others.map((line) => <p className={s.ingQ} key={line}>{line}</p>)}
+      {own.map((line) => <p className={s.ingQ} key={line}>{line}</p>)}
+      {theirs.map((n) => <PartnerLines key={`${n.reason}/${n.route}/${n.substance}+${n.partnerSubstance}`} n={n} senior={senior} />)}
     </div>
   );
 }

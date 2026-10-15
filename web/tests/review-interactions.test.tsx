@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { renderToStaticMarkup as r } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import Interactions from "@/components/review/detail/Interactions";
@@ -255,6 +257,34 @@ describe("P1C: In other batches (§5.6.2)", () => {
       "DDInter 2.0 lists no interaction between Napa and the medicines in other batches. This is not a guarantee that they are safe to combine.");
   });
 
+  it("not-checked lines name their partners like pairs do: three, 'and {k} more.' per line, the details and the senior link", () => {
+    const line = (partnerSubstance: string, partnerBdsId: string, from: number) => ({ substance: "Acetaminophen", partnerSubstance,
+      partnerBdsId, partners: Array.from({ length: 5 }, (_, i) => partner(from + i, true)), partnerCount: 7,
+      reason: "no_route" as const, side: "partner" as const, route: "nasal" });
+    const item = napa({ otherBatches: 14, pairs: [], notChecked: [line("Mupirocin", "BDS-000020", 1), line("Fusidic acid", "BDS-000021", 11)] });
+    for (const role of ["senior", "pharmacist"] as const) {
+      const html = r(<Interactions item={item} role={role} />);
+      const text = strip(html);
+      expect(text).toContain("0 pairs found in DDInter 2.0. 2 pairs not checked.");
+      for (const [sub, from] of [["Mupirocin", 1], ["Fusidic acid", 11]] as const) {
+        for (let n = from; n < from + 3; n++)
+          expect(text).toContain(`Not checked: Brand ${n} (batch b-${n})'s route is nasal and DDInter has no entry for ${sub} on that route.`);
+        for (let n = from + 3; n < from + 5; n++) expect(text).not.toContain(`Brand ${n} (batch b-${n})'s route`);
+        for (let n = from; n < from + 5; n++)
+          expect(html).toContain(`<a href="/review/b-${n}/c${n}">Brand ${n} (batch <span class="mono">b-${n}</span>)</a>`);
+        const seeAll = `<a href="/review/substances/BDS-0000${from === 1 ? 20 : 21}">See every brand of ${sub}</a>`;
+        if (role === "senior") expect(html).toContain(seeAll);
+        else expect(html).not.toContain(seeAll);
+      }
+      expect(html.match(/<summary>5 of 7 medicines<\/summary>/g)).toHaveLength(2);
+      // each line keeps its own "and 4 more." (7 − 3 shown) and its list's "and 2 more." (7 − 5 returned): never merged
+      expect(text.match(/and 4 more\./g)).toHaveLength(2);
+      expect(text.match(/and 2 more\./g)).toHaveLength(2);
+      expect(html.indexOf("Mupirocin on that route")).toBeLessThan(html.indexOf("<summary>5 of 7 medicines</summary>"));
+      expect(html.indexOf("<summary>5 of 7 medicines</summary>")).toBeLessThan(html.indexOf("Fusidic acid on that route"));
+    }
+  });
+
   it("a no-data substance names its pairs with other batches on a second line, each pair once", () => {
     const nc = (approved: boolean) => ({ substance: "Domperidone", partnerSubstance: "Ibuprofen", partnerBdsId: "BDS-000012",
       partners: [partner(1, approved)], partnerCount: 1, reason: "no_data" as const, side: "this" as const, route: "systemic" });
@@ -262,5 +292,23 @@ describe("P1C: In other batches (§5.6.2)", () => {
     const html = r(<Interactions item={item} />);
     expect(strip(html)).toContain("Not checked, 1 pair with medicines in other batches:");
     expect(html.match(/<span class="sev sev--nodata">Domperidone \+ Ibuprofen<\/span>/g)).toHaveLength(1);
+  });
+});
+
+describe("the partner details are 24 × 24 px targets (§10.4, WCAG 2.5.8)", () => {
+  const css = readFileSync(join(process.cwd(), "components/review/detail/detail.module.css"), "utf8");
+  it("gives each partner link a 24 px line, inline-block so the space before its mono batch id survives (never flex)", () => {
+    const rule = /\.partners li > a\s*\{([^}]*)\}/.exec(css);
+    expect(rule).not.toBeNull();
+    expect(rule![1]).toMatch(/display:\s*inline-block/);
+    expect(rule![1]).toMatch(/min-height:\s*24px/);
+    expect(rule![1]).toMatch(/line-height:\s*24px/);
+  });
+  it("gives the summary a 24 px line and keeps its disclosure marker (list-item, never flex)", () => {
+    const rule = /\.partners summary\s*\{([^}]*)\}/.exec(css);
+    expect(rule).not.toBeNull();
+    expect(rule![1]).toMatch(/min-height:\s*24px/);
+    expect(rule![1]).toMatch(/line-height:\s*24px/);
+    expect(rule![1]).not.toMatch(/display:/);
   });
 });

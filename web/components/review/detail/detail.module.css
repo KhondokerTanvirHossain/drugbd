@@ -55,3 +55,9 @@
 .withH { font: 600 15px/1.3 var(--font-ui); letter-spacing: -.008em; }
 .partners { font-size: 13px; color: var(--fg-2); }
 .partners ul { margin: 6px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 2px; }
+/* §10.4: 24 × 24 px targets (WCAG 2.5.8), as .menuLink. The summary stays display: list-item (its marker); the link is
+   inline-block, not flex, so the space before its mono batch id is kept. */
+.partners summary { min-height: 24px; line-height: 24px; cursor: pointer; }
+.partners li > a { display: inline-block; min-height: 24px; line-height: 24px; }
+/* A cross-batch not-checked line whose partners carry the details list (§5.6.2). */
+.ncOther { display: flex; flex-direction: column; gap: 4px; }
