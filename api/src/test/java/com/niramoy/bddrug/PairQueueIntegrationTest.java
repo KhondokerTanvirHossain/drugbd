@@ -218,6 +218,9 @@ class PairQueueIntegrationTest {
             """);
         ok("/v1/review/pairs?show=reviewed").jsonPath("$.data.items[*].ddinterA").isEqualTo(List.of("DDInter14"))
             .jsonPath("$.data.items[0].review.mine").isEqualTo(true);
+        internal(web).post().uri("/v1/interactions/check").contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+            .bodyValue(java.util.Map.of("conceptIds", List.of("W-1", "N-1"))).exchange().expectStatus().isOk().expectBody()
+            .jsonPath("$.data.alerts[0].pairReview.state").isEqualTo("reviewed");
         exec(pg, "UPDATE curated.ddinter_pair SET severity = 'major' WHERE ddinter_a = 'DDInter14' AND ddinter_b = 'DDInter1951'");
         ok("/v1/review/pairs?show=changed")
             .jsonPath("$.data.items[*].ddinterA").isEqualTo(List.of("DDInter14"))
@@ -226,6 +229,10 @@ class PairQueueIntegrationTest {
             .jsonPath("$.data.items[0].changes[0].atReview").isEqualTo("moderate")
             .jsonPath("$.data.items[0].changes[0].now").isEqualTo("major")
             .jsonPath("$.data.items[0].history[0].changedAfter").isEqualTo(true);
+        web.post().uri("/v1/interactions/check").contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+            .bodyValue(java.util.Map.of("conceptIds", List.of("W-1", "N-1"))).exchange().expectStatus().isOk().expectBody()
+            .jsonPath("$.data.alerts[0].severity").isEqualTo("major")
+            .jsonPath("$.data.alerts[0].pairReview.state").isEqualTo("not_reviewed");   // S8: the public line, no record re-opened
         ok("/v1/review/pairs").jsonPath("$.data.counts.changed").isEqualTo(1).jsonPath("$.data.counts.todo").isEqualTo(3);
         assertThat(text(pg, "SELECT string_agg(batch_id || concept_id || review || extracted_at, ',' ORDER BY batch_id, concept_id) FROM ops.batch_item"))
             .isEqualTo(items);   // no record re-opened (S8)

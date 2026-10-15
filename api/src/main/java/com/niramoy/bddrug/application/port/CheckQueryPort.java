@@ -1,5 +1,6 @@
 package com.niramoy.bddrug.application.port;
 import com.niramoy.bddrug.domain.DdinterCode;
+import com.niramoy.bddrug.domain.PairReviewRule;
 import reactor.core.publisher.Mono;
 import java.util.List;
 import java.util.Map;
@@ -23,7 +24,13 @@ public interface CheckQueryPort {
      * pairs holds every stored pair whose two sides are both among the loaded DDInter codes.
      * listedCodes holds the loaded codes that have a curated.ddinter_drug row, i.e. whose full pair list is stored
      * (§7.4, §8.1 item 5). A chosen code outside it was never read in full, so its substance is not checked.
+     * {@code reviews}: the senior pair decisions among the loaded codes, keyed "{a}|{b}", for the public pairReview (§7.4).
      */
     record CheckData(List<ProductRow> products, List<IngredientRow> ingredients, Map<String, List<DdinterCode>> codesByBds,
-                     Set<String> listedCodes, List<PairRow> pairs) {}
+                     Set<String> listedCodes, List<PairRow> pairs, Map<String, List<PairReviewRule.Decision>> reviews) {
+        public CheckData(List<ProductRow> products, List<IngredientRow> ingredients, Map<String, List<DdinterCode>> codesByBds,
+                         Set<String> listedCodes, List<PairRow> pairs) {
+            this(products, ingredients, codesByBds, listedCodes, pairs, Map.of());
+        }
+    }
 }
