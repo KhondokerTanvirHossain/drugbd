@@ -18,7 +18,9 @@ export default function StartChapter({ ctx }: { ctx: LearnContext }) {
   const napa = S.records[P.napa];
   const [acet] = substancesOf(P.napa);
   const nothingPublic = ctx.batch !== null && ctx.batch.approved === 0;
-  const napaHidden = ctx.pending(P.napa);
+  // §6.8 "Approval-state sentences": only while /v1/stats reports Napa as not reviewed. pending() is also true for a
+  // record it does not report, which would state Napa's approval from absence (Review Focus 2).
+  const napaHidden = ctx.item(P.napa)?.status === "not_reviewed";
   return (
     <>
       <header className={styles.hero} id="top">

@@ -43,6 +43,16 @@ describe("/learn/start: the hero and chapter 1 (§6.8)", () => {
     expect(all).toMatch(/<p class="status"><span class="rv rv--approved">/);
   });
 
+  it("states Napa's approval state only when /v1/stats reports Napa (Review Focus 2, §6.8 'Approval-state sentences')", () => {
+    for (const silent of [pilotStats({ missing: [P.napa] }), { ...pilotStats(), batches: [] }]) {
+      const html = render(silent, true);
+      for (const gone of ["Public visitors see the smaller card below until a pharmacist approves the record.",
+        "What a public visitor sees for Napa today", 'class="pubMock"', "A pharmacist checks every record before its contents appear here.",
+        "The API returns the same thing"])
+        expect(html).not.toContain(gone);
+    }
+  });
+
   it("'Nothing from the pilot is public yet.' follows the pilot batch, not other batches", () => {
     const otherBatchApproved = { ...pilotStats(), approvedProducts: 1 };
     expect(render(otherBatchApproved)).toContain("Nothing from the pilot is public yet.");
