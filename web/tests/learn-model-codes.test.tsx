@@ -56,6 +56,30 @@ describe("chapter 2, The model", () => {
     expect(html).not.toContain("DDInter352");
     expect(html).toContain("Warfarin Sodium 5 mg");
     expect(html.match(/data-withdrawn/g)).toHaveLength(1);
+    expect(html).not.toContain("Chloramphenicol has three");
+  });
+
+  it("default render names Chloramphenicol's entries and Domperidone's pilot pairs", () => {
+    const html = model();
+    expect(html).toContain("Domperidone has none. Chloramphenicol has three.");
+    expect(html).toContain('<span class="sev sev--nodata">Domperidone + Warfarin</span>');
+    expect(html).toContain('<span class="sev sev--nodata">Domperidone + Acetylsalicylic acid</span>');
+  });
+
+  it("a withdrawn Warfarin drops its pair from the no-data card and folds it into the other count (G3, §6.8)", () => {
+    const html = model(pilotStats({ withdrawn: [P.warfarin] }));
+    expect(html).not.toContain("Domperidone + Warfarin");
+    expect(html).toContain("Domperidone + Acetylsalicylic acid");
+    expect(html).toContain("Domperidone + 9 other pilot substances");
+    expect(html).toContain(NO_DATA_SENTENCE);
+  });
+
+  it("a withdrawn Aspirin drops its pair from the no-data card (G3, §6.8)", () => {
+    const html = model(pilotStats({ withdrawn: [P.aspirin] }));
+    expect(html).not.toContain("Domperidone + Acetylsalicylic acid");
+    expect(html).toContain("Domperidone + Warfarin");
+    expect(html).toContain("Domperidone + 9 other pilot substances");
+    expect(html).toContain(NO_DATA_SENTENCE);
   });
 });
 

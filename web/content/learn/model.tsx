@@ -19,7 +19,12 @@ export default function ModelChapter({ ctx }: { ctx: LearnContext }) {
   const amoxS = substanceNamed("Amoxicillin"), clavS = substanceNamed("Clavulanic acid"), chlorS = substanceNamed("Chloramphenicol");
   const dompS = substanceNamed("Domperidone");
   const napaWarn = S.warnings[P.napa].status === "warn" ? 1 : 0;
-  const otherPilot = S.notCheckedPairs - 2;
+  // G3 (§6.8 Withdrawn examples): a clause naming another record's mapped values shows only while that record is usable.
+  const namedPairs = [
+    ctx.usable(P.warfarin) ? `${dompS.name} + ${warfS.name}` : null,
+    ctx.usable(P.aspirin) ? `${dompS.name} + ${aspS.name}` : null,
+  ].filter((p): p is string => p !== null);
+  const otherPilot = S.notCheckedPairs - namedPairs.length;
   return (
     <Chapter slug="model" level={1}>
       <Section id="model-diagram" h={H}>
@@ -33,7 +38,7 @@ export default function ModelChapter({ ctx }: { ctx: LearnContext }) {
             <div><b>Brand product is a clinical drug</b><span>Many brands, one clinical drug. Napa and any other paracetamol 500 mg tablet share <span className="mono">{napa.bdcId}</span>.</span></div>
             <div><b>Clinical drug contains substances</b><span>One or more, each with its own strength. A combination tablet has two.</span></div>
             <div><b>Substance is coded as</b><span>Many codes per substance, each with how it was matched and a confidence from 0 to 1.</span></div>
-            <div><b>Substance is found in DDInter entries</b><span>Zero or more, one per route. Domperidone has none. Chloramphenicol has three.</span></div>
+            <div><b>Substance is found in DDInter entries</b><span>Zero or more, one per route. Domperidone has none.{ctx.usable(P.chloramphenicol) ? " Chloramphenicol has three." : null}</span></div>
             <div><b>DDInter entry lists interactions</b><span>Drug–drug pairs, drug–disease and drug–food records, from DDInter 2.0.</span></div>
             <div><b>Substance has coverage</b><span>Exactly one: full, or none. "None" is stored, never guessed from an empty list.</span></div>
             <div><b>Brand product is reviewed in a batch</b><span>Each batch record keeps stage results, raw evidence and every review decision.</span></div>
@@ -180,7 +185,7 @@ export default function ModelChapter({ ctx }: { ctx: LearnContext }) {
                 <span className={styles.flowStep}><DownArrow />No DDInter entry, coverage: none</span>
               </div>
               <NoDataBlock title={dompS.name} bdsId={dompS.bdsId}
-                pairs={[`${dompS.name} + ${warfS.name}`, `${dompS.name} + ${aspS.name}`, `${dompS.name} + ${otherPilot} other pilot substances`]} />
+                pairs={[...namedPairs, `${dompS.name} + ${otherPilot} other pilot substances`]} />
               <p className={styles.small}>Domperidone has no DDInter 2.0 entry (coverage: none). It still gets a substance and every code we can find. Its pairs are "not checked", never counted as checked.</p>
             </article>
           </SnapshotBlock>
