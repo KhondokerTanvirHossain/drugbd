@@ -3,7 +3,7 @@ import ReviewStatus from "@/components/ui/ReviewStatus";
 import { CHAPTERS, sectionTitle, type ChapterSlug } from "@/content/learn/chapters";
 import { PILOT_IDS, PILOT_SNAPSHOT, type PilotId } from "@/content/learn/pilot-snapshot";
 import { LEARN_NEW, fill } from "@/lib/copy";
-import { batchPill, pillStatus } from "@/lib/stats";
+import { batchPill, partlyApproved, pillStatus } from "@/lib/stats";
 import type { LearnContext } from "./context";
 import styles from "./learn.module.css";
 
@@ -81,12 +81,20 @@ export function LivePill({ ctx, id }: { ctx: LearnContext; id: PilotId }) {
   return <ReviewStatus status={pillStatus(ctx.item(id))} />;
 }
 
-/** The pilot batch's live pill and "All {n} pilot records, batch {id}." (Board L nav note). */
+/**
+ * The pilot batch's live pill and "All {n} pilot records, batch {id}." (Board L nav note). Once some but not all records
+ * are approved, neither pill is true of all {n}, so the Approved pill speaks for the approved ones, "{a} of {n}", as
+ * chapter 5's pharmacist line and the glossary's "Approved record" print it (§6.8 "Approval-state sentences", Review
+ * Focus 5). Nothing while /v1/stats does not report the batch: no count and no pill from absence.
+ */
 export function BatchNote({ ctx }: { ctx: LearnContext }) {
+  const b = ctx.batch;
+  if (!b) return null;
+  const some = partlyApproved(b);
   return (
     <>
-      <ReviewStatus status={batchPill(ctx.batch)} />
-      <span>All {ctx.batch?.itemCount ?? 0} pilot records, batch <span className="mono">{PILOT_SNAPSHOT.batchId}</span>.</span>
+      <ReviewStatus status={some ? "approved" : batchPill(b)} />
+      <span>{some ? `${b.approved} of ${b.itemCount}` : `All ${b.itemCount}`} pilot records, batch <span className="mono">{PILOT_SNAPSHOT.batchId}</span>.</span>
     </>
   );
 }

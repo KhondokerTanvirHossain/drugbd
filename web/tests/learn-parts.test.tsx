@@ -62,6 +62,13 @@ describe("SnapshotBlock: frozen examples and live pills (§6.8)", () => {
     expect(out).toContain('class="rv rv--pending"');
   });
 
+  it("once some but not all records are approved, the all-ten pill speaks for the approved ones (Review Focus 5)", () => {
+    const out = html(<SnapshotBlock ctx={learnContext(pilotStats({ approved: [P.aspirin] }))} ids={PILOT_IDS}>{SECRET}</SnapshotBlock>);
+    expect(out).toContain('<p class="snapPills"><span class="rv rv--approved">Approved by a pharmacist</span><span>1 of 10 pilot records, batch <span class="mono">0001-pilot</span>.</span></p>');
+    expect(out).not.toContain("rv--pending");
+    expect(out).not.toContain("All 10");
+  });
+
   it("with pills inline it prints no pill row", () => {
     const out = html(<SnapshotBlock ctx={learnContext(pilotStats())} ids={[P.napa]} pills="inline">{SECRET}</SnapshotBlock>);
     expect(out).not.toContain("snapPills");
@@ -98,6 +105,11 @@ describe("live pieces", () => {
     expect(html(<LivePill ctx={ctx} id={P.napa} />)).toContain("rv--approved");
     expect(html(<BatchNote ctx={ctx} />)).toContain("rv--approved");
     expect(html(<BatchNote ctx={learnContext(pilotStats({ missing: [P.napa] }))} />)).toContain("All 9 pilot records");
+    // Some but not all approved: "Not yet reviewed · All 10" would be false, and so would "Approved · All 10".
+    expect(html(<BatchNote ctx={learnContext(pilotStats({ approved: [P.aspirin] }))} />))
+      .toBe('<span class="rv rv--approved">Approved by a pharmacist</span><span>1 of 10 pilot records, batch <span class="mono">0001-pilot</span>.</span>');
+    expect(html(<BatchNote ctx={learnContext(pilotStats({ approved: PILOT_IDS.slice(0, 9) }))} />)).toContain("9 of 10 pilot records");
+    expect(html(<BatchNote ctx={learnContext({ ...pilotStats(), batches: [] })} />)).toBe("");
   });
 
   it("AsStored prints the snapshot date suffix (§1.7)", () => {

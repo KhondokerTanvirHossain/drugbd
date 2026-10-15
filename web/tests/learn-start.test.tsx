@@ -41,6 +41,10 @@ describe("/learn/start: the hero and chapter 1 (§6.8)", () => {
       expect(html).not.toContain(gone);
     const all = render(pilotStats({ approved: [...PILOT_IDS] }));
     expect(all).toMatch(/<p class="status"><span class="rv rv--approved">/);
+    // Some but not all approved, or the batch unreported: no one pill is true of the pilot run, so the status line has none.
+    for (const s of [pilotStats({ approved: [P.aspirin] }), { ...pilotStats(), batches: [] }])
+      expect(render(s)).toMatch(/<p class="status"><span>Pilot run /);
+    expect(render()).toMatch(/<p class="status"><span class="rv rv--pending">/);
   });
 
   it("states Napa's approval state only when /v1/stats reports Napa (Review Focus 2, §6.8 'Approval-state sentences')", () => {

@@ -48,6 +48,9 @@ describe("chapter 9, Glossary (§6.8)", () => {
     expect(entry(two, "Approved record")).toContain('2 of 10 <span class="rv rv--approved">Approved by a pharmacist</span>');
     expect(entry(two, "Approved record")).not.toContain("rv--pending");
     expect(entry(two, NOT_REVIEWED)).toContain("8 of 10 records");
+    // The header's batch note: "2 of 10" with the approved pill, never "Not yet reviewed · All 10" (Review Focus 5).
+    expect(two).toContain('<p class="snapPills"><span class="rv rv--approved">Approved by a pharmacist</span><span>2 of 10 pilot records, batch');
+    expect(two).not.toContain("All 10 pilot records");
   });
 
   it("uses the safety constants for the definitions that are safety sentences", () => {

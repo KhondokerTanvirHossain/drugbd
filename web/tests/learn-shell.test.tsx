@@ -35,6 +35,8 @@ describe("Learn shell (Board L, §6.8)", () => {
     expect(render()).toContain('<div class="navNote"><span class="rv rv--pending">Not yet reviewed by a pharmacist</span><span>All 10 pilot records, batch <span class="mono">0001-pilot</span>.</span></div>');
     expect(render("process", pilotStats({ approved: [...PILOT_IDS] }))).toContain('<div class="navNote"><span class="rv rv--approved">');
     expect(render("process", pilotStats({ missing: [P.napa] }))).toContain("All 9 pilot records");
+    // Review Focus 5: with 1 of 10 approved, the note never reads "Not yet reviewed by a pharmacist · All 10 pilot records".
+    expect(render("process", pilotStats({ approved: [P.aspirin] }))).toContain('<div class="navNote"><span class="rv rv--approved">Approved by a pharmacist</span><span>1 of 10 pilot records, batch <span class="mono">0001-pilot</span>.</span></div>');
     expect(render()).not.toContain("rv--compact");
   });
 

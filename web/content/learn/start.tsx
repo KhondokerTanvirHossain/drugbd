@@ -7,7 +7,7 @@ import ReviewStatus from "@/components/ui/ReviewStatus";
 import Severity from "@/components/ui/Severity";
 import { NOT_REVIEWED } from "@/lib/copy";
 import { fmtDhakaClock, fmtUtc } from "@/lib/format";
-import { batchPill, formatCount } from "@/lib/stats";
+import { batchPill, formatCount, partlyApproved } from "@/lib/stats";
 import { P, PILOT_SNAPSHOT as S, substancesOf } from "./pilot-snapshot";
 
 const H = 3;   // §6.8: on /learn/start the hero holds the <h1>, the chapter title is an <h2>, sections are <h3>
@@ -33,7 +33,8 @@ export default function StartChapter({ ctx }: { ctx: LearnContext }) {
           <div role="listitem"><b className="num">{`${formatCount(st.approvedProducts)} of ${formatCount(st.productsLoaded)}`}</b><span>approved by a pharmacist</span></div>
         </div>
         <p className={styles.status}>
-          <ReviewStatus status={batchPill(ctx.batch)} />
+          {/* No one pill is true of the pilot run while it is unreported or only partly approved; the facts above carry "{a} of {n}". */}
+          {ctx.batch && !partlyApproved(ctx.batch) && <ReviewStatus status={batchPill(ctx.batch)} />}
           <span>Pilot run {fmtUtc(S.runAt)}, which is {fmtDhakaClock(S.runAt)} in Dhaka.{nothingPublic ? " Nothing from the pilot is public yet." : ""}</span>
         </p>
       </header>

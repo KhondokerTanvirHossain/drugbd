@@ -53,6 +53,8 @@ export const pillStatus = (i: StatsItem | null): "approved" | "pending" => (i?.s
 /** A batch reads approved only when every record still in its file is approved. */
 export const batchPill = (b: StatsBatch | null): "approved" | "pending" =>
   (b !== null && b.itemCount > 0 && b.approved === b.itemCount ? "approved" : "pending");
+/** Some, but not all, of the batch's records are approved: then neither pill is true of the whole batch (§6.8, Review Focus 5). */
+export const partlyApproved = (b: StatsBatch): boolean => b.approved > 0 && b.approved < b.itemCount;
 export const BATCH_STATUS_WORD: Record<BatchStatus, string> = { in_review: "in review", approved: "approved", rejected: "rejected" };
 /** "39,196": counts as the boards print them. */
 export const formatCount = (n: number): string => n.toLocaleString("en-US");

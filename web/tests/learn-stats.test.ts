@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getStats } from "@/lib/api";
-import { BATCH_STATUS_WORD, batchPill, exampleUsable, findBatch, findItem, formatCount, parseStats, pillStatus } from "@/lib/stats";
+import { BATCH_STATUS_WORD, batchPill, exampleUsable, findBatch, findItem, formatCount, parseStats, partlyApproved, pillStatus } from "@/lib/stats";
 
 const STATS = {
   registerProducts: 39196, productsLoaded: 10, substances: 11, approvedProducts: 1, inReviewProducts: 9,
@@ -51,6 +51,7 @@ describe("lookups and pills", () => {
     expect(batchPill({ ...batch!, approved: 2 })).toBe("approved");
     expect(batchPill({ ...batch!, itemCount: 0, approved: 0 })).toBe("pending");
     expect(batchPill(null)).toBe("pending");
+    expect([0, 1, 9, 10].map((approved) => partlyApproved({ ...batch!, itemCount: 10, approved }))).toEqual([false, true, true, false]);
   });
 
   it("words the batch status and prints counts with thousands separators", () => {
