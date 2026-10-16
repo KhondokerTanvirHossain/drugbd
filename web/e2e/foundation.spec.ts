@@ -57,7 +57,8 @@ test.describe("self-hosted fonts (§3.2)", () => {
   for (const path of ["/learn/start", "/signin"]) {
     test(`every font ${path} preloads or references answers 200 as a font`, async ({ request }) => {
       const urls = await fontUrls(request, path);
-      expect(urls).toContain("/fonts/onest-latin-wght-normal.woff2");
+      expect(urls).toEqual(expect.arrayContaining(["/fonts/onest-latin-wght-normal.woff2",
+        "/fonts/ibm-plex-mono-latin-400-normal.woff2", "/fonts/ibm-plex-mono-latin-500-normal.woff2"]));
       for (const url of urls) {
         const res = await request.get(url);
         expect(`${url} ${res.status()}`).toBe(`${url} 200`);
@@ -65,15 +66,29 @@ test.describe("self-hosted fonts (§3.2)", () => {
       }
     });
 
-    test(`${path} renders in Onest, not a fallback font`, async ({ page }) => {
-      await page.goto(path);
-      const state = await page.evaluate(async () => {
+    // font-display: optional (§3.2, PO 16/10/2026): a first view may keep the fallback if Onest misses the ~100 ms block
+    // period, so the first view only proves Onest loads; the reload, with Onest cached, must render the heading in it.
+    test(`${path} loads Onest and a reload renders in Onest, not a fallback font`, async ({ page }) => {
+      const onestState = () => page.evaluate(async () => {
         await document.fonts.ready;
         const onest = [...document.fonts].filter((f) => f.family.replace(/"/g, "") === "Onest").map((f) => f.status);
         return { onest, check: document.fonts.check("16px Onest") };
       });
-      expect(state.onest).toEqual(["loaded"]);
-      expect(state.check).toBe(true);
+      await page.goto(path);
+      expect(await onestState()).toEqual({ onest: ["loaded"], check: true });
+
+      await page.reload();
+      expect(await onestState()).toEqual({ onest: ["loaded"], check: true });
+      const cdp = await page.context().newCDPSession(page);
+      await cdp.send("DOM.enable");
+      await cdp.send("CSS.enable");
+      const { root } = await cdp.send("DOM.getDocument");
+      const { nodeId } = await cdp.send("DOM.querySelector", { nodeId: root.nodeId, selector: "h1" });
+      expect(nodeId).toBeGreaterThan(0);
+      const { fonts } = await cdp.send("CSS.getPlatformFontsForNode", { nodeId });
+      // The font that drew most of the heading's glyphs (a glyph outside the latin subset may fall back).
+      const main = fonts.reduce((a, b) => (b.glyphCount > a.glyphCount ? b : a));
+      expect(`${main.familyName} custom=${main.isCustomFont}`).toMatch(/^Onest\b.* custom=true$/);
     });
   }
 });

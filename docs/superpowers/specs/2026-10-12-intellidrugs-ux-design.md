@@ -313,7 +313,7 @@ Stored emails ("Emails of anyone else") are never rendered by any route. The tea
   - Onest variable, latin subset, weights 400–700;
   - IBM Plex Mono 400 and 500, latin subset;
   - both OFL licence texts.
-- `fonts.css` declares `font-family: "Onest"` and `font-family: "IBM Plex Mono"`, so `--font-ui` and `--font-mono` in `tokens.css` work unchanged. Use `font-display: swap`.
+- `fonts.css` declares `font-family: "Onest"` and `font-family: "IBM Plex Mono"`, so `--font-ui` and `--font-mono` in `tokens.css` work unchanged. Use `font-display: optional` (Decision, product owner 16/10/2026: no LCP cost; a first visit on a slow connection may render the fallback font, later visits use the cached font).
 - The root layout preloads Onest only: `<link rel="preload" as="font" type="font/woff2" crossorigin>`.
 - CSP needs no font host, because `font-src 'self'` comes from `default-src`.
 - The `<link>` to Google Fonts in the `tokens.css` header comment is documentation only and is never emitted.
