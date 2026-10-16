@@ -7,6 +7,9 @@ const replace = vi.fn(), push = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace, push }) }));
 import CheckerCombobox from "@/components/check/CheckerCombobox";
 import Banner from "@/components/ui/Banner";
+// The build hashes CSS Module class names; vitest's config keeps them readable, so this file hashes them as the build does.
+// A global class the forced-colours rule in tokens.css targets must therefore be named outside the module.
+vi.mock("@/components/check/check.module.css", () => ({ default: new Proxy({}, { get: (_, k) => `check_${String(k)}__hash` }) }));
 
 function Page({ ids, summary = "2 medicines · 1 of 1 pair checked · 0 with an interaction listed", names = {} as Record<string, string>, banners = [] }:
     { ids: string[]; summary?: string; names?: Record<string, string>; banners?: { title: string; body?: string }[] }) {
@@ -178,5 +181,76 @@ describe("CheckerCombobox (§6.7.1)", () => {
     await waitFor(() => expect(screen.getAllByRole("option")).toHaveLength(1));
     await act(async () => { first(new Response(JSON.stringify(ROWS), { status: 200 })); await new Promise((r) => setTimeout(r, 20)); });
     expect(screen.getAllByRole("option").map((o) => o.querySelector("span")!.textContent)).toEqual(["Hidasprin"]);
+  });
+  // Fix round 1 (Task 32 Ruling): every next URL is built from the latest requested ids, not the prop that lags one render.
+  it("two removes before the server render lands never bring the first one back", async () => {
+    const view = render(<Page ids={["A", "B", "C"]} names={{ B: "Bravo", C: "Charlie" }} />);
+    fireEvent.click(document.querySelector('[data-remove="B"]')!);
+    expect(replace).toHaveBeenLastCalledWith("/check?ids=A&ids=C", { scroll: false });
+    fireEvent.click(document.querySelector('[data-remove="C"]')!);
+    expect(replace).toHaveBeenLastCalledWith("/check?ids=A", { scroll: false });
+    view.rerender(<Page ids={["A"]} summary="Add at least 2 medicines to check them against each other." />);
+    await waitFor(() => expect(live()).toBe("Charlie removed. Add at least 2 medicines to check them against each other."));
+    await waitFor(() => expect(document.activeElement).toBe(document.querySelector('[data-remove="A"]')));
+  });
+
+  it("two quick adds before the server render lands keep both", async () => {
+    fetchMock.mockImplementation(() => Promise.resolve(new Response(JSON.stringify(ROWS), { status: 200 })));
+    render(<Page ids={["A"]} />);
+    await typeAndOpen("pa");
+    fireEvent.keyDown(input(), { key: "Enter" });
+    expect(replace).toHaveBeenLastCalledWith("/check?ids=A&ids=N", { scroll: false });
+    await typeAndOpen("hi");
+    expect(String(fetchMock.mock.calls.at(-1)![0])).toBe("/check/suggest?q=hi&ids=A&ids=N");
+    fireEvent.keyDown(input(), { key: "ArrowDown" });
+    fireEvent.keyDown(input(), { key: "Enter" });
+    expect(replace).toHaveBeenLastCalledWith("/check?ids=A&ids=N&ids=H", { scroll: false });
+  });
+
+  // §10.3: tokens.css's forced-colours rule names the global .s-opt class, so the option carries it unhashed.
+  it("the active option carries the global s-opt class that the forced-colours rule targets", async () => {
+    render(<Page ids={[]} />);
+    await typeAndOpen("pa");
+    const opt = document.getElementById("cx-opt-0")!;
+    expect(opt.getAttribute("aria-selected")).toBe("true");
+    expect(opt.classList.contains("s-opt")).toBe(true);
+  });
+
+  // Board P renderList: the active option is scrolled into view.
+  it("arrowing scrolls the active option into view", async () => {
+    const spy = vi.fn();
+    const orig = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = spy;
+    try {
+      render(<Page ids={[]} />);
+      await typeAndOpen("pa");
+      spy.mockClear();
+      fireEvent.keyDown(input(), { key: "ArrowDown" });
+      await waitFor(() => expect(spy).toHaveBeenCalledWith({ block: "nearest" }));
+      expect(spy.mock.contexts.at(-1)).toBe(document.getElementById("cx-opt-1"));
+    } finally {
+      Element.prototype.scrollIntoView = orig;
+    }
+  });
+
+  // Board P l.1787-1788: the list closes on blur and on a click outside the combobox.
+  it("the list closes when focus moves to another control", async () => {
+    render(<Page ids={["A"]} />);
+    input().focus();
+    await typeAndOpen("pa");
+    (document.querySelector('[data-remove="A"]') as HTMLButtonElement).focus();
+    await waitFor(() => expect(input().getAttribute("aria-expanded")).toBe("false"));
+  });
+
+  it("the list closes on a click outside the combobox, but a click on an option still adds", async () => {
+    fetchMock.mockImplementation(() => Promise.resolve(new Response(JSON.stringify(ROWS), { status: 200 })));
+    render(<Page ids={["A"]} />);
+    await typeAndOpen("pa");
+    fireEvent.click(document.body);
+    await waitFor(() => expect(input().getAttribute("aria-expanded")).toBe("false"));
+    await typeAndOpen("par");
+    fireEvent.mouseDown(document.getElementById("cx-opt-1")!);
+    fireEvent.click(document.getElementById("cx-opt-1")!);
+    expect(replace).toHaveBeenLastCalledWith("/check?ids=A&ids=H", { scroll: false });
   });
 });

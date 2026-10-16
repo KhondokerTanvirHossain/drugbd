@@ -47,10 +47,29 @@ export default function CheckerCombobox({ ids, max, q }: { ids: string[]; max: n
   const pending = useRef<Pending>(NONE);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const seq = useRef(0);   // the latest suggestion request; an older or cancelled one never lands
+  const box = useRef<HTMLDivElement>(null);
+  // The latest requested id list. The ids prop lags one server render, so two quick actions built from it would lose the
+  // first (a removed medicine comes back, an added one is dropped); every next URL is built from this instead.
+  const want = useRef<string[]>(ids);
   const atMax = ids.length >= max;
 
   useEffect(() => { setReady(true); }, []);
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  useEffect(() => { want.current = ids; }, [ids]);
+
+  // Board P renderList: keep the active option in view as the arrows move it.
+  useEffect(() => {
+    if (open && active >= 0) document.getElementById(`cx-opt-${active}`)?.scrollIntoView?.({ block: "nearest" });
+  }, [active, open]);
+
+  // Board P: a click outside the combobox closes the list.
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      if (!box.current?.contains(e.target as Node | null)) setOpen(false);
+    };
+    document.addEventListener("click", onDocClick);
+    return () => document.removeEventListener("click", onDocClick);
+  }, []);
 
   // The server's render with the new ids has landed: announce and put focus back.
   useEffect(() => {
@@ -79,10 +98,12 @@ export default function CheckerCombobox({ ids, max, q }: { ids: string[]; max: n
         e.preventDefault();
         if (btn.name === "remove") {
           const brand = btn.closest("li")?.querySelector("b")?.textContent ?? btn.value;
-          pending.current = { message: fill(CHECK.removedAnnounce, { brand }), focusRemoveAt: ids.indexOf(btn.value), focusInput: false };
-          router.replace(checkHref(ids.filter((id) => id !== btn.value)), { scroll: false });
+          pending.current = { message: fill(CHECK.removedAnnounce, { brand }), focusRemoveAt: want.current.indexOf(btn.value), focusInput: false };
+          want.current = want.current.filter((id) => id !== btn.value);
+          router.replace(checkHref(want.current), { scroll: false });
         } else if (btn.getAttribute("aria-disabled") !== "true") {
           pending.current = { message: CHECK.cleared, focusRemoveAt: null, focusInput: true };
+          want.current = [];
           router.replace("/check", { scroll: false });
         }
         return;
@@ -91,11 +112,13 @@ export default function CheckerCombobox({ ids, max, q }: { ids: string[]; max: n
       if (!a) return;
       e.preventDefault();
       pending.current = { message: fill(CHECK.scenarioLoaded, { scenario: a.dataset.scenario ?? "" }), focusRemoveAt: null, focusInput: false };
-      router.push(a.getAttribute("href") ?? "/check");
+      const href = a.getAttribute("href") ?? "/check";
+      want.current = new URL(href, "http://x").searchParams.getAll("ids");
+      router.push(href);
     };
     form.addEventListener("click", onClick);
     return () => form.removeEventListener("click", onClick);
-  }, [ids, router]);
+  }, [router]);
 
   function cancelSuggest(): number {
     if (timer.current) clearTimeout(timer.current);
@@ -110,7 +133,7 @@ export default function CheckerCombobox({ ids, max, q }: { ids: string[]; max: n
     timer.current = setTimeout(async () => {
       let data: Row[] = [];
       try {
-        const params = new URLSearchParams([["q", v], ...ids.map((id): [string, string] => ["ids", id])]);
+        const params = new URLSearchParams([["q", v], ...want.current.map((id): [string, string] => ["ids", id])]);
         const res = await fetch(`/check/suggest?${params}`);
         data = res.ok ? ((await res.json()) as Row[]) : [];
       } catch {
@@ -129,7 +152,8 @@ export default function CheckerCombobox({ ids, max, q }: { ids: string[]; max: n
     setText("");
     setRows([]);
     setOpen(false);
-    router.replace(checkHref([...ids, r.conceptId]), { scroll: false });
+    if (!want.current.includes(r.conceptId)) want.current = [...want.current, r.conceptId];
+    router.replace(checkHref(want.current), { scroll: false });
     input.current?.focus();
   }
 
@@ -155,20 +179,21 @@ export default function CheckerCombobox({ ids, max, q }: { ids: string[]; max: n
   return (
     <div className="field">
       <label className="field-label" htmlFor="cx-input" id="cx-label">{CHECK.fieldLabel}</label>
-      <div className={styles["s-cbx"]}>
+      <div ref={box} className={styles["s-cbx"]}>
         <div className="search">
           <input ref={input} type="text" id="cx-input" name="q" value={text} placeholder={CHECK.placeholder} autoComplete="off"
             aria-describedby="cx-help" role={ready ? "combobox" : undefined} aria-autocomplete={ready ? "list" : undefined}
             aria-expanded={ready ? open : undefined} aria-controls={ready ? "cx-list" : undefined}
             aria-activedescendant={ready && open && active >= 0 ? `cx-opt-${active}` : undefined}
             aria-disabled={atMax ? "true" : undefined} readOnly={atMax || undefined}
-            onChange={(e) => { if (atMax) return; setText(e.target.value); suggest(e.target.value); }} onKeyDown={onKeyDown} />
+            onChange={(e) => { if (atMax) return; setText(e.target.value); suggest(e.target.value); }} onKeyDown={onKeyDown}
+            onBlur={() => { setTimeout(() => { if (document.activeElement !== input.current) setOpen(false); }, 0); }} />
         </div>
         {ready && (
           <ul className={styles["s-cbx-list"]} id="cx-list" role="listbox" aria-labelledby="cx-label" hidden={!open}>
             {rows.length === 0 ? <li className={styles["s-opt-empty"]} role="presentation">{fill(PUBLIC_NEW.checker.noMatch, { q: text.trim() })}</li>
               : rows.map((r, i) => (
-                <li key={r.conceptId} id={`cx-opt-${i}`} role="option" aria-selected={i === active} className={styles["s-opt"]}
+                <li key={r.conceptId} id={`cx-opt-${i}`} role="option" aria-selected={i === active} className={`s-opt ${styles["s-opt"]}`}
                   onMouseDown={(e) => e.preventDefault()} onClick={() => add(r)}>
                   <span className={styles["s-opt-name"]}>{r.tradeName}</span>
                   <span className={styles["s-opt-sub"]}>{r.status === "approved" ? suggestionSub(r) : NOT_REVIEWED}</span>
