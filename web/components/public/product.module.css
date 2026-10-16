@@ -1,6 +1,6 @@
 .s-prod { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 40px; padding: 28px 40px 48px; max-width: 1180px; margin: 0 auto; }
 .s-prod-main { display: flex; flex-direction: column; gap: 36px; min-width: 0; }
-.h1 { font: var(--t-title1); letter-spacing: var(--tr-title1); margin-top: 8px; }
+.h1 { font: var(--t-title1); letter-spacing: var(--tr-title1); margin-top: 8px; overflow-wrap: anywhere; min-width: 0; }
 .s-crumb { font-size: 13px; color: var(--fg-2); display: flex; flex-wrap: wrap; gap: 6px; }
 .s-crumb a { color: var(--fg-2); }
 .s-prod-meta { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 14.5px; color: var(--fg-2); margin-top: 10px; }

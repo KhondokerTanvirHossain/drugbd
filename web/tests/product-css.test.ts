@@ -20,3 +20,16 @@ describe("product.module.css reflows the aside's primary link at 320 px (§10.4,
     expect(body).toMatch(/overflow-wrap:\s*anywhere/);
   });
 });
+
+// The product and substance pages put the trade/preferred name in .h1 (28 px title1). At 320 px .single
+// leaves 256 px, and a single long word (Phenoxymethylpenicillin ~310 px, Carboxymethylcellulose ~306 px)
+// would otherwise scroll the page sideways.
+describe("product.module.css .h1 reflows at 320 px (§10.4, WCAG 1.4.10)", () => {
+  it(".h1 can shrink inside its flex parent and break inside a long name", () => {
+    const m = css.match(/^\.h1\s*\{([^}]*)\}/m);
+    expect(m, ".h1 rule").not.toBeNull();
+    const body = m![1];
+    expect(body).toMatch(/overflow-wrap:\s*anywhere/);
+    expect(body).toMatch(/min-width:\s*0/);
+  });
+});
