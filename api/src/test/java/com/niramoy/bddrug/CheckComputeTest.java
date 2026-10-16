@@ -189,4 +189,39 @@ class CheckComputeTest {
         assertThat(between(r, "EYE", "W")).extracting(NotChecked::reason, NotChecked::side).containsExactly("not_run", "a");
         assertThat(r.products().get(0).substances().get(0).ddinter()).isEmpty();
     }
+
+    /** Two BDS ids the mapping resolves to one DDInter entry (a salt and its base): DDInter never assesses an entry against itself. */
+    static CheckResult sameEntry(List<DdinterCode> besilateCodes, List<PairRow> pairs, String... ids) {
+        CheckQueryPort port = q -> Mono.just(new CheckData(
+            List.of(new ProductRow("AMB", "Amlobes", "Amlodipine besilate 5 mg", "systemic", "ok"),
+                new ProductRow("AML", "Amlonor", "Amlodipine 5 mg", "systemic", "ok")),
+            List.of(new IngredientRow("AMB", "XMAB", "Amlodipine besilate", "BDS-1", "Amlodipine besilate", "full"),
+                new IngredientRow("AML", "XMAL", "Amlodipine", "BDS-2", "Amlodipine", "full")),
+            Map.of("BDS-1", besilateCodes, "BDS-2", List.of(new DdinterCode("DDInter100", "systemic"))),
+            Set.of("DDInter100", "DDInter101"), pairs, Map.of(), Map.of()));
+        return new InteractionCheckService(port).check(List.of(ids), Scope.PUBLIC).block();
+    }
+
+    @Test void twoSubstancesSharingOneDdinterEntryAreADuplicateNeverNoInteractionListed() {
+        List<DdinterCode> shared = List.of(new DdinterCode("DDInter100", "systemic"));
+        CheckResult r = sameEntry(shared, List.of(), "AMB", "AML");
+        assertThat(r.noInteraction()).isEmpty();
+        assertThat(r.alerts()).isEmpty();
+        assertThat(r.notChecked()).isEmpty();
+        assertThat(r.duplicates()).containsExactly(new Duplicate("BDS-1", "Amlodipine besilate", List.of("AMB", "AML")));
+        assertThat(r.summary()).isEqualTo(new Summary(2, 0, 0, 0, 0, 0, 0, new BySeverity(0, 0, 0, 0)));
+        // listed under the smaller BDS id whichever product comes first, conceptIds in request order
+        assertThat(sameEntry(shared, List.of(), "AML", "AMB").duplicates())
+            .containsExactly(new Duplicate("BDS-1", "Amlodipine besilate", List.of("AML", "AMB")));
+    }
+
+    @Test void aSharedEntryNeverHidesAStoredRowOfAnotherChosenEntry() {
+        List<DdinterCode> two = List.of(new DdinterCode("DDInter100", "systemic"), new DdinterCode("DDInter101", "systemic"));
+        CheckResult r = sameEntry(two, List.of(new PairRow("DDInter100", "DDInter101", "moderate", List.of(), "x", "y", null)),
+            "AMB", "AML");
+        assertThat(r.alerts()).singleElement().extracting(Alert::ddinterA, Alert::ddinterB).containsExactly("DDInter100", "DDInter101");
+        assertThat(r.duplicates()).isEmpty();
+        assertThat(r.noInteraction()).isEmpty();
+        assertThat(r.summary()).isEqualTo(new Summary(2, 1, 1, 1, 0, 0, 0, new BySeverity(0, 1, 0, 0)));
+    }
 }

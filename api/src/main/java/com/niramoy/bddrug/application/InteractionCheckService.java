@@ -111,9 +111,19 @@ public class InteractionCheckService {
                             notChecked.add(new NotChecked(side(pa, a), side(pb, b), onA ? a.reason() : b.reason(), onA ? "a" : "b"));
                             continue;
                         }
-                        checked++;
                         int before = alerts.size();
                         alertsFor(pa, a, pb, b, pairs, data.reviews(), alerts);
+                        if (alerts.size() == before && sharesAnEntry(a, b)) {
+                            // rule 4: two BDS ids resolved to one DDInter entry are one substance to DDInter, which never
+                            // assesses an entry against itself, so the absent row is no data (G3): a duplicate, not counted.
+                            // Listed under the smaller BDS id, as R2dbcSubstanceAdapter.partnerBdsIdSql names one entry.
+                            String bds = a.bdsId().compareTo(b.bdsId()) < 0 ? a.bdsId() : b.bdsId();
+                            List<String> c = dupConcepts.get(bds);
+                            for (String id : List.of(pa.row().conceptId(), pb.row().conceptId())) if (!c.contains(id)) c.add(id);
+                            total--;
+                            continue;
+                        }
+                        checked++;
                         if (alerts.size() > before) alerted++;
                         else none.add(new NoInteraction(side(pa, a), side(pb, b), a.choice().codes().get(0).code(),
                             b.choice().codes().get(0).code()));
@@ -124,7 +134,8 @@ public class InteractionCheckService {
 
         List<Duplicate> duplicates = new ArrayList<>();
         dupConcepts.forEach((bds, concepts) -> {
-            if (concepts.size() > 1) duplicates.add(new Duplicate(bds, dupNames.get(bds), List.copyOf(concepts)));
+            if (concepts.size() > 1) duplicates.add(new Duplicate(bds, dupNames.get(bds),
+                concepts.stream().sorted(Comparator.comparingInt(ids::indexOf)).toList()));
         });
         int[] sev = new int[4];
         for (Alert a : alerts) sev[Severity.rank(a.severity())]++;
@@ -167,6 +178,13 @@ public class InteractionCheckService {
     }
 
     private static boolean same(Sub a, Sub b) { return a.bdsId() != null && a.bdsId().equals(b.bdsId()); }
+
+    /** Both sides usable and their chosen DDInter entries intersect. */
+    private static boolean sharesAnEntry(Sub a, Sub b) {
+        Set<String> mine = new HashSet<>();
+        for (DdinterCode c : a.choice().codes()) mine.add(c.code());
+        return b.choice().codes().stream().anyMatch(c -> mine.contains(c.code()));
+    }
 
     private static Side side(Prod p, Sub s) {
         String scope = s.reason() == null && s.choice() != null ? s.choice().codes().get(0).routeScope() : null;
