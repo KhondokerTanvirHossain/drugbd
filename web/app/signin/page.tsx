@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import Welcome from "@/components/public/Welcome";
-import { newestInReview } from "@/components/review/ReviewAccount";
+import { newestInReview } from "@/lib/account";
 import Banner from "@/components/ui/Banner";
 import BrandIcon from "@/components/ui/BrandIcon";
 import Wordmark from "@/components/ui/Wordmark";

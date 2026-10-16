@@ -3,7 +3,7 @@ import "@/styles/fonts.css";
 import { cookies, headers } from "next/headers";
 import Footer from "@/components/Footer";
 import Header, { hasSearchBar } from "@/components/Header";
-import { newestInReview } from "@/components/review/ReviewAccount";
+import { newestInReview } from "@/lib/account";
 import { listReviewBatches } from "@/lib/api";
 import { ONEST_URL } from "@/lib/fonts";
 import { isReviewer } from "@/lib/reviewers";

@@ -1,4 +1,4 @@
-import { initials } from "@/components/review/ReviewAccount";
+import { initials } from "@/lib/account";
 import { buttonClass } from "@/components/ui/Button";
 import Kbd from "@/components/ui/Kbd";
 import ReviewStatus from "@/components/ui/ReviewStatus";

@@ -1,24 +1,17 @@
 import AccountMenu from "@/components/AccountMenu";
 import ThemeSwitch from "@/components/ThemeSwitch";
 import { buttonClass } from "@/components/ui/Button";
+import { initials, newestInReview } from "@/lib/account";
 import { DESK_NEW, P1C_COPY } from "@/lib/copy";
 import type { KeysSetting } from "@/lib/desk-settings";
 import { DESK, ROLE_LABEL_DESK } from "@/lib/review-copy";
-import type { ReviewBatchSummary } from "@/lib/review-types";
 import { isReviewer } from "@/lib/reviewers";
 import type { Session } from "@/lib/session";
 import type { Theme } from "@/lib/theme";
 import KeysSwitch from "./desk/KeysSwitch";
 import styles from "@/app/review/review.module.css";
 
-/** Two initials from the display name, else from the email's parts (the account menu and the reader welcome, §6.2). */
-export const initials = (s: Session) => ((s.name ?? "").trim() || s.email)
-  .split(/[\s@._-]+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join("");
-
-/** The newest in_review batch: the one the copy "Batch {id}" names (§5.13). */
-export function newestInReview(batches: ReviewBatchSummary[]): string | null {
-  return [...batches].filter((b) => b.status === "in_review").sort((a, b) => b.runAt.localeCompare(a.runAt))[0]?.batchId ?? null;
-}
+export { initials, newestInReview };
 
 /**
  * The account menu on /review/* (§6.2): own name and email, role badge and batch, Review desk, Problem reports and
