@@ -202,7 +202,7 @@ class CheckApiIntegrationTest {
             .jsonPath("$.data.noData[1].bdsId").doesNotExist()
             .jsonPath("$.data.noData[1].name").isEqualTo("Newmol")
             .jsonPath("$.data.products[1].substances[0].name").isEqualTo("Newmol")
-            .jsonPath("$.data.products[1].substances[0].coverage").isEqualTo("none");
+            .jsonPath("$.data.products[1].substances[0].coverage").isEqualTo("not_run");
     }
 
     private void expectInvalid(WebTestClient.ResponseSpec spec) {

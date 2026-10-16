@@ -48,7 +48,7 @@ public class R2dbcCheckAdapter implements CheckQueryPort {
                 .toArray(String[]::new);
             return codes(bds).flatMap(codes -> Mono.zip(pairs(codes.byBds()),
                     pairReviews.forCodes(codes.byBds().values().stream().flatMap(List::stream).map(DdinterCode::code).toList(), null))
-                .map(p -> new CheckData(t.getT1(), t.getT2(), codes.byBds(), codes.listed(), p.getT1(), p.getT2())));
+                .map(p -> new CheckData(t.getT1(), t.getT2(), codes.byBds(), codes.listed(), p.getT1(), p.getT2(), Map.of())));
         });
     }
 
@@ -87,7 +87,7 @@ public class R2dbcCheckAdapter implements CheckQueryPort {
             .bind("codes", all)
             .map(r -> new PairRow(r.get("ddinter_a", String.class), r.get("ddinter_b", String.class),
                 r.get("severity", String.class), R2dbcSubstanceAdapter.list(r, "actions"),
-                r.get("interaction", String.class), r.get("management", String.class)))
+                r.get("interaction", String.class), r.get("management", String.class), null))
             .all().collectList();
     }
 }

@@ -207,9 +207,9 @@ class VisibilityApiIntegrationTest {
             .jsonPath("$.data.noData.length()").isEqualTo(0)
             .jsonPath("$.data.notReviewed.length()").isEqualTo(1)
             .jsonPath("$.data.notReviewed[0].conceptId").isEqualTo("A-1")
-            .jsonPath("$.data.notReviewed[0].length()").isEqualTo(1)
+            .jsonPath("$.data.notReviewed[0].tradeName").isEqualTo("Ecosprin")
             .returnResult().getResponseBody());
-        assertThat(body).doesNotContain("Ecosprin", "Aspirin");
+        assertThat(body).doesNotContain("Aspirin");
         // duplicates never reveal a hidden product either
         check(web, "public", "W-1", "W-2").expectStatus().isOk()
             .expectBody()
@@ -305,10 +305,11 @@ class VisibilityApiIntegrationTest {
         String checked = str(check(web, null, "W-1", "D-1").expectStatus().isOk().expectBody()
             .jsonPath("$.data.products[*].conceptId").isEqualTo(List.of("W-1"))
             .jsonPath("$.data.notReviewed[*].conceptId").isEqualTo(List.of("D-1"))
+            .jsonPath("$.data.notReviewed[0].tradeName").isEqualTo("Motigut")
             .jsonPath("$.data.alerts.length()").isEqualTo(0)
             .jsonPath("$.data.noData.length()").isEqualTo(0)
             .returnResult().getResponseBody());
-        assertThat(checked).doesNotContain("Motigut", "Domperidone", "BDS-000004");
+        assertThat(checked).doesNotContain("Domperidone", "BDS-000004");
         web.get().uri("/v1/stats").exchange().expectStatus().isOk().expectBody()
             .jsonPath("$.data.approvedProducts").isEqualTo(3)
             .jsonPath("$.data.batches[?(@.batchId == 'V-rm')].items[0].status").isEqualTo(List.of("not_reviewed"))
