@@ -11,8 +11,9 @@ const SEVERITIES = ["major", "moderate", "minor", "unknown"] as const;
 export const joinAnd = (xs: string[]) => (xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
 export const medicinesOnly = (m: number) => `${m} ${medicines(m)}`;
 
-/** True when that product's substance has coverage "none" in r.products (matched on conceptId + bdsId). */
-const hasNoData = (r: CheckResult, s: Side) =>
+/** True when that product's substance has coverage "none" in r.products (matched on conceptId + bdsId). Exported so the
+ *  check page's no-data blocks (§6.7.3) can test both sides of a no_data row, not only the API's `side`. */
+export const hasNoData = (r: CheckResult, s: Side) =>
   r.products.some((p) => p.conceptId === s.conceptId && p.substances.some((x) => x.bdsId === s.bdsId && x.coverage === "none"));
 
 /** The substances, by name and in result order, that make the not-checked pairs not checked because of no data. The API

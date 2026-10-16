@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { countChips, joinAnd, medicinesOnly, summarySentence } from "@/lib/check-summary";
+import { countChips, hasNoData, joinAnd, medicinesOnly, summarySentence } from "@/lib/check-summary";
 import type { CheckResult, Side } from "@/lib/public-types";
 import { emptyCheck } from "./fixtures/public";
 
@@ -76,6 +76,18 @@ describe("summary sentence (§6.7.2, §11.1 check-summary)", () => {
         { a: side("W", "W", "Warfarin"), b: side("O", "O", "Oticmol"), reason: "no_route", side: "b" },
         { a: side("W", "W", "Warfarin"), b: side("N", "N", "Newmol", null), reason: "unmapped", side: "b" }] });
     expect(countChips(r)).toEqual({ severities: [["major", 1], ["minor", 2], ["unknown", 4]], noData: 1, other: 2 });
+  });
+
+  it("hasNoData (exported for the check page's no-data blocks, §6.7.3): true only for that product's own coverage-none substance", () => {
+    const sub = (bdsId: string, name: string, coverage: "none" | "full") => ({ bdsId, name, coverage, ddinter: [] });
+    const r = emptyCheck({ products: [
+      { conceptId: "D", tradeName: "Domperidone", route: null, substances: [sub("BDS-D", "Domperidone", "none")] },
+      { conceptId: "W", tradeName: "G Warfarin", route: null, substances: [sub("BDS-W", "Warfarin", "full")] },
+      { conceptId: "W2", tradeName: "Other", route: null, substances: [sub("BDS-W", "Warfarin", "none")] }] });
+    expect(hasNoData(r, side("D", "Domperidone", "Domperidone", "BDS-D"))).toBe(true);
+    expect(hasNoData(r, side("W", "G Warfarin", "Warfarin", "BDS-W"))).toBe(false);
+    expect(hasNoData(r, side("W2", "Other", "Warfarin", "BDS-W"))).toBe(true);
+    expect(hasNoData(r, side("Z", "Absent", "Domperidone", "BDS-D"))).toBe(false);
   });
 
   it("helpers", () => {
