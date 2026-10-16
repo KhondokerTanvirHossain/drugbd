@@ -107,8 +107,7 @@ public class InteractionCheckService {
                         if (same(a, b)) continue;                       // rule 4: a duplicate, never a pair
                         total++;
                         if (a.reason() != null || b.reason() != null) {
-                            boolean onA = b.reason() == null || (a.reason() != null
-                                && BatchPairs.REASON_ORDER.indexOf(a.reason()) <= BatchPairs.REASON_ORDER.indexOf(b.reason()));
+                            boolean onA = BatchPairs.reasonOnThisSide(a.reason(), b.reason());
                             notChecked.add(new NotChecked(side(pa, a), side(pb, b), onA ? a.reason() : b.reason(), onA ? "a" : "b"));
                             continue;
                         }
@@ -139,31 +138,26 @@ public class InteractionCheckService {
      * is one unmapped pseudo-substance named by its generic content, so its pairs are listed as not checked (G3).
      */
     private static List<Sub> substances(ProductRow p, List<IngredientRow> rows, CheckData data) {
-        if (rows.isEmpty()) return List.of(new Sub(null, p.genericContentRaw(), "not_run", null, "unmapped", false));
+        Set<String> listed = data.listedCodes();
+        if (rows.isEmpty())
+            return List.of(new Sub(null, p.genericContentRaw(), "not_run", null, BatchPairs.reason(null, null, null, listed), false));
         Map<String, Sub> byKey = new LinkedHashMap<>();
         for (IngredientRow r : rows) {
             if (r.bdsId() == null) {
-                byKey.putIfAbsent("xm:" + r.xmCode(), new Sub(null, r.ingredientName(), "not_run", null, "unmapped", true));
+                byKey.putIfAbsent("xm:" + r.xmCode(),
+                    new Sub(null, r.ingredientName(), "not_run", null, BatchPairs.reason(null, null, null, listed), true));
                 continue;
             }
             String coverage = r.coverage() != null ? r.coverage() : "not_run";      // §7.3: no coverage row = never ran
             RouteRule.Choice choice = "full".equals(coverage)
                 ? RouteRule.choose(data.codesByBds().getOrDefault(r.bdsId(), List.of()), p.route()).orElse(null) : null;
             byKey.putIfAbsent("bds:" + r.bdsId(), new Sub(r.bdsId(), r.preferredName() != null ? r.preferredName() : r.ingredientName(),
-                coverage, choice, reason(coverage, choice, data.listedCodes()), true));
+                coverage, choice, BatchPairs.reason(r.bdsId(), coverage, choice, listed), true));
         }
         List<Sub> out = new ArrayList<>(byKey.values());
         out.sort(Comparator.comparing((Sub s) -> s.name().toLowerCase(Locale.ROOT))
             .thenComparing(Sub::bdsId, Comparator.nullsLast(Comparator.naturalOrder())));
         return out;
-    }
-
-    /** §6.7.2 rule 1. A chosen entry without a stored full pair list was never read in full: not_run (D41). */
-    static String reason(String coverage, RouteRule.Choice choice, Set<String> listed) {
-        if ("none".equals(coverage)) return "no_data";
-        if (!"full".equals(coverage)) return "not_run";
-        if (choice == null) return "no_route";
-        return choice.codes().stream().allMatch(c -> listed.contains(c.code())) ? null : "not_run";
     }
 
     private static List<Chosen> chosen(Sub s, CheckData data) {
