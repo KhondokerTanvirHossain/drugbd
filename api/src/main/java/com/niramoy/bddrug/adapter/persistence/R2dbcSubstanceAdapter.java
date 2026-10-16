@@ -11,7 +11,6 @@ import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 import java.math.BigDecimal;
-import java.time.OffsetDateTime;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -38,7 +37,12 @@ public class R2dbcSubstanceAdapter implements SubstanceQueryPort {
         "JOIN raw.ocl_concept rc ON rc.concept_id = bpi.concept_id WHERE bpi.xm_code = c.code";
 
     private final DatabaseClient db;
-    public R2dbcSubstanceAdapter(DatabaseClient db) { this.db = db; }
+    /** The per-entry count rule (IngredientSummaryReader.entries); a stateless reader over the same client. */
+    private final IngredientSummaryReader entryReader;
+    public R2dbcSubstanceAdapter(DatabaseClient db) {
+        this.db = db;
+        this.entryReader = new IngredientSummaryReader(db);
+    }
 
     @Override public Mono<Substance> find(String bdsId, boolean approvedOnly) {
         return db.sql("SELECT bds_id, preferred_name FROM curated.substance WHERE bds_id = :id")
@@ -160,37 +164,26 @@ public class R2dbcSubstanceAdapter implements SubstanceQueryPort {
             .all().collectList();
     }
 
+    /**
+     * Per-entry counts come from IngredientSummaryReader.entries, the one rule the product page reads too (§6.5 item 4,
+     * §6.6, §7.3), so both pages give the same numbers. A code with no row gets zero counts, no name and no link.
+     */
     private Mono<List<Substance.Entry>> entries(String id) {
-        return db.sql("""
-                WITH e AS (SELECT c.code AS id, c.route_scope FROM curated.substance_code c WHERE c.bds_id = :id AND c.system = 'DDINTER'),
-                sides AS (SELECT p.ddinter_a AS id, p.severity FROM curated.ddinter_pair p JOIN e ON p.ddinter_a = e.id
-                          UNION ALL SELECT p.ddinter_b, p.severity FROM curated.ddinter_pair p JOIN e ON p.ddinter_b = e.id)
-                SELECT e.id, e.route_scope, d.name, d.fetched_at,
-                       count(s.severity) FILTER (WHERE s.severity = 'major') AS major,
-                       count(s.severity) FILTER (WHERE s.severity = 'moderate') AS moderate,
-                       count(s.severity) FILTER (WHERE s.severity = 'minor') AS minor,
-                       count(s.severity) FILTER (WHERE s.severity NOT IN ('major','moderate','minor')) AS unknown,
-                       count(s.severity) AS total,
-                       (SELECT count(*) FROM curated.ddinter_disease x WHERE x.ddinter_id = e.id) AS disease,
-                       (SELECT count(*) FROM curated.ddinter_food x WHERE x.ddinter_id = e.id) AS food
-                FROM e LEFT JOIN curated.ddinter_drug d ON d.ddinter_id = e.id LEFT JOIN sides s ON s.id = e.id
-                GROUP BY e.id, e.route_scope, d.name, d.fetched_at""")
+        return db.sql(MINE + "SELECT code, route_scope FROM mine")
             .bind("id", id)
-            .map(r -> {
-                String code = r.get("id", String.class);
-                OffsetDateTime at = r.get("fetched_at", OffsetDateTime.class);
-                return new Substance.Entry(code, r.get("name", String.class), r.get("route_scope", String.class),
-                    new IngredientSummary.Counts(n(r, "major"), n(r, "moderate"), n(r, "minor"), n(r, "unknown"), n(r, "total")),
-                    n(r, "disease"), n(r, "food"),
-                    SourceLinks.code("DDINTER", code, at == null ? null : at.toInstant()).orElse(null));
-            })
+            .map(r -> new DdinterCode(r.get("code", String.class), r.get("route_scope", String.class)))
             .all().collectList()
-            .map(list -> list.stream().sorted(java.util.Comparator.comparing(Substance.Entry::ddinterId, DdinterCode.ID_ORDER)).toList());
+            .flatMap(codes -> codes.isEmpty() ? Mono.just(List.<Substance.Entry>of())
+                : entryReader.entries(codes.stream().map(DdinterCode::code).distinct().toArray(String[]::new))
+                    .map(rows -> codes.stream().sorted(java.util.Comparator.comparing(DdinterCode::code, DdinterCode.ID_ORDER))
+                        .map(c -> entry(c, rows.get(c.code()))).toList()));
     }
 
-    private static int n(Readable r, String column) {
-        Long v = r.get(column, Long.class);
-        return v == null ? 0 : v.intValue();
+    private static Substance.Entry entry(DdinterCode c, IngredientSummaryReader.EntryRow row) {
+        if (row == null) return new Substance.Entry(c.code(), null, c.routeScope(), new IngredientSummary.Counts(0, 0, 0, 0, 0), 0, 0, null);
+        return new Substance.Entry(c.code(), row.name(), c.routeScope(),
+            new IngredientSummary.Counts(row.major(), row.moderate(), row.minor(), row.unknown(), row.total()), row.disease(), row.food(),
+            SourceLinks.code("DDINTER", c.code(), row.fetchedAt()).orElse(null));
     }
 
     private Mono<List<Substance.ClinicalDrugRef>> clinicalDrugs(String id, boolean publicOnly) {
