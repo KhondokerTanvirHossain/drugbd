@@ -11,9 +11,6 @@ import org.springframework.test.web.reactive.server.WebTestClient;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 import static com.niramoy.bddrug.TestSupport.*;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -83,18 +80,11 @@ class SeniorReviewScaleIntegrationTest {
         return internal(web).get().uri(uri).header("X-Viewer-Email", SENIOR).exchange().expectStatus().isOk().expectBody();
     }
 
-    /** p95 of 20 timed calls after two warm-up calls. */
+    /** p95 of 20 timed calls after {@link Latency#WARM_UPS} untimed warm-up calls. */
     private long p95(String uri) {
-        for (int i = 0; i < 2; i++) get(uri).returnResult();
-        List<Long> ms = new ArrayList<>();
-        for (int i = 0; i < 20; i++) {
-            long t = System.nanoTime();
-            get(uri).returnResult();
-            ms.add((System.nanoTime() - t) / 1_000_000);
-        }
-        Collections.sort(ms);
-        System.out.println("p95 " + uri + " = " + ms.get(18) + " ms (median " + ms.get(10) + " ms)");
-        return ms.get(18);
+        long p95 = Latency.p95Millis(() -> get(uri).returnResult());
+        System.out.println("p95 " + uri + " = " + p95 + " ms");
+        return p95;
     }
 
     @Test void theSeedIsRegisterSized() {

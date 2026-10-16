@@ -14,8 +14,6 @@ import org.springframework.test.web.reactive.server.WebTestClient;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import static com.niramoy.bddrug.TestSupport.*;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -72,14 +70,9 @@ class OtherPairsScaleIntegrationTest {
             .jsonPath("$.data.otherPairs.pairs[0].partners.length()").isEqualTo(5)
             .jsonPath("$.data.otherPairs.notChecked[?(@.partners[0].approved == true)].partnerCount").isEqualTo(List.of(2000))
             .jsonPath("$.data.otherPairs.notChecked[?(@.partners[0].approved == false)].partnerCount").isEqualTo(List.of(8000));
-        List<Long> ms = new ArrayList<>();
-        for (int i = 0; i < 20; i++) {
-            long t = System.nanoTime();
-            internal(web).get().uri("/v1/review/batches/S-0/items/W-1").exchange().expectStatus().isOk().expectBody().returnResult();
-            ms.add((System.nanoTime() - t) / 1_000_000);
-        }
-        Collections.sort(ms);
-        assertThat(ms.get(18)).as("p95 of 20 record opens, ms").isLessThan(300L);
+        long p95 = Latency.p95Millis(() ->
+            internal(web).get().uri("/v1/review/batches/S-0/items/W-1").exchange().expectStatus().isOk().expectBody().returnResult());
+        assertThat(p95).as("p95 of 20 record opens after %d untimed warm-ups, ms", Latency.WARM_UPS).isLessThan(300L);
     }
 
     /** Runs after the latency test: it adds a 21st batch, so the first test's otherBatches == 20 holds. */
