@@ -130,5 +130,9 @@ describe("/substances/[id] (§6.6)", () => {
     expect(html).not.toContain("is in review in batch");
     getPublicSubstance.mockResolvedValue({ ok: false, status: 404 });
     await expect(render({}, "BDS-999999")).rejects.toThrow("NEXT_NOT_FOUND");
+    // final review finding 2: an id over ID_MAX or with a control character never reaches the API
+    getPublicSubstance.mockClear();
+    for (const bad of ["B".repeat(5000), "BDS-000001%00", "%1F"]) await expect(render({}, bad)).rejects.toThrow("NEXT_NOT_FOUND");
+    expect(getPublicSubstance).not.toHaveBeenCalled();
   });
 });

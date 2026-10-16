@@ -37,4 +37,12 @@ describe("/check/suggest (§4.3, §6.7.1)", () => {
     expect(res.status).toBe(502);
     expect(await res.json()).toEqual([]);
   });
+  it("control characters never reach the API: q reads them as spaces, an id holding one is dropped (final review finding 2)", async () => {
+    expect(await (await call("?q=a%00")).json()).toEqual([]);
+    expect(await (await call("?q=a%1F")).json()).toEqual([]);
+    expect(suggestProducts).not.toHaveBeenCalled();
+    suggestProducts.mockResolvedValue({ ok: true, data: [] });
+    await call("?q=na%00&ids=A%00&ids=B");
+    expect(suggestProducts).toHaveBeenCalledWith("na", ["B"]);
+  });
 });

@@ -3,7 +3,7 @@ import { SubstanceStubView } from "@/components/public/ProductStub";
 import SubstanceView from "@/components/public/SubstanceView";
 import { getPublicSubstance, getSubstanceInteractions, isStub } from "@/lib/api";
 import type { PublicSubstance, SubstanceInteractions, SubstanceStub } from "@/lib/public-types";
-import { parseIndex, parseSeverity } from "@/lib/public-params";
+import { isPathId, parseIndex, parseSeverity } from "@/lib/public-params";
 export const dynamic = "force-dynamic";
 
 /** §6.6. Public scope for every session (§2.2). A bad severity or page reads as All or the first page (Review Focus 5). */
@@ -13,6 +13,7 @@ export default async function SubstancePage({ params, searchParams }: {
   const sp = await searchParams;
   let decoded: string;
   try { decoded = decodeURIComponent(id); } catch { notFound(); }
+  if (!isPathId(decoded)) notFound();   // over ID_MAX or a control character: never sent to the API (final review finding 2)
   const r = await getPublicSubstance(decoded);
   if (!r.ok && r.status === 404) notFound();
   if (!r.ok) throw new Error(`substance read failed (${r.status})`);

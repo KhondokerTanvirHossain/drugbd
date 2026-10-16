@@ -63,6 +63,10 @@ describe("hidden-record stub (§6.4)", () => {
     getPublicProduct.mockResolvedValue({ ok: false, status: 404 });
     await expect(renderProduct("gone")).rejects.toThrow("NEXT_NOT_FOUND");
     await expect(renderProduct("%E0%A4")).rejects.toThrow("NEXT_NOT_FOUND");
+    // final review finding 2: an id over ID_MAX or with a control character never reaches the API
+    getPublicProduct.mockClear();
+    for (const bad of ["x".repeat(5000), "napa%00", "%1Fnapa", "a%0Ab"]) await expect(renderProduct(bad)).rejects.toThrow("NEXT_NOT_FOUND");
+    expect(getPublicProduct).not.toHaveBeenCalled();
     const html = renderToStaticMarkup(await ProductNotFound());
     expect(html).toContain("<h1>No medicine with the id gone.</h1>");
     expect(html).toContain('href="/search">Search medicines</a>');

@@ -185,3 +185,25 @@ test("an approved no-data product lists each approved partner as not checked, ne
   await expect(block).toContainText("Not checked: Domperidone + Acetaminophen, in 1 approved brand");
   expect(await block.locator(".nodata-pairs").filter({ hasText: /^Not checked: Domperidone \+ / }).count()).toBeGreaterThanOrEqual(3);
 });
+
+/*
+ * Final review finding 2 (Review Focus 2): a C0 control in q or an over-long or control-bearing id once answered 500 with
+ * Next's bare __next_error__ document. Each now answers the site's own page, with the header and the skip link.
+ */
+test("hostile URLs answer the site's own pages, never a 500 (Review Focus 2)", async ({ page }) => {
+  const cases: [string, number, RegExp][] = [
+    ["/search?q=ab%00", 200, /^Results for "ab"$|^No medicines match "ab"$/],
+    ["/search?q=%00%00", 200, /^Search medicines$/],
+    ["/search?q=a%1F", 200, /^Search medicines$/],
+    [`/products/${"x".repeat(5000)}`, 404, /^No medicine with the id /],
+    ["/products/napa%00", 404, /^No medicine with the id /],
+    [`/substances/${"B".repeat(5000)}`, 404, /.+/],
+  ];
+  for (const [url, status, h1] of cases) {
+    const res = await page.goto(url);
+    expect(res?.status(), url).toBe(status);
+    await expect(page.locator("html"), url).not.toHaveAttribute("id", "__next_error__");
+    await expect(page.getByRole("link", { name: "Skip to content" }), url).toBeAttached();
+    await expect(page.locator("h1"), url).toHaveText(h1);
+  }
+});

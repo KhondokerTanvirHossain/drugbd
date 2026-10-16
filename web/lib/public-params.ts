@@ -6,9 +6,15 @@ export const Q_MIN = 2, Q_MAX = 100, SEARCH_PAGE_MAX = 9, INDEX_MAX = 10_000, CH
 type Raw = string | string[] | undefined;
 const chars = (s: string) => [...s].length;
 const DIGITS = /^[0-9]+$/;
+const CONTROL = /[\u0000-\u001F\u007F]/g;
+const HAS_CONTROL = /[\u0000-\u001F\u007F]/;
 
+/**
+ * §6.3 query. A C0 control or DEL reads as a space (final review finding 2): Postgres rejects NUL and Java's strip()
+ * removes U+001C–U+001F, so either would surface as an API error instead of the page's own problem line.
+ */
 export function parseQuery(raw: Raw): { q: string; problem: "short" | "long" | null } {
-  const q = firstParam(raw).trim();
+  const q = firstParam(raw).replace(CONTROL, " ").trim();
   const n = chars(q);
   return { q, problem: n < Q_MIN ? "short" : n > Q_MAX ? "long" : null };
 }
@@ -38,14 +44,19 @@ export function parseSeverity(raw: Raw): SeverityFilter | null {
   return (SEVERITIES as readonly string[]).includes(v) ? (v as SeverityFilter) : null;
 }
 
+/** A product or substance id from a URL path: 1 to ID_MAX characters, no control character; anything else is not found. */
+export function isPathId(id: string): boolean {
+  return id.length > 0 && id.length <= ID_MAX && !HAS_CONTROL.test(id);
+}
+
 /** The checker's selection: the URL's ids, then the no-JavaScript actions (clear, remove, add). The URL is the only store (§6.7.1). */
 export function parseCheckIds(sp: { ids?: Raw; add?: Raw; remove?: Raw; clear?: Raw }): { ids: string[]; changed: boolean } {
   const raw = Array.isArray(sp.ids) ? sp.ids : sp.ids === undefined ? [] : [sp.ids];
-  let ids = listParam(sp.ids).filter((id) => id.length <= ID_MAX);
+  let ids = listParam(sp.ids).filter(isPathId);
   const clear = firstParam(sp.clear) !== "", remove = firstParam(sp.remove).trim(), add = firstParam(sp.add).trim();
   if (clear) ids = [];
   if (remove) ids = ids.filter((id) => id !== remove);
-  if (add && add.length <= ID_MAX && !ids.includes(add) && ids.length < CHECK_MAX) ids.push(add);
+  if (add && isPathId(add) && !ids.includes(add) && ids.length < CHECK_MAX) ids.push(add);
   ids = ids.slice(0, CHECK_MAX);
   const changed = clear || remove !== "" || add !== "" || raw.length !== ids.length || raw.some((id, i) => id !== ids[i]);
   return { ids, changed };

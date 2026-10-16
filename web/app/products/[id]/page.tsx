@@ -5,7 +5,7 @@ import { getClinicalDrug, getProductInteractions, getPublicProduct, isStub } fro
 import { cspNonce } from "@/lib/nonce";
 import { firstParam } from "@/lib/params";
 import type { ProductInteractions, ProductStub as Stub, PublicProduct } from "@/lib/public-types";
-import { parseIndex } from "@/lib/public-params";
+import { isPathId, parseIndex } from "@/lib/public-params";
 import { getSession } from "@/lib/session";
 import { turnstileSiteKey } from "@/lib/turnstile";
 export const dynamic = "force-dynamic";
@@ -20,6 +20,7 @@ export default async function ProductPage({ params, searchParams }: {
   const sp = await searchParams;
   let decoded: string;
   try { decoded = decodeURIComponent(id); } catch { notFound(); }
+  if (!isPathId(decoded)) notFound();   // over ID_MAX or a control character: never sent to the API (final review finding 2)
   const r = await getPublicProduct(decoded);
   if (!r.ok && r.status === 404) notFound();
   if (!r.ok) throw new Error(`product read failed (${r.status})`);
