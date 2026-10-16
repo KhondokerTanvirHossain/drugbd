@@ -37,3 +37,5 @@
 @media (max-width: 520px) { .s-chk-side, .s-chk-main { padding: 18px 16px; } }
 /* Board P .s-sum: a global class (scoped under a local one, as CSS Modules require), so tests read the board's name. */
 .s-chk-main :global(.s-sum) { font: var(--t-title2); letter-spacing: var(--tr-title2); text-wrap: pretty; }
+/* §10.4 / WCAG 1.4.10: tokens.css .sev is nowrap at a fixed 24 px; the no-data chips carry full pair labels, so let them wrap at 320 px. */
+.results :global(.nodata-pairs .sev) { white-space: normal; height: auto; min-height: 24px; padding-block: 4px; line-height: 1.25; overflow-wrap: anywhere; }
