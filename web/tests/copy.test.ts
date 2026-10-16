@@ -178,11 +178,8 @@ function* sources(dir: string): Generator<string> {
   }
 }
 const stripComments = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
-/**
- * Legacy pages that still retype copy. P2 rewrites app/check/page.tsx and app/page.tsx (the home page's `>Next page<`)
- * and empties this list.
- */
-const LEGACY_EXEMPT = ["app/check/page.tsx"];
+/** Legacy pages that still retype copy. P2 rewrote both pages (app/check/page.tsx and app/page.tsx), so none remain. */
+const LEGACY_EXEMPT: string[] = [];
 /** Files that may hold the compact pill's short form (§3.4). */
 const SHORT_FORM_ALLOWED = ["components/ui/ReviewStatus.tsx"];
 /** P3 adds content/ (Learn chapters, §6.8): Learn copy is held to the same rules as every page. */

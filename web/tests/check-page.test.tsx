@@ -1,246 +1,105 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { CheckResult, LoadedProduct } from "@/lib/api";
+import { NAPA, emptyCheck } from "./fixtures/public";
 
-const listLoadedProducts = vi.fn();
-const checkInteractions = vi.fn();
-const listBatches = vi.fn();
-const getBatch = vi.fn();
-vi.mock("@/lib/api", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/api")>()),
-  listLoadedProducts: (...args: unknown[]) => listLoadedProducts(...args),
-  checkInteractions: (...args: unknown[]) => checkInteractions(...args),
-  listBatches: () => listBatches(),
-  getBatch: (id: string) => getBatch(id),
-}));
-const getSession = vi.fn();
-vi.mock("@/lib/session", () => ({ getSession: () => getSession() }));
+const getPublicProduct = vi.fn(), checkPublic = vi.fn(), suggestProducts = vi.fn();
+vi.mock("@/lib/api", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/api")>()),
+  getPublicProduct: (id: string) => getPublicProduct(id), checkPublic: (ids: string[]) => checkPublic(ids),
+  suggestProducts: (q: string, ex: string[]) => suggestProducts(q, ex) }));
+const redirect = vi.fn((to: string) => { throw new Error(`REDIRECT ${to}`); });
+vi.mock("next/navigation", () => ({ redirect: (to: string) => redirect(to), useRouter: () => ({ replace: vi.fn(), push: vi.fn() }) }));
 import CheckPage from "@/app/check/page";
+import { SCENARIOS } from "@/content/check-scenarios";
 
-const loaded = (conceptId: string, tradeName: string, dosageForm = "Tablet"): LoadedProduct => ({ conceptId, tradeName, dosageForm });
-const WARIN = loaded("W-1", "Warin");
-const ECOSPRIN = loaded("A-1", "Ecosprin");
-const MOTIGUT = loaded("D-1", "Motigut", "Suspension");
-
-const render = async (ids?: string | string[], extra: Record<string, string> = {}) =>
-  renderToStaticMarkup(await CheckPage({ searchParams: Promise.resolve({ ...(ids === undefined ? {} : { ids }), ...extra }) }));
-
-/** The checkbox tag for one product, whatever React's attribute order. */
-const checkbox = (html: string, id: string) =>
-  html.match(new RegExp(`<input[^>]*name="ids"[^>]*value="${id}"[^>]*/>`))?.[0] ?? "";
-
-const emptyResult = (over: Partial<CheckResult>): CheckResult => ({
-  products: [], alerts: [], duplicates: [], noData: [], notReviewed: [], ...over });
+const render = async (sp: Record<string, string | string[]>) => renderToStaticMarkup(await CheckPage({ searchParams: Promise.resolve(sp) }));
+const approved = (id: string, tradeName: string) => ({ ok: true, data: { ...NAPA, conceptId: id, tradeName } });
+const stub = (id: string, tradeName: string) => ({ ok: true, data: { conceptId: id, tradeName, status: "not_reviewed", batchId: "B", hidden: true } });
 
 beforeEach(() => {
-  listLoadedProducts.mockReset(); checkInteractions.mockReset(); listBatches.mockReset(); getBatch.mockReset();
-  getSession.mockReset(); getSession.mockResolvedValue(null);
-  listLoadedProducts.mockResolvedValue([ECOSPRIN, MOTIGUT, WARIN]);
+  getPublicProduct.mockReset();
+  getPublicProduct.mockImplementation(async (id: string) => id === "gone" ? { ok: false, status: 404 }
+    : id === "HID" ? stub(id, "Hidasprin") : approved(id, `Brand ${id}`));
+  checkPublic.mockReset();
+  checkPublic.mockImplementation(async (ids: string[]) => ({ ok: true, data: emptyCheck({ summary: { ...emptyCheck().summary, medicines: ids.length } }) }));
+  suggestProducts.mockReset(); suggestProducts.mockResolvedValue({ ok: true, data: [] });
+  redirect.mockClear();
 });
 
-describe("check page visibility", () => {
-  it("lists products from /v1/products/loaded with scope=public for anonymous visitors, not from batches", async () => {
-    const html = await render();
-    expect(listLoadedProducts).toHaveBeenCalledWith();
-    expect(listBatches).not.toHaveBeenCalled();
-    expect(getBatch).not.toHaveBeenCalled();
-    expect(html).toContain(" Motigut (Suspension)");
+describe("/check (§6.7)", () => {
+  it("the h1 at the top of the side column, the summary h2 opening the main column, one polite live region", async () => {
+    const html = await render({});
+    expect(html.match(/<h1/g)).toHaveLength(1);
+    expect(html).toContain(">Check interactions</h1>");
+    expect(html).toContain(">Add at least 2 medicines to check them against each other.</h2>");
+    expect(html).toContain("Add medicines with the field on the left, or start from a scenario. Pairs appear here, Major first.");
+    expect(html).toContain('id="check-live" class="sr-only" aria-live="polite" aria-atomic="true"');
+    expect(html).toContain("No medicines yet.");
+    expect(html).toContain('aria-disabled="true"');            // Clear all, never disabled
+    expect(html).not.toMatch(/<button[^>]*disabled=""/);
   });
 
-  it("reads the public list and checks with public scope for reviewers too (spec §2.2)", async () => {
-    getSession.mockResolvedValue({ email: "pharm@example.org", role: "pharmacist" });
-    checkInteractions.mockResolvedValue({ result: emptyResult({}), error: null });
-    const html = await render(["W-1", "A-1"]);
-    expect(listLoadedProducts).toHaveBeenCalledWith();
-    expect(checkInteractions).toHaveBeenCalledWith(["W-1", "A-1"]);
-    expect(html).toContain("Products reviewed by a pharmacist");
-    expect(html).not.toContain("reviewer view");
-    expect(html).not.toContain("pharm@example.org");
+  it("the no-JavaScript field: label, Find submit, help; the current ids as hidden inputs; remove buttons per medicine", async () => {
+    const html = await render({ ids: ["A", "HID"] });
+    // React 19's server renderer writes a form's action and method after its other attributes, and a button's name last.
+    expect(html).toMatch(/<form [^>]*action="\/check" method="get">/);
+    expect(html).toContain("Add a medicine");
+    expect(html).toContain('name="q"');
+    expect(html).toContain(">Find</button>");
+    expect(html).toContain('<input type="hidden" name="ids" value="A"/>');
+    expect(html).toMatch(/<button type="submit" value="HID"[^>]* name="remove">/);
+    expect(html).toContain('<span class="sr-only">Remove Hidasprin</span>');
+    expect(html).toContain("Selected, 2 of 20");
+    expect(html).toContain("Acetaminophen 500 mg tablet");
+    expect(html).toContain("Not yet reviewed by a pharmacist");
   });
 
-  it("renders notReviewed as a Not yet reviewed section and never as no interactions", async () => {
-    checkInteractions.mockResolvedValue({ result: emptyResult({
-      products: [{ conceptId: "W-1", tradeName: "Warin", substances: [{ bdsId: "BDS-000001", name: "Warfarin", coverage: "full" }] }],
-      notReviewed: [{ conceptId: "H-9" }],
-    }), error: null });
-    const html = await render(["W-1", "H-9"]);
-    expect(checkInteractions).toHaveBeenCalledWith(["W-1", "H-9"]);
-    expect(html).toContain("<h2>Not yet reviewed</h2>");
-    expect(html).toMatch(/<li>H-9<\/li>/);
-    expect(html).toContain("not yet reviewed by a pharmacist, so they were not checked");
-    expect(html.toLowerCase()).not.toContain("no interactions");
-    expect(html).not.toContain("DDInter 2.0 lists no interactions between the selected products.");
+  it("Find lists matches as submit buttons named ids inside the same form, or says nothing matched", async () => {
+    suggestProducts.mockResolvedValue({ ok: true, data: [{ conceptId: "N", tradeName: "Napa", dosageForm: "Tablet", status: "approved",
+      clinicalDisplayName: "Acetaminophen 500 mg tablet", matched: { name: "Paracetamol", substance: "Acetaminophen" } }] });
+    const html = await render({ ids: ["A"], q: "paracetamol" });
+    expect(suggestProducts).toHaveBeenCalledWith("paracetamol", ["A"]);
+    expect(html).toMatch(/<button type="submit" value="N" name="ids">/);
+    expect(html).toContain("Acetaminophen 500 mg tablet. Matches Paracetamol, a name for Acetaminophen");
+    suggestProducts.mockResolvedValue({ ok: true, data: [] });
+    expect(await render({ q: "zzz" })).toContain("No medicine matches &quot;zzz&quot;.");
   });
 
-  it("shows the flag form to signed-in visitors with the selected ids as the target", async () => {
-    getSession.mockResolvedValue({ email: "someone@gmail.com", role: "user" });
-    checkInteractions.mockResolvedValue({ result: emptyResult({}), error: null });
-    const html = await render(["W-1", "A-1"], { flag: "sent" });
-    expect(html).toContain("Flag a problem");
-    expect(html).toContain('name="targetType" value="check"');
-    expect(html).toContain('name="targetId" value="W-1,A-1"');
-    expect(html).toContain("Thank you. Your flag was sent to the reviewers.");
-    expect(html).not.toContain("someone@gmail.com");
-  });
-});
-
-describe("check page", () => {
-  it("renders a GET form with one checkbox per loaded product", async () => {
-    const html = await render();
-    expect(html).toContain('method="get"');
-    expect(html).toContain('action="/check"');
-    for (const id of ["W-1", "A-1", "D-1"]) {
-      expect(checkbox(html, id)).toContain('type="checkbox"');
-      expect(checkbox(html, id)).not.toContain("checked");
-    }
-    expect(html.match(/value="W-1"/g)).toHaveLength(1);
-    expect(html.indexOf("Ecosprin")).toBeLessThan(html.indexOf("Warin"));   // API order (sorted by trade name)
-    expect(html).not.toContain("<script");
+  // Review Focus 3
+  it("an unknown id is dropped with the info banner; repeated, blank or extra ids redirect to the canonical list", async () => {
+    const html = await render({ ids: ["A", "gone", "B"] });
+    expect(html).toContain("One medicine in the link no longer exists, so it was removed.");
+    expect(checkPublic).toHaveBeenCalledWith(["A", "B"]);
+    await expect(render({ ids: ["A", "A", " ", "B"] })).rejects.toThrow("REDIRECT /check?ids=A&ids=B");
+    await expect(render({ ids: ["A", "B"], remove: "A" })).rejects.toThrow("REDIRECT /check?ids=B");
+    await expect(render({ ids: ["A", "B"], clear: "1" })).rejects.toThrow("REDIRECT /check");
+    const many = Array.from({ length: 25 }, (_, i) => `P${i}`);
+    await expect(render({ ids: many })).rejects.toThrow(`REDIRECT ${"/check?" + new URLSearchParams(many.slice(0, 20).map((id) => ["ids", id]))}`);
   });
 
-  it("with fewer than 2 ids shows the message without calling the API", async () => {
-    const html = await render("W-1");
-    expect(html).toContain("Select at least two products to check.");
-    expect(checkInteractions).not.toHaveBeenCalled();
-    expect(checkbox(html, "W-1")).toContain('checked=""');
+  it("at 20 medicines the field is aria-disabled and readonly with the maximum help text", async () => {
+    const twenty = Array.from({ length: 20 }, (_, i) => `P${i}`);
+    const html = await render({ ids: twenty });
+    expect(html).toMatch(/<input[^>]*aria-disabled="true"[^>]*readOnly=""/i);
+    expect(html).toContain("20 medicines is the maximum. Remove one to add another.");
   });
 
-  it("counts repeated or blank ids once", async () => {
-    await render(["W-1", "W-1", " "]);
-    expect(checkInteractions).not.toHaveBeenCalled();
-    checkInteractions.mockResolvedValue({ result: emptyResult({}), error: null });
-    await render(["W-1", "A-1", "W-1"]);
-    expect(checkInteractions).toHaveBeenCalledWith(["W-1", "A-1"]);
+  it("a failed check is the crit banner with Try again, and nothing was saved", async () => {
+    checkPublic.mockImplementation(async (ids: string[]) => (ids.length === 2 ? { ok: false, status: 503, unknownId: null }
+      : { ok: true, data: emptyCheck() }));
+    const html = await render({ ids: ["A", "B"] });
+    expect(html).toContain("Couldn&#x27;t check these medicines.");
+    expect(html).toContain("Nothing was saved. Try again in a moment.");
+    expect(html).toContain('href="/check?ids=A&amp;ids=B">Try again</a>');
+    expect(html).toContain(">2 medicines</h2>");
   });
 
-  it("renders the No interaction data section for a domperidone product", async () => {
-    checkInteractions.mockResolvedValue({ result: emptyResult({
-      products: [
-        { conceptId: "D-1", tradeName: "Motigut", substances: [{ bdsId: "BDS-000004", name: "Domperidone", coverage: "none" }] },
-        { conceptId: "W-1", tradeName: "Warin", substances: [{ bdsId: "BDS-000001", name: "Warfarin", coverage: "full" }] },
-      ],
-      noData: [{ conceptId: "D-1", bdsId: "BDS-000004", name: "Domperidone" }],
-    }), error: null });
-    const html = await render(["D-1", "W-1"]);
-    expect(checkInteractions).toHaveBeenCalledWith(["D-1", "W-1"]);
-    expect(html).toContain("<h2>No interaction data</h2>");
-    expect(html).toContain('<a href="/substances/BDS-000004">Domperidone</a>');
-    expect(html).toContain("Motigut");
-    expect(html).toContain("This does not mean it is safe to combine.");
-    expect(html).toContain("No alerts for the substances DDInter 2.0 covers.");
-    expect(html.toLowerCase()).not.toContain("no interactions");   // no data is never shown as "no interactions"
-  });
-
-  it("says DDInter lists no interactions only when every substance has data", async () => {
-    checkInteractions.mockResolvedValue({ result: emptyResult({
-      products: [
-        { conceptId: "W-1", tradeName: "Warin", substances: [{ bdsId: "BDS-000001", name: "Warfarin", coverage: "full" }] },
-        { conceptId: "A-1", tradeName: "Ecosprin", substances: [{ bdsId: "BDS-000002", name: "Aspirin", coverage: "full" }] },
-      ],
-    }), error: null });
-    const html = await render(["W-1", "A-1"]);
-    expect(html).toContain("DDInter 2.0 lists no interactions between the selected products.");
-    expect(html).not.toContain("<h2>No interaction data</h2>");
-  });
-
-  it("renders alerts by severity with interaction and management text and the source line", async () => {
-    const side = (conceptId: string, bdsId: string, name: string) => ({ conceptId, bdsId, name });
-    checkInteractions.mockResolvedValue({ result: emptyResult({
-      products: [
-        { conceptId: "W-1", tradeName: "Warin", substances: [] },
-        { conceptId: "A-1", tradeName: "Ecosprin", substances: [] },
-      ],
-      alerts: [
-        { severity: "major", a: side("W-1", "BDS-000001", "Warfarin"), b: side("A-1", "BDS-000002", "Aspirin"),
-          actions: ["Avoid"], interaction: "Bleeding risk rises.", management: "Avoid the combination.",
-          routeAssumed: false, source: "DDInter 2.0" },
-        { severity: "minor", a: side("W-1", "BDS-000001", "Warfarin"), b: side("A-1", "BDS-000009", "Caffeine"),
-          actions: [], interaction: null, management: null, routeAssumed: true, source: "DDInter 2.0" },
-      ],
-    }), error: null });
-    const html = await render(["W-1", "A-1"]);
-    const major = html.indexOf("<h3>Major (1)</h3>"), minor = html.indexOf("<h3>Minor (1)</h3>");
-    expect(major).toBeGreaterThan(-1);
-    expect(minor).toBeGreaterThan(major);
-    expect(html).toContain("Bleeding risk rises.");
-    expect(html).toContain("Avoid the combination.");
-    expect(html).toContain("Source: DDInter 2.0");
-    expect(html).toContain("Warfarin (Warin)");
-    expect(html).toContain("Aspirin (Ecosprin)");
-    expect(html).toContain("Interaction text not available from DDInter.");
-    expect(html).toContain("Route assumed");
-    expect(html).not.toContain("<h2>No interaction data</h2>");
-  });
-
-  it("never prints a DDInter placeholder: missing interaction or management text gets the fallback sentences", async () => {
-    const side = (conceptId: string, bdsId: string, name: string) => ({ conceptId, bdsId, name });
-    checkInteractions.mockResolvedValue({ result: emptyResult({
-      products: [
-        { conceptId: "W-1", tradeName: "Warin", substances: [] },
-        { conceptId: "A-1", tradeName: "Ecosprin", substances: [] },
-      ],
-      alerts: [
-        { severity: "major", a: side("W-1", "BDS-000001", "Warfarin"), b: side("A-1", "BDS-000002", "Aspirin"),
-          actions: [], interaction: "None", management: "-", routeAssumed: false, source: "DDInter 2.0" },
-        { severity: "moderate", a: side("W-1", "BDS-000001", "Warfarin"), b: side("A-1", "BDS-000003", "Herb"),
-          actions: [], interaction: "  ", management: "", routeAssumed: false, source: "DDInter 2.0" },
-        { severity: "minor", a: side("W-1", "BDS-000001", "Warfarin"), b: side("A-1", "BDS-000004", "Tea"),
-          actions: [], interaction: "Real effect.", management: "N/A", routeAssumed: false, source: "DDInter 2.0" },
-      ],
-    }), error: null });
-    const html = await render(["W-1", "A-1"]);
-    expect(html.match(/Interaction text not available from DDInter\./g)).toHaveLength(2);
-    expect(html.match(/DDInter 2\.0 gives no management text for this pair\./g)).toHaveLength(3);
-    expect(html).toContain("Real effect.");
-    expect(html).not.toMatch(/>\s*(None|-|N\/A)\s*</);
-    expect(html).not.toContain("Management: -");
-    expect(html).not.toContain("Management: N/A");
-    expect(html).not.toMatch(/\bNone\b/);
-  });
-
-  it("shows severity unknown as 'Severity not classified by DDInter', never the bare word", async () => {
-    const side = (conceptId: string, bdsId: string, name: string) => ({ conceptId, bdsId, name });
-    checkInteractions.mockResolvedValue({ result: emptyResult({
-      products: [
-        { conceptId: "W-1", tradeName: "Warin", substances: [] },
-        { conceptId: "A-1", tradeName: "Ecosprin", substances: [] },
-      ],
-      alerts: [{ severity: "unknown", a: side("W-1", "BDS-000001", "Warfarin"), b: side("A-1", "BDS-000002", "Aspirin"),
-        actions: [], interaction: "Some effect.", management: "Monitor.", routeAssumed: false, source: "DDInter 2.0" }],
-    }), error: null });
-    const html = await render(["W-1", "A-1"]);
-    expect(html).toContain("<h3>Severity not classified by DDInter (1)</h3>");
-    expect(html).toMatch(/<span class="badge[^"]*"[^>]*>Severity not classified by DDInter<\/span>/);
-    expect(html.toLowerCase()).not.toContain("unknown");
-  });
-
-  it("renders the same-substance section", async () => {
-    checkInteractions.mockResolvedValue({ result: emptyResult({
-      products: [
-        { conceptId: "N-1", tradeName: "Napa", substances: [] },
-        { conceptId: "N-2", tradeName: "Ace", substances: [] },
-      ],
-      duplicates: [{ bdsId: "BDS-000005", name: "Acetaminophen", conceptIds: ["N-1", "N-2"] }],
-    }), error: null });
-    const html = await render(["N-1", "N-2"]);
-    expect(html).toContain("<h2>Same substance in more than one product</h2>");
-    expect(html).toContain('<a href="/substances/BDS-000005">Acetaminophen</a>');
-    expect(html).toContain("Napa, Ace");
-  });
-
-  it("shows the API's error message", async () => {
-    checkInteractions.mockResolvedValue({ result: null, error: "Product not found: X-9" });
-    const html = await render(["W-1", "X-9"]);
-    expect(html).toContain('role="alert"');
-    expect(html).toContain("Product not found: X-9");
-  });
-
-  it("still checks when the product list cannot be loaded", async () => {
-    listLoadedProducts.mockRejectedValue(new Error("API error 500"));
-    checkInteractions.mockResolvedValue({ result: emptyResult({}), error: null });
-    const html = await render(["W-1", "A-1"]);
-    expect(checkInteractions).toHaveBeenCalledWith(["W-1", "A-1"]);
-    expect(html).toContain("The product list is temporarily unavailable.");
-    expect(checkbox(html, "W-1")).toContain('checked=""');                // selected ids stay in the form
+  it("scenarios render only when all their products exist", async () => {
+    checkPublic.mockImplementation(async (ids: string[]) => ids.includes(SCENARIOS[1].ids[1])
+      ? { ok: false, status: 404, unknownId: SCENARIOS[1].ids[1] } : { ok: true, data: emptyCheck() });
+    const html = await render({});
+    expect(html).toContain("Start from a scenario");
+    expect(html).toContain(`>${SCENARIOS[0].label}</a>`);
+    expect(html).not.toContain(`>${SCENARIOS[1].label}</a>`);
+    expect(html).not.toContain(`>${SCENARIOS[2].label}</a>`);    // shares the unknown simvastatin id
   });
 });

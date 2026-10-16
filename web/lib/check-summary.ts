@@ -1,5 +1,5 @@
 import { PUBLIC_NEW, fill } from "./copy";
-import type { CheckResult, Side } from "./public-types";
+import type { CheckResult, Side, SuggestRow } from "./public-types";
 import { CHECK, plural } from "./public-copy";
 
 /** §6.7.2 summary formatting. The API counts (§7.4); this only words it. Pure and client-safe. */
@@ -80,4 +80,12 @@ export function countChips(r: CheckResult) {
   const severities = SEVERITIES.map((k) => [k, r.summary.bySeverity[k]] as [(typeof SEVERITIES)[number], number]).filter(([, n]) => n > 0);
   const noData = r.notChecked.filter((n) => n.reason === "no_data").length;
   return { severities, noData, other: Math.max(0, r.summary.notCheckedPairs - noData) };
+}
+
+/** §6.7.1 sub line of an approved suggestion or no-JS match: "{clinical display}[. Matches {synonym}, a name for {substance} | . Matches {substance}]". */
+export function suggestionSub(r: Pick<SuggestRow, "status" | "clinicalDisplayName" | "matched">): string {
+  if (r.status !== "approved" || !r.clinicalDisplayName) return "";
+  if (!r.matched) return r.clinicalDisplayName;
+  return r.clinicalDisplayName + (r.matched.name.toLowerCase() === r.matched.substance.toLowerCase()
+    ? fill(CHECK.matches, { name: r.matched.substance }) : fill(CHECK.matchesFor, { name: r.matched.name, substance: r.matched.substance }));
 }
