@@ -63,9 +63,9 @@ describe("chapter 8: the endpoint table comes from the API controllers (§6.8)",
   });
 
   it("the planned endpoints are not served by any controller yet", () => {
-    expect(PLANNED).toEqual(["/v1/search", "/v1/substances/{bdsId}/interactions", "/v1/releases"]);
+    expect(PLANNED).toEqual(["/v1/releases"]);
     for (const p of PLANNED) expect(controllerRoutes()).not.toContain(`GET ${p.replace(/\{[^}]+\}/g, "{}")}`);
-    expect(text).toContain('Planned endpoints: <span class="mono">/v1/search</span>, <span class="mono">/v1/substances/{bdsId}/interactions</span>, <span class="mono">/v1/releases</span>.');
+    expect(text).toContain('Planned endpoints: <span class="mono">/v1/releases</span>.');
   });
 });
 
