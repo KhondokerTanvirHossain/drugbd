@@ -3,6 +3,7 @@ import CodeChip from "@/components/ui/CodeChip";
 import NoDataChip from "@/components/ui/NoDataChip";
 import ReviewStatus from "@/components/ui/ReviewStatus";
 import { buttonClass } from "@/components/ui/Button";
+import { joinAnd } from "@/lib/check-summary";
 import { DESK_NEW, NOT_RUN, NO_DATA_SENTENCE, PUBLIC_NEW, fill } from "@/lib/copy";
 import type { SearchProduct, SearchResult, SearchStub, SearchSubstance } from "@/lib/public-types";
 import { SEARCH, SYSTEM_NAMES, plural } from "@/lib/public-copy";
@@ -12,7 +13,6 @@ import styles from "./search.module.css";
 
 const enc = encodeURIComponent;
 const Mono = ({ children }: { children: ReactNode }) => <span className="mono">{children}</span>;
-const joinAnd = (xs: string[]) => (xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
 
 /** The first case-insensitive occurrence of q in <mark>; the text as it is when q does not occur. */
 export function Marked({ text, q }: { text: string; q: string }) {
