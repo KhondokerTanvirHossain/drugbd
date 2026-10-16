@@ -18,6 +18,8 @@ ENV HOSTNAME=0.0.0.0
 ENV PORT=3000
 COPY --from=build /app/.next/standalone ./
 COPY --from=build /app/.next/static ./.next/static
+# The standalone server serves public/ itself; without it the self-hosted fonts (§3.2) answer 404.
+COPY --from=build /app/public ./public
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=30s CMD wget -qO- http://127.0.0.1:3000/healthz || exit 1
