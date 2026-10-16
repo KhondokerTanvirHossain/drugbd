@@ -99,31 +99,34 @@ class VisibilityApiIntegrationTest {
 
     // ---- product detail
 
-    private void expectHidden(String conceptId, String tradeName, String status) {
+    private void expectHidden(String conceptId, String tradeName, String status, String batchId) {
         String body = str(web.get().uri("/v1/products/{id}", conceptId).exchange().expectStatus().isOk()
             .expectBody()
             .jsonPath("$.success").isEqualTo(true)
-            .jsonPath("$.data.length()").isEqualTo(4)
+            .jsonPath("$.data.length()").isEqualTo(5)
             .jsonPath("$.data.conceptId").isEqualTo(conceptId)
             .jsonPath("$.data.tradeName").isEqualTo(tradeName)
-            .jsonPath("$.data.reviewStatus").isEqualTo(status)
+            .jsonPath("$.data.status").isEqualTo(status)
+            .jsonPath("$.data.batchId").value(v -> assertThat(v).isEqualTo(batchId))
             .jsonPath("$.data.hidden").isEqualTo(true)
             .returnResult().getResponseBody());
-        assertThat(body).doesNotContain("genericContentRaw", "ingredients", "clinicalDrug", "company", "darNumber", "Test Pharma");
+        assertThat(body).doesNotContain("reviewStatus", "\"issue\"", "genericContentRaw", "ingredients", "clinicalDrug", "company",
+            "darNumber", "Test Pharma");
     }
 
     @Test void unapprovedProductDetailIsTheHiddenShape() {
-        expectHidden("A-1", "Ecosprin", "pending");
-        expectHidden("C-EYE", "Optimycin", "issue");
-        expectHidden("D-1", "Motigut", "pending");          // approved, then removed from its batch file (PO D7)
-        expectHidden("W-2", "Coumarol", "pending");         // approved before, re-run in a newer batch
+        expectHidden("A-1", "Ecosprin", "not_reviewed", "V-1");
+        expectHidden("C-EYE", "Optimycin", "not_reviewed", "V-1");      // issue: never named in public
+        expectHidden("X-NOMAP", "Herbex", "not_reviewed", null);        // no batch item at all
+        expectHidden("W-2", "Coumarol", "not_reviewed", "V-new");       // approved before, re-run in a newer batch
+        expectHidden("D-1", "Motigut", "removed", "V-rm");              // approved, then removed from its batch file (P1C, PO D7)
     }
 
     @Test void approvedProductDetailIsFull() {
         web.get().uri("/v1/products/W-1").exchange().expectStatus().isOk()
             .expectBody()
             .jsonPath("$.data.hidden").doesNotExist()
-            .jsonPath("$.data.reviewStatus").isEqualTo("ok")
+            .jsonPath("$.data.verification.status").isEqualTo("approved").jsonPath("$.data.reviewStatus").doesNotExist()
             .jsonPath("$.data.genericContentRaw").isEqualTo("Warfarin Sodium 5 mg")
             .jsonPath("$.data.ingredients[0].xmCode").isEqualTo("XM5S93")
             .jsonPath("$.data.clinicalDrug.bdcId").isEqualTo("BDC-000001");
@@ -164,13 +167,12 @@ class VisibilityApiIntegrationTest {
     @Test void substanceWithoutAnApprovedProductIsHidden() {
         String body = str(web.get().uri("/v1/substances/BDS-000002").exchange().expectStatus().isOk()
             .expectBody()
-            .jsonPath("$.data.length()").isEqualTo(4)
+            .jsonPath("$.data.length()").isEqualTo(3)
             .jsonPath("$.data.bdsId").isEqualTo("BDS-000002")
             .jsonPath("$.data.preferredName").isEqualTo("Aspirin")
-            .jsonPath("$.data.reviewStatus").isEqualTo("pending")
             .jsonPath("$.data.hidden").isEqualTo(true)
             .returnResult().getResponseBody());
-        assertThat(body).doesNotContain("interactions", "Ecosprin", "DDInter");
+        assertThat(body).doesNotContain("reviewStatus", "interactions", "Ecosprin", "DDInter");
         // a substance with no products at all is hidden too
         web.get().uri("/v1/substances/BDS-000004").exchange().expectStatus().isOk()
             .expectBody().jsonPath("$.data.hidden").isEqualTo(true);
@@ -205,9 +207,9 @@ class VisibilityApiIntegrationTest {
             .jsonPath("$.data.noData.length()").isEqualTo(0)
             .jsonPath("$.data.notReviewed.length()").isEqualTo(1)
             .jsonPath("$.data.notReviewed[0].conceptId").isEqualTo("A-1")
-            .jsonPath("$.data.notReviewed[0].length()").isEqualTo(1)
+            .jsonPath("$.data.notReviewed[0].tradeName").isEqualTo("Ecosprin")
             .returnResult().getResponseBody());
-        assertThat(body).doesNotContain("Ecosprin", "Aspirin");
+        assertThat(body).doesNotContain("Aspirin");
         // duplicates never reveal a hidden product either
         check(web, "public", "W-1", "W-2").expectStatus().isOk()
             .expectBody()
@@ -295,7 +297,7 @@ class VisibilityApiIntegrationTest {
     // ---- PO D7 (§7.4, §11.3): the approved-then-removed fixture on every public endpoint of the matrix
 
     @Test void anApprovedThenRemovedProductIsNeverPublicOnAnyEndpoint() {
-        expectHidden("D-1", "Motigut", "pending");
+        expectHidden("D-1", "Motigut", "removed", "V-rm");
         web.get().uri("/v1/products?q=motigut").exchange().expectStatus().isOk().expectBody().jsonPath("$.data.length()").isEqualTo(0);
         String loaded = str(web.get().uri("/v1/products/loaded").exchange().expectStatus().isOk().expectBody().returnResult().getResponseBody());
         assertThat(loaded).doesNotContain("D-1", "Motigut");
@@ -303,10 +305,11 @@ class VisibilityApiIntegrationTest {
         String checked = str(check(web, null, "W-1", "D-1").expectStatus().isOk().expectBody()
             .jsonPath("$.data.products[*].conceptId").isEqualTo(List.of("W-1"))
             .jsonPath("$.data.notReviewed[*].conceptId").isEqualTo(List.of("D-1"))
+            .jsonPath("$.data.notReviewed[0].tradeName").isEqualTo("Motigut")
             .jsonPath("$.data.alerts.length()").isEqualTo(0)
             .jsonPath("$.data.noData.length()").isEqualTo(0)
             .returnResult().getResponseBody());
-        assertThat(checked).doesNotContain("Motigut", "Domperidone", "BDS-000004");
+        assertThat(checked).doesNotContain("Domperidone", "BDS-000004");
         web.get().uri("/v1/stats").exchange().expectStatus().isOk().expectBody()
             .jsonPath("$.data.approvedProducts").isEqualTo(3)
             .jsonPath("$.data.batches[?(@.batchId == 'V-rm')].items[0].status").isEqualTo(List.of("not_reviewed"))

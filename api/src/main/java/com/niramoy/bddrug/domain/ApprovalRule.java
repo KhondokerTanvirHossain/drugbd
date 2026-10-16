@@ -106,6 +106,17 @@ public final class ApprovalRule {
         return PENDING;
     }
 
+    /**
+     * The counting approval's date (§2, §6.5): the decidedAt of the last ok by a pharmacist or senior pharmacist among the
+     * counted decisions. Empty when none counts (a carried approval has no decision of its own to date it).
+     */
+    public static Optional<Instant> latestApproval(List<ReviewDecision> decisions, Instant extractedAt) {
+        Instant at = null;
+        for (ReviewDecision d : counted(decisions, extractedAt))
+            if (OK.equals(d.decision()) && actsAsPharmacist(d.reviewerRole())) at = d.decidedAt();
+        return Optional.ofNullable(at);
+    }
+
     /** §7.3 {@code openIssues}: the counted issue decisions (after the latest dismissal since the stamp), oldest first. */
     public static List<ReviewDecision> openIssues(List<ReviewDecision> decisions, Instant extractedAt) {
         return counted(decisions, extractedAt).stream().filter(d -> ISSUE.equals(d.decision())).toList();

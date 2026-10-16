@@ -32,9 +32,10 @@ export type Product = {
   genericContentRaw: string; qualityFlag: string | null; ingredients: Ingredient[];
   parseStatus: "parsed" | "partial" | "failed" | null; parseNote: string | null; clinicalDrug: ClinicalDrug | null;
 };
-/** What the API returns under public scope for a record no pharmacist has approved: no data fields. */
-export type HiddenProduct = { conceptId: string; tradeName?: string; reviewStatus: "pending" | "issue"; hidden: true };
-export type HiddenSubstance = { bdsId: string; preferredName?: string; reviewStatus?: string; hidden: true };
+/** §7.4 product stub (every non-public state); `batchId` is null only for a product in no batch. Never a review status. */
+export type HiddenProduct = { conceptId: string; tradeName: string; status: "not_reviewed" | "removed"; batchId: string | null; hidden: true };
+/** §7.4 substance stub. */
+export type HiddenSubstance = { bdsId: string; preferredName: string; hidden: true };
 export type SearchResult = { items: Product[]; error: string | null };
 
 export function isHidden(x: unknown): x is { hidden: true } {
