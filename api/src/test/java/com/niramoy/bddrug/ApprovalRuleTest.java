@@ -156,4 +156,16 @@ class ApprovalRuleTest {
         assertThat(ApprovalRule.openIssues(List.of(d("issue", "engineer", 1)), RUN)).hasSize(1);
         assertThat(ApprovalRule.openIssues(List.of(d("issue", "engineer", 1), d("dismiss", "senior", 2)), RUN)).isEmpty();
     }
+
+    @Test void latestApprovalIsTheLastCountedPharmacistOrSeniorOk() {
+        // an ok before the run stamp and one before a dismissal are ignored; an engineer ok is ignored; the last senior ok wins
+        List<ReviewDecision> ds = List.of(d("ok", "pharmacist", -5), d("ok", "pharmacist", 1), d("dismiss", "senior", 2),
+            d("ok", "pharmacist", 3), d("ok", "senior", 4), d("ok", "engineer", 5));
+        assertThat(ApprovalRule.latestApproval(ds, RUN)).contains(RUN.plusSeconds(60L * 4));
+        // nothing counts: empty
+        assertThat(ApprovalRule.latestApproval(List.of(), RUN)).isEmpty();
+        assertThat(ApprovalRule.latestApproval(List.of(d("ok", "pharmacist", -1)), RUN)).isEmpty();
+        assertThat(ApprovalRule.latestApproval(List.of(d("ok", "pharmacist", 1), d("dismiss", "senior", 2)), RUN)).isEmpty();
+        assertThat(ApprovalRule.latestApproval(List.of(d("ok", "engineer", 1)), RUN)).isEmpty();
+    }
 }
