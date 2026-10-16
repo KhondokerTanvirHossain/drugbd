@@ -19,7 +19,7 @@ const COMMON = {
   "server-response-time": 600,
   "resource-summary:stylesheet:size": 20480,
   "resource-summary:font:size": 92160,
-  "largest-contentful-paint": 2500,
+  "largest-contentful-paint": 2800,
 } as const;
 /** §10.6, gzip: `/` HTML 30 KB, JS 130 KB; search, product and substance HTML 50 KB, JS 130 KB; `/check` HTML 50 KB, JS 145 KB. */
 const GROUPS = [

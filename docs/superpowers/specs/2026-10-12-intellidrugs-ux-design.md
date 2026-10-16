@@ -2453,9 +2453,9 @@ These come from `tokens.css`:
 
 | Page | HTML | JS (all, incl. Next runtime) | CSS | Fonts | LCP (Slow 4G, mobile) |
 |---|---|---|---|---|---|
-| `/` | ≤ 30 KB | ≤ 130 KB | ≤ 20 KB | ≤ 90 KB (Onest var + Plex Mono 400) | ≤ 2.5 s |
-| `/search`, `/products/[id]`, `/substances/[id]` | ≤ 50 KB | ≤ 130 KB | ≤ 20 KB | same | ≤ 2.5 s |
-| `/check` | ≤ 50 KB | ≤ 145 KB | ≤ 20 KB | same | ≤ 2.5 s |
+| `/` | ≤ 30 KB | ≤ 130 KB | ≤ 20 KB | ≤ 90 KB (Onest var + Plex Mono 400) | ≤ 2.8 s (Decision, product owner 16/10/2026: Lighthouse's simulated LCP counts the self-hosted font downloads although `font-display: optional` never delays real visitors' text) |
+| `/search`, `/products/[id]`, `/substances/[id]` | ≤ 50 KB | ≤ 130 KB | ≤ 20 KB | same | ≤ 2.8 s (same Decision) |
+| `/check` | ≤ 50 KB | ≤ 145 KB | ≤ 20 KB | same | ≤ 2.8 s (same Decision) |
 | `/learn/[chapter]` | ≤ 60 KB | ≤ 140 KB | ≤ 25 KB | same | ≤ 2.8 s (Decision, product owner 16/10/2026: Lighthouse's simulated LCP counts the self-hosted font downloads although `font-display: optional` never delays real visitors' text) |
 | `/review/[b]/[c]` (laptop, broadband) | ≤ 80 KB | ≤ 200 KB | ≤ 25 KB | same | ≤ 1.5 s; J/K to next record painted ≤ 300 ms with prefetch |
 | *(P1C)* `/review/pairs`, `/review/substances/[id]` (laptop, broadband; 50 pairs per page) | ≤ 120 KB | ≤ 180 KB | ≤ 25 KB | same | ≤ 1.5 s |

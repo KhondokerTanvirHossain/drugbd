@@ -19,7 +19,7 @@
             "resource-summary:script:size": ["error", { "maxNumericValue": 133120, "aggregationMethod": "median" }],
             "resource-summary:stylesheet:size": ["error", { "maxNumericValue": 20480, "aggregationMethod": "median" }],
             "resource-summary:font:size": ["error", { "maxNumericValue": 92160, "aggregationMethod": "median" }],
-            "largest-contentful-paint": ["error", { "maxNumericValue": 2500, "aggregationMethod": "median" }]
+            "largest-contentful-paint": ["error", { "maxNumericValue": 2800, "aggregationMethod": "median" }]
           }
         },
         {
@@ -32,7 +32,7 @@
             "resource-summary:script:size": ["error", { "maxNumericValue": 133120, "aggregationMethod": "median" }],
             "resource-summary:stylesheet:size": ["error", { "maxNumericValue": 20480, "aggregationMethod": "median" }],
             "resource-summary:font:size": ["error", { "maxNumericValue": 92160, "aggregationMethod": "median" }],
-            "largest-contentful-paint": ["error", { "maxNumericValue": 2500, "aggregationMethod": "median" }]
+            "largest-contentful-paint": ["error", { "maxNumericValue": 2800, "aggregationMethod": "median" }]
           }
         },
         {
@@ -45,7 +45,7 @@
             "resource-summary:script:size": ["error", { "maxNumericValue": 148480, "aggregationMethod": "median" }],
             "resource-summary:stylesheet:size": ["error", { "maxNumericValue": 20480, "aggregationMethod": "median" }],
             "resource-summary:font:size": ["error", { "maxNumericValue": 92160, "aggregationMethod": "median" }],
-            "largest-contentful-paint": ["error", { "maxNumericValue": 2500, "aggregationMethod": "median" }]
+            "largest-contentful-paint": ["error", { "maxNumericValue": 2800, "aggregationMethod": "median" }]
           }
         }
       ]
