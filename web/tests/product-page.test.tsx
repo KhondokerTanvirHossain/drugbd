@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { NAPA } from "./fixtures/public";
+import { NAPA, NAPA_PAIRS } from "./fixtures/public";
 
 const getPublicProduct = vi.fn(), getProductInteractions = vi.fn(), getClinicalDrug = vi.fn(), getSession = vi.fn();
 vi.mock("@/lib/api", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/api")>()),
@@ -143,5 +143,74 @@ describe("approved product (§6.5 items 1–5)", () => {
     const html = await renderProduct();
     expect(html).toContain("No entry for route otic");
     expect(html).not.toContain("sev--nodata");
+  });
+});
+
+describe("approved product (§6.5 item 6)", () => {
+  it("data found: the pair count heading, the severity chips and the disease and food counts; never a count of 0 for missing data", async () => {
+    const html = await renderProduct();
+    expect(html).toContain("From DDInter 2.0, for Acetaminophen");
+    expect(html).toContain("645 drug–drug pairs");
+    expect(html).toContain('<span class="sev sev--major">Major <b class="sev-n">10</b></span>');
+    expect(html).toContain("<b>3</b>drug–disease interactions");
+    expect(html).toContain("<b>1</b>drug–food interaction");
+    expect(html).not.toContain("is checked against");    // systemic and not assumed: no statement
+  });
+
+  it("no data: the hatch block with the full sentence and the second line, no count anywhere", async () => {
+    const item = NAPA.clinicalDrug!.ingredients[0];
+    getPublicProduct.mockResolvedValue({ ok: true, data: { ...NAPA, clinicalDrug: { ...NAPA.clinicalDrug!, ingredients: [{ ...item,
+      summary: { ...item.summary!, coverage: { coverage: "none", note: "" }, ddinter: { chosen: [], entries: [] } } }] } } });
+    const html = await renderProduct();
+    expect(html).toContain("No interaction data in DDInter for this substance. This does not mean it is safe to combine.");
+    expect(html).toContain("Drug, disease and food interactions: no data in DDInter 2.0.");
+    expect(html).not.toMatch(/\b0 drug–drug pairs/);
+  });
+
+  it("an eye drop names the entry it is checked against; no route entry is the plain line", async () => {
+    const item = NAPA.clinicalDrug!.ingredients[0];
+    const eye = { ...item, name: "Chloramphenicol", summary: { ...item.summary!, name: "Chloramphenicol", ddinter: { chosen: [{ ddinterId: "DDInter352",
+      name: "Chloramphenicol (ophthalmic)", routeScope: "ophthalmic", routeAssumed: false }], entries: [{ ddinterId: "DDInter352",
+      name: "Chloramphenicol (ophthalmic)", routeScope: "ophthalmic", counts: { major: 1, moderate: 111, minor: 0, unknown: 0, total: 112 },
+      diseaseCount: 0, foodCount: 0, source: null }] } } };
+    getPublicProduct.mockResolvedValue({ ok: true, data: { ...NAPA, clinicalDrug: { ...NAPA.clinicalDrug!, route: "ophthalmic", ingredients: [eye] } } });
+    const html = await renderProduct();
+    expect(html).toContain('Chloramphenicol is checked against <span class="mono">DDInter352</span> Chloramphenicol (ophthalmic).');
+    expect(html).toContain("112 drug–drug pairs");
+    const none = { ...eye, summary: { ...eye.summary, ddinter: { ...eye.summary.ddinter, chosen: [] } } };
+    getPublicProduct.mockResolvedValue({ ok: true, data: { ...NAPA, clinicalDrug: { ...NAPA.clinicalDrug!, route: "otic", ingredients: [none] } } });
+    const nr = await renderProduct();
+    expect(nr).toContain("No DDInter entry for this product&#x27;s route (otic). Its pairs are not checked.");
+    expect(nr).not.toContain("sev--nodata");
+  });
+
+  it("With other approved medicines: grouped cards with brands, the label and review state, the unclassified panel, no-data and other lines", async () => {
+    getProductInteractions.mockResolvedValue({ ok: true, data: NAPA_PAIRS });
+    const html = await renderProduct();
+    expect(html).toContain("With other approved medicines");
+    expect(html).toContain(">Acetaminophen + Warfarin</h4>");
+    expect(html).toContain("With 4 approved brands: G Warfarin, Warin, Coumarol and 1 more. Action: synergy");
+    expect(html).toContain("From DDInter 2.0");
+    expect(html).toContain("Pair reviewed by a senior pharmacist on 16/10/2026");
+    expect(html).toContain("<summary>All 4 brands</summary>");
+    expect(html).toContain('<a href="/products/W-7">Warfa</a>');
+    expect(html).toContain('Source: DDInter 2.0, <span class="mono">DDInter14</span> + <span class="mono">DDInter1951</span>');
+    expect(html).toContain('<span class="sev sev--unclassified">Severity not classified by DDInter <b class="sev-n">2</b></span>');
+    expect(html).toContain("Acetaminophen with Amlodipine (pair not yet reviewed by a senior pharmacist) and Acetylsalicylic acid (pair reviewed by a senior pharmacist on 15/10/2026).");
+    expect(html).toContain("DDInter 2.0 lists these pairs with action &quot;unknown&quot; and no text. They are not treated as low risk.");
+    expect(html).toContain("Not checked: Acetaminophen + Domperidone, in 1 approved brand");
+    expect(html).toContain("Not checked: Otimol&#x27;s route is systemic and DDInter has no entry for Oticmol on that route.");
+    expect(html).not.toContain("No interaction listed in DDInter 2.0");
+  });
+
+  it("pages of 20 partner substances with More and Previous interactions; the empty line on page 0", async () => {
+    getProductInteractions.mockResolvedValue({ ok: true, data: { ...NAPA_PAIRS, page: 1, totalPartners: 45 } });
+    const html = await renderProduct(NAPA.conceptId, { ix: "1" });
+    expect(html).toContain('href="/products/186-0030-006--napa?ix=2#with-other">More interactions</a>');
+    expect(html).toContain('href="/products/186-0030-006--napa?ix=0#with-other">Previous interactions</a>');
+    getProductInteractions.mockResolvedValue({ ok: true, data: { ...NAPA_PAIRS, totalPartners: 0, partners: [], notChecked: [] } });
+    expect(await renderProduct()).toContain("No other approved medicine has an interaction with Acetaminophen listed in DDInter 2.0 yet.");
+    getProductInteractions.mockResolvedValue({ ok: false, status: 503 });
+    expect(await renderProduct()).not.toContain("With other approved medicines");
   });
 });
