@@ -115,6 +115,13 @@ class SearchApiIntegrationTest {
             .jsonPath("$.data.suggestion").value(v -> assertThat(v).isNull());
     }
 
+    // Final review finding 2: a C0 control or DEL is a 400 on q, never a Postgres 22021 surfacing as a 500.
+    @Order(1) @Test void controlCharactersAreA400OnQNeverA500() {
+        for (String q : new String[]{"ab\u0000", "\u0000\u0000", "a\u001F", "na\u0007pa", "napa\u007F", "a\u001Cb"})
+            web.get().uri("/v1/search?q={q}", q).exchange().expectStatus().isBadRequest()
+                .expectBody().jsonPath("$.errors[0].field").isEqualTo("q").jsonPath("$.errors[0].code").isEqualTo("INVALID_QUERY");
+    }
+
     @Order(1) @Test void publicPagesStopAtIndexNine() {
         web.get().uri("/v1/search?q=napa&page=9").exchange().expectStatus().isOk().expectBody().jsonPath("$.data.hasMore").isEqualTo(false);
         web.get().uri("/v1/search?q=napa&page=10").exchange().expectStatus().isBadRequest()

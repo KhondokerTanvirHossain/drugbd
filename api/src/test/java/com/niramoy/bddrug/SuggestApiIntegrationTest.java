@@ -83,6 +83,17 @@ class SuggestApiIntegrationTest {
     }
 
     /** Trade-name prefix first, then approved before not reviewed, then trade name; at most 10 rows (§7.4 P16). */
+    // Final review finding 2: control characters in q or an excluded id are a 400, never a Postgres 22021 500.
+    @Test void controlCharactersAreA400NeverA500() {
+        web.get().uri("/v1/products/suggest?q={q}", "na\u0000").exchange().expectStatus().isBadRequest()
+            .expectBody().jsonPath("$.errors[0].field").isEqualTo("q");
+        web.get().uri("/v1/products/suggest?q={q}", "na\u001F").exchange().expectStatus().isBadRequest()
+            .expectBody().jsonPath("$.errors[0].field").isEqualTo("q");
+        // two values: a single one goes through Spring's comma-split conversion, whose trim() already drops a trailing NUL
+        web.get().uri("/v1/products/suggest?q=napa&exclude={a}&exclude={b}", "W-1", "N-1\u0000").exchange().expectStatus().isBadRequest()
+            .expectBody().jsonPath("$.errors[0].field").isEqualTo("exclude");
+    }
+
     @Test void prefixMatchesComeFirstThenApprovedThenNameAndTenAtMost() {
         web.get().uri("/v1/products/suggest?q=qu").exchange().expectStatus().isOk().expectBody()
             .jsonPath("$.data[*].conceptId").isEqualTo(java.util.List.of("Q-3", "Q-2", "Q-1", "Q-4"))

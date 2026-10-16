@@ -21,6 +21,7 @@ public class SearchQueryService {
     }
 
     public Mono<SearchResult> search(String q, int page, Scope scope) {
+        if (Validate.hasControl(q)) return Mono.error(new InvalidQueryException("q", "q must not contain control characters"));
         String query = q == null ? "" : q.strip();
         int len = query.codePointCount(0, query.length());
         if (len < MIN_LEN || len > MAX_LEN) return Mono.error(new InvalidQueryException("q", "q must be 2-100 characters"));

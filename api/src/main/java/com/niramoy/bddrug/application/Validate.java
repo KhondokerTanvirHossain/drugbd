@@ -11,6 +11,11 @@ final class Validate {
 
     static String stripped(String s) { return s == null ? "" : s.strip(); }
 
+    /** A C0 control or DEL: Postgres rejects NUL in a text bind (22021), so such input is a 400, never a 500. */
+    static boolean hasControl(String s) {
+        return s != null && s.chars().anyMatch(c -> c < 0x20 || c == 0x7F);
+    }
+
     static String oneOf(String value, Set<String> allowed, String field) {
         if (value == null || !allowed.contains(value))
             throw new InvalidQueryException(field, field + " must be one of " + String.join(", ", allowed.stream().sorted().toList()));

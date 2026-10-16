@@ -79,10 +79,13 @@ public class ProductQueryService {
 
     /** §7.4 P16. Unapproved rows match on trade name and DAR only and carry no clinical data. */
     public Flux<SuggestRow> suggest(String q, List<String> exclude) {
+        if (Validate.hasControl(q)) return Flux.error(new InvalidQueryException("q", "q must not contain control characters"));
         String query = q == null ? "" : q.strip();
         int len = query.codePointCount(0, query.length());
         if (len < MIN_LEN || len > MAX_LEN) return Flux.error(new InvalidQueryException("q", "q must be 2-100 characters"));
         List<String> ids = exclude == null ? List.of() : exclude.stream().filter(s -> s != null && !s.isBlank()).distinct().toList();
+        if (ids.stream().anyMatch(Validate::hasControl))
+            return Flux.error(new InvalidQueryException("exclude", "exclude ids must not contain control characters"));
         if (ids.size() > EXCLUDE_MAX) return Flux.error(new InvalidQueryException("exclude", "exclude holds at most 20 ids"));
         return suggestions.suggest(query.toLowerCase(Locale.ROOT), ids, SUGGEST_LIMIT);
     }
