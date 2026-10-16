@@ -30,7 +30,7 @@ services:
       NEXT_PUBLIC_FIREBASE_API_KEY: e2e-dummy-api-key
       NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: localhost
       NEXT_PUBLIC_FIREBASE_APP_ID: "1:0:web:e2e"
-      REVIEWERS: pharm@e2e.test:pharmacist,eng@e2e.test:engineer
+      REVIEWERS: pharm@e2e.test:pharmacist,eng@e2e.test:engineer,senior@e2e.test:senior
     ports: ["3000:3000"]
   seed:
     image: postgres:16
