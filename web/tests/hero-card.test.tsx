@@ -92,8 +92,23 @@ describe("HeroCard (§6.1, §1.6 item 9)", () => {
   });
   it("the narrow parts are marked so CSS can drop them below 480 px", () => {
     const html = renderToStaticMarkup(<HeroCard hero={NAPA} />);
-    expect(html).toContain('<span class="narrow">Brand</span>');
-    expect(html).toMatch(/class="wide"[^>]*>[\s\S]*DrugBank/);
+    // Brand: short label, form and mono DAR stay; the company is wide-only
+    expect(html).toContain('<span class="s-k"><span class="wide">Brand in the DGDA register</span><span class="narrow">Brand</span></span>');
+    expect(html).toContain('Tablet, <span class="wide">Beximco Pharmaceuticals Ltd., </span><span class="mono">DAR 186-0030-006</span>');
+    // the 'Filed as' line is wide-only
+    expect(html).toContain('<span class="s-x wide">Filed as <span class="raw">Paracetamol 500 mg</span></span>');
+    // Clinical drug: display name and mono BDC stay; the route is wide-only
+    expect(html).toContain('<span class="s-x"><span class="mono">BDC-000001</span><span class="wide">, systemic route</span></span>');
+    // substance: no strength below 480 px; "also {DGDA name}" replaces "also listed as {DGDA name}"
+    expect(html).toContain('<span class="s-v">Acetaminophen<span class="wide">, 500 mg</span></span>');
+    expect(html).toContain('<span class="mono">BDS-000001</span><span class="wide">, also listed as Paracetamol</span><span class="narrow">, also Paracetamol</span>');
+    // only ICD-11, RxCUI and ATC chips stay; DrugBank and SNOMED CT are wide-only
+    for (const sys of ["ICD-11", "RxCUI", "ATC"])
+      expect(html).toContain(`<span><span class="code"><span class="code-sys">${sys}</span>`);
+    for (const sys of ["DrugBank", "SNOMED CT"])
+      expect(html).toContain(`<span class="wide"><span class="code"><span class="code-sys">${sys}</span>`);
+    expect(html.match(/<span class="code"><span class="code-sys">/g)).toHaveLength(5);
+    expect(html.match(/<span class="wide"><span class="code">/g)).toHaveLength(2);
   });
   it("every rail has a step beside it, and below 480 px the substance rail ends the chain as on Board P", () => {
     const rails = (html: string) => html.match(/<div class="s-rail[^"]*" aria-hidden="true">/g) ?? [];
