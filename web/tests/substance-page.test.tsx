@@ -1,167 +1,134 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Substance } from "@/lib/api";
+import type { PublicSubstance, SubstanceInteractions } from "@/lib/public-types";
 
-const getSubstance = vi.fn();
-vi.mock("@/lib/api", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/api")>()),
-  getSubstance: (...args: unknown[]) => getSubstance(...args),
-}));
-const getSession = vi.fn();
-vi.mock("@/lib/session", () => ({ getSession: () => getSession() }));
+const getPublicSubstance = vi.fn(), getSubstanceInteractions = vi.fn();
+vi.mock("@/lib/api", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/api")>()),
+  getPublicSubstance: (id: string) => getPublicSubstance(id),
+  getSubstanceInteractions: (id: string, sev: string | null, p: number) => getSubstanceInteractions(id, sev, p) }));
+const notFound = vi.fn(() => { throw new Error("NEXT_NOT_FOUND"); });
+vi.mock("next/navigation", () => ({ notFound: () => notFound() }));
 import SubstancePage from "@/app/substances/[id]/page";
 
-const NONE_SENTENCE = "No interaction data in DDInter for this substance. This does not mean it is safe to combine.";
-
-const domperidone: Substance = {
-  bdsId: "BDS-000004", preferredName: "Domperidone",
-  names: [{ name: "Domperidone", nameType: "icd11", source: "dgda-ocl" }],
-  codes: [{ system: "ICD11_XM", code: "XM0Y01", routeScope: "any", source: "dgda-ocl", method: "xm", confidence: 1 }],
-  coverage: { coverage: "none", note: "No interaction data in DDInter for this substance" },
-  products: [{ conceptId: "D-1", tradeName: "Motigut", company: "Square" }],
-  interactions: [], diseases: [], foods: [],
+const WARFARIN: PublicSubstance = {
+  bdsId: "BDS-000003", preferredName: "Warfarin",
+  names: [{ name: "Warfarin", nameType: "icd11", source: "dgda-ocl" }, { name: "Warfarin Sodium", nameType: "dgda_content", source: "dgda-ocl" }],
+  codes: [{ system: "ATC", code: "B01AA03", routeScope: "any", source: "rxnav", method: "rxnav-exact", confidence: 1,
+      sourceLink: { url: "https://atcddd.fhi.no/atc_ddd_index/?code=B01AA03&showdescription=no", label: "WHO ATC/DDD Index", fetchedAt: "2026-10-11T22:05:00Z" } },
+    { system: "DDINTER", code: "DDInter1951", routeScope: "systemic", source: "ddinter2", method: "drugbank", confidence: 1, sourceLink: null }],
+  coverage: { coverage: "full", note: "" },
+  products: [{ conceptId: "185-0138-012--g-warfarin", tradeName: "G Warfarin", company: "Gonoshasthaya" }],
+  diseases: [{ diseaseName: "Bleeding", severity: "major", text: "Warfarin increases bleeding risk.", interactionId: "D1", routeScope: "systemic" }],
+  foods: [{ food: "Vitamin K rich foods", severity: "moderate", description: "Vitamin K reduces the effect.", management: "Keep intake steady.", interactionId: "F1", routeScope: "systemic" }],
+  entries: [{ ddinterId: "DDInter1951", name: "Warfarin", routeScope: "systemic", counts: { major: 1, moderate: 2, minor: 1, unknown: 1, total: 5 },
+    diseaseCount: 1, foodCount: 1, sourceLink: { url: "https://ddinter2.scbdd.com/server/drug-detail/DDInter1951/", label: "DDInter 2.0", fetchedAt: null } }],
+  clinicalDrugs: [{ bdcId: "BDC-000003", displayName: "Warfarin 5 mg tablet" }],
 };
+const LIST: SubstanceInteractions = { bdsId: "BDS-000003", counts: WARFARIN.entries, total: 25, page: 0, size: 20, items: [
+  { partnerName: "Acetylsalicylic acid", partnerBdsId: null, ddinterA: "DDInter1951", ddinterB: "DDInter20", routeScope: "systemic",
+    severity: "major", actions: ["synergy"], interaction: "Raises bleeding risk.", management: "Avoid unless needed.",
+    pairReview: { state: "not_reviewed", reviewedAt: null }, sourceUrl: "https://ddinter2.scbdd.com/server/interact/3039/" },
+  { partnerName: "Acetaminophen", partnerBdsId: "BDS-000001", ddinterA: "DDInter14", ddinterB: "DDInter1951", routeScope: "systemic",
+    severity: "moderate", actions: ["synergy"], interaction: null, management: null,
+    pairReview: { state: "reviewed", reviewedAt: "2026-10-16T05:20:00Z" }, sourceUrl: null }] };
 
-const warfarin: Substance = {
-  bdsId: "BDS-000001", preferredName: "Warfarin",
-  names: [
-    { name: "Warfarin", nameType: "icd11", source: "dgda-ocl" },
-    { name: "Warfarin Sodium", nameType: "dgda_content", source: "dgda-ocl" },
-  ],
-  codes: [
-    { system: "RXCUI", code: "11289", routeScope: "any", source: "rxnav", method: "rxnav-approx", confidence: 0.8 },
-    { system: "DDINTER", code: "DDInter1951", routeScope: "systemic", source: "ddinter", method: "name", confidence: 0.95 },
-  ],
-  coverage: { coverage: "full", note: "DDInter DDInter1951" },
-  products: [{ conceptId: "W-1", tradeName: "Warin", company: "Acme" }],
-  interactions: [
-    { partnerName: "Acetylsalicylic acid", partnerBdsId: "BDS-000002", severity: "major", actions: ["Monitor", "Avoid"],
-      interactionId: "IA-1", routeScope: "systemic" },
-    { partnerName: "Chloramphenicol (ophthalmic)", partnerBdsId: "BDS-000003", severity: "moderate", actions: [],
-      interactionId: null, routeScope: "systemic" },
-    { partnerName: "Some Herb", partnerBdsId: null, severity: "minor", actions: [], interactionId: null, routeScope: "systemic" },
-  ],
-  diseases: [{ diseaseName: "Bleeding", severity: "major", text: "Warfarin increases bleeding risk.", refs: ["ref one"],
-    interactionId: "D-1", routeScope: "systemic" }],
-  foods: [{ food: "Vitamin K rich foods", severity: "moderate", mechanism: "Antagonism",
-    description: "Vitamin K reduces the effect of warfarin.", management: "Keep vitamin K intake steady.", refs: [],
-    interactionId: "F-1", routeScope: "systemic" }],
-};
+const render = async (sp: Record<string, string> = {}, id = "BDS-000003") =>
+  renderToStaticMarkup(await SubstancePage({ params: Promise.resolve({ id }), searchParams: Promise.resolve(sp) }));
 
-const render = async (id: string) => renderToStaticMarkup(await SubstancePage({ params: Promise.resolve({ id }) }));
-
-beforeEach(() => { getSubstance.mockReset(); getSession.mockReset(); getSession.mockResolvedValue(null); });
-
-describe("substance page visibility (spec §2.2: public scope for every session)", () => {
-  it("shows only the not-reviewed text for a hidden substance", async () => {
-    getSubstance.mockResolvedValue({ bdsId: "BDS-000009", preferredName: "Secretine", reviewStatus: "pending", hidden: true });
-    const html = await render("BDS-000009");
-    expect(getSubstance).toHaveBeenCalledWith("BDS-000009");
-    expect(html).toContain("Not yet reviewed by a pharmacist");
-    for (const absent of ["Secretine", "Names", "Codes", "Drug interactions", "Products using it", NONE_SENTENCE])
-      expect(html).not.toContain(absent);
-  });
-
-  it("a reviewer reads the same public page: no badge, and the flag form", async () => {
-    getSession.mockResolvedValue({ email: "eng@example.org", role: "engineer" });
-    getSubstance.mockResolvedValue(warfarin);
-    const html = await render("BDS-000001");
-    expect(getSubstance).toHaveBeenCalledWith("BDS-000001");
-    expect(html).not.toContain("unreviewed");
-    expect(html).toContain('<a href="/products/W-1">Warin</a> (Acme)</li>');
-    expect(html).toContain("Flag a problem");
-    expect(html).not.toContain("eng@example.org");
-  });
-
-  it("anonymous visitors see no badge and no flag form", async () => {
-    getSubstance.mockResolvedValue(warfarin);
-    const html = await render("BDS-000001");
-    expect(html).not.toContain("unreviewed");
-    expect(html).not.toContain("Flag a problem");
-  });
+beforeEach(() => {
+  getPublicSubstance.mockReset(); getPublicSubstance.mockResolvedValue({ ok: true, data: WARFARIN });
+  getSubstanceInteractions.mockReset(); getSubstanceInteractions.mockResolvedValue({ ok: true, data: LIST });
 });
 
-describe("substance page", () => {
-  it("shows the exact no-data sentence for coverage none and never says 'no interactions'", async () => {
-    getSubstance.mockResolvedValue(domperidone);
-    const html = await render("BDS-000004");
-    expect(getSubstance).toHaveBeenCalledWith("BDS-000004");
-    expect(html).toContain(NONE_SENTENCE);
-    expect(html.toLowerCase()).not.toContain("no interactions");
-    expect(html).toContain('href="/products/D-1"');
+describe("/substances/[id] (§6.6)", () => {
+  it("crumb, h1 with the BDS id, names, codes with source links, neutral coverage, entry counts", async () => {
+    const html = await render();
+    expect(html.match(/<h1/g)).toHaveLength(1);
+    expect(html).toContain('Warfarin <span class="mono">BDS-000003</span></h1>');
+    expect(html).toContain("<li>Warfarin Sodium <span>DGDA register</span></li>");
+    expect(html).toContain('href="https://atcddd.fhi.no/atc_ddd_index/?code=B01AA03&amp;showdescription=no"');
+    expect(html).toContain("drugbank, confidence 1.0, systemic");
+    expect(html).toContain("<p>Interaction data found</p>");
+    expect(html).not.toContain("rv--approved\">Interaction");
+    expect(html).toContain('<span class="mono">DDInter1951</span> (systemic)');
   });
 
-  it("shows names and codes with source, method and confidence", async () => {
-    getSubstance.mockResolvedValue(warfarin);
-    const html = await render("BDS-000001");
-    expect(html).toContain("Warfarin Sodium");
-    expect(html).toContain("dgda_content");
-    expect(html).toMatch(/<td>RXCUI<\/td><td>11289<\/td><td>any<\/td><td>rxnav<\/td><td>rxnav-approx<\/td><td>0\.80<\/td>/);
-    expect(html).toMatch(/<td>DDINTER<\/td><td>DDInter1951<\/td><td>systemic<\/td><td>ddinter<\/td><td>name<\/td><td>0\.95<\/td>/);
-    expect(html).not.toContain(NONE_SENTENCE);
-  });
-
-  it("groups interactions by severity, most severe first, and links known partners", async () => {
-    getSubstance.mockResolvedValue(warfarin);
-    const html = await render("BDS-000001");
-    const major = html.indexOf("Major (1)"), moderate = html.indexOf("Moderate (1)"), minor = html.indexOf("Minor (1)");
-    expect(major).toBeGreaterThan(-1);
-    expect(moderate).toBeGreaterThan(major);
-    expect(minor).toBeGreaterThan(moderate);
-    expect(html).toContain('<a href="/substances/BDS-000002">Acetylsalicylic acid</a>');
-    expect(html).toContain("Monitor, Avoid");
-    expect(html).toContain("Some Herb");
+  it("drug–drug pairs with the label, review state, DDInter link, unlinked private partners, and paging", async () => {
+    const html = await render();
+    expect(getSubstanceInteractions).toHaveBeenCalledWith("BDS-000003", null, 0);
+    expect(html).toContain("Drug–drug interactions");
+    expect(html).toContain("Warfarin + Acetylsalicylic acid");
     expect(html).not.toContain('href="/substances/null"');
+    expect(html).toContain('<a href="/substances/BDS-000001">Acetaminophen</a>');
+    expect(html).toContain("From DDInter 2.0");
+    expect(html).toContain("Pair not yet reviewed by a senior pharmacist");
+    expect(html).toContain('href="https://ddinter2.scbdd.com/server/interact/3039/"');
+    expect(html).toContain("Full record in DDInter 2.0");
+    expect(html).toContain('href="/substances/BDS-000003?page=1#pairs">Next page</a>');
   });
 
-  it("lists diseases, foods and the products using it", async () => {
-    getSubstance.mockResolvedValue(warfarin);
-    const html = await render("BDS-000001");
-    expect(html).toContain("Bleeding");
+  it("the severity filter is a set of GET links with the current one marked (Review Focus 5: unknown values read as All)", async () => {
+    const html = await render({ severity: "major" });
+    expect(getSubstanceInteractions).toHaveBeenLastCalledWith("BDS-000003", "major", 0);
+    expect(html).toContain('aria-current="page" href="/substances/BDS-000003?severity=major#pairs">Major</a>');
+    expect(html).toContain('href="/substances/BDS-000003?severity=unknown#pairs">Severity not classified by DDInter</a>');
+    await render({ severity: "fatal", page: "-3" });
+    expect(getSubstanceInteractions).toHaveBeenLastCalledWith("BDS-000003", null, 0);
+  });
+
+  it("disease and food lists with truncated text; approved products and clinical drugs", async () => {
+    const html = await render();
+    expect(html).toContain("Drug–disease");
     expect(html).toContain("Warfarin increases bleeding risk.");
-    expect(html).toContain("Vitamin K rich foods");
-    expect(html).toContain("Keep vitamin K intake steady.");
-    expect(html).toContain('<a href="/products/W-1">Warin</a>');
+    expect(html).toContain("Drug–food");
+    expect(html).toContain("Keep intake steady.");
+    expect(html).toContain('<a href="/products/185-0138-012--g-warfarin">G Warfarin</a>');
+    expect(html).toContain("Warfarin 5 mg tablet");
   });
 
-  it("never prints a DDInter placeholder in disease or food texts", async () => {
-    getSubstance.mockResolvedValue({ ...warfarin,
-      diseases: [
-        { diseaseName: "Bleeding", severity: "major", text: "None", refs: [], interactionId: "D-1", routeScope: "systemic" },
-        { diseaseName: "Liver disease", severity: "moderate", text: null, refs: [], interactionId: "D-2", routeScope: "systemic" },
-      ],
-      foods: [
-        { food: "Alcohol", severity: "minor", mechanism: null, description: " - ", management: "N/A", refs: [],
-          interactionId: "F-1", routeScope: "systemic" },
-        { food: "Grapefruit", severity: "minor", mechanism: null, description: null, management: null, refs: [],
-          interactionId: "F-2", routeScope: "systemic" },
-      ] });
-    const html = await render("BDS-000001");
-    expect(html.match(/Interaction text not available from DDInter\./g)).toHaveLength(4);
-    expect(html.match(/DDInter 2\.0 gives no management text for this pair\./g)).toHaveLength(2);
-    expect(html).not.toMatch(/<td>\s*(None|-|N\/A|null)\s*<\/td>/);
-    // no empty disease / food text cell either (the interactions table's empty Actions cell is unrelated)
-    const tables = html.slice(html.indexOf("<h2>Diseases</h2>"), html.indexOf("<h2>Products using it</h2>"));
-    expect(tables).not.toMatch(/<td>\s*<\/td>/);
+  it("DDInter placeholders are never printed in the disease and food lists (§3.6)", async () => {
+    getPublicSubstance.mockResolvedValue({ ok: true, data: { ...WARFARIN,
+      diseases: [{ ...WARFARIN.diseases[0], text: "None" }],
+      foods: [{ ...WARFARIN.foods[0], management: "-", description: "Vitamin K reduces the effect." }] } });
+    const html = await render();
+    expect(html).not.toContain(">None<");
+    expect(html).not.toContain(">-<");
+    expect(html).toContain("Vitamin K reduces the effect.");
   });
 
-  it("shows severity unknown as 'Severity not classified by DDInter' in interactions, diseases and foods", async () => {
-    getSubstance.mockResolvedValue({ ...warfarin,
-      interactions: [{ partnerName: "Alpha", partnerBdsId: null, severity: "unknown", actions: [], interactionId: null,
-        routeScope: "systemic" }],
-      diseases: [{ diseaseName: "Gout", severity: "unknown", text: "Text.", refs: [], interactionId: "D-9", routeScope: "systemic" }],
-      foods: [{ food: "Tea", severity: "unknown", mechanism: null, description: "Desc.", management: "Mgmt.", refs: [],
-        interactionId: "F-9", routeScope: "systemic" }] });
-    const html = await render("BDS-000001");
-    expect(html).toContain("<h3>Severity not classified by DDInter (1)</h3>");
-    expect(html).toContain("<td>Gout</td><td>Severity not classified by DDInter</td>");
-    expect(html).toContain("<td>Tea</td><td>Severity not classified by DDInter</td>");
-    expect(html.toLowerCase()).not.toContain("unknown");
+  it("a page past the end links back to the last real page, never the empty line (Review Focus 5)", async () => {
+    getSubstanceInteractions.mockResolvedValue({ ok: true, data: { ...LIST, page: 7, items: [] } });
+    const html = await render({ page: "7" });
+    expect(getSubstanceInteractions).toHaveBeenLastCalledWith("BDS-000003", null, 7);
+    expect(html).toContain('href="/substances/BDS-000003?page=1#pairs">Previous page</a>');
+    expect(html).not.toContain("Next page");
+    expect(html).not.toContain("None listed in DDInter 2.0.");
+    getSubstanceInteractions.mockResolvedValue({ ok: true, data: { ...LIST, total: 0, page: 3, items: [] } });
+    const empty = await render({ page: "3", severity: "minor" });
+    expect(empty).toContain("None listed in DDInter 2.0.");
+    expect(empty).not.toContain("Previous page");
   });
 
-  it("calls notFound for an unknown substance", async () => {
-    getSubstance.mockResolvedValue(null);
-    await expect(SubstancePage({ params: Promise.resolve({ id: "BDS-999999" }) })).rejects.toSatisfy(
-      (e: unknown) => /NEXT_HTTP_ERROR_FALLBACK;404|NEXT_NOT_FOUND/.test(String((e as { digest?: string }).digest)));
+  it("no data: the hatch block and no pair list; not run: NOT_RUN and never the no-data sentence", async () => {
+    getPublicSubstance.mockResolvedValue({ ok: true, data: { ...WARFARIN, coverage: { coverage: "none", note: "" }, entries: [] } });
+    const none = await render();
+    expect(none).toContain("No interaction data in DDInter for this substance. This does not mean it is safe to combine.");
+    expect(none).not.toContain("Drug–drug interactions");
+    expect(getSubstanceInteractions).not.toHaveBeenCalled();
+    getPublicSubstance.mockResolvedValue({ ok: true, data: { ...WARFARIN, coverage: { coverage: "not_run", note: "" }, entries: [] } });
+    const nr = await render();
+    expect(nr).toContain("Not checked yet: DDInter mapping has not run");
+    expect(nr).not.toContain("No interaction data in DDInter for this substance");
+  });
+
+  it("a substance that is not public is the stub; unknown is not found", async () => {
+    getPublicSubstance.mockResolvedValue({ ok: true, data: { bdsId: "BDS-000002", preferredName: "Aspirin", hidden: true } });
+    const html = await render({}, "BDS-000002");
+    expect(html).toContain(">Aspirin</h1>");
+    expect(html).toContain("Not yet reviewed by a pharmacist");
+    expect(html).toContain("hides its codes and interactions");
+    expect(html).not.toContain("is in review in batch");
+    getPublicSubstance.mockResolvedValue({ ok: false, status: 404 });
+    await expect(render({}, "BDS-999999")).rejects.toThrow("NEXT_NOT_FOUND");
   });
 });

@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { buttonClass } from "@/components/ui/Button";
 import ReviewStatus from "@/components/ui/ReviewStatus";
 import { PUBLIC_NEW } from "@/lib/copy";
-import type { ProductStub as Stub } from "@/lib/public-types";
+import type { ProductStub as Stub, SubstanceStub } from "@/lib/public-types";
 import { PRODUCT, STUB } from "@/lib/public-copy";
 import { fillNodes } from "@/lib/review-copy";
 import styles from "./product.module.css";
@@ -31,4 +31,9 @@ export default function ProductStub({ stub }: { stub: Stub }) {
       </>}
     </StubLayout>
   );
+}
+
+/** §6.4: "The same pattern applies to substance stubs: "…hides its codes and interactions…", with no batch sentence." */
+export function SubstanceStubView({ stub }: { stub: SubstanceStub }) {
+  return <StubLayout name={stub.preferredName} id={stub.bdsId}><p>{STUB.substancePending}</p></StubLayout>;
 }

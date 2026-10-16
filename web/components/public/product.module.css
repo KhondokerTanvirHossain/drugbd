@@ -58,3 +58,7 @@
 .brandList { display: flex; flex-direction: column; gap: 4px; }
 @media (max-width: 980px) { .s-prod { grid-template-columns: 1fr; padding: 24px 16px 40px; } }
 @media (max-width: 720px) { .s-trace { grid-template-columns: 1fr; } .s-trace > div + div { border-left: 0; border-top: 1px solid var(--line); } .s-stages { grid-template-columns: 1fr; } .s-stub { padding: 24px 16px 36px; } .stubH1 { font: var(--t-title1); } }
+.single { display: flex; flex-direction: column; gap: 32px; max-width: 960px; margin: 0 auto; padding: 28px 40px 48px; }
+.filters { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.filters a[aria-current="page"] { font-weight: 600; color: var(--fg); }
+@media (max-width: 720px) { .single { padding: 24px 16px 40px; } }
