@@ -130,8 +130,13 @@ export default async function SubstancePage({ params, searchParams }: {
         {d.coverage === "none" ? (
           // No pair list, but the page is shown: SeniorDesk with no pair logs senior_open (§5.15).
           <SeniorDesk role="senior" {...desk} pairs={[]}><p>{fill(r.notChecked, { name: d.name })}</p></SeniorDesk>
+        ) : d.coverage === "not_run" && d.pairs.total === 0 ? (
+          // DDInter was never fetched for it: NOT_RUN, never the no-pair sentence (absence of data is never shown as
+          // safety, G3). A stored pair is still listed below if one exists. SeniorDesk logs senior_open (§5.15).
+          <SeniorDesk role="senior" {...desk} pairs={[]}><p>{NOT_RUN}</p></SeniorDesk>
         ) : (
           <>
+            {d.coverage === "not_run" && <p>{NOT_RUN}</p>}
             <ScopeAndSeverity pairs={q.pairs} severity={q.severity} scopeHref={(pairs) => substanceHref(d.bdsId, { ...q, pairs, page: 0 })}
               severityHref={(severity) => substanceHref(d.bdsId, { ...q, severity, page: 0 })} />
             <PairList items={d.pairs.items} total={d.pairs.total} page={q.page} heading="h3" emptyText={fill(r.pairsEmpty, { name: d.name })}

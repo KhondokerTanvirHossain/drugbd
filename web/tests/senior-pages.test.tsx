@@ -242,6 +242,22 @@ describe("the substance page (§5.17.4)", () => {
     expect(html).toContain("Pairs with Warfarin are not checked.");
     expect(html).not.toContain("pair-row");
   });
+  it("coverage not_run: NOT_RUN in the pairs section, never the no-pair sentence, and no pair list (§5.17.4, G3)", async () => {
+    getSeniorSubstance.mockResolvedValue(substanceDetail({ coverage: "not_run", entries: [], pairs: { total: 0, items: [] } }));
+    const html = await substancePage();
+    const pairs = html.slice(html.indexOf('<h2 id="sub-pairs">'));
+    expect(pairs).toContain("<p>Not checked yet: DDInter mapping has not run</p>");
+    expect(html).not.toContain("No stored DDInter pair links");
+    expect(html).not.toContain("pair-row");
+    expect(pairs).not.toContain("Applies to our brands");
+  });
+  it("coverage not_run with a stored pair: NOT_RUN, and the pair is still listed (never hidden, G3)", async () => {
+    getSeniorSubstance.mockResolvedValue(substanceDetail({ coverage: "not_run" }));
+    const html = await substancePage();
+    const pairs = html.slice(html.indexOf('<h2 id="sub-pairs">'));
+    expect(pairs).toContain("<p>Not checked yet: DDInter mapping has not run</p>");
+    expect(pairs).toContain("pair-row");
+  });
   it("no pair: its sentence", async () => {
     getSeniorSubstance.mockResolvedValue(substanceDetail({ pairs: { total: 0, items: [] } }));
     expect(await substancePage()).toContain("No stored DDInter pair links Warfarin with another substance we hold.");

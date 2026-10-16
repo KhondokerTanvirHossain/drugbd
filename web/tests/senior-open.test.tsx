@@ -74,6 +74,15 @@ describe("senior_open on a senior page with no pair row (§5.15)", () => {
     expect(document.querySelector('[data-test="turnstile"]')).toBeNull();
   });
 
+  it("a substance with coverage not_run logs senior_open with its BDS id, and never claims no pair", async () => {
+    getSeniorSubstance.mockResolvedValue(substanceDetail({ coverage: "not_run", entries: [], pairs: { total: 0, items: [] } }));
+    render(await SubstancePage({ params: Promise.resolve({ bdsId: "BDS-000003" }), searchParams: sp() }));
+    expect(document.body.textContent).not.toContain("No stored DDInter pair links");
+    expect(logSeniorOpen).toHaveBeenCalledTimes(1);
+    expect(logSeniorOpen).toHaveBeenCalledWith("substance", "BDS-000003");
+    expect(document.querySelector('[data-test="turnstile"]')).toBeNull();
+  });
+
   it("a page with rows still logs it once and keeps the region and the widget", async () => {
     render(await PairQueuePage({ searchParams: sp() }));
     expect(logSeniorOpen).toHaveBeenCalledTimes(1);
