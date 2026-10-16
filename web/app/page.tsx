@@ -1,31 +1,19 @@
-import { searchProducts } from "@/lib/api";
-import { firstParam } from "@/lib/params";
+import HeroCard from "@/components/public/HeroCard";
+import { loadHero } from "@/components/public/hero";
+import Landing from "@/components/public/Landing";
+import { PARTNER_SAMPLE } from "@/content/check-scenarios";
+import { checkPublic, getStats } from "@/lib/api";
 export const dynamic = "force-dynamic";
 
-export default async function Home({ searchParams }: { searchParams: Promise<{ q?: string | string[]; page?: string | string[] }> }) {
-  const sp = await searchParams;
-  const q = firstParam(sp.q);
-  const page = firstParam(sp.page) || "0";
-  const pageNum = Math.max(0, Number.parseInt(page, 10) || 0);
-  // Public scope for every session, reviewers included (spec §2.2): only approved products are listed.
-  const { items, error } = await searchProducts(q, pageNum);
+/** §6.1. Every read is public scope; each one that fails only leaves its own part out (Review Focus 4). */
+export default async function Home() {
+  const [stats, hero, check] = await Promise.all([
+    getStats().catch(() => null),
+    loadHero(),
+    checkPublic(PARTNER_SAMPLE.ids).catch(() => null),
+  ]);
   return (
-    <>
-      <form method="get" role="search">
-        <input name="q" defaultValue={q} placeholder="Brand or ingredient, e.g. napa, amphotericin" minLength={2} maxLength={100} />
-        <button type="submit">Search</button>
-      </form>
-      {error && <p role="alert">{error}</p>}
-      {q.trim().length >= 2 && !error && items.length === 0 && <p>No products found.</p>}
-      <ul>
-        {items.map((p) => (
-          <li key={p.conceptId}>
-            <a href={`/products/${encodeURIComponent(p.conceptId)}`}>{p.tradeName}</a>{" "}
-            {p.dosageForm}: {p.genericContentRaw} <small>({p.company})</small>
-          </li>
-        ))}
-      </ul>
-      {items.length === 20 && <a href={`/?q=${encodeURIComponent(q)}&page=${pageNum + 1}`}>Next page</a>}
-    </>
+    <Landing stats={stats} hero={hero ? <HeroCard hero={hero} /> : null}
+      sample={{ ids: PARTNER_SAMPLE.ids, result: check?.ok ? check.data : null }} />
   );
 }

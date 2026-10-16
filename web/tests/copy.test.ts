@@ -182,7 +182,7 @@ const stripComments = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(
  * Legacy pages that still retype copy. P2 rewrites app/check/page.tsx and app/page.tsx (the home page's `>Next page<`)
  * and empties this list.
  */
-const LEGACY_EXEMPT = ["app/check/page.tsx", "app/page.tsx"];
+const LEGACY_EXEMPT = ["app/check/page.tsx"];
 /** Files that may hold the compact pill's short form (§3.4). */
 const SHORT_FORM_ALLOWED = ["components/ui/ReviewStatus.tsx"];
 /** P3 adds content/ (Learn chapters, §6.8): Learn copy is held to the same rules as every page. */
