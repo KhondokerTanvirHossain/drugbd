@@ -34,9 +34,18 @@ public final class PublicPairs {
     public record Pair(SubstanceRef substance, SubstanceRef partnerSubstance, String severity, List<String> actions, String interaction,
                        String management, String ddinterA, String ddinterB, boolean routeAssumed, String source,
                        PairReviewRule.PublicReview pairReview, List<Brand> brands, int brandCount) {}
-    /** route: the partner brands' route for no_route (they share it), else null. */
+    /**
+     * route: for no_route, the route of the side the reason is on (this product's, or the partner brands', which they
+     * share), else null. side: "this" when the reason is this product's substance's (§6.7.2 REASON_ORDER, this side on a
+     * tie, as BatchPairs), else "partner". brands are always the partner brands the line covers.
+     */
     public record NotChecked(SubstanceRef substance, SubstanceRef partnerSubstance, String reason, String route, List<Brand> brands,
-                             int brandCount) {}
+                             int brandCount, String side) {
+        public NotChecked(SubstanceRef substance, SubstanceRef partnerSubstance, String reason, String route, List<Brand> brands,
+                          int brandCount) {
+            this(substance, partnerSubstance, reason, route, brands, brandCount, "partner");
+        }
+    }
     public record Result(String conceptId, int page, int totalPartners, List<Pair> partners, List<NotChecked> notChecked) {}
 
     private static final Comparator<Brand> BRAND_ORDER = Comparator
@@ -59,8 +68,8 @@ public final class PublicPairs {
         PairAcc(Row row) { this.row = row; }
     }
     private static final class NcAcc {
-        final String reason, route; final Brands brands = new Brands();
-        NcAcc(String reason, String route) { this.reason = reason; this.route = route; }
+        final String reason, route, side; final Brands brands = new Brands();
+        NcAcc(String reason, String route, String side) { this.reason = reason; this.route = route; this.side = side; }
     }
     private static final class Group {
         final SubstanceRef substance, partner;
@@ -69,7 +78,7 @@ public final class PublicPairs {
         Group(SubstanceRef substance, SubstanceRef partner) { this.substance = substance; this.partner = partner; }
         int rank() {
             if (!pairs.isEmpty()) return pairs.values().stream().mapToInt(p -> Severity.rank(p.row.severity())).min().orElse(3);
-            return notChecked.containsKey("no_data") ? 4 : 5;
+            return notChecked.values().stream().anyMatch(n -> "no_data".equals(n.reason)) ? 4 : 5;
         }
     }
 
@@ -102,18 +111,21 @@ public final class PublicPairs {
         for (Row r : rows) byKey.put(key(r.ddinterA(), r.ddinterB()), r);
         Map<String, Group> groups = new LinkedHashMap<>();
         for (BatchPairs.Substance s : mine) {
+            // An unusable substance of this product is never dropped (G3): each partner gets a not-checked line (§6.7.2 rule 1).
             BatchPairs.Use us = BatchPairs.use(s, route, complete);
-            if (us.reason() != null) continue;
-            boolean sAssumed = assumed(s, route);
+            boolean sAssumed = us.reason() == null && assumed(s, route);
+            String sk = s.bdsId() != null ? s.bdsId() : "name:" + s.name();
             for (PartnerGroup q : partners) {
                 BatchPairs.Substance t = q.substance();
                 if (t.bdsId() != null && t.bdsId().equals(s.bdsId())) continue;
-                String gk = s.bdsId() + "|" + (t.bdsId() != null ? t.bdsId() : "name:" + t.name());
+                String gk = sk + "|" + (t.bdsId() != null ? t.bdsId() : "name:" + t.name());
                 Group g = groups.computeIfAbsent(gk, k -> new Group(ref(s), ref(t)));
                 BatchPairs.Use ut = BatchPairs.use(t, q.route(), complete);
-                if (ut.reason() != null) {
-                    String r = ut.reason(), rt = "no_route".equals(r) ? q.route() : null;
-                    g.notChecked.computeIfAbsent(r + "|" + rt, k -> new NcAcc(r, rt)).brands.add(q);
+                if (us.reason() != null || ut.reason() != null) {
+                    boolean mineSide = BatchPairs.reasonOnThisSide(us.reason(), ut.reason());
+                    String r = mineSide ? us.reason() : ut.reason(), side = mineSide ? "this" : "partner";
+                    String rt = "no_route".equals(r) ? (mineSide ? route : q.route()) : null;
+                    g.notChecked.computeIfAbsent(r + "|" + rt + "|" + side, k -> new NcAcc(r, rt, side)).brands.add(q);
                     continue;
                 }
                 boolean tAssumed = assumed(t, q.route());
@@ -145,9 +157,9 @@ public final class PublicPairs {
                     p.brands.capped(), p.brands.count)));
             g.notChecked.values().stream()
                 .sorted(Comparator.comparingInt((NcAcc n) -> BatchPairs.REASON_ORDER.indexOf(n.reason))
-                    .thenComparing(n -> String.valueOf(n.route)))
+                    .thenComparing(n -> n.side).thenComparing(n -> String.valueOf(n.route)))
                 .forEach(n -> notChecked.add(new NotChecked(g.substance, g.partner, n.reason, n.route, n.brands.capped(),
-                    n.brands.count)));
+                    n.brands.count, n.side)));
         }
         return new Result(conceptId, page, ordered.size(), List.copyOf(pairs), List.copyOf(notChecked));
     }

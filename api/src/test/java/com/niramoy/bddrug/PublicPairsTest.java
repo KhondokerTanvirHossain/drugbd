@@ -197,10 +197,56 @@ class PublicPairsTest {
         assertThat(grouped.notChecked().get(2).brands()).hasSize(27);
     }
 
-    @Test void anUnusableSubstanceOfThisProductTakesNoPart() {
+    /**
+     * Final review finding 1 (G3): this product's own substance with no usable entry is never dropped. Every partner
+     * substance gets a not-checked line carrying this side's reason, so the page never prints the §6.5 empty sentence
+     * ("No other approved medicine has an interaction …") while public partners exist.
+     */
+    @Test void anUnusableSubstanceOfThisProductIsNotCheckedAgainstEveryPartner() {
         Result r = PublicPairs.compute("DOMP", "systemic", List.of(sub("BDS-10", "Domperidone", "none")), PARTNERS, ROWS, COMPLETE, Map.of(), 0);
-        assertThat(r.totalPartners()).isZero();
         assertThat(r.partners()).isEmpty();
-        assertThat(r.notChecked()).isEmpty();
+        assertThat(r.totalPartners()).isEqualTo(8);   // every partner substance but Domperidone itself (Motigut: same substance)
+        assertThat(r.notChecked()).extracting(n -> n.substance().name() + "+" + n.partnerSubstance().name() + ":" + n.reason() + ":"
+                + n.side() + ":" + n.route() + ":" + n.brandCount())
+            .containsExactly("Domperidone+Acetaminophen:no_data:this:null:2", "Domperidone+Amoxicillin:no_data:this:null:1",
+                "Domperidone+Aspirin:no_data:this:null:1", "Domperidone+Chloramphenicol:no_data:this:null:2",
+                "Domperidone+Clavulanic acid:no_data:this:null:1", "Domperidone+Herbalol:no_data:this:null:1",
+                // Oticmol has no systemic entry (no_route), but no_data comes first in REASON_ORDER, so this side's reason wins
+                "Domperidone+Oticmol:no_data:this:null:1", "Domperidone+Warfarin:no_data:this:null:2");
+        assertThat(r.notChecked().get(0).brands()).containsExactly(new Brand("ACE", "Ace"), new Brand("NAPA", "Napa"));
+    }
+
+    @Test void thisSidesNoRouteAndNotRunCarryThisRouteAndYieldToAPartnersNoData() {
+        BatchPairs.Substance eyeOnly = sub("BDS-20", "Eyelol", "full", new DdinterCode("DDInter900", "ophthalmic"));
+        List<Partner> two = List.of(new Partner("GW", "G Warfarin", "systemic", List.of(WARFARIN)),
+            new Partner("DOM", "Motigut", "systemic", List.of(sub("BDS-10", "Domperidone", "none"))));
+        Result noRoute = PublicPairs.compute("EYEL", "systemic", List.of(eyeOnly), two, ROWS, COMPLETE, Map.of(), 0);
+        assertThat(noRoute.notChecked()).extracting(n -> n.partnerSubstance().name() + ":" + n.reason() + ":" + n.side() + ":" + n.route())
+            .containsExactly("Domperidone:no_data:partner:null", "Warfarin:no_route:this:systemic");
+        BatchPairs.Substance unread = sub("BDS-21", "Unreadol", "full", sys("DDInter901"));   // not in COMPLETE: not_run
+        Result notRun = PublicPairs.compute("UNR", "systemic", List.of(unread), two, ROWS, COMPLETE, Map.of(), 0);
+        assertThat(notRun.notChecked()).extracting(n -> n.partnerSubstance().name() + ":" + n.reason() + ":" + n.side() + ":" + n.route())
+            .containsExactly("Domperidone:no_data:partner:null", "Warfarin:not_run:this:null");
+    }
+
+    @Test void aCombinationKeepsThePairsOfItsUsableSubstanceAndListsItsUnusableOne() {
+        Result r = PublicPairs.compute("COMBO", "systemic", List.of(ACETAMINOPHEN, sub("BDS-30", "Caffeinol", "none")),
+            List.of(new Partner("GW", "G Warfarin", "systemic", List.of(WARFARIN))), ROWS, COMPLETE, Map.of(), 0);
+        assertThat(r.totalPartners()).isEqualTo(2);
+        assertThat(r.partners()).extracting(p -> p.substance().name() + "+" + p.partnerSubstance().name()).containsExactly("Acetaminophen+Warfarin");
+        assertThat(r.notChecked()).extracting(n -> n.substance().name() + "+" + n.partnerSubstance().name() + ":" + n.reason() + ":" + n.side())
+            .containsExactly("Caffeinol+Warfarin:no_data:this");
+    }
+
+    @Test void aNoDataPartnerComesBeforeOtherNotCheckedPartnersWhateverTheName() {
+        List<Partner> two = List.of(new Partner("OTI", "Otimol", "systemic", List.of(sub("BDS-7", "Oticmol", "full",
+                new DdinterCode("DDInter700", "otic")))),
+            new Partner("ZED", "Zedex", "systemic", List.of(sub("BDS-40", "Zedol", "none"))));
+        assertThat(napa(two, ROWS, Map.of(), 0).notChecked()).extracting(n -> n.partnerSubstance().name() + ":" + n.reason())
+            .containsExactly("Zedol:no_data", "Oticmol:no_route");
+    }
+
+    @Test void aPartnersReasonIsOnThePartnerSide() {
+        assertThat(napa(PARTNERS, ROWS, Map.of(), 0).notChecked()).extracting(NotChecked::side).containsOnly("partner");
     }
 }

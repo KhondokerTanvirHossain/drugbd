@@ -73,9 +73,25 @@ class ProductInteractionsApiIntegrationTest {
             .jsonPath("$.data.notChecked[0].partnerSubstance.name").isEqualTo("Domperidone")
             .jsonPath("$.data.notChecked[0].reason").isEqualTo("no_data")
             .jsonPath("$.data.notChecked[0].brandCount").isEqualTo(1)
+            .jsonPath("$.data.notChecked[0].side").isEqualTo("partner")
             .returnResult().getResponseBody(), StandardCharsets.UTF_8);
         // a pending partner and a removed partner are never shown (§7.4 visibility rule, PO D7)
         assertThat(body).doesNotContain("Ecosprin", "A-1", "Warremo", "W-REM", "Acetylsalicylic acid");
+    }
+
+    /** Final review finding 1 (G3): a public product with no interaction data lists every public partner as not checked. */
+    @Test void aNoDataProductListsEveryPublicPartnerAsNotCheckedNeverEmpty() {
+        web.get().uri("/v1/products/D-1/interactions").exchange().expectStatus().isOk().expectBody()
+            .jsonPath("$.data.totalPartners").isEqualTo(3)
+            .jsonPath("$.data.partners.length()").isEqualTo(0)
+            .jsonPath("$.data.notChecked.length()").isEqualTo(3)
+            .jsonPath("$.data.notChecked[*].substance.name").value(v -> assertThat(v.toString()).doesNotContain("Acetaminophen", "Warfarin"))
+            .jsonPath("$.data.notChecked[0].substance.name").isEqualTo("Domperidone")
+            .jsonPath("$.data.notChecked[0].partnerSubstance.name").isEqualTo("Acetaminophen")
+            .jsonPath("$.data.notChecked[0].reason").isEqualTo("no_data")
+            .jsonPath("$.data.notChecked[0].side").isEqualTo("this")
+            .jsonPath("$.data.notChecked[2].partnerSubstance.name").isEqualTo("Warfarin")
+            .jsonPath("$.data.notChecked[2].brandCount").isEqualTo(2);
     }
 
     @Test void aProductThatIsNotPublicIsTheStubAndUnknownIs404() {
