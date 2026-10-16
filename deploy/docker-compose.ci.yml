@@ -31,6 +31,7 @@ services:
       NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: localhost
       NEXT_PUBLIC_FIREBASE_APP_ID: "1:0:web:e2e"
       REVIEWERS: pharm@e2e.test:pharmacist,eng@e2e.test:engineer,senior@e2e.test:senior
+      HERO_CONCEPT_ID: 186-0030-006--napa
     ports: ["3000:3000"]
   seed:
     image: postgres:16
