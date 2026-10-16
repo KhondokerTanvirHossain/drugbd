@@ -1,5 +1,5 @@
 import { PUBLIC_NEW, fill } from "./copy";
-import type { CheckResult } from "./public-types";
+import type { CheckResult, Side } from "./public-types";
 import { CHECK, plural } from "./public-copy";
 
 /** §6.7.2 summary formatting. The API counts (§7.4); this only words it. Pure and client-safe. */
@@ -11,13 +11,20 @@ const SEVERITIES = ["major", "moderate", "minor", "unknown"] as const;
 export const joinAnd = (xs: string[]) => (xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
 export const medicinesOnly = (m: number) => `${m} ${medicines(m)}`;
 
-/** The substances, by name and in result order, that make the not-checked pairs not checked because of no data. */
+/** True when that product's substance has coverage "none" in r.products (matched on conceptId + bdsId). */
+const hasNoData = (r: CheckResult, s: Side) =>
+  r.products.some((p) => p.conceptId === s.conceptId && p.substances.some((x) => x.bdsId === s.bdsId && x.coverage === "none"));
+
+/** The substances, by name and in result order, that make the not-checked pairs not checked because of no data. The API
+ *  names one `side` per row (side "a" when both have none), so the opposite side is named too when its substance has none. */
 export function noDataNames(r: CheckResult): string[] {
   const names: string[] = [];
+  const add = (name: string) => { if (!names.includes(name)) names.push(name); };
   for (const n of r.notChecked) {
     if (n.reason !== "no_data") continue;
-    const name = (n.side === "a" ? n.a : n.b).name;
-    if (!names.includes(name)) names.push(name);
+    const [chosen, other] = n.side === "a" ? [n.a, n.b] : [n.b, n.a];
+    add(chosen.name);
+    if (hasNoData(r, other)) add(other.name);
   }
   return names;
 }

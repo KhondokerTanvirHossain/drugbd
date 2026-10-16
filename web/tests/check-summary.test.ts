@@ -28,6 +28,27 @@ describe("summary sentence (§6.7.2, §11.1 check-summary)", () => {
     expect(summarySentence(r, 3)).toBe("3 medicines · 1 of 3 pairs checked · 1 with an interaction listed · 2 pairs not checked because Domperidone has no interaction data");
   });
 
+  it("both sides no_data (API sets side 'a'): the opposite side's no-data substance is named too", () => {
+    const sub = (bdsId: string, name: string, coverage: "none" | "full") => ({ bdsId, name, coverage, ddinter: [] });
+    const r = emptyCheck({ summary: summary({ medicines: 2, totalPairs: 1, checkedPairs: 0, alertPairs: 0, notCheckedPairs: 1 }),
+      products: [
+        { conceptId: "D", tradeName: "Domperidone", route: null, substances: [sub("BDS-D", "Domperidone", "none")] },
+        { conceptId: "X", tradeName: "X", route: null, substances: [sub("BDS-X", "X", "none")] }],
+      notChecked: [{ a: side("D", "Domperidone", "Domperidone", "BDS-D"), b: side("X", "X", "X", "BDS-X"), reason: "no_data", side: "a" }] });
+    expect(summarySentence(r, 2)).toBe("2 medicines · 0 of 1 pair checked · 0 with an interaction listed · 1 pair not checked because Domperidone and X have no interaction data");
+  });
+
+  it("the opposite side is not named when its substance has data, or a same-named substance elsewhere has none", () => {
+    const sub = (bdsId: string, name: string, coverage: "none" | "full") => ({ bdsId, name, coverage, ddinter: [] });
+    const r = emptyCheck({ summary: summary({ medicines: 3, totalPairs: 1, checkedPairs: 0, notCheckedPairs: 1 }),
+      products: [
+        { conceptId: "D", tradeName: "Domperidone", route: null, substances: [sub("BDS-D", "Domperidone", "none")] },
+        { conceptId: "W", tradeName: "G Warfarin", route: null, substances: [sub("BDS-W", "Warfarin", "full")] },
+        { conceptId: "W2", tradeName: "Other", route: null, substances: [sub("BDS-W", "Warfarin", "none")] }],
+      notChecked: [{ a: side("D", "Domperidone", "Domperidone", "BDS-D"), b: side("W", "G Warfarin", "Warfarin", "BDS-W"), reason: "no_data", side: "a" }] });
+    expect(summarySentence(r, 3)).toBe("3 medicines · 0 of 1 pair checked · 0 with an interaction listed · 1 pair not checked because Domperidone has no interaction data");
+  });
+
   it("other reasons give the generic segment; not-reviewed medicines are counted", () => {
     const r = emptyCheck({ summary: summary({ medicines: 3, totalPairs: 1, checkedPairs: 0, notCheckedPairs: 1, notReviewed: 1 }),
       notChecked: [{ a: side("W", "G Warfarin", "Warfarin"), b: side("O", "Otimol", "Oticmol"), reason: "no_route", side: "b" }] });
