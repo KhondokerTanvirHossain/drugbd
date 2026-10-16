@@ -30,11 +30,11 @@ export default function DeskRecordContext({ reg, filters, evidence, fallbackWidg
   return (
     <div className={styles.panes} data-pane={pane ?? "detail"}>
       <aside className={`side chrome-sidebar material ${styles.side}`} aria-label={DESK.sidebarLabel}>
-        {desk.slots.batchesNav}{filters}{desk.slots.batchCard}
+        {desk.slots.batchesNav}{filters}{desk.slots.seniorLinks}{desk.slots.batchCard}
       </aside>
       <section className={styles.list} aria-label="Records">
         <div className={styles.listH}>
-          <details className={styles.sideDisclosure}><summary>{DESK.sidebarLabel}</summary>{desk.slots.batchesNav}{filters}</details>
+          <details className={styles.sideDisclosure}><summary>{DESK.sidebarLabel}</summary>{desk.slots.batchesNav}{filters}{desk.slots.seniorLinks}</details>
           <div className={styles.listT}><b>{reg.batchId}</b><span>{count}</span></div>
           <ListSearch batchId={reg.batchId} conceptId={reg.conceptId} show={reg.show} q={reg.q} />
         </div>

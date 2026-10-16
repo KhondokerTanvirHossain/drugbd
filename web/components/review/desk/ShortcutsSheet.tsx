@@ -7,11 +7,12 @@ import { DESK_NEW } from "@/lib/copy";
 import { UNDO_SECONDS } from "@/lib/desk-settings";
 import { setDeskSettingAction } from "@/lib/desk-settings-actions";
 import { DESK, SHEET_ROWS } from "@/lib/review-copy";
+import type { ReviewerRole } from "@/lib/review-types";
 
 /** §5.14 shortcuts sheet: a modal dialog, Tab trapped, with the two desk settings (forms that the desk enhances). */
-export default function ShortcutsSheet({ open, onClose, undoSeconds, singleKeys, sendKeys, onUndo, onKeys }: {
+export default function ShortcutsSheet({ open, onClose, undoSeconds, singleKeys, sendKeys, onUndo, onKeys, role = "pharmacist" }: {
   open: boolean; onClose: () => void; undoSeconds: number; singleKeys: boolean; sendKeys: string;
-  onUndo: (n: number) => void; onKeys: (on: boolean) => void;
+  onUndo: (n: number) => void; onKeys: (on: boolean) => void; role?: ReviewerRole;
 }) {
   const sheet = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -36,7 +37,7 @@ export default function ShortcutsSheet({ open, onClose, undoSeconds, singleKeys,
           <Button variant="plain" size="sm" data-fk="sheet-close" onClick={onClose}>{DESK.close} <Kbd keys="Esc" /></Button></div>
         <p className="sheet-note" id="sheet-note">{DESK.sheetNote}</p>
         <dl>
-          {SHEET_ROWS(undoSeconds).map(([k, text]) => (
+          {SHEET_ROWS(undoSeconds, role).map(([k, text]) => (
             <Fragment key={text}>
               <dt>{(k === "SEND" ? [sendKeys] : k.split(" ")).map((x) => <Kbd key={x} keys={x} />)}</dt>
               <dd>{text}</dd>

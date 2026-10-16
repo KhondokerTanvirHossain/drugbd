@@ -1,0 +1,9 @@
+/* §10.4 "Interactive targets are at least 24 × 24 px" (WCAG 2.5.8), the flat project rule. The SourceLink markup is
+   fixed by §3.4 (class="src-link"), so this is a global component stylesheet, not a CSS Module. Inline-block keeps the
+   link in its line of text (a code, a label, " fetched on …") and gives it a 24 px line wherever it is stacked: the
+   comparison table, the evidence drawer's Sources rows, the substance page's DDInter entries. */
+.src-link {
+  display: inline-block;
+  min-height: 24px;
+  line-height: 24px;
+}

@@ -2,6 +2,8 @@ package com.niramoy.bddrug;
 
 import com.niramoy.bddrug.domain.BatchPairs;
 import com.niramoy.bddrug.domain.BatchPairs.NotChecked;
+import com.niramoy.bddrug.domain.BatchPairs.OtherProduct;
+import com.niramoy.bddrug.domain.BatchPairs.OtherResult;
 import com.niramoy.bddrug.domain.BatchPairs.Pair;
 import com.niramoy.bddrug.domain.BatchPairs.PairRow;
 import com.niramoy.bddrug.domain.BatchPairs.PartnerRef;
@@ -9,8 +11,10 @@ import com.niramoy.bddrug.domain.BatchPairs.Product;
 import com.niramoy.bddrug.domain.BatchPairs.Substance;
 import com.niramoy.bddrug.domain.DdinterCode;
 import org.junit.jupiter.api.Test;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.IntStream;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /** §5.6.2 batch pairs with RouteRule on both sides; the eye drop is checked against DDInter352 (§1.5). */
@@ -134,5 +138,97 @@ class BatchPairsTest {
         List<Product> batch = List.of(p("W", 1, "systemic", WARFARIN), p("MN", 2, "nasal", MUPIROCIN), p("MX", 3, null, MUPIROCIN));
         BatchPairs.Result r = BatchPairs.compute("W", batch, ROWS, COMPLETE);
         assertThat(r.notChecked()).extracting(NotChecked::route).containsExactly("nasal", null);
+    }
+
+    // ---- P1C: computeFor over other batches (§7.3 otherPairs) and partnerScope (§5.5.3)
+
+    static OtherProduct other(Product q, String batch, boolean approved) {
+        return new OtherProduct(q.conceptId(), q.tradeName(), batch, approved, q.route(), q.substances());
+    }
+
+    /** §11.3 BatchPairsTest.computeForMatchesCompute: for one partner set, the same pairs and not-checked lines. */
+    @Test void computeForMatchesCompute() {
+        for (String id : List.of("W", "EYE", "CAP", "D", "COMBO", "NASAL")) {
+            Product me = BATCH.stream().filter(p -> p.conceptId().equals(id)).findFirst().orElseThrow();
+            BatchPairs.Result batch = BatchPairs.compute(id, BATCH, ROWS, COMPLETE);
+            List<OtherProduct> partners = BATCH.stream().filter(p -> p != me).map(p -> other(p, "B-2", false)).toList();
+            OtherResult others = BatchPairs.computeFor(me, partners, ROWS, COMPLETE);
+            assertThat(others.pairs()).extracting(BatchPairs.OtherPair::ddinterA, BatchPairs.OtherPair::ddinterB,
+                    BatchPairs.OtherPair::severity, p -> p.partners().stream().map(BatchPairs.OtherPartner::conceptId).sorted().toList())
+                .as(id).containsExactlyElementsOf(batch.pairs().stream().map(p -> org.assertj.core.groups.Tuple.tuple(p.ddinterA(),
+                    p.ddinterB(), p.severity(), p.partners().stream().map(PartnerRef::conceptId).sorted().toList())).toList());
+            assertThat(others.notChecked()).extracting(BatchPairs.OtherNotChecked::substance, BatchPairs.OtherNotChecked::partnerSubstance,
+                    BatchPairs.OtherNotChecked::reason, BatchPairs.OtherNotChecked::side, BatchPairs.OtherNotChecked::route,
+                    n -> n.partners().stream().map(BatchPairs.OtherPartner::conceptId).sorted().toList())
+                .as(id).containsExactlyInAnyOrderElementsOf(batch.notChecked().stream().filter(n -> !n.reason().equals("same_product"))
+                    .map(n -> org.assertj.core.groups.Tuple.tuple(n.substance(), n.partnerSubstance(), n.reason(), n.side(), n.route(),
+                        n.partners().stream().map(PartnerRef::conceptId).sorted().toList())).toList());
+            assertThat(others.otherBatches()).isEqualTo(1);
+        }
+    }
+
+    @Test void partnersAreSplitByStatusOrderedByBatchThenNameAndCappedAtFive() {
+        Product me = BATCH.get(0);   // W: warfarin
+        List<OtherProduct> partners = new ArrayList<>();
+        IntStream.rangeClosed(1, 7).forEach(i -> partners.add(new OtherProduct("A" + i, "Aspra " + i, i % 2 == 0 ? "B-2" : "B-3",
+            false, "systemic", List.of(ASPIRIN))));
+        partners.add(new OtherProduct("A-OK", "Ecosprin", "B-9", true, "systemic", List.of(ASPIRIN)));
+        OtherResult r = BatchPairs.computeFor(me, partners, ROWS, COMPLETE);
+        assertThat(r.pairs()).hasSize(2);
+        BatchPairs.OtherPair approved = r.pairs().get(0), pending = r.pairs().get(1);
+        assertThat(approved.partners()).extracting(BatchPairs.OtherPartner::conceptId).containsExactly("A-OK");
+        assertThat(approved.partnerCount()).isEqualTo(1);
+        assertThat(pending.partnerCount()).isEqualTo(7);
+        assertThat(pending.partners()).extracting(BatchPairs.OtherPartner::tradeName)
+            .containsExactly("Aspra 2", "Aspra 4", "Aspra 6", "Aspra 1", "Aspra 3");   // B-2 first, then B-3
+        assertThat(pending.partners()).allMatch(p -> !p.approved());
+        assertThat(pending.partnerBdsId()).isEqualTo("BDS-2");
+        assertThat(r.otherBatches()).isEqualTo(3);
+    }
+
+    /** Many partners share one substance list (the reader shares it); each still counts once, apart by route and status. */
+    @Test void partnersSharingSubstancesStayApartByRouteAndStatus() {
+        List<Substance> chloramphenicol = List.of(CHLORAMPHENICOL), mupirocin = List.of(MUPIROCIN);
+        List<OtherProduct> partners = List.of(
+            new OtherProduct("CAP1", "Cap 1", "B-2", false, "systemic", chloramphenicol),
+            new OtherProduct("CAP2", "Cap 2", "B-2", false, "systemic", chloramphenicol),
+            new OtherProduct("EYE1", "Eye 1", "B-2", false, "ophthalmic", chloramphenicol),
+            new OtherProduct("CAP3", "Cap 3", "B-3", true, "systemic", chloramphenicol),
+            new OtherProduct("N1", "Nasal 1", "B-2", false, "nasal", mupirocin),
+            new OtherProduct("N2", "Nasal 2", "B-3", false, "nasal", mupirocin));
+        OtherResult r = BatchPairs.computeFor(BATCH.get(0), partners, ROWS, COMPLETE);
+        assertThat(r.pairs()).extracting(BatchPairs.OtherPair::ddinterB, BatchPairs.OtherPair::partnerCount,
+                p -> p.partners().stream().map(BatchPairs.OtherPartner::conceptId).toList())
+            .containsExactly(org.assertj.core.groups.Tuple.tuple("DDInter351", 1, List.of("CAP3")),
+                org.assertj.core.groups.Tuple.tuple("DDInter351", 2, List.of("CAP1", "CAP2")));
+        assertThat(r.notChecked()).extracting(BatchPairs.OtherNotChecked::partnerSubstance, BatchPairs.OtherNotChecked::route,
+                BatchPairs.OtherNotChecked::partnerCount, n -> n.partners().stream().map(BatchPairs.OtherPartner::conceptId).toList())
+            .containsExactly(org.assertj.core.groups.Tuple.tuple("Mupirocin", "nasal", 2, List.of("N1", "N2")));
+    }
+
+    @Test void noPartnersMeansNoPairsAndNoOtherBatches() {
+        OtherResult r = BatchPairs.computeFor(BATCH.get(0), List.of(), ROWS, COMPLETE);
+        assertThat(r.pairs()).isEmpty();
+        assertThat(r.notChecked()).isEmpty();
+        assertThat(r.otherBatches()).isZero();
+    }
+
+    @Test void theInteractionIdTravelsWithThePairButIsNotSerialised() throws Exception {
+        PairRow row = new PairRow("DDInter1951", "DDInter20", "Warfarin", "Acetylsalicylic acid", "major", List.of(), "t", "m", "3039");
+        BatchPairs.Result r = BatchPairs.compute("W", BATCH, List.of(row), COMPLETE);
+        assertThat(r.pairs().get(0).interactionId()).isEqualTo("3039");
+        assertThat(new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules().writeValueAsString(r.pairs().get(0)))
+            .doesNotContain("3039").contains("\"source\":null").contains("\"pairReview\":null");
+    }
+
+    /** §7.3 partnerScope: the partner side is the id that is not one of mine. */
+    @Test void partnerScopeIsBatchSameProductOrOther() {
+        Set<String> mine = Set.of("DDInter1951"), others = Set.of("DDInter14");
+        assertThat(BatchPairs.partnerScope("DDInter14", "DDInter1951", mine, others)).isEqualTo("batch");
+        assertThat(BatchPairs.partnerScope("DDInter1951", "DDInter20", mine, others)).isEqualTo("other");
+        Set<String> combo = Set.of("DDInter394", "DDInter83");
+        assertThat(BatchPairs.partnerScope("DDInter394", "DDInter83", combo, Set.of())).isEqualTo("same_product");
+        // both mine, and another product of this batch chooses one of them: the batch note
+        assertThat(BatchPairs.partnerScope("DDInter394", "DDInter83", combo, Set.of("DDInter83"))).isEqualTo("batch");
     }
 }

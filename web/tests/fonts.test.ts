@@ -20,13 +20,13 @@ describe("self-hosted fonts (§3.2)", () => {
     expect(statSync(path(FILES[0])).size + statSync(path(FILES[1])).size).toBeLessThanOrEqual(90 * 1024);
   });
 
-  it("fonts.css holds only @font-face rules with the exact family names and font-display: swap", () => {
+  it("fonts.css holds only @font-face rules with the exact family names and font-display: optional (§3.2, PO 16/10/2026)", () => {
     expect(css().replace(/\/\*[\s\S]*?\*\//g, "").replace(/@font-face\s*\{[^}]*\}/g, "").trim()).toBe("");
     const all = faces().map((f) => [prop(f, "font-family"), prop(f, "font-weight"), prop(f, "font-display"), prop(f, "src")]);
     expect(all).toEqual([
-      ['"Onest"', "400 700", "swap", 'url("/fonts/onest-latin-wght-normal.woff2") format("woff2")'],
-      ['"IBM Plex Mono"', "400", "swap", 'url("/fonts/ibm-plex-mono-latin-400-normal.woff2") format("woff2")'],
-      ['"IBM Plex Mono"', "500", "swap", 'url("/fonts/ibm-plex-mono-latin-500-normal.woff2") format("woff2")'],
+      ['"Onest"', "400 700", "optional", 'url("/fonts/onest-latin-wght-normal.woff2") format("woff2")'],
+      ['"IBM Plex Mono"', "400", "optional", 'url("/fonts/ibm-plex-mono-latin-400-normal.woff2") format("woff2")'],
+      ['"IBM Plex Mono"', "500", "optional", 'url("/fonts/ibm-plex-mono-latin-500-normal.woff2") format("woff2")'],
     ]);
   });
 

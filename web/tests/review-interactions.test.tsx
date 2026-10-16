@@ -1,8 +1,10 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { renderToStaticMarkup as r } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import Interactions from "@/components/review/detail/Interactions";
 import { NO_DATA_SENTENCE, NOT_RUN } from "@/lib/copy";
-import type { BatchPairs, IngredientSummary, ReviewItem } from "@/lib/review-types";
+import type { BatchPairs, IngredientSummary, OtherPair, OtherPairs, OtherPartner, ReviewItem } from "@/lib/review-types";
 import { pilotItem } from "./fixtures/pilot";
 
 /** The visible text: tags removed and React's entity escapes decoded. */
@@ -62,7 +64,7 @@ describe("no data, no entry for the route, not run, unmapped (§5.6.1, D46)", ()
     expect(html).toContain("Drug, disease and food interactions: no data in DDInter 2.0.");
     expect(html).toContain("Not checked, 2 pairs with this batch:");
     expect(html).toContain('<span class="sev sev--nodata">Domperidone + Warfarin</span>');
-    expect(html).not.toContain("With the other medicines in this batch");
+    expect(html).not.toContain("With other medicines");
     expect(html).not.toContain("<details");
   });
 
@@ -120,17 +122,18 @@ describe("the batch block (§5.6.2)", () => {
   const text = strip(html);
 
   it("summary and chips", () => {
-    expect(text).toContain("With the other medicines in this batch");
+    expect(html).toContain('<h3 class="withH">With other medicines</h3>');
+    expect(html).toContain('<h4 class="subH">In batch 0001-pilot</h4>');
     expect(text).toContain("3 pairs found in DDInter 2.0. 4 pairs not checked.");
     expect(html).toContain('aria-label="Batch pairs by severity"');
   });
 
   it("pairs with text are cards, management first, interaction otherwise, with mono ids", () => {
-    expect(html).toContain('<h4 class="pair-names">Warfarin + Acetylsalicylic acid</h4>');
-    expect(html).toContain('<p class="pair-meta">With Aspirin (record 2). Action in DDInter: synergy. <span class="mono">DDInter1951/DDInter20</span></p>');
+    expect(html).toContain('<h5 class="pair-names">Warfarin + Acetylsalicylic acid</h5>');
+    expect(html).toContain('<p class="pair-meta">From DDInter 2.0. With Aspirin (record 2). Action in DDInter: synergy. <span class="mono">DDInter1951/DDInter20</span></p>');
     expect(html).toContain('<span class="whenClosed">Management, truncated.</span><span class="whenOpen">Management, in full.</span>');
     expect(html).toContain("Interaction description, truncated. DDInter has no management text for this pair.");
-    expect(html.indexOf("Acetylsalicylic acid</h4>")).toBeLessThan(html.indexOf("Clarithromycin</h4>"));
+    expect(html.indexOf("Acetylsalicylic acid</h5>")).toBeLessThan(html.indexOf("Clarithromycin</h5>"));
   });
 
   it("pairs without text are grouped, and an unclassified pair is never low risk", () => {
@@ -156,5 +159,156 @@ describe("the batch block (§5.6.2)", () => {
     expect(strip(combo)).toContain("Not checked: Clavulanic acid + Amoxicillin are ingredients of this product.");
     expect(strip(combo)).toContain("0 pairs found in DDInter 2.0.");
     expect(strip(combo)).not.toContain("not checked.");
+  });
+});
+
+describe("P1C: the combination fix (§5.6.2)", () => {
+  it("one no-data ingredient no longer hides the other ingredient's pairs; its own pairs are not checked", () => {
+    const base = pilotItem("amoxycillin");
+    const [clav, amox] = base.ingredients;
+    const g = (n: string, i: number) => ({ conceptId: n, tradeName: n, index: i });
+    const item = pilotItem("amoxycillin", {
+      ingredients: [{ ...clav, coverage: { coverage: "none", note: "" }, ddinter: { chosen: [], entries: [] } }, amox],
+      batchPairs: { totalBatchPairs: 28,
+        pairs: [{ ddinterA: "DDInter1951", ddinterB: "DDInter83", nameA: "Warfarin", nameB: "Amoxicillin", substance: "Amoxicillin",
+          partnerSubstance: "Warfarin", severity: "moderate", actions: ["synergy"], interaction: "May increase the INR.",
+          management: "Monitor the INR.", partners: [g("G Warfarin", 6)] }],
+        notChecked: [{ substance: "Clavulanic acid", partnerSubstance: "Warfarin", partners: [g("G Warfarin", 6)], reason: "no_data",
+          side: "this", route: "systemic" }] } });
+    const html = r(<Interactions item={item} />);
+    expect(html).toContain('<h3 class="withH">With other medicines</h3>');
+    expect(html).toContain('<h5 class="pair-names">Amoxicillin + Warfarin</h5>');
+    expect(strip(html)).toContain(`Not checked. Clavulanic acid: ${NO_DATA_SENTENCE}`);
+    expect(html).toContain('<span class="sev sev--nodata">Clavulanic acid + Warfarin</span>');
+  });
+});
+
+describe("P1C: every pair card says it is from DDInter and shows its senior-review state (§5.6.2)", () => {
+  const card = (over: Partial<BatchPairs["pairs"][number]>) => pilotItem("g-warfarin", { batchPairs: { totalBatchPairs: 28, notChecked: [],
+    pairs: [{ ddinterA: "DDInter1951", ddinterB: "DDInter20", nameA: "Warfarin", nameB: "Acetylsalicylic acid", substance: "Warfarin",
+      partnerSubstance: "Acetylsalicylic acid", severity: "major", actions: ["synergy"], interaction: "May increase bleeding.",
+      management: "Avoid the combination.", partners: [{ conceptId: "a", tradeName: "Aspirin", index: 2 }], ...over }] } });
+
+  it("the pair link follows the source line and the state line is last; never green", () => {
+    const html = r(<Interactions item={card({
+      source: { url: "https://ddinter2.scbdd.com/server/interact/3039/", label: "Full record in DDInter 2.0", fetchedAt: null },
+      pairReview: { state: "reviewed", at: "2026-10-15T03:00:00Z", mine: false, note: null } })} />);
+    expect(html).toContain('Management, truncated.</span><span class="whenOpen">Management, in full.</span> <a class="src-link" href="https://ddinter2.scbdd.com/server/interact/3039/" target="_blank" rel="noopener noreferrer">Full record in DDInter 2.0<span class="sr-only"> (opens in a new tab)</span></a>');
+    expect(html).toContain('<p class="pair-review">Pair reviewed by a senior pharmacist on 15/10/2026</p></article>');
+    expect(html).not.toMatch(/rv--approved/);
+  });
+
+  it("an open pair issue shows its note to every reviewer; the pair, its severity and its text stay (G3)", () => {
+    const html = r(<Interactions item={card({ pairReview: { state: "issue", at: "2026-10-15T03:00:00Z", mine: false, note: "severity looks low" } })} />);
+    expect(strip(html)).toContain("Pair issue reported by a senior pharmacist on 15/10/2026. Note: severity looks low");
+    expect(html).toContain('<span class="sev sev--major">Major</span>');
+    expect(html).toContain("Avoid the combination.");
+  });
+});
+
+describe("P1C: In other batches (§5.6.2)", () => {
+  const partner = (n: number, approved: boolean): OtherPartner => ({ conceptId: `c${n}`, tradeName: `Brand ${n}`, batchId: `b-${n}`, approved });
+  const other = (approved: boolean, count: number, over: Partial<OtherPair> = {}): OtherPair => ({
+    ddinterA: "DDInter14", ddinterB: "DDInter926", nameA: "Acetaminophen", nameB: "Ibuprofen", substance: "Acetaminophen",
+    partnerSubstance: "Ibuprofen", partnerBdsId: "BDS-000012", severity: "moderate", actions: ["synergy"],
+    interaction: "May increase the risk of bleeding.", management: null, source: null,
+    pairReview: { state: "not_reviewed", at: null, mine: false, note: null },
+    partners: Array.from({ length: Math.min(count, 5) }, (_, i) => partner(i + 1, approved)), partnerCount: count, ...over });
+  const napa = (otherPairs: OtherPairs) => pilotItem("napa", { otherPairs });
+
+  it("two subgroups by the partner's status, each with its summary and chips", () => {
+    const html = r(<Interactions item={napa({ otherBatches: 2, notChecked: [], pairs: [other(true, 1), other(false, 2, { severity: "minor" })] })} />);
+    expect(html).toContain('<h4 class="subH">In other batches</h4>');
+    expect(html).toContain('<h5 class="subH">With approved medicines</h5>');
+    expect(html).toContain('<h5 class="subH">With medicines not yet approved</h5>');
+    expect(html.match(/aria-label="Pairs with other batches by severity"/g)).toHaveLength(2);
+    expect(html).toContain('<h6 class="pair-names">Acetaminophen + Ibuprofen</h6>');
+    expect(html).toContain('id="other-a-DDInter14-DDInter926-text"');
+    expect(html).toContain('id="other-n-DDInter14-DDInter926-text"');
+    // only the In other batches block: the batch block still says "None of the 28 batch pairs … involve Acetaminophen"
+    // (napa's batchPairs.pairs is empty while Acetaminophen has a chosen entry)
+    const otherBlock = html.slice(html.indexOf('<h4 class="subH">In other batches</h4>'));
+    expect(strip(otherBlock)).not.toContain("None of the");
+    expect(strip(otherBlock)).not.toContain("DDInter 2.0 lists no interaction between");
+  });
+
+  it("partner lines show three, then 'and {k} more'; the details list the five returned and say '{s} of {n} medicines'", () => {
+    const html = r(<Interactions item={napa({ otherBatches: 7, notChecked: [], pairs: [other(true, 7)] })} />);
+    expect(strip(html)).toContain("With Brand 1 (batch b-1), Brand 2 (batch b-2), Brand 3 (batch b-3) and 4 more. ");
+    expect(html).toContain("<summary>5 of 7 medicines</summary>");
+    for (let n = 1; n <= 5; n++) expect(html).toContain(`<a href="/review/b-${n}/c${n}">Brand ${n} (batch <span class="mono">b-${n}</span>)</a>`);
+    expect(strip(html)).toContain("and 2 more.");
+    expect(html).not.toContain("See every brand");
+    const senior = r(<Interactions item={napa({ otherBatches: 7, notChecked: [], pairs: [other(true, 7)] })} role="senior" />);
+    expect(senior).toContain('<a href="/review/substances/BDS-000012">See every brand of Ibuprofen</a>');
+    for (const role of ["pharmacist", "engineer"] as const)
+      expect(r(<Interactions item={napa({ otherBatches: 7, notChecked: [], pairs: [other(true, 7)] })} role={role} />)).not.toContain("See every brand");
+    expect(r(<Interactions item={napa({ otherBatches: 1, notChecked: [], pairs: [other(false, 2)] })} />)).toContain("<summary>All 2 medicines</summary>");
+  });
+
+  it("no partners in other batches: no no-interaction claim (Review Focus 2)", () => {
+    const html = strip(r(<Interactions item={napa({ otherBatches: 0, pairs: [], notChecked: [] })} />));
+    expect(html).toContain("There are no other batches yet.");
+    expect(html).not.toContain("DDInter 2.0 lists no interaction between");
+  });
+
+  it("other batches exist and every pair with them was checked: the no-interaction line with its caveat", () => {
+    expect(strip(r(<Interactions item={napa({ otherBatches: 2, pairs: [], notChecked: [] })} />))).toContain(
+      "DDInter 2.0 lists no interaction between Napa and the medicines in other batches. This is not a guarantee that they are safe to combine.");
+  });
+
+  it("not-checked lines name their partners like pairs do: three, 'and {k} more.' per line, the details and the senior link", () => {
+    const line = (partnerSubstance: string, partnerBdsId: string, from: number) => ({ substance: "Acetaminophen", partnerSubstance,
+      partnerBdsId, partners: Array.from({ length: 5 }, (_, i) => partner(from + i, true)), partnerCount: 7,
+      reason: "no_route" as const, side: "partner" as const, route: "nasal" });
+    const item = napa({ otherBatches: 14, pairs: [], notChecked: [line("Mupirocin", "BDS-000020", 1), line("Fusidic acid", "BDS-000021", 11)] });
+    for (const role of ["senior", "pharmacist"] as const) {
+      const html = r(<Interactions item={item} role={role} />);
+      const text = strip(html);
+      expect(text).toContain("0 pairs found in DDInter 2.0. 2 pairs not checked.");
+      for (const [sub, from] of [["Mupirocin", 1], ["Fusidic acid", 11]] as const) {
+        for (let n = from; n < from + 3; n++)
+          expect(text).toContain(`Not checked: Brand ${n} (batch b-${n})'s route is nasal and DDInter has no entry for ${sub} on that route.`);
+        for (let n = from + 3; n < from + 5; n++) expect(text).not.toContain(`Brand ${n} (batch b-${n})'s route`);
+        for (let n = from; n < from + 5; n++)
+          expect(html).toContain(`<a href="/review/b-${n}/c${n}">Brand ${n} (batch <span class="mono">b-${n}</span>)</a>`);
+        const seeAll = `<a href="/review/substances/BDS-0000${from === 1 ? 20 : 21}">See every brand of ${sub}</a>`;
+        if (role === "senior") expect(html).toContain(seeAll);
+        else expect(html).not.toContain(seeAll);
+      }
+      expect(html.match(/<summary>5 of 7 medicines<\/summary>/g)).toHaveLength(2);
+      // each line keeps its own "and 4 more." (7 − 3 shown) and its list's "and 2 more." (7 − 5 returned): never merged
+      expect(text.match(/and 4 more\./g)).toHaveLength(2);
+      expect(text.match(/and 2 more\./g)).toHaveLength(2);
+      expect(html.indexOf("Mupirocin on that route")).toBeLessThan(html.indexOf("<summary>5 of 7 medicines</summary>"));
+      expect(html.indexOf("<summary>5 of 7 medicines</summary>")).toBeLessThan(html.indexOf("Fusidic acid on that route"));
+    }
+  });
+
+  it("a no-data substance names its pairs with other batches on a second line, each pair once", () => {
+    const nc = (approved: boolean) => ({ substance: "Domperidone", partnerSubstance: "Ibuprofen", partnerBdsId: "BDS-000012",
+      partners: [partner(1, approved)], partnerCount: 1, reason: "no_data" as const, side: "this" as const, route: "systemic" });
+    const item = pilotItem("domperidone", { otherPairs: { otherBatches: 1, pairs: [], notChecked: [nc(true), nc(false)] } });
+    const html = r(<Interactions item={item} />);
+    expect(strip(html)).toContain("Not checked, 1 pair with medicines in other batches:");
+    expect(html.match(/<span class="sev sev--nodata">Domperidone \+ Ibuprofen<\/span>/g)).toHaveLength(1);
+  });
+});
+
+describe("the partner details are 24 × 24 px targets (§10.4, WCAG 2.5.8)", () => {
+  const css = readFileSync(join(process.cwd(), "components/review/detail/detail.module.css"), "utf8");
+  it("gives each partner link a 24 px line, inline-block so the space before its mono batch id survives (never flex)", () => {
+    const rule = /\.partners li > a\s*\{([^}]*)\}/.exec(css);
+    expect(rule).not.toBeNull();
+    expect(rule![1]).toMatch(/display:\s*inline-block/);
+    expect(rule![1]).toMatch(/min-height:\s*24px/);
+    expect(rule![1]).toMatch(/line-height:\s*24px/);
+  });
+  it("gives the summary a 24 px line and keeps its disclosure marker (list-item, never flex)", () => {
+    const rule = /\.partners summary\s*\{([^}]*)\}/.exec(css);
+    expect(rule).not.toBeNull();
+    expect(rule![1]).toMatch(/min-height:\s*24px/);
+    expect(rule![1]).toMatch(/line-height:\s*24px/);
+    expect(rule![1]).not.toMatch(/display:/);
   });
 });

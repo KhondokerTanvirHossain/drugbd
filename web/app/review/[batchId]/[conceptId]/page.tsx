@@ -60,6 +60,7 @@ export default async function RecordPage({ params, searchParams }: {
     displayStatus: item.displayStatus, version: item.version, stagesBlocked: stagesBlocked(item), sourceUrl: item.sourceUrl,
     show, q, rows, all, requestId: randomUUID(), prevHref: rows[k - 1]?.href ?? null, nextHref: rows[k + 1]?.href ?? null,
     complete: firstParam(sp.view) === "done" && all.length > 0 && all.length === whole.total && all.every((r) => r.displayStatus === "approved"),
+    openIssues: item.openIssues,
   };
   const emptyText = rows.length === 0 ? (q ? fill(DESK.noMatch, { q }) : DESK.empty[show]) : null;
   const diff = item.displayStatus === "back_in_review" && item.reopen?.diffAvailable
@@ -72,13 +73,13 @@ export default async function RecordPage({ params, searchParams }: {
       filters={<ShowFilters batchId={batchId} conceptId={conceptId} show={show} q={q} counts={visible.filterCounts} />}
       evidence={<EvidenceContent item={item} />}
       fallbackWidget={<Turnstile action="decision" nonce={nonce} />}
-      confirm={confirming ? <ConfirmPanel item={item} role={session.role === "engineer" ? "engineer" : "pharmacist"} x={firstParam(sp.x)}
+      confirm={confirming ? <ConfirmPanel item={item} role={session.role} x={firstParam(sp.x)}
         d={firstParam(sp.d)} r={firstParam(sp.r)} error={firstParam(sp.e) || null} nonce={nonce} /> : null}>
       <RecordHeader item={item} tools={<DetailTools reg={reg} />} backHref={recordHref(batchId, conceptId, { show, q, pane: "list" })} />
       {item.displayStatus === "back_in_review" && <BackInReviewCard item={item} diff={diff} />}
       <ComparisonTable item={item} />
       <AutomatedChecks item={item} />
-      <Interactions item={item} />
+      <Interactions item={item} role={session.role} />
       <History item={item} />
     </DeskRecordContext>
   );

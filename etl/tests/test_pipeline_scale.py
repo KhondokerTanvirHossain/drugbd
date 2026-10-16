@@ -141,13 +141,21 @@ def url():
 
 @pytest.fixture(autouse=True)
 def clean(url):
-    """Every test starts without DDInter data, so mapping and text counts are its own."""
+    """Every test starts from an empty database (P1C: a carried approval would cross tests otherwise)."""
     with psycopg.connect(url) as c:
-        for t in ("ddinter_pair", "ddinter_interaction_text", "ddinter_disease", "ddinter_food", "ddinter_drug",
-                  "interaction_coverage"):
-            c.execute(f"DELETE FROM curated.{t}")
-        c.execute("DELETE FROM curated.substance_code WHERE system = 'DDINTER'")
-        c.execute("DELETE FROM curated.substance_name WHERE name_type = 'ddinter'")
+        # V6 snapshots are append-only; only this throwaway test database switches the trigger off to start each test empty.
+        c.execute("ALTER TABLE ops.item_snapshot DISABLE TRIGGER item_snapshot_append_only")
+        c.execute("DELETE FROM ops.item_snapshot")
+        c.execute("ALTER TABLE ops.item_snapshot ENABLE TRIGGER item_snapshot_append_only")
+        for t in ("ops.review_decision", "ops.stage_result", "ops.batch_run", "ops.batch_item", "ops.batch",
+                  "curated.ddinter_pair", "curated.ddinter_interaction_text", "curated.ddinter_disease",
+                  "curated.ddinter_food", "curated.ddinter_drug", "curated.interaction_coverage",
+                  "curated.clinical_drug_ingredient", "curated.brand_product_ingredient"):
+            c.execute(f"DELETE FROM {t}")
+        c.execute("UPDATE curated.brand_product SET bdc_id = NULL")
+        for t in ("curated.clinical_drug", "curated.brand_product", "curated.substance_name",
+                  "curated.substance_code", "curated.substance"):
+            c.execute(f"DELETE FROM {t}")
 
 
 def q(url, sql, params=()):
@@ -326,14 +334,14 @@ def test_an_exception_while_committing_a_chunk_fails_it_and_marks_later_chunks_n
     batch_id = "0205-commit-boom"
     h = Harness(url)
     f = loaded(h, tmp_path, batch_id, ALL)
-    real, calls = run_pipeline.reopen_review, []
+    real, calls = run_pipeline.settle, []
 
-    def boom_on_third_chunk(conn, b, ids, *rest):
+    def boom_on_third_chunk(conn, b, ids, *rest, **kw):
         calls.append(list(ids))
         if len(calls) == 3:
             raise RuntimeError("chunk bookkeeping exploded")
-        return real(conn, b, ids, *rest)
-    monkeypatch.setattr(run_pipeline, "reopen_review", boom_on_third_chunk)
+        return real(conn, b, ids, *rest, **kw)
+    monkeypatch.setattr(run_pipeline, "settle", boom_on_third_chunk)
     assert h.main("--batch", f, "--stages", "ddinter", "--ddinter-chunk", "3") != 0
     assert calls == [ALL[0:3], ALL[3:6], ALL[6:9]]
     res = results(url, batch_id, "ddinter")
@@ -363,12 +371,12 @@ def test_ddinter_chunk_must_be_a_positive_integer(url, tmp_path, bad):
 
 # --- single record (--concept) ---------------------------------------------------------------------
 
-def test_concept_runs_only_that_item_and_resets_only_its_review(url, tmp_path):
+def test_concept_runs_only_that_item_and_settles_only_its_review(url, tmp_path):
     batch_id = "0210-single"
     f = batch_file(tmp_path, batch_id, [P[1], P[2], P[3], MISSING])
     assert Harness(url).main("--batch", f) == 0
     approve(url, batch_id, P[1])
-    decided_2 = approve(url, batch_id, P[2])
+    approve(url, batch_id, P[2])
     batch_before = q(url, "SELECT item_count, run_at FROM ops.batch WHERE batch_id = %s", (batch_id,))
     items_before = items(url, batch_id)
     stage_before = {(c, s): t for c, s, t in q(
@@ -378,12 +386,7 @@ def test_concept_runs_only_that_item_and_resets_only_its_review(url, tmp_path):
     assert h.main("--batch", f, "--concept", P[2]) == 0
     assert h.ocl.asked == [P[2]]
     assert h.ddinter.detail_calls == [DD[2]]
-    after = items(url, batch_id)
-    review, note, extracted_at = after[P[2]]
-    assert (review, note) == ("pending", None) and extracted_at > decided_2
-    for other in (P[1], P[3], MISSING):
-        assert after[other] == items_before[other], other  # P1 keeps its 'ok', the others are untouched
-    assert after[P[1]][0] == "ok"
+    assert items(url, batch_id) == items_before   # nothing P2's approval covered changed: it keeps its ok and its stamp
     stage_after = {(c, s): t for c, s, t in q(
         url, "SELECT concept_id, stage, updated_at FROM ops.stage_result WHERE batch_id = %s", (batch_id,))}
     assert stage_after.keys() == stage_before.keys()
@@ -405,7 +408,9 @@ def test_concept_with_later_stages_only_rewrites_only_that_item(url, tmp_path):
     assert h.ocl.asked == [] and h.ddinter.detail_calls == [DD[3]]
     after = items(url, batch_id)
     assert after[P[1]] == before[P[1]] and after[P[2]] == before[P[2]]
-    assert after[P[3]][0] == "pending" and after[P[3]][2] > before[P[3]][2]
+    assert after[P[3]] == before[P[3]]   # stage results rewritten; an unchanged view is not re-stamped (§8.3.1)
+    assert q(url, "SELECT count(*) FROM ops.stage_result WHERE batch_id = %s AND concept_id = %s AND stage = 'ddinter'",
+             (batch_id, P[3])) == [(1,)]
 
 
 def test_concept_that_fails_dgda_is_recorded_as_an_issue_for_that_item_only(url, tmp_path):

@@ -1,4 +1,4 @@
-import { DESK_NEW, fill } from "@/lib/copy";
+import { DESK_NEW, P1C_COPY, fill } from "@/lib/copy";
 import { DESK, toastSub } from "@/lib/review-copy";
 import type { DeskOutcome, ReviewerRole, Version } from "@/lib/review-types";
 
@@ -9,7 +9,8 @@ import type { DeskOutcome, ReviewerRole, Version } from "@/lib/review-types";
  */
 
 export type Op = {
-  conceptId: string; name: string; role: ReviewerRole; decision: "ok" | "issue"; note: string;
+  conceptId: string; name: string; role: ReviewerRole; /** "dismiss" travels on the report channel only (§5.8.2). */
+  decision: "ok" | "issue" | "dismiss"; note: string;
   /** The version the reviewer saw (§5.11); sent with the commit and every retry, never a later one. */
   viewedVersion: Version;
   /** UUID v4 made when A is pressed or Send report is chosen; reused unchanged on every retry (§7.2 step 1). */
@@ -38,10 +39,10 @@ export const initialMachine = (undoSeconds: number): MachineState =>
 
 /** The codes the decide server action answers with (lib/desk-core.ts). */
 export type DecideCode = "stale_rerun" | "stale_decision" | "issue_open" | "already_approved" | "already_checked" | "removed"
-  | "stage_failed" | "captcha" | "forbidden" | "unauthenticated" | "rate_limited" | "invalid" | "failed";
+  | "no_issue" | "stage_failed" | "captcha" | "forbidden" | "unauthenticated" | "rate_limited" | "invalid" | "failed";
 export type DecideResultLike = { ok: true; outcome: DeskOutcome } | { ok: false; code: DecideCode };
 type ConflictCode = Extract<DecideCode, "stale_rerun" | "stale_decision" | "issue_open" | "already_approved" | "already_checked"
-  | "removed" | "stage_failed">;
+  | "removed" | "no_issue" | "stage_failed">;
 
 export type Outcome =
   | { type: "OK"; outcome: DeskOutcome }
@@ -78,6 +79,7 @@ export type Event =
   | { type: "PAGE_UNLOAD" }
   | { type: "DEADLINE"; now: number }
   | { type: "SEND_REPORT"; op: Op; token: TokenState }
+  | { type: "SEND_DISMISS"; op: Op; token: TokenState }
   | { type: "RESULT"; channel: "commit" | "report"; result: Outcome }
   | { type: "RETRY_OK"; now: number }
   | { type: "RETRY_FAIL" }
@@ -107,6 +109,7 @@ const CONFLICT_HINT: Record<Exclude<ConflictCode, "stale_rerun" | "stale_decisio
   already_approved: () => DESK.alreadyApproved,
   already_checked: () => DESK.alreadyChecked,
   removed: () => DESK_NEW.approvalRefused.removedHint,
+  no_issue: () => P1C_COPY.dismiss.conflictNoIssue,
   stage_failed: () => DESK_NEW.approvalRefused.commitHint,
 };
 
@@ -123,6 +126,16 @@ function cancelWindow(s: MachineState, conceptId?: string): { s: MachineState; c
   return { s: { ...s, commit: IDLE }, cancelled: c.op };
 }
 
+/** The report channel's announcements, by what the op was: a report (§5.10) or a dismissal (§5.10a). */
+function reportOk(op: Op): string {
+  return op.decision === "dismiss" ? fill(P1C_COPY.dismiss.announceDismissed, { name: op.name }) : fill(DESK.reported, { name: op.name });
+}
+function reportFailed(op: Op, saved: "no" | "unknown"): string {
+  const d = P1C_COPY.dismiss;
+  if (op.decision !== "dismiss") return `${DESK_NEW.deskMisc.reportFailedTitle} ${DESK_NEW.deskMisc.reportFailedBody}`;
+  return saved === "no" ? `${d.failedTitle} ${DESK_NEW.deskMisc.reportFailedBody}` : `${d.unconfirmedTitle} ${d.unconfirmedBody}`;
+}
+
 function outcome(s: MachineState, channel: "commit" | "report", op: Op, r: Outcome): { state: MachineState; effects: Effect[] } {
   const clear = channel === "commit" ? { ...s, commit: IDLE } : { ...s, report: { kind: "idle" } as Report };
   const failed = (saved: "no" | "unknown") => channel === "commit"
@@ -130,7 +143,7 @@ function outcome(s: MachineState, channel: "commit" | "report", op: Op, r: Outco
   switch (r.type) {
     case "OK":
       return { state: clear, effects: [{ type: "saved", channel, op, outcome: r.outcome },
-        ...(channel === "report" ? [announce(fill(DESK.reported, { name: op.name }))] : [])] };
+        ...(channel === "report" ? [announce(reportOk(op))] : [])] };
     case "CONFLICT":
       if (r.code === "stale_rerun" || r.code === "stale_decision")
         return { state: clear, effects: [{ type: "stale", conceptId: op.conceptId, reason: r.code === "stale_rerun" ? "rerun" : "other",
@@ -144,13 +157,11 @@ function outcome(s: MachineState, channel: "commit" | "report", op: Op, r: Outco
     case "UNAUTHENTICATED":
       return { state: { ...clear, auth: "signedOut" }, effects: [announce(fill(DESK_NEW.sessionExpired.block, { name: op.name }))] };
     case "NOT_SAVED":
-      return { state: failed("no"), effects: [announce(channel === "commit" ? DESK.netAnnounce : reportFailed())] };
+      return { state: failed("no"), effects: [announce(channel === "commit" ? DESK.netAnnounce : reportFailed(op, "no"))] };
     case "UNCONFIRMED":
-      return { state: failed("unknown"), effects: [announce(channel === "commit" ? DESK_NEW.decisionUnconfirmed.announce : reportFailed())] };
+      return { state: failed("unknown"), effects: [announce(channel === "commit" ? DESK_NEW.decisionUnconfirmed.announce : reportFailed(op, "unknown"))] };
   }
 }
-
-const reportFailed = () => `${DESK_NEW.deskMisc.reportFailedTitle} ${DESK_NEW.deskMisc.reportFailedBody}`;
 
 export function step(s: MachineState, e: Event): { state: MachineState; effects: Effect[] } {
   const c = s.commit;
@@ -201,6 +212,13 @@ export function step(s: MachineState, e: Event): { state: MachineState; effects:
       // "pending" sends now; the desk's freshToken waits up to TOKEN_WAIT_MS for the token.
       if (e.token === "failed") return { state: { ...next, report: { kind: "botHold", op: e.op } }, effects: [announce(DESK.botFailedAnnounce)] };
       return { state: { ...next, report: { kind: "sending", op: e.op } }, effects: [{ type: "send", channel: "report", op: e.op }] };
+    }
+    case "SEND_DISMISS": {
+      // §5.8.2 (P1C): a senior's dismissal is a report-channel op. No undo window, and the commit channel is never touched:
+      // the bar refuses D while a window or a failed commit is open on this record (bar-state dismissHint).
+      if (s.report.kind !== "idle" || e.op.role !== "senior" || e.op.decision !== "dismiss") return { state: s, effects: [] };
+      if (e.token === "failed") return { state: { ...s, report: { kind: "botHold", op: e.op } }, effects: [announce(DESK.botFailedAnnounce)] };
+      return { state: { ...s, report: { kind: "sending", op: e.op } }, effects: [{ type: "send", channel: "report", op: e.op }] };
     }
     case "RESULT": {
       if (e.channel === "commit") return c.kind === "committing" ? outcome(s, "commit", c.op, e.result) : { state: s, effects: [] };

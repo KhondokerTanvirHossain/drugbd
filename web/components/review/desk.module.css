@@ -86,3 +86,8 @@
   .app :global(.decision-keys) { display: none; }
   .dScroll { scroll-padding-bottom: 0; }
 }
+
+/* §5.10a dismiss panel: the report panel's frame, the quoted reports before the field. */
+.dismissTitle { font: 600 14px/1.4 var(--font-ui); }
+.dismissQuote { font-size: 13px; color: var(--fg-2); }
+.dismissQuote :global(.raw) { color: var(--fg); white-space: pre-wrap; }

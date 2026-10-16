@@ -99,4 +99,40 @@ class DecisionGuardTest {
             .isEqualTo(refused("review", "Your check is already recorded for this record"));
         assertThat(DecisionGuard.check(checked, ok("pharmacist"))).isEmpty();
     }
+
+    // ---- P1C step 6d: a dismissal needs an open reviewer issue; steps 5-8 never apply to it (§7.2)
+
+    static Attempt dismiss() { return new Attempt("dismiss", "senior", RUN, 7L); }
+
+    @Test void aDismissalOfAnOpenIssuePassesEvenWithAFailedCheck() {
+        Map<String, String> failed = new HashMap<>(ALL_RAN);
+        failed.put("dgda", "fail");
+        assertThat(DecisionGuard.check(item("issue", null, ALL_RAN, "issue"), dismiss())).isEmpty();
+        assertThat(DecisionGuard.check(item("issue", null, failed, "issue"), dismiss())).isEmpty();
+    }
+
+    @Test void aDismissalWithoutAnOpenReviewerIssueIsRefusedOnReview() {
+        assertThat(DecisionGuard.check(pending(), dismiss())).isEqualTo(refused("review", DecisionGuard.NO_ISSUE));
+        assertThat(DecisionGuard.check(item("ok", null, ALL_RAN, "approved"), dismiss())).isEqualTo(refused("review", DecisionGuard.NO_ISSUE));
+        // the pipeline's own issue ("not found at source") has display status pending: only a re-run clears it
+        assertThat(DecisionGuard.check(item("issue", "not found at source", Map.of("dgda", "fail"), "pending"), dismiss()))
+            .isEqualTo(refused("review", DecisionGuard.NO_ISSUE));
+    }
+
+    @Test void aDismissalStillMeetsStepsTwoToFourFirst() {
+        assertThat(DecisionGuard.check(item("issue", null, ALL_RAN, "issue"), new Attempt("dismiss", "senior", RUN.minusSeconds(1), 7L)))
+            .isEqualTo(refused("extractedAt", DecisionGuard.STALE_RUN));
+        assertThat(DecisionGuard.check(item("issue", null, ALL_RAN, "issue"), new Attempt("dismiss", "senior", RUN, 6L)))
+            .isEqualTo(refused("lastDecisionId", DecisionGuard.OTHER_REVIEWER));
+        assertThat(DecisionGuard.check(item("issue", "removed from batch file", ALL_RAN, "issue"), dismiss()))
+            .isEqualTo(refused("conceptId", DecisionGuard.REMOVED));
+    }
+
+    @Test void aSeniorOkMeetsThePharmacistGuards() {
+        assertThat(DecisionGuard.check(pending(), ok("senior"))).isEmpty();
+        assertThat(DecisionGuard.check(item("ok", null, ALL_RAN, "approved"), ok("senior")))
+            .isEqualTo(refused("review", DecisionGuard.ALREADY_APPROVED));
+        // step 8 stays engineer-only
+        assertThat(DecisionGuard.check(item("pending", null, ALL_RAN, "engineer_checked"), ok("senior"))).isEmpty();
+    }
 }

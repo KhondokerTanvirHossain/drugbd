@@ -2,6 +2,7 @@ package com.niramoy.bddrug.application.port;
 import com.niramoy.bddrug.domain.BatchPairs;
 import com.niramoy.bddrug.domain.IngredientSummary;
 import com.niramoy.bddrug.domain.ItemHistory;
+import com.niramoy.bddrug.domain.PairReviewRule;
 import com.niramoy.bddrug.domain.ReviewDecision;
 import com.niramoy.bddrug.domain.ReviewItem;
 import reactor.core.publisher.Flux;
@@ -49,4 +50,15 @@ public interface ReviewQueryPort {
     Mono<List<Instant>> fullRuns(String batchId);
     /** The snapshot payload stamped exactly {@code extractedAt}; empty when there is none. */
     Mono<String> payload(String batchId, String conceptId, Instant extractedAt);
+
+    /**
+     * §7.3 otherPairs: the latest current item of every product held outside this batch (never one marked removed, never a
+     * product with a current item in this batch), with its substances and DDInter codes, ordered by batch, then trade name.
+     * {@code approved} is true when that item's review is ok (display status approved).
+     */
+    Mono<List<BatchPairs.OtherProduct>> otherProducts(String batchId);
+    /** Stored pairs between one of {@code mine} and one of {@code theirs} (both orders); placeholder text removed. */
+    Mono<List<BatchPairs.PairRow>> pairRowsTouching(Collection<String> mine, Collection<String> theirs);
+    /** Every senior pair decision among {@code codes}, keyed "{a}|{b}" (PairReviewReader). */
+    Mono<Map<String, List<PairReviewRule.Decision>>> pairReviews(Collection<String> codes, String viewerEmail);
 }

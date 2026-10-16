@@ -1,4 +1,6 @@
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 /* Direct database access for e2e setup and checks, through the compose `db` service (CI and local runs both start it). */
 const COMPOSE = ["compose", "-f", "../deploy/docker-compose.yml", "-f", "../deploy/docker-compose.ci.yml"];
@@ -48,3 +50,23 @@ export const flagStatus = (id: number): string => sql(`SELECT status FROM ops.fl
 
 export const auditCount = (event: string, targetId: string): number =>
   Number(sql(`SELECT count(*) FROM ops.audit_event WHERE event = ${lit(event)} AND target_id = ${lit(targetId)}`));
+
+/** The P1C fixture (batch e2e-p1c), once: senior.spec.ts calls it in beforeAll. */
+export function applyP1cFixture(): void {
+  if (sql("SELECT count(*) FROM ops.batch WHERE batch_id = 'e2e-p1c'") === "0") sql(readFileSync(join(__dirname, "p1c-fixture.sql"), "utf8"));
+}
+
+/** Another pharmacist reports an issue on the record (an open issue for the dismiss panel). */
+export function otherReviewerReports(b: string, c: string, note: string): void {
+  sql(`INSERT INTO ops.review_decision (batch_id, concept_id, decision, note, reviewer_email, reviewer_role)
+       VALUES (${lit(b)}, ${lit(c)}, 'issue', ${lit(note)}, 'other.pharmacist@e2e.test', 'pharmacist');
+       UPDATE ops.batch_item SET review = 'issue' WHERE ${item(b, c)};`);
+}
+
+export const pairReviews = (a: string, b: string): number =>
+  Number(sql(`SELECT count(*) FROM ops.pair_review WHERE ddinter_a = ${lit(a)} AND ddinter_b = ${lit(b)}`));
+
+/** The audit rows of one event on one target, oldest first, as "outcome|actor_role". Never an email. */
+export const auditOutcomes = (event: string, targetId: string): string =>
+  sql(`SELECT coalesce(string_agg(outcome || '|' || actor_role, ',' ORDER BY id), '') FROM ops.audit_event
+       WHERE event = ${lit(event)} AND target_id = ${lit(targetId)}`);

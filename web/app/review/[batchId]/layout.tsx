@@ -5,7 +5,8 @@ import BatchCard from "@/components/review/BatchCard";
 import BatchesNav from "@/components/review/BatchesNav";
 import ReviewAccount, { newestInReview } from "@/components/review/ReviewAccount";
 import ReviewDesk from "@/components/review/ReviewDesk";
-import { listReviewBatches } from "@/lib/api";
+import SeniorLinks from "@/components/review/SeniorLinks";
+import { getPairQueue, listReviewBatches } from "@/lib/api";
 import { KEYS_COOKIE, UNDO_COOKIE, parseKeys, parseUndo } from "@/lib/desk-settings";
 import { cspNonce } from "@/lib/nonce";
 import { isReviewer } from "@/lib/reviewers";
@@ -29,13 +30,18 @@ export default async function BatchLayout({ children, params }: { children: Reac
   const store = await cookies();
   const theme = parseTheme(store.get(THEME_COOKIE)?.value);
   const keys = parseKeys(store.get(KEYS_COOKIE)?.value);
+  // §5.1: a senior's sidebar counts the pairs to review (all batches, both scopes). A failed read never fails the desk.
+  const toReview = session.role === "senior"
+    ? (await getPairQueue({ show: "todo", pairs: "all", severity: null, page: 0 }, session.email, 1).catch(() => null))?.counts.todo ?? null
+    : null;
   return (
     <main id="content">
       <ReviewDesk batchId={batchId} role={session.role} total={batch.itemCount}
         counts={{ approved: batch.counts.approved, issue: batch.counts.issue }}
         undoSeconds={parseUndo(store.get(UNDO_COOKIE)?.value)} singleKeys={keys === "on"} siteKey={turnstileSiteKey()} nonce={await cspNonce()}
         account={<ReviewAccount session={session} theme={theme} batchId={newestInReview(batches)} keys={keys} shortcutsItem />}
-        batchesNav={<BatchesNav batches={batches} current={batchId} />} batchCard={<BatchCard batch={batch} />}>
+        batchesNav={<BatchesNav batches={batches} current={batchId} />} batchCard={<BatchCard batch={batch} />}
+        seniorLinks={session.role === "senior" ? <SeniorLinks toReview={toReview} /> : null}>
         {children}
       </ReviewDesk>
     </main>

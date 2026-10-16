@@ -28,4 +28,17 @@ describe("PairCard (§3.4)", () => {
     expect(html).toContain('<p class="pair-meta">With Aspirin. <span class="mono">a/b</span></p>');
     expect(html).toContain('<span class="whenClosed">Management, truncated.</span><span class="whenOpen">Management, in full.</span>');
   });
+
+  it("P1C: heading level, details after the meta, the pair link after the source line, and the review state last", () => {
+    const html = r(<PairCard id="p4" severity="major" names="Warfarin + Ibuprofen" heading="h5" meta="From DDInter 2.0."
+      details={<details><summary>All 2 medicines</summary></details>}
+      text={{ kind: "management", body: "Avoid." }} source="Management, truncated."
+      link={<a className="src-link" href="https://ddinter2.scbdd.com/server/interact/3039/">Full record in DDInter 2.0</a>}
+      review={<p className="pair-review">state</p>} surface="reviewer" />);
+    expect(html).toContain('<h5 class="pair-names">Warfarin + Ibuprofen</h5>');
+    expect(html.indexOf("pair-meta")).toBeLessThan(html.indexOf("<details>"));
+    expect(html.indexOf("<details>")).toBeLessThan(html.indexOf("pair-text"));
+    expect(html).toContain('<p class="pair-source">Management, truncated. <a class="src-link"');
+    expect(html.indexOf("pair-review")).toBeGreaterThan(html.indexOf("pair-source"));
+  });
 });

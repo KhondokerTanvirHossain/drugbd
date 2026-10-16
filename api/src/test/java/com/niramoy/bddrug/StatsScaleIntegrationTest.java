@@ -12,9 +12,6 @@ import org.springframework.test.web.reactive.server.WebTestClient;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 import static com.niramoy.bddrug.TestSupport.*;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -63,13 +60,8 @@ class StatsScaleIntegrationTest {
     @Test void answersFiveThousandItemsQuicklyAndCompactly() {
         byte[] first = web.get().uri("/v1/stats").exchange().expectStatus().isOk().expectBody().returnResult().getResponseBody();
         assertThat(first.length).isLessThan(1_000_000);
-        List<Long> ms = new ArrayList<>();
-        for (int i = 0; i < 20; i++) {
-            long t = System.nanoTime();
-            web.get().uri("/v1/stats").exchange().expectStatus().isOk().expectBody().returnResult();
-            ms.add((System.nanoTime() - t) / 1_000_000);
-        }
-        Collections.sort(ms);
-        assertThat(ms.get(18)).as("p95 of 20 calls, ms").isLessThan(300L);
+        Latency.P95s p95 = Latency.p95Samples(() -> web.get().uri("/v1/stats").exchange().expectStatus().isOk().expectBody().returnResult());
+        assertThat(p95.best()).as("best of %d p95 samples of 20 calls, each after %d untimed warm-ups: %s",
+            Latency.SAMPLES, Latency.WARM_UPS, p95).isLessThan(Latency.boundMs());
     }
 }

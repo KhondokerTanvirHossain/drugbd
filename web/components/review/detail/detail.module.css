@@ -41,6 +41,8 @@
 .hist li:first-child { border-top: 0; }
 .histT { font-size: 12.5px; color: var(--fg-2); font-variant-numeric: tabular-nums; }
 .histT span { display: block; }
+/* §5.6.5: a carried approval's second line. */
+.histSub { display: block; margin-top: 2px; font-size: 12.5px; color: var(--fg-2); }
 .diffFoot { font-size: 13px; color: var(--fg-2); }
 .chg { background: var(--warn-soft); }
 @media (max-width: 1023px) {
@@ -48,3 +50,17 @@
   .backToList { display: inline-flex; }
 }
 @media (max-width: 560px) { .hist li { grid-template-columns: minmax(0, 1fr); } }
+
+/* §5.6.2 (P1C): the "With other medicines" heading and the partner list under a cross-batch pair. */
+.withH { font: 600 15px/1.3 var(--font-ui); letter-spacing: -.008em; }
+.partners { font-size: 13px; color: var(--fg-2); }
+.partners ul { margin: 6px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 2px; }
+/* §10.4: 24 × 24 px targets (WCAG 2.5.8), as .menuLink. The summary stays display: list-item (its marker); the link is
+   inline-block, not flex, so the space before its mono batch id is kept. */
+.partners summary { min-height: 24px; line-height: 24px; cursor: pointer; }
+.partners li > a { display: inline-block; min-height: 24px; line-height: 24px; }
+/* A cross-batch not-checked line whose partners carry the details list (§5.6.2). */
+.ncOther { display: flex; flex-direction: column; gap: 4px; }
+/* The SourceLinks in the comparison table carry .sr-only text (position: absolute). A positioned .cmp-wrap is their
+   containing block, so its overflow-x holds them and the record never scrolls sideways at 320 px (§10.4). */
+.cmpWrap { position: relative; }

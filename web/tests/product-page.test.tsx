@@ -85,7 +85,7 @@ describe("product page", () => {
   });
   it("calls notFound for a malformed percent-encoded id", async () => {
     await expect(ProductPage({ params: Promise.resolve({ id: "%E0%A4%A" }) })).rejects.toSatisfy(
-      (e: { digest?: string }) => !(e instanceof URIError) && /NEXT_HTTP_ERROR_FALLBACK;404|NEXT_NOT_FOUND/.test(String(e.digest)));
+      (e: unknown) => !(e instanceof URIError) && /NEXT_HTTP_ERROR_FALLBACK;404|NEXT_NOT_FOUND/.test(String((e as { digest?: string }).digest)));
   });
 
   it("shows the clinical drug with a route badge, linked ingredients and the ophthalmic DDInter entry", async () => {

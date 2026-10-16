@@ -4,9 +4,10 @@ import type { FlagPage } from "@/lib/review-types";
 
 const getSession = vi.fn();
 const listFlagPage = vi.fn();
+const getPairQueue = vi.fn();
 const listReviewBatches = vi.fn(async () => []);
 vi.mock("@/lib/session", () => ({ getSession: () => getSession() }));
-vi.mock("@/lib/api", () => ({ listFlagPage: (k: string, p: number) => listFlagPage(k, p), listReviewBatches: () => listReviewBatches() }));
+vi.mock("@/lib/api", () => ({ listFlagPage: (k: string, p: number) => listFlagPage(k, p), getPairQueue: (...a: unknown[]) => getPairQueue(...a), listReviewBatches: () => listReviewBatches() }));
 vi.mock("@/lib/review-actions", () => ({ resolveFlagAction: vi.fn() }));
 vi.mock("@/lib/nonce", () => ({ cspNonce: async () => "n0nce" }));
 vi.mock("@/lib/turnstile", () => ({ turnstileSiteKey: () => "1x00000000000000000000AA" }));
@@ -106,5 +107,31 @@ describe("/review/flags (§5.16)", () => {
     const both = await render({ resolve: "resolved", kind: "reports" });
     expect(both).toContain('<p class="outcome">Report resolved.</p>');
     expect(both.match(/role="status"/g)).toHaveLength(1);
+  });
+});
+
+describe("/review/flags for seniors (§5.16 P1C)", () => {
+  const counts = (issue: number) => ({ total: 0, counts: { todo: 0, changed: 0, issue, reviewed: 0, all: 0 }, items: [] });
+  it("a senior with open pair issues gets the line under the heading, linking to the issue filter", async () => {
+    getSession.mockResolvedValue({ email: "senior@e2e.test", name: "S", role: "senior" });
+    getPairQueue.mockResolvedValue(counts(2));
+    const html = await render();
+    expect(getPairQueue).toHaveBeenCalledWith({ show: "issue", pairs: "all", severity: null, page: 0 }, "senior@e2e.test", 1);
+    expect(html).toContain('<h1>Problem reports and partner requests</h1><p><a href="/review/pairs?show=issue">Pair issues reported by senior pharmacists: 2</a></p>');
+  });
+  it("none open, or a failed read: no line", async () => {
+    getSession.mockResolvedValue({ email: "senior@e2e.test", name: "S", role: "senior" });
+    getPairQueue.mockResolvedValue(counts(0));
+    expect(await render()).not.toContain("Pair issues reported");
+    getPairQueue.mockRejectedValue(new Error("API error 500"));
+    expect(await render()).not.toContain("Pair issues reported");
+  });
+  it("pharmacists and engineers never get the line, and no count is read", async () => {
+    getPairQueue.mockClear();
+    for (const role of ["pharmacist", "engineer"]) {
+      getSession.mockResolvedValue({ email: "x@e2e.test", name: "X", role });
+      expect(await render()).not.toContain("Pair issues reported");
+    }
+    expect(getPairQueue).not.toHaveBeenCalled();
   });
 });

@@ -25,7 +25,7 @@ const SPEC_ROWS = [
   "Decision saving (`committing`): promise and toast",
   "Desk: narrow-screen \"Back to list\", the no-JavaScript notices, loading and loaded announcements",
   "Desk: batch load error, batch not found",
-  "History: role variants, the \"No longer counts\" suffix, shared-change entries",
+  "History: role variants, the \"No longer counts\" suffix, shared-change entries; the carried-approval line \"Approval carried over from batch {batchId}: nothing it covered changed.\"",
   "Account menu item \"Keyboard shortcuts and settings\"",
   "Batch list and problem-report and partner-request lists (`/review`, `/review/flags`)",
   "Phase-0 `/batches` gate for non-reviewers",
@@ -37,6 +37,14 @@ const SPEC_ROWS = [
   "Checker: summary segments, \"Other not checked\" count, unknown id (404), check failed (5xx), scenario announcement",
   "Partner request sent",
   "Route assumed because the product has no route",
+  // P1C rows (the spec's "*(P1C)* " marker removed: P1C plan rule, Global Constraints)
+  "Senior pharmacist role: role badge, promise (`PROMISE_SENIOR`), welcome step, invite role, account-menu and sidebar links",
+  "Senior review: substance list, substance page, pair queue, the scope filter (\"All pairs\", \"Applies to our brands\"), pair row, the non-applying pair line, the brand list cap (\"and {n} more.\", \"All brands of {substance}\"), pair actions and their outcomes, pair history, keyboard sheet, empty, loading, error and not-authorised states, announcements",
+  "Pair label and pair review state lines: `FROM_DDINTER`, `PAIR_REVIEWED`, `PAIR_NOT_REVIEWED` (public and reviewer), and the reviewer-only \"changed\" and \"issue\" lines",
+  "Desk: \"With other medicines\" groups, cross-batch partner lines, the partner `<details>` summaries (\"All {n} medicines\", \"{s} of {n} medicines\"), \"and {k} more.\" and \"See every brand of {partner substance}\", the outside-this-batch text-missing note, the same-product text-missing note, the no-data line for other batches, \"no other batches\" lines",
+  "Dismiss issue: control, panel, consequence sentence, hints, 409 outcomes, the not-saved and unconfirmed failure banners (report channel), announcements, history entries and the dismissal \"No longer counts\" suffix",
+  "Source links: link labels, \"fetched on {date}\", the ICD-11 search link, the evidence drawer's \"Sources\" section, the product page's \"Source\" column",
+  "Product page \"With other approved medicines\" (cross-batch, grouped by partner substance) and its paging",
 ];
 
 describe("§3.6 fixed safety strings", () => {
@@ -57,6 +65,9 @@ describe("§3.6 fixed safety strings", () => {
     ["DECISION_SUPPORT", "IntelliDrugs is decision support. It is not a substitute for clinical judgement. Severity levels and management text come from DDInter 2.0 and are shown truncated, never rewritten."],
     ["NO_PHI_HELP", "Don't include patient names or other personal health details."],
     ["NOT_RUN", "Not checked yet: DDInter mapping has not run"],
+    ["FROM_DDINTER", "From DDInter 2.0"],
+    ["PAIR_REVIEWED", "Pair reviewed by a senior pharmacist on {date}"],
+    ["PAIR_NOT_REVIEWED", "Pair not yet reviewed by a senior pharmacist"],
   ])("%s is exactly its literal", (name, literal) => {
     expect((copy as unknown as Record<string, unknown>)[name]).toBe(literal);
   });
@@ -68,6 +79,9 @@ describe("§3.6 fixed safety strings", () => {
       body: '"Looks correct" records your check. It does not publish; a pharmacist still needs to approve.' });
     expect(copy.PROMISE_PAUSED).toEqual({ lead: "Decisions are paused.",
       body: "This record changed after you opened it. Reload it to review the latest data." });
+    expect(copy.PROMISE_SENIOR.lead).toBe("You're reviewing as a senior pharmacist.");
+    expect(copy.PROMISE_SENIOR.body(8)).toBe('"Looks correct" publishes this record after an 8-second undo window.');
+    expect(copy.PROMISE_SENIOR.body(20)).toBe('"Looks correct" publishes this record after an 20-second undo window.');
   });
 
   it("the em dash appears only in STALE_TITLE", () => {

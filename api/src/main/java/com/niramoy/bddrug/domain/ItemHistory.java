@@ -17,16 +17,28 @@ import java.util.UUID;
 public final class ItemHistory {
     private ItemHistory() {}
 
-    public record Snapshot(Instant extractedAt, UUID runId, String reason) {}
+    /** {@code carriedFrom}: the batch whose approval the stamp carried (payload carried_from, §8.3.1 item 8), or null. */
+    public record Snapshot(Instant extractedAt, UUID runId, String reason, String carriedFrom) {
+        public Snapshot(Instant extractedAt, UUID runId, String reason) { this(extractedAt, runId, reason, null); }
+    }
     /** {@code mine} is decided by the caller (the decision's email equals the viewer's, case-insensitively). */
     public record Decision(long id, String decision, String note, String role, Instant decidedAt, boolean mine) {}
+    /**
+     * {@code uncountedBy} says why {@code counts} is false: "rerun" (at or before the run stamp) or "dismiss" (after the
+     * stamp, at or before the latest dismissal since it, §5.6.5). {@code carriedFrom} is set on an extract entry.
+     */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record Entry(String kind, Instant at, String reason, String role, String decision, String note, Boolean counts,
-                        Boolean mine) {}
+                        Boolean mine, String uncountedBy, String carriedFrom) {
+        public Entry(String kind, Instant at, String reason, String role, String decision, String note, Boolean counts, Boolean mine) {
+            this(kind, at, reason, role, decision, note, counts, mine, null, null);
+        }
+    }
     public record Reopen(String reason, Instant at, Instant previousExtractedAt, boolean diffAvailable) {}
     public record Result(List<Entry> history, Reopen reopen) {}
 
-    private record Group(Instant at, String reason) {}
+    private record Group(Instant at, String reason, String carriedFrom) {}
+    private static final Comparator<Decision> CHRONOLOGICAL = Comparator.comparing(Decision::decidedAt).thenComparingLong(Decision::id);
 
     private static final Map<String, Integer> KIND_ORDER = Map.of("run", 0, "extract", 1, "decision", 2);
 
@@ -34,10 +46,16 @@ public final class ItemHistory {
         List<Group> groups = groups(snapshots, extractedAt);
         List<Entry> out = new ArrayList<>();
         for (Instant at : fullRuns) out.add(new Entry("run", at, null, null, null, null, null, null));
-        for (Group g : groups) out.add(new Entry("extract", g.at(), g.reason(), null, null, null, null, null));
+        for (Group g : groups) out.add(new Entry("extract", g.at(), g.reason(), null, null, null, null, null, null, g.carriedFrom()));
+        Decision boundary = decisions.stream()
+            .filter(d -> "dismiss".equals(d.decision()) && (extractedAt == null || d.decidedAt().isAfter(extractedAt)))
+            .max(CHRONOLOGICAL).orElse(null);
         for (Decision d : decisions) {
-            boolean counts = extractedAt == null || d.decidedAt().isAfter(extractedAt);
-            out.add(new Entry("decision", d.decidedAt(), null, d.role(), d.decision(), d.note(), counts, d.mine()));
+            boolean afterStamp = extractedAt == null || d.decidedAt().isAfter(extractedAt);
+            boolean beforeBoundary = boundary != null && d.id() != boundary.id() && CHRONOLOGICAL.compare(d, boundary) < 0;
+            boolean counts = afterStamp && !beforeBoundary;
+            String uncountedBy = !afterStamp ? "rerun" : beforeBoundary ? "dismiss" : null;
+            out.add(new Entry("decision", d.decidedAt(), null, d.role(), d.decision(), d.note(), counts, d.mine(), uncountedBy, null));
         }
         out.sort(Comparator.comparing(Entry::at).thenComparing(e -> KIND_ORDER.get(e.kind())));
         Reopen reopen = null;
@@ -51,7 +69,7 @@ public final class ItemHistory {
     }
 
     private static List<Group> groups(List<Snapshot> snapshots, Instant extractedAt) {
-        if (snapshots.isEmpty()) return extractedAt == null ? List.of() : List.of(new Group(extractedAt, "run"));
+        if (snapshots.isEmpty()) return extractedAt == null ? List.of() : List.of(new Group(extractedAt, "run", null));
         Instant first = snapshots.stream().map(Snapshot::extractedAt).min(Comparator.naturalOrder()).orElseThrow();
         Map<UUID, List<Snapshot>> byRun = new LinkedHashMap<>();
         for (Snapshot s : snapshots) byRun.computeIfAbsent(s.runId(), k -> new ArrayList<>()).add(s);
@@ -60,7 +78,8 @@ public final class ItemHistory {
             Instant last = run.stream().map(Snapshot::extractedAt).max(Comparator.naturalOrder()).orElseThrow();
             String reason = run.stream().anyMatch(s -> s.extractedAt().equals(first)) ? "run"
                 : run.stream().allMatch(s -> "shared_change".equals(s.reason())) ? "shared_change" : "rerun";
-            out.add(new Group(last, reason));
+            String carried = run.stream().map(Snapshot::carriedFrom).filter(java.util.Objects::nonNull).findFirst().orElse(null);
+            out.add(new Group(last, reason, carried));
         }
         out.sort(Comparator.comparing(Group::at));
         return out;

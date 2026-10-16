@@ -1,5 +1,6 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
-import { keyAction, type KeyTarget } from "@/components/review/desk/keys";
+import { keyAction, targetKind, type KeyTarget } from "@/components/review/desk/keys";
 
 const ctx = (over: Partial<Parameters<typeof keyAction>[1]> = {}) => ({ singleKeys: true, sheetOpen: false, target: "other" as KeyTarget,
   searchHasText: false, drawerOpen: false, reportOpen: false, ...over });
@@ -56,5 +57,32 @@ describe("keyboard model (§5.14)", () => {
     expect(keyAction(key("Enter", { ctrlKey: true }), off({ target: "note" }))).toBe("sendReport");
     expect(keyAction(key("ArrowDown"), off({ target: "listbox" }))).toBe("next");
     expect(keyAction(key("Enter"), off({ target: "approve" }))).toBe("enterBlocked");
+  });
+});
+
+describe("D and the dismiss field (§5.14 P1C)", () => {
+  const base = { singleKeys: true, sheetOpen: false, target: "other" as const, searchHasText: false, drawerOpen: false, reportOpen: false };
+  const ev = (key: string, mods = {}) => ({ key, ctrlKey: false, metaKey: false, altKey: false, ...mods });
+  it("d and D are dismiss; with single keys off they do nothing", () => {
+    expect(keyAction(ev("d"), base)).toBe("dismiss");
+    expect(keyAction(ev("D"), base)).toBe("dismiss");
+    expect(keyAction(ev("d"), { ...base, singleKeys: false })).toBeNull();
+  });
+  it("in the dismiss field: Ctrl or Cmd Enter sends, Esc closes, Enter alone and letters do nothing", () => {
+    const f = { ...base, target: "dismissNote" as const, dismissOpen: true };
+    expect(keyAction(ev("Enter", { ctrlKey: true }), f)).toBe("sendDismiss");
+    expect(keyAction(ev("Enter", { metaKey: true }), f)).toBe("sendDismiss");
+    expect(keyAction(ev("Enter"), f)).toBeNull();
+    expect(keyAction(ev("a"), f)).toBeNull();
+    expect(keyAction(ev("Escape"), f)).toBe("closeDismiss");
+  });
+  it("Esc outside the field closes the drawer, then the report, then the dismiss panel", () => {
+    expect(keyAction(ev("Escape"), { ...base, dismissOpen: true })).toBe("closeDismiss");
+    expect(keyAction(ev("Escape"), { ...base, drawerOpen: true, dismissOpen: true })).toBe("closeDrawer");
+  });
+  it("the dismiss textarea is its own target", () => {
+    const t = document.createElement("textarea");
+    t.setAttribute("data-desk", "dismiss-note");
+    expect(targetKind(t)).toBe("dismissNote");
   });
 });

@@ -8,7 +8,8 @@ import java.util.Optional;
 /**
  * The decision guards of spec §7.2, steps 2 to 8, as one pure function (step 1, requestId idempotency, needs the audit
  * table and lives in the adapter). The first failing step wins. An {@code issue} passes every step after step 4: a
- * reviewer can always report a problem on a current, non-removed record, even one whose checks failed.
+ * reviewer can always report a problem on a current, non-removed record, even one whose checks failed. A {@code dismiss}
+ * passes steps 2–4 like any decision, then step 6d only: the display status must be {@code issue}.
  */
 public final class DecisionGuard {
     private DecisionGuard() {}
@@ -26,6 +27,8 @@ public final class DecisionGuard {
     public static final String ISSUE_OPEN = "An issue is open on this record. It returns to review after the fix and re-run.";
     public static final String ALREADY_APPROVED = "This record is already approved by a pharmacist";
     public static final String ALREADY_CHECKED = "Your check is already recorded for this record";
+    /** §7.2 step 6d: a dismissal needs a counted reviewer issue (display status issue). */
+    public static final String NO_ISSUE = "No issue is open on this record";
 
     /** The locked item as the decision transaction sees it; {@code stages} maps a stage name to its status. */
     public record Item(Instant extractedAt, Long lastDecisionId, String review, String note,
@@ -39,6 +42,8 @@ public final class DecisionGuard {
         if (!Objects.equals(a.expectedExtractedAt(), item.extractedAt())) return refuse("extractedAt", STALE_RUN);
         if (!Objects.equals(a.expectedLastDecisionId(), item.lastDecisionId())) return refuse("lastDecisionId", OTHER_REVIEWER);
         if (REMOVED_NOTE.equals(item.note())) return refuse("conceptId", REMOVED);
+        if (ApprovalRule.DISMISS.equals(a.decision()))
+            return ApprovalRule.ISSUE.equals(item.displayStatus()) ? Optional.empty() : refuse("review", NO_ISSUE);
         if (!ApprovalRule.OK.equals(a.decision())) return Optional.empty();
         boolean checksFailed = item.extractedAt() == null || STAGES.stream()
             .anyMatch(s -> !item.stages().containsKey(s) || "fail".equals(item.stages().get(s)));

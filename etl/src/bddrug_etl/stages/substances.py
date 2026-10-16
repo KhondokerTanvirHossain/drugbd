@@ -3,8 +3,8 @@
 Substances, their names and codes are shared by every product with that substance. A product's run
 reports each substance whose rows it really added (``SharedChanges.bds_ids``; the inserts are
 ``ON CONFLICT DO NOTHING``, so an unchanged re-run reports nothing), merged into the caller's
-``changes`` only when the product's savepoint commits. The pipeline then re-opens the review of the
-other products that show them (``reopen_review(..., changes)``).
+``changes`` only when the product's savepoint commits. The pipeline then re-checks the review of the
+other products that show them (``load.batches.settle``, which re-opens one only when its approval view changed).
 """
 from __future__ import annotations
 

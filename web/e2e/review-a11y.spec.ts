@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
 import { approveAllExcept, restamp } from "./db";
-import { PILOT_IDS, STALE, blockIslands, interceptActions, openRecord, replaceNextActionResult, shown } from "./review-helpers";
+import { PILOT_IDS, STALE, blockIslands, interceptActions, openRecord, replaceNextActionResult, shown, sourceLinkTargets } from "./review-helpers";
 import { BASE_URL, signInAs } from "./session";
 import { installTurnstileFake } from "./turnstile-fake";
 
@@ -181,6 +181,18 @@ for (const look of LOOKS) {
     await reader.close();
   });
 }
+
+test("source links are 24 × 24 px targets in the comparison table and the evidence drawer (§10.4, WCAG 2.5.8)", async ({ context, page }) => {
+  await signInAs(context, "pharmacist");
+  await openRecord(page, "0001-pilot", PILOT_IDS.amlodipine);
+  const record = await sourceLinkTargets(page);
+  expect(record.measured).toBeGreaterThan(0);
+  expect(record.small, "record").toEqual([]);
+  await page.keyboard.press("e");
+  await expect(page.locator("#drawer")).toBeVisible();
+  await expect.poll(async () => (await sourceLinkTargets(page)).measured).toBeGreaterThan(record.measured);
+  expect((await sourceLinkTargets(page)).small, "record with the evidence drawer").toEqual([]);
+});
 
 test("reflow at 320 CSS px: no horizontal scroll in the list or the record (§10.4)", async ({ context, page }) => {
   await signInAs(context, "pharmacist");

@@ -8,6 +8,23 @@
 | **Approved design** | Direction A "Clinical Calm", wordmark option A ("IntelliDrugs" + cobalt full stop), approved by the user on 12/10/2026 |
 | **Visual source of truth** | `docs/artifacts/2026-10-12-intellidrugs-design-system.html`, `-reviewer.html`, `-public.html`, `-learn.html`, and `docs/design/intellidrugs/tokens.css` |
 | **Earlier approved docs** | `docs/design/2026-10-11-bd-drug-kb-design.md`, `docs/design/database.md` (schema `db-schema-v1.0` is locked) |
+| **Amendments** | P1C "Review model and source links", 15/10/2026, from the product owner's decisions of 15/10/2026 (see "Changes in P1C" below) |
+
+> **Changes in P1C (15/10/2026).** The product owner's decisions of 15/10/2026 (PO D1–D10) add plan P1C, "Review model and source links". It brings in the senior pharmacist role, senior review by substance and by pair across all batches, the reopen rule, cross-batch pairs on the desk, removed items never public, source links for every code, and dismissing an issue. Learn is not touched (PO D9: the chapter 6 Chloramphenicol row is fixed in the P3 branch). Sections touched:
+>
+> - header table;
+> - §1.2 (G3 bullets, new G6); §1.4 (new S8, S9); §1.6 (new item 17); §1.7 (new rows);
+> - §2.1 (senior routes); §2.2 (senior column and new rows);
+> - §3.4 (`CodeChip` `href`, new `SourceLink` and `PairReviewState`, mark exclusivity); §3.6 (`PROMISE_SENIOR`, `PAIR_REVIEWED`, `PAIR_NOT_REVIEWED`, `FROM_DDINTER`);
+> - §4.2 (`SeniorDesk` island);
+> - §5.1 (role badge, senior links); §5.2 (dismissed issues, re-run reach); §5.5.2 (source links); §5.5.3 (text-missing notes split by `partnerScope`); §5.6.1, §5.6.2 (cross-batch pairs, combination fix); §5.6.3 (evidence "Sources"); §5.6.5 (history entries); new §5.6.6 (source links); §5.7 (Dismiss issue, senior promise); §5.8.2, §5.8.4 (dismiss events and copy); §5.9; new §5.10a (Dismiss issue); §5.11 (409 `review` for dismiss); §5.12 (complete-view sentence); §5.13 (senior role, PO D1); §5.14 (`D` key); §5.15 (audit); §5.16 (pair-issue line on `/review/flags`); new §5.17 (senior clinical review);
+> - §6.2 (senior welcome and account menu); §6.4 (removed record coming back); §6.5 ("With other approved medicines", source links, verification-card sentence); §6.6; §6.7.3 (pair label and review state);
+> - §7.2 (`dismiss`, `senior`); §7.3 (`otherPairs`, pair review state, source links, history); §7.4 (P9, P10, the checker's `pairReview`, PO D7); §7.5; new §7.7 (senior review endpoints); new §7.8 (V7 migration, `db-schema-v1.2`);
+> - §8.1 item 4; §8.3 (reopen rule rewritten; `batch_item.note`, re-added items, carried approvals, `--reopen` limited);
+> - §9.2, §9.3, §9.7; §10.6;
+> - §11.1–§11.4;
+> - §12.1, §12.2 (new P1C row; P2 depends on P1C), §12.3, §12.5;
+> - §13.1 (Q4–Q13), §13.2 (D18 and D25 notes, D49–D60).
 
 This document is the authority the implementation plans argue from. Where it says **Decision**, the choice is made and is not open. Where a board and this spec disagree, this spec wins only in the cases listed in §1.6 (board errors found against live data or the safety rules, and board strings that the Decisions here change). Everywhere else the boards win. Any string shown in "quotes" or a code block below must be used verbatim: it is either copied from a board, or it is new copy for a state the boards do not draw, listed in §1.7. Any quoted string that no board contains is new copy whether or not §1.7 names its state: it follows §3.5, and the copy test (§11.1) checks it against the §1.7 list.
 
@@ -41,8 +58,14 @@ The pages stay server-rendered. A short, fixed list of client islands (§4.2) ad
   - nothing is public until a pharmacist approves it. The single exception is Learn's frozen, labelled explanatory examples (§6.8), which offer no search, check or link into unreviewed records;
   - an engineer's check never publishes;
   - Enter never approves in the desk. On the no-JavaScript confirm page (§5.8.6) the explicit "Confirm" button is the approval, and it is reached only through a second, deliberate POST.
+  - *(P1C)* an interaction is never hidden because no senior pharmacist has reviewed it yet. Senior review of pairs comes after the fact; it is not a gate (§5.17, §6.7.3);
+  - *(P1C)* a record leaves public view only when something its approval covered changes (§8.3), when a reviewer reports an issue, or when it is removed from its batch file (§6.4). Two engineering paths are listed with it, so no path is left unstated (§8.3.1 items 5 and 8):
+    - the engineer's `--reopen` override, which re-opens the named records whatever changed. It overrides PO D5's "only", so it waits for the PO's confirmation (§13.1 Q12);
+    - a product listed again in a new batch keeps its approval when its approval view is unchanged (the approval is carried over, §8.3.1 item 8). It leaves public view only when its approval view changed.
+  - *(P1C)* a record never returns to public view without a pharmacist's decision: a record that comes back into its batch file after it was marked removed is always re-opened (§8.3.1 item 5), and re-runs never publish (§12.5).
 - G4. The site meets WCAG 2.2 AA in both themes, and the contrast table in Board DS still holds.
 - G5. The approved UX is reachable with the security posture intact: SSR, an internal-only API, rate limits, Turnstile on every write and on sign-in, no PHI, and an audit trail.
+- G6. *(P1C)* A senior pharmacist reviews the clinical picture across all batches at once, by substance and pair by pair, so no review misses an interaction partner that sits in another batch (§5.17).
 
 ### 1.3 Non-goals (v1 of this UX)
 
@@ -65,6 +88,8 @@ The pages stay server-rendered. A short, fixed list of client islands (§4.2) ad
 | S5 | Lighthouse (mobile, Slow 4G) scores at least 90 for performance and 100 for accessibility on `/`, `/search?q=paracetamol`, a product page and `/check`. The page-weight budgets in §10.6 hold. | Lighthouse CI in the e2e job. |
 | S6 | Each safety string in §3.6 appears verbatim wherever its condition holds, and no paraphrase of it appears anywhere. | Copy test (§11.1) plus e2e assertions. |
 | S7 | After the ETL route fix and re-run, the eye-drop record's DDInter stage is OK with no `DDInter351` pair in its note. Its checker result with G Warfarin names `DDInter352` and raises no alert. | ETL, API and e2e tests (§8, §11). |
+| S8 | *(P1C)* A DDInter re-run that changes no covered field (§8.3) leaves every approved record approved. A re-run that changes only a pair's severity, actions or text puts that pair back in the senior pair queue as "changed" and re-opens no record. | ETL test `test_pair_change_reopens_no_record` and API test `PairQueueIntegrationTest.changedPairReturnsToQueue` (§11.3), plus the P1C pilot re-run check on production (§12.1). |
+| S9 | *(P1C)* Every code on the desk links to its source (§5.6.6). With the pilot codes, each link pattern opens the page the §5.6.6 table names. | Unit test of `SourceLinks` (§11.3), component test of the links (§11.2), and a manual browser check of each pattern, recorded in the P1C PR (CI never calls external sites). |
 
 ### 1.5 Data finding that shapes this spec: Chloramphenicol eye drops
 
@@ -136,6 +161,12 @@ Corrections:
     - Chapter 6 "A worked check" banner: "All three records are not yet reviewed by a pharmacist." becomes "All three records are "Not yet reviewed by a pharmacist"." (§3.6: rendered from `NOT_REVIEWED`). The second sentence stays. The banner shows only while all three are not approved (§6.8 "Approval-state sentences").
     - Chapter 8 "Reviewer" access legend: "It never includes emails." becomes "Reviewer emails are never shown on public pages or in public API answers." Decision history needs the internal token and includes emails (§7.1 A2).
     - FAQ "Is my email shown to anyone?": "Public decision history shows the role, never the email." becomes "Decision history is served only to signed-in reviewers; public pages and the public API never show an email."
+17. **P1C strings (PO D3, D4, D6; D53, D55, D60).**
+    - Item 15's product-page heading "With the other medicines in batch {id}" (D25) becomes "With other approved medicines". It lists pairs with approved products from every batch (§6.5).
+    - Board R's "With the other medicines in this batch" becomes the desk section "With other medicines", with the groups "In batch {id}" and "In other batches" (§5.6.2).
+    - The desk DDInter note "DDInter text not found for {n} pair[s] with other medicines in this batch." is kept only for pairs whose partner is in this batch (`partnerScope: "batch"`). Pairs with partners outside this batch, and pairs between two ingredients of the record itself, get their own notes (§5.5.3).
+    - Board P's checker cards and product-page pair cards gain the pair label `FROM_DDINTER` and the pair's senior-review state (§3.6, §6.7.3).
+    - The reopen rule changes (D54, §8.3), so two board sentences that say "re-runs" now say "changes data … covered": Board P's verification card (§6.5) and Board R's complete view (§5.12). Learn's re-run sentences (item 4, chapter 4) are not changed here (PO D9: Learn stays out of P1C). They are listed for the next Learn amendment (§12.2).
 
 ### 1.7 States the boards do not draw (new copy, Decision)
 
@@ -160,7 +191,7 @@ The boards do not cover the states below. Their copy is defined in the section n
 | Decision saving (`committing`): promise and toast | §5.7, §5.8.4 |
 | Desk: narrow-screen "Back to list", the no-JavaScript notices, loading and loaded announcements | §5.1, §4.4, §5.12 |
 | Desk: batch load error, batch not found | §5.12 |
-| History: role variants, the "No longer counts" suffix, shared-change entries | §5.6.5 |
+| History: role variants, the "No longer counts" suffix, shared-change entries; *(P1C)* the carried-approval line "Approval carried over from batch {batchId}: nothing it covered changed." | §5.6.5, §8.3.1 |
 | Account menu item "Keyboard shortcuts and settings" | §5.14, §6.2 |
 | Batch list and problem-report and partner-request lists (`/review`, `/review/flags`) | §5.16 |
 | Phase-0 `/batches` gate for non-reviewers | §12.1 |
@@ -172,6 +203,13 @@ The boards do not cover the states below. Their copy is defined in the section n
 | Checker: summary segments, "Other not checked" count, unknown id (404), check failed (5xx), scenario announcement | §6.7 |
 | Partner request sent | §6.9 |
 | Route assumed because the product has no route | §5.6.4, §6.7.3, §8.1 |
+| *(P1C)* Senior pharmacist role: role badge, promise (`PROMISE_SENIOR`), welcome step, invite role, account-menu and sidebar links | §3.6, §5.1, §5.13, §6.2 |
+| *(P1C)* Senior review: substance list, substance page, pair queue, the scope filter ("All pairs", "Applies to our brands"), pair row, the non-applying pair line, the brand list cap ("and {n} more.", "All brands of {substance}"), pair actions and their outcomes, pair history, keyboard sheet, empty, loading, error and not-authorised states, announcements | §5.17 |
+| *(P1C)* Pair label and pair review state lines: `FROM_DDINTER`, `PAIR_REVIEWED`, `PAIR_NOT_REVIEWED` (public and reviewer), and the reviewer-only "changed" and "issue" lines | §3.6, §5.6.2, §5.17, §6.5, §6.6, §6.7.3 |
+| *(P1C)* Desk: "With other medicines" groups, cross-batch partner lines, the partner `<details>` summaries ("All {n} medicines", "{s} of {n} medicines"), "and {k} more." and "See every brand of {partner substance}", the outside-this-batch text-missing note, the same-product text-missing note, the no-data line for other batches, "no other batches" lines | §5.5.3, §5.6.1, §5.6.2 |
+| *(P1C)* Dismiss issue: control, panel, consequence sentence, hints, 409 outcomes, the not-saved and unconfirmed failure banners (report channel), announcements, history entries and the dismissal "No longer counts" suffix | §5.6.5, §5.7, §5.8.2, §5.8.4, §5.10a |
+| *(P1C)* Source links: link labels, "fetched on {date}", the ICD-11 search link, the evidence drawer's "Sources" section, the product page's "Source" column | §5.6.3, §5.6.6, §6.5 |
+| *(P1C)* Product page "With other approved medicines" (cross-batch, grouped by partner substance) and its paging | §6.5 |
 
 ---
 
@@ -198,6 +236,9 @@ The boards do not cover the states below. Their copy is defined in the section n
 | `/review/[batchId]/[conceptId]?show=&q=` | **The workspace**. One route. The batch layout (toolbar and the ReviewDesk island) persists across records; the record page renders the filters, the list and the detail pane (§5.8.1). | server + ReviewDesk and DeskRecordContext islands | pharmacist, engineer |
 | `/review/[batchId]/versions` | Version tokens for stale detection (route handler, JSON) | server | pharmacist, engineer |
 | `/review/flags` | Open problem reports and partner access requests, with Resolve (§5.16) | server | pharmacist, engineer |
+| `/review/pairs?show=&pairs=&severity=&page=` | *(P1C)* Senior pair queue: every stored pair between substances we hold, from all batches, Major first (PO D3(b), §5.17) | server + SeniorDesk island | senior (others: not-authorised page, §5.17) |
+| `/review/substances?q=&page=` | *(P1C)* Senior review: the substances we hold, from all batches (§5.17) | server | senior |
+| `/review/substances/[bdsId]?pairs=&severity=&page=` | *(P1C)* Senior review by substance: brands from every batch, mappings, codes with source links, and pairs (§5.17) | server + SeniorDesk island | senior |
 | `POST /signout` | Sign out (route handler, §9.6): checks `Origin`, clears the session cookie, sends `Clear-Site-Data: "storage"`, then 303 to `/` (or to `/signin?returnTo=…` for "Use another Google account") | route handler | everyone, rate-limited |
 | `/healthz` | Liveness (route handler, `200 ok`, not rate-limited) | server | container healthcheck |
 
@@ -205,24 +246,33 @@ The boards do not cover the states below. Their copy is defined in the section n
 
 **Decision: no separate clinical-drug route.** "Other brands of …" is a card on the product page (§6.5).
 
+**Decision (P1C, D49).** Every route above that is open to "pharmacist, engineer" is also open to `senior`. The three senior routes are open to `senior` only.
+
 ### 2.2 Who sees what
 
-| Data | Anonymous | Signed in, role `user` | Engineer | Pharmacist |
-|---|---|---|---|---|
-| Approved product, substance and clinical drug | yes | yes | yes | yes |
-| Unapproved product (any state other than `approved`: pending, engineer checked, issue, back in review) | stub only: concept id, trade name, "Not yet reviewed by a pharmacist", batch id | stub only | stub on public routes; full in `/review` only | stub on public routes; full in `/review` only |
-| Product whose latest batch item is marked "removed from batch file" | stub with "Removed from the DGDA batch file." (§6.4), whatever its last decision | same | same on public routes; not listed in `/review`, and decisions on it are refused (§7.2) | same |
-| Unapproved substance (none of its products approved) | stub only: BDS id, name, "Not yet reviewed by a pharmacist" | stub only | stub on public routes; full in `/review` only | stub on public routes; full in `/review` only |
-| Unapproved clinical drug (no approved product maps to it) | not served | not served | in `/review` only | in `/review` only |
-| Batch evidence (source JSON, stage evidence, extraction) | no | no | yes | yes |
-| Decision history, with notes | no | no | yes (roles only; "(you)" for own) | yes |
-| Public verification line (role and date of the counting approval) | yes, approved records only | yes | yes | yes |
-| Emails of anyone else | never | never | never | never |
-| Own name and email | n/a | in the account menu only | same | same |
-| Report a problem (flag) | no ("Sign in to report a problem") | yes | yes | yes |
-| Review decisions | no | no ("Your account can't review this batch.") | records an engineer check | approves and publishes |
-| Resolve flags | no | no | yes | yes |
-| Partner access request | no (sign in first) | yes | yes | yes |
+| Data | Anonymous | Signed in, role `user` | Engineer | Pharmacist | Senior pharmacist *(P1C)* |
+|---|---|---|---|---|---|
+| Approved product, substance and clinical drug | yes | yes | yes | yes | yes |
+| Unapproved product (any state other than `approved`: pending, engineer checked, issue, back in review) | stub only: concept id, trade name, "Not yet reviewed by a pharmacist", batch id | stub only | stub on public routes; full in `/review` only | stub on public routes; full in `/review` only | as pharmacist |
+| Product whose latest batch item is marked "removed from batch file" | stub with "Removed from the DGDA batch file." (§6.4), whatever its last decision | same | same on public routes; not listed in `/review`, and decisions on it are refused (§7.2) | same | same |
+| Unapproved substance (none of its products approved) | stub only: BDS id, name, "Not yet reviewed by a pharmacist" | stub only | stub on public routes; full in `/review` only | stub on public routes; full in `/review` only | as pharmacist |
+| Unapproved clinical drug (no approved product maps to it) | not served | not served | in `/review` only | in `/review` only | in `/review` only |
+| Batch evidence (source JSON, stage evidence, extraction) | no | no | yes | yes | yes |
+| Decision history, with notes | no | no | yes (roles only; "(you)" for own) | yes | yes |
+| Public verification line (role and date of the counting approval) | yes, approved records only | yes | yes | yes | yes. A senior's approval reads "Approved by a pharmacist" in public (D49). |
+| Emails of anyone else | never | never | never | never | never |
+| Own name and email | n/a | in the account menu only | same | same | same |
+| Report a problem (flag) | no ("Sign in to report a problem") | yes | yes | yes | yes |
+| Review decisions | no | no ("Your account can't review this batch.") | records an engineer check | approves and publishes | approves and publishes, as a pharmacist |
+| *(P1C)* Dismiss an open issue on a record (§5.10a) | no | no | no: sees the issue, no Dismiss control | no: same | yes |
+| *(P1C)* Senior review pages (`/review/pairs`, `/review/substances/*`, §5.17) | no (sign-in redirect) | no (not-authorised page) | no ("Senior review is for senior pharmacists.") | no (same) | yes |
+| *(P1C)* Pair decisions: mark reviewed, report pair issue (§5.17) | no | no | no | no | yes |
+| *(P1C)* Pair review state | pairs between approved products only: `PAIR_REVIEWED` with its date, or `PAIR_NOT_REVIEWED` (D53) | same | all four states in `/review` (§5.17) | same | same |
+| *(P1C)* Source links and "fetched on" dates (§5.6.6) | approved records only (P2, §6.5) | same | every record in `/review` | same | same |
+| Resolve flags | no | no | yes | yes | yes |
+| Partner access request | no (sign in first) | yes | yes | yes | yes |
+
+**Decision (P1C, PO D2, D49).** `senior` is a pharmacist role. Every rule in this spec that names the pharmacist also applies to the senior pharmacist: approval, the promise's consequence, the "needs review" set, Report issue, history, and access to every pharmacist route. The senior also has the senior review surfaces (§5.17) and Dismiss issue (§5.10a). Wherever this spec writes "pharmacist" for a power, read "pharmacist or senior pharmacist". Wherever it writes "pharmacist" for a label shown to reviewers, the senior's label is "senior pharmacist".
 
 **Decision: public routes always read with public scope.** `/`, `/search`, `/products/*`, `/substances/*`, `/check`, `/check/suggest`, `/partners`, `/learn/*` and `/privacy` call the API with `scope=public` whatever the session, so a reviewer sees exactly what a reader sees there. Unapproved data is readable only under `/review/*`, through the token-gated endpoints in §7.3. The current `UnreviewedBadge` and the `scopeFor(session)` switch on public pages are removed. An e2e test opens `/products/{unapprovedId}` with a pharmacist session and asserts the stub (§11.4).
 
@@ -263,7 +313,7 @@ Stored emails ("Emails of anyone else") are never rendered by any route. The tea
   - Onest variable, latin subset, weights 400–700;
   - IBM Plex Mono 400 and 500, latin subset;
   - both OFL licence texts.
-- `fonts.css` declares `font-family: "Onest"` and `font-family: "IBM Plex Mono"`, so `--font-ui` and `--font-mono` in `tokens.css` work unchanged. Use `font-display: swap`.
+- `fonts.css` declares `font-family: "Onest"` and `font-family: "IBM Plex Mono"`, so `--font-ui` and `--font-mono` in `tokens.css` work unchanged. Use `font-display: optional` (Decision, product owner 16/10/2026: no LCP cost; a first visit on a slow connection may render the fallback font, later visits use the cached font).
 - The root layout preloads Onest only: `<link rel="preload" as="font" type="font/woff2" crossorigin>`.
 - CSP needs no font host, because `font-src 'self'` comes from `default-src`.
 - The `<link>` to Google Fonts in the `tokens.css` header comment is documentation only and is never emitted.
@@ -309,6 +359,9 @@ Each component is a React server component in `$WEB/components/ui/`. It renders 
 | `ProgressMeter` | `approved`, `issue`, `total` | `.prog` with `role="img"` | Worded `aria-label`: "{a} of {n} approved by a pharmacist, {i} with an issue reported". |
 | `BotCheck` | `state: "passed" \| "checking" \| "failed"` | `.botcheck` showing "Bot check passed", "Checking" or "Bot check failed" (failed adds `.is-failed`) | Inline text only. |
 | `ExampleMarker` | none | `.example` "Example" | Allowed only in Learn and on the landing page's partner code sample until §7 ships (§6.1). Never on a record's data. |
+| `CodeChip` *(P1C addition)* | adds `source?: {url, label, fetchedAt}` | the chip, then a `SourceLink` | `source` comes from the API only (§5.6.6). The web never builds a source URL. |
+| `SourceLink` *(P1C)* | `url`, `label`, `fetchedAt?: string \| null` | `<a class="src-link" href={url} target="_blank" rel="noopener noreferrer">{label}<span class="sr-only"> (opens in a new tab)</span></a>`, plus " fetched on {DD/MM/YYYY}" (Dhaka date) when `fetchedAt` is set | Never rendered without a `url`. Never says "fetched on" without a stored time. Plain link style, never a button. |
+| `PairReviewState` *(P1C)* | `state: "reviewed" \| "not_reviewed" \| "changed" \| "issue"`, `at?`, `mine?`, `note?`, `surface: "reviewer" \| "public"` | `.pair-review` plain text line (§5.17 copy) | Public accepts only `reviewed` and `not_reviewed`. Never green, never a pill, never a chip (mark exclusivity). |
 
 **Mark exclusivity (enforced in review and by a lint test):**
 
@@ -316,6 +369,7 @@ Each component is a React server component in `$WEB/components/ui/`. It renders 
 - The hatch (`NoDataBlock`, `NoDataChip`) means "no interaction data" (coverage `none`) and nothing else. Pairs not checked for any other reason are plain, unhatched text.
 - Square chips mean severity. Rounded pills mean review status.
 - Translucent material (`.material`, `.decision-bar`) is used only on the toolbar, the sidebar and the decision bar.
+- *(P1C)* A pair's senior-review state is plain text (`PairReviewState`). A senior's review of a pair is not a pharmacist's approval of a record, so it never uses green, the seal icon or a review-status pill.
 
 ### 3.5 Content and voice rules
 
@@ -355,6 +409,10 @@ These are copied from Board DS. Every PR that adds copy is checked against them.
 | `PROMISE_PAUSED` | `**Decisions are paused.** This record changed after you opened it. Reload it to review the latest data.` | Decision bar. |
 | `NO_PHI_HELP` | `Don't include patient names or other personal health details.` | Help text on every free-text field: the reviewer note (§5.10), "Report a problem" (§6.5) and "What you will build" (§6.9). New copy (§1.7). |
 | `NOT_RUN` | `Not checked yet: DDInter mapping has not run` | Coverage `not_run` (§7.3). From Board L. Never paired with `NO_DATA_SENTENCE`. |
+| `PROMISE_SENIOR` *(P1C)* | `**You're reviewing as a senior pharmacist.** "Looks correct" publishes this record after an {n}-second undo window.` | Decision bar for role `senior` (§5.7). New copy (§1.7). |
+| `FROM_DDINTER` *(P1C)* | `From DDInter 2.0` | The label on every pair card whose text or severity comes from DDInter, public and reviewer (§5.6.2, §6.5, §6.6, §6.7.3). New copy (§1.7). |
+| `PAIR_REVIEWED` *(P1C)* | `Pair reviewed by a senior pharmacist on {date}` | `{date}` = `DD/MM/YYYY` of the counting pair review, Dhaka. Public and reviewer. Plain text, never green. New copy (§1.7). |
+| `PAIR_NOT_REVIEWED` *(P1C)* | `Pair not yet reviewed by a senior pharmacist` | Every pair with no counting review: never reviewed, changed since review, or an open pair issue (public), or never reviewed (reviewer, §5.17). It never hides the pair or its text (G3). New copy (§1.7). The copy test allows it next to `NOT_REVIEWED`; it is not a paraphrase of it. |
 
 (`**…**` marks the `<b>` lead sentence.) The **safety sentences** that the copy test guards against paraphrase are `NO_DATA_SENTENCE`, `NOT_REVIEWED`, `SEVERITY_NOT_CLASSIFIED`, `UNKNOWN_PAIR_LINE` (with its plural `UNKNOWN_PAIRS_LINE`) and `NOT_RUN`. Each is rendered from its constant, never retyped; a shorter form appears only where this spec names it (the compact reviewer pill, §3.4, and the `NoDataChip` labels of §3.4, used only on a page that also shows `NO_DATA_SENTENCE` for the same substance). DDInter placeholder text ("None", "-", "n/a", and so on) is never printed. `$WEB/lib/ddinter-text.ts` stays.
 
@@ -386,6 +444,9 @@ A build check, `scripts/check-client-islands.mjs` (run in `postbuild` next to th
 | GlossaryFilter | `components/learn/GlossaryFilter.tsx` | Live filter with a debounced count | none (filters the server-rendered list in the DOM) |
 | LearnRail | `components/learn/LearnRail.tsx` | Scroll-spy `aria-current` on "On this page"; scrolls the current chapter into view in the narrow nav; drives chapter 8's `.seg` example switches | none |
 | ErrorBoundary | `app/error.tsx`, `app/review/error.tsx` | Next requires error boundaries to be client components | none |
+| SeniorDesk *(P1C)* | `components/review/senior/SeniorDesk.tsx` plus `components/review/senior/*` | Keyboard model of the senior pages (J, K, M, R, ?, Esc), pair decisions with Turnstile and `requestId`, the pair-issue note drafts, row-level 409 banners, live region | role, page kind (`queue` or `substance`), the visible pair order with each pair's `{ddinterA, ddinterB, version}`, desk settings (single-key shortcuts). No clinical text and no emails in props; the rows are server-rendered. |
+
+*(P1C)* ReviewDesk's `role` prop also takes `senior` (§5.7, §5.10a).
 
 ### 4.3 What data may reach the browser
 
@@ -421,11 +482,12 @@ The source is Board R's `.app`.
 - **Toolbar** (`.chrome-toolbar.material`, 52 px), from left to right:
   - `Wordmark` at 17 px with sub "Review";
   - centre: "Batch `0001-pilot`", `ProgressMeter` (160 px), "0 of 10 approved" (tabular), a separator, then "Record 1 of 10", or "Batch approved" in the complete view;
-  - right: role badge "Pharmacist" or "Engineer" (`.role-badge`), then the account (initials avatar, name, AccountMenu).
+  - right: role badge "Pharmacist" or "Engineer" (`.role-badge`), then the account (initials avatar, name, AccountMenu). *(P1C)* For role `senior` the badge reads "Senior pharmacist".
 - **Panes**: `grid-template-columns: var(--pane-side) var(--pane-list) minmax(0,1fr)`, which is 232 px, 336 px and the rest.
 - **Sidebar** (`.chrome-sidebar.material`):
   - heading "Batches", with one `.filter` per batch: stack icon, mono batch id, item count. The current batch has `aria-current="true"`. Clicking it clears the filter and the search.
   - heading "Show", with filters (§5.3).
+  - *(P1C, seniors only)* heading "Senior review", with two links: "Pair queue" plus the count of pairs to review (`.filter-n`, tabular), to `/review/pairs`; and "Substances", to `/review/substances` (§5.17).
   - batch card at the bottom:
     - "**{a} of {n}** approved by a pharmacist";
     - a wide progress meter with `aria-label` "{a} approved, {i} with an issue, {needs} need review";
@@ -455,6 +517,15 @@ The source is Board R's `.app`.
 3. `engineer_checked`: `review = 'pending'`, and the counted decisions (`decidedAt > extractedAt`) contain an engineer `ok` with no `issue` after it.
 4. `back_in_review`: `review = 'pending'`, there are no counted decisions, and `ApprovalRule.review(decisionsAtOrBefore(extractedAt), null)` = `ok`. In other words, the record was approved before its latest extraction.
 5. `pending`: everything else, including an issue fixed and re-run. Per the gate table in Board L chapter 4, "Issue reported → re-run" returns to "Not yet reviewed by a pharmacist".
+
+**Dismissed issues (P1C, Decision, PO D10, D57).** A counted `dismiss` decision (§5.10a) is a review boundary, like a re-run stamp. Decisions at or before it no longer count. So after a dismissal the record's `review` is `pending` and its display status is `pending`, even when a pharmacist's `ok` came before the issue; a pharmacist (or senior) approves it again.
+
+- In rules 1–3, "counted" means decided after `max(extractedAt, the latest counted dismiss)`.
+- Rule 4 (`back_in_review`) applies only when there is no counted dismiss since the run stamp, so a dismissal never shows "Back in review".
+- `ApprovalRule.review` returns `pending` (never empty) when the newest decision after the stamp is a `dismiss`. The item's `review` is then reset from `issue` to `pending`.
+- The PO's alternative, "restore the prior approval", is not chosen (§13.1 Q4). Restoring it would publish again with no pharmacist looking at the record at that moment. The senior who dismisses is a pharmacist and can press A straight after, so the cost is one key.
+
+**Re-run reach (P1C, D54).** A re-run re-opens a record only when it changes something the record's approval covered (§8.3). A re-run that changes nothing covered leaves an open issue open; the senior dismisses it if the report was a mistake (§5.10a), or an engineer re-runs with `--reopen` (§8.3).
 
 Header chips: the pill for the status, plus a second `pending` pill ("Not yet reviewed by a pharmacist") when the status is `engineer_checked`, `issue` or `back_in_review`. Beside the chips, `.d-vis` reads "Published. Readers can see this record." for `approved`, and "Hidden from readers until a pharmacist approves it." otherwise.
 
@@ -542,6 +613,8 @@ match = new RegExp(`(^|[^\\d.])${escapeRegExp(base)}(?![\\d])`, "i").test(src)
 
 Numbers are rendered without trailing zeros, as the API's `plain()` does.
 
+**Source links in the table (P1C, PO D8, D58).** The "DGDA source" header cell carries the `SourceLink` "DGDA register (OCL)" with the OCL fetch date. Every `CodeChip` in the "DGDA ingredient code", "Codes n" and "DDInter mapping n" rows carries its source (§5.6.6), on every record and in every status.
+
 #### 5.5.3 "Automated checks"
 
 - Subtitle: "{ok} OK, {w} warning[s], {f} failed. Pipeline run {fmtUtc(runAt)}". Zero parts are omitted.
@@ -557,9 +630,13 @@ Numbers are rendered without trailing zeros, as the API's `plain()` does.
 - **Quiet OK stages.** OK stages with an empty note (except DDInter when the record has no data) merge into one `StageCheck` named by joining their names with ", " (for example "DGDA load, Substances, Clinical drug") with status "OK".
 - **DDInter stage with no-data coverage**: the note is `NO_DATA_SENTENCE`.
 - **DDInter stage with text-missing pairs** (from the API's structured `textMissing`, §7.3; never a regex on the note):
-  - note "DDInter text not found for {n} pair[s] with other medicines in this batch.";
-  - toggle button, open by default, `aria-expanded`/`aria-controls`: "Hide the pair" / "Show the pair" when n = 1, otherwise "Hide the {n} pairs" / "Show the {n} pairs";
-  - a list of `.stage-pair` items: "{nameA} + {nameB} `{ddinterA}/{ddinterB}`" plus a `Severity` chip when the severity is known. Order follows the note (text order of the ids).
+  - *(P1C, PO D6, D55)* the pairs are split by the API's new `partnerScope` (§7.3). The existing `inBatch` flag cannot do it alone: it is true only when another current product of **this** batch chooses the partner entry, while the ETL lists a text-missing pair whenever the partner entry is chosen by this product or by any product ever mapped (`run.scope_chosen`, `$ETL/stages/ddinter.py` `_applies`). So `inBatch: false` also covers a pair between two ingredients of this combination product, a partner in a later batch when an older batch is re-run, and a partner whose only product was removed from its batch file. Each group shows only when it is not empty, in this order:
+    - `partnerScope: "batch"`: note "DDInter text not found for {n} pair[s] with other medicines in this batch.";
+    - `partnerScope: "same_product"` (both entries are chosen by this record's own ingredients, and no other product of this batch chooses the partner entry): note "DDInter text not found for {k} pair[s] between ingredients of this product." (new copy, §1.7);
+    - `partnerScope: "other"` (the partner entry is chosen only by products outside this batch: another batch, earlier or later, or a product no longer in any current item): note "DDInter text not found for {m} pair[s] with medicines outside this batch." (new copy, §1.7). Before P1C, these pairs sat under the "in this batch" note, which was false. The note never says "earlier", because the partner may be in a later batch.
+  - each group has its own toggle button, open by default, `aria-expanded`/`aria-controls`: "Hide the pair" / "Show the pair" when its count is 1, otherwise "Hide the {n} pairs" / "Show the {n} pairs";
+  - each group has its own list of `.stage-pair` items: "{nameA} + {nameB} `{ddinterA}/{ddinterB}`" plus a `Severity` chip when the severity is known. Order follows the note (text order of the ids).
+  - The triage hint (§5.4 row 5) still counts all text-missing pairs, in both groups.
 - **Other structured notes** (`name_only`, `route_assumed`, `no_route_entry`, `other`) are listed as separate `.stage-note` lines with the pipeline's text verbatim.
 - **Fail notes** are shown whole, never split.
 - An OK stage that has a note shows the note. The text "No pipeline note." is used only on public product pages (§6.5).
@@ -573,7 +650,7 @@ Numbers are rendered without trailing zeros, as the API's `plain()` does.
   - title: the substance name;
   - text: `NO_DATA_SENTENCE`;
   - second line: "Drug, disease and food interactions: no data in DDInter 2.0.";
-  - pairs: "Not checked, {k} pairs with this batch:" plus chips "{substance} + {other}".
+  - pairs: "Not checked, {k} pairs with this batch:" plus chips "{substance} + {other}". *(P1C)* When `otherPairs` (§7.3) holds `no_data` pairs for this substance, a second line follows: "Not checked, {j} pair[s] with medicines in other batches:" plus chips "{substance} + {other}" (new copy, §1.7).
 - **Data found** (route-aware, **Decision**; replaces Board R's line, §1.6 item 10):
   - "Interaction data found for this product's route ({route}): `{chosen ids with route}`", plus ", route assumed" when assumed. When the product has no route: "Interaction data found: `{chosen ids with route}`, route assumed";
   - `Severity` chips with counts for the chosen entries, Major, Moderate, Minor and unclassified (group `aria-label` "Drug pairs in DDInter 2.0 by severity");
@@ -582,9 +659,18 @@ Numbers are rendered without trailing zeros, as the API's `plain()` does.
 - **The substance has entries but none fits the route** (`no_route_entry`): "No DDInter entry for this product's route ({route}). Its pairs are not checked." When the product has no route: "No DDInter entry fits this product, which has no route on record. Its pairs are not checked." The pairs are listed as not checked, with reason `no_route`, as plain text, never the hatch.
 - **DDInter mapping has not run** (coverage `not_run`): `NOT_RUN` as plain text, never the hatch block and never `NO_DATA_SENTENCE`. Its pairs are listed as not checked, with reason `not_run`. Approval is refused until the DDInter stage has run (§7.2).
 
-#### 5.6.2 "With the other medicines in this batch"
+#### 5.6.2 "With other medicines" (P1C; was "With the other medicines in this batch")
 
-The API's `batchPairs` are computed with RouteRule for this record and for each partner record. Shown only when the record has data.
+**Decision (P1C, PO D6, D55).** The record's interactions cover every current medicine we hold, not only its own batch, so the pharmacist never approves a record blind to a partner in another batch. The section heading is "With other medicines" (`<h3>`), and it holds two groups, each with an `<h4>`:
+
+1. **"In batch {batchId}"**: the API's `batchPairs`, rendered exactly as described in the rest of this section.
+2. **"In other batches"**: the API's `otherPairs` (§7.3), described at the end of this section.
+
+**When the section shows (fixes `Interactions.tsx`).** The section is shown when **at least one** ingredient has a chosen entry. Today `Interactions.tsx` hides the whole block when any ingredient has coverage `none`, so a combination product with one no-data ingredient loses every pair of its other ingredient. That is a bug. The no-data ingredient's pairs appear in the section as not checked, reason `no_data`, as below. When no ingredient has a chosen entry, the section is not shown; the per-ingredient blocks (§5.6.1) list the not-checked pairs.
+
+**Every pair card in this section** (both groups) shows `FROM_DDINTER` in its meta line and ends with the pair's senior-review state (`PairReviewState`, reviewer surface, §5.17). For a pharmacist or engineer this state is information only. Senior review is not a gate on approval (PO D4).
+
+The API's `batchPairs` are computed with RouteRule for this record and for each partner record.
 
 - Summary: "{p} pair[s] found in DDInter 2.0." plus " {nc} pair[s] not checked." when nc > 0 (nc counts every not-checked reason except `same_product`, as in §6.7.2 rule 5). Then a group of severity chips with counts (`aria-label` "Batch pairs by severity").
 - For each ingredient that has data but no batch pair: "None of the {N} batch pairs from DDInter 2.0 involve {name}." (N = `totalBatchPairs`).
@@ -597,6 +683,23 @@ The API's `batchPairs` are computed with RouteRule for this record and for each 
 - **Not checked, no data** (reason `no_data`): `.nc` block, "**Not checked.** {names}: " + `NO_DATA_SENTENCE`, plus `NoDataChip`s "{a} + {b}".
 - **Not checked, other reasons** (`not_run`, `no_route`, `unmapped`): plain text, one line per pair, using the §6.7.3 item 4 wording, where {brand} is the trade name of the record whose substance the reason applies to (this record or the partner). No hatch, no `NoDataChip`.
 - **Same-product pairs** (combination products): "Not checked: {a} + {b} are ingredients of this product." (reason `same_product`).
+
+**"In other batches" (P1C).** `otherPairs` is computed like `batchPairs`. It runs against the **latest current item of every product held in any other batch**: the item `ReviewSql.statusOf` reads, and never an item marked "removed from batch file". RouteRule applies on both sides. A product that is also in this batch is listed only under "In batch {batchId}". The group has two `<h5>` subgroups, by the partner product's status:
+
+- "With approved medicines": partners whose display status is `approved`;
+- "With medicines not yet approved": every other partner (pending, engineer checked, issue, back in review).
+
+Each subgroup uses the parts of the batch block, with these changes:
+
+- The summary reads "{p} pair[s] found in DDInter 2.0." plus " {nc} pair[s] not checked." when nc > 0, with severity chips (`aria-label` "Pairs with other batches by severity").
+- Partner references read "{trade name} (batch `{b}`)", ordered by batch, then trade name. At most 3 are shown, then "and {k} more". A `<details>` lists the partners the API returned (at most 5 per pair or not-checked line, §7.3), each linking to `/review/{b}/{conceptId}`:
+  - when `partnerCount` ≤ 5, its summary is "All {n} medicines";
+  - when `partnerCount` > 5, its summary is "{s} of {n} medicines", and the list ends with "and {k} more." (k = n − s). For a senior, "See every brand of {partner substance}" follows, linking to `/review/substances/{partnerBdsId}` (§5.17.4). Other roles cannot open the senior pages (§5.17), so they get no link; the pair, its severity and its text are complete either way, and only the names of further brands are left out.
+  - the same applies to the partners of `otherPairs.notChecked` lines.
+- There is no "None of the {N} batch pairs…" line.
+- Not-checked lines and the no-data block are as in the batch block, with the partner named as above.
+
+When there is no other batch: "There are no other batches yet." When other batches exist and `otherPairs` has no pair and no not-checked pair (so every pair with them was checked and DDInter lists none): "DDInter 2.0 lists no interaction between {trade name} and the medicines in other batches. This is not a guarantee that they are safe to combine." (both new copy, §1.7).
 
 #### 5.6.3 Evidence drawer (E)
 
@@ -611,6 +714,7 @@ The API's `batchPairs` are computed with RouteRule for this record and for each 
      - Clinical signature (mono);
      - Extracted at: `fmtUtc` plus `fmtDhaka`;
      - Batch run: `fmtUtc`, plus "{batchId}, {n} items".
+  6. *(P1C)* "Sources", with note "Where each value came from. Links open the source's own page." It is a `dl` with one row per source the record uses: "DGDA register (OCL)", "RxNav", "WHO ATC/DDD Index", "DrugBank", "ICD-11", "DDInter 2.0". Each row holds the `SourceLink`s of §5.6.6, with "fetched on {date}" where a fetch time is stored. Every label is new copy (§1.7).
 - Opening the drawer:
   - makes the detail scroll region `inert`;
   - moves focus to Close;
@@ -636,13 +740,44 @@ Every record whose clinical drug route is not `systemic`, or whose entry was ass
 | `run` (full run) | "Batch {batchId} run started" |
 | `extract` (first) | "Pipeline extracted this record" |
 | `extract` (later) | "Pipeline re-ran this record"; when `reason = shared_change`: "Shared substance data for this record changed" |
+| `extract` with `carriedFrom` *(P1C, §8.3.1 item 8)* | "Pipeline extracted this record", then a second line: "Approval carried over from batch {batchId}: nothing it covered changed." |
 | `decision` ok, pharmacist | "Approved by a pharmacist. Published." / "Approved by a pharmacist (you). Published." |
 | `decision` ok, engineer | "Engineer checked. Not published." / "Engineer checked (you). Not published." |
 | `decision` issue | "Issue reported by a pharmacist. Note:" / "Issue reported by an engineer. Note:" / "Issue reported (you). Note:", followed by the note in `.raw` |
+| `decision` ok, senior *(P1C)* | "Approved by a senior pharmacist. Published." / "Approved by a senior pharmacist (you). Published." |
+| `decision` issue, senior *(P1C)* | "Issue reported by a senior pharmacist. Note:", followed by the note in `.raw` ("(you)" as above) |
+| `decision` dismiss *(P1C, PO D10)* | "Issue dismissed by a senior pharmacist. Note:" / "Issue dismissed (you). Note:", followed by the dismissal note in `.raw` |
 
+- *(P1C)* **The reporter's note stays.** A dismissal never hides or changes the issue entry it dismisses. That entry and every other decision at or before the dismissal (and after the run stamp) gets the suffix " No longer counts: a senior pharmacist dismissed the issue after it." (new copy, §1.7). When a decision is at or before both a dismissal and the current stamp, the re-run suffix below wins.
+- History shows roles only, never an email, for the senior too.
 - **One `extract` entry per pipeline run.** Every stage of a run stamps the item (§8.1), so one full run writes up to four snapshots. The API collapses the snapshots that share a `run_id` (§7.6) into one `extract` entry at the last stamp of that run. Its reason is `run` when the group holds the item's first snapshot, `shared_change` when every snapshot in the group is `shared_change`, and `rerun` otherwise.
 - A decision that no longer counts (made at or before the current `extractedAt`) gets the suffix " No longer counts: the record was re-run after it." (**Decision**).
 - Emails are never shown. "(you)" comes from the API's `mine` flag.
+
+#### 5.6.6 Source links (P1C, PO D8, D58)
+
+**Decision.** Every code links to its public source page, next to the stored source text. "fetched on {date}" is added where we store a fetch time. On the desk, links show for every record, whatever its status. On public pages they show only for approved records (§6.5, P2). The URL is built **only** by the API (`$API/domain/SourceLinks.java`), from the system and the code, and it is sent as `source: {url, label, fetchedAt}` (§7.3). The web renders it with `SourceLink` and never builds a source URL itself. The code is checked against its system's pattern before a URL is built. A code that fails the check gets no link and is still shown. The user takes responsibility for licences (PO D8). §13.1 Q1 still covers the attribution lines.
+
+Each pattern below was checked live, read-only, on 15/10/2026 with real pilot codes. "curl" means a plain HTTP GET; "browser" means a real Chromium page load, for single-page apps and bot-protected sites.
+
+| System | Code pattern | Link (`{c}` = URL-encoded code) | Link text | "fetched on" from | Verification, 15/10/2026 |
+|---|---|---|---|---|---|
+| DGDA register (brand) | concept id | `https://tr.ocl.dghs.gov.bd/#/orgs/MoHFW/sources/DGDA-Drugs/concepts/{c}/` (existing `sourceUrl`, §7.3) | "DGDA register (OCL)" | `raw.ocl_concept.fetched_at` | curl 200 (single-page app; it is the existing S key target) |
+| RxCUI | `^[0-9]{1,10}$` | `https://mor.nlm.nih.gov/RxNav/search?searchBy=RXCUI&searchTerm={c}` | "RxNav" | `raw.http_snapshot.fetched_at`, source `rxnav`, key `GET /REST/rxcui/{c}/properties.json` | curl 200; browser: 161 shows "acetaminophen [RxCUI 161]". The REST form `https://rxnav.nlm.nih.gov/REST/rxcui/161/properties.json` also answers 200 JSON (`"name":"acetaminophen"`), but it is not a reader's page and is not used. |
+| ATC | `^[A-Z][0-9]{2}([A-Z]([A-Z]([0-9]{2})?)?)?$` | `https://atcddd.fhi.no/atc_ddd_index/?code={c}&showdescription=no` | "WHO ATC/DDD Index" | the RxNav snapshot `GET /REST/rxcui/{rxcui}/allProperties.json?prop=codes` of the substance's RxCUI (the code came from RxNav) | curl 200: N02BE01 lists "N02BE01 paracetamol 3 g O"; B01AA03 200 |
+| DrugBank | `^DB[0-9]{5}$` | `https://go.drugbank.com/drugs/{c}` | "DrugBank" | the same RxNav snapshot | browser: DB00316 opens "Acetaminophen: Uses, Interactions, Mechanism of…". curl gets 403 (DrugBank's bot challenge), so nothing automated ever requests it. |
+| SNOMED CT | `^[0-9]{6,18}$` | **Fallback (search):** `https://mor.nlm.nih.gov/RxNav/search?searchBy=SNOMEDCT&searchTerm={c}` | "RxNav (SNOMED CT search)" | the same RxNav snapshot | The SNOMED International browser (`https://browser.ihtsdotools.org/?perspective=full&conceptId1={c}&edition=MAIN&release=&languages=en`) and `https://snomed.info/id/{c}` refused connections from two networks (curl: connection refused, once 423 Locked; the fetch tool: ECONNREFUSED). The NHS browser (`termbrowser.nhs.uk`) answers 200 but opens a cookie and licence screen, not the concept. RxNav, our actual source of the code, resolves 387517004 to "acetaminophen [RxCUI 161]" (browser). |
+| ICD-11 (DGDA ingredient XM code) | `^XM[0-9A-Z]{4}$` | **Fallback (no deep link by code):** `https://icd.who.int/browse/latest-release/mms/en` | "Search ICD-11 for {code}" | `raw.ocl_concept.fetched_at` (the XM code comes from the DGDA register) | `#XM5DJ7` opens only the browser root (browser). The coding tool `#/?q=XM5DJ7` is ignored, `/search?q=` is 404, and the code API `id.who.int/…/codeinfo/XM5DJ7` needs OAuth (401). The browser deep-links only by entity id: `https://icd.who.int/browse/latest-release/mms/en#173693607` opens "XM5DJ7 Acetaminophen" (browser). We store no entity id (§13.1 Q9), so the link opens the browser and its text names the code to search. |
+| DDInter entry | `^DDInter[0-9]{1,6}$` | `https://ddinter2.scbdd.com/server/drug-detail/{c}/` | "DDInter 2.0" | `curated.ddinter_drug.fetched_at` | curl 200: DDInter14 "Acetaminophen", DDInter352 "Chloramphenicol (ophthalmic)", DDInter1951 "Warfarin" |
+| DDInter pair | stored `interaction_id`, `^[0-9]{1,9}$` | `https://ddinter2.scbdd.com/server/interact/{interactionId}/`; no link when the pair has no `interaction_id` | "Full record in DDInter 2.0" | none: no per-pair fetch time is stored, so no date is shown | curl 200: 3039 (DDInter1951 + DDInter9) |
+
+Rules:
+
+- **Placement on the desk.** The comparison table (§5.5.2); the per-ingredient block's "Interaction data found…" line, where each chosen entry id carries its DDInter link; every pair card (the pair link in the footer, after the source line); and the evidence drawer's "Sources" (§5.6.3).
+- **Link behaviour.** Links open in a new tab (`target="_blank" rel="noopener noreferrer"`, with sr-only " (opens in a new tab)"). They never take a shortcut key: S stays the DGDA source.
+- **Dates.** "fetched on {DD/MM/YYYY}" is the Dhaka date of the stored time (`fmtDhakaOn` without the time).
+- **No automated calls.** CI asserts the hrefs only and never calls the external sites. The P1C PR re-runs the browser check above with the pilot codes and records the results.
+- **Security.** The links are plain `<a>` elements, so they need no CSP change (§9.4). `Referrer-Policy: same-origin` (§9.4) keeps our paths out of the source sites' logs.
 
 ### 5.7 Decision bar
 
@@ -656,7 +791,7 @@ Every record whose clinical drug route is not `systemic`, or whose entry was ass
      - title "Couldn't confirm your decision.";
      - body "We couldn't confirm your decision was saved. Try again to find out; it will not be saved twice. Decision: Looks correct on {name}.";
    - action in both: "Try again" (tonal sm, busy label "Saving"). Try again resends the same `requestId` and version, so the API either saves once or reports the earlier save (§7.2).
-2. **Report panel** (`.bar-report`, hidden unless open), §5.10.
+2. **Report panel** (`.bar-report`, hidden unless open), §5.10. *(P1C)* **Dismiss panel** (`.bar-report.bar-dismiss`, hidden unless open, seniors only), §5.10a. At most one of the two panels is open at a time. Opening one closes the other and keeps its draft.
 3. **Signed-out block** (hidden unless the server reported `unauthenticated`), new copy (§1.7): info icon; "Your sign-in expired. Your decision on {name} was not saved."; link "Sign in again" to `/signin?returnTo={current path}`. It replaces `decision-main` and the key row. Any note draft is kept in `sessionStorage` until sign-out (§5.10).
 4. **No-auth block** (hidden unless the server reported `forbidden`):
    - info icon;
@@ -667,6 +802,7 @@ Every record whose clinical drug route is not `systemic`, or whose entry was ass
    - the promise (`aria-live` off; changes are announced through the live region only when this spec says so);
    - actions:
      - `BotCheck`;
+     - *(P1C)* "Dismiss issue `D`" (tonal, `aria-expanded`, `aria-controls`, `aria-keyshortcuts="D"`). It is rendered only for role `senior`, and only when the display status is `issue`. Pharmacists and engineers see the issue (pill, promise and history) but no Dismiss control, and D does nothing for them;
      - "Report issue `R`" (tonal, `aria-expanded`, `aria-controls`, `aria-keyshortcuts="R"`);
      - "Looks correct `A`" (primary, `aria-keyshortcuts="A"`).
 6. **Bot row** (hidden unless a bot hold is active, and always hidden while the no-auth or signed-out block shows):
@@ -674,7 +810,7 @@ Every record whose clinical drug route is not `systemic`, or whose entry was ass
    - "Retry check" (busy label "Checking").
    - When Try again (item 1) or Retry check succeeds, focus moves to "Looks correct" if the committed record is the open one, otherwise to the workspace region (Board R).
 7. **Hint** `.decision-hint`. Hidden by default. Each hint shows for 5000 ms and is also announced.
-8. **Key row** (`aria-hidden="true"`): "`J` `K` next, previous · `A` looks correct · `U` undo · `R` report · `E` evidence · `S` DGDA source · `?` all keys". Hidden when single-key shortcuts are off (§5.14) or the viewport is under 480 px tall (§5.1).
+8. **Key row** (`aria-hidden="true"`): "`J` `K` next, previous · `A` looks correct · `U` undo · `R` report · `E` evidence · `S` DGDA source · `?` all keys". *(P1C)* For role `senior`, while the status is `issue`, " · `D` dismiss issue" is inserted after "`R` report". Hidden when single-key shortcuts are off (§5.14) or the viewport is under 480 px tall (§5.1).
 
 **Promise text by state** (the first match wins):
 
@@ -689,9 +825,11 @@ Every record whose clinical drug route is not `systemic`, or whose entry was ass
 | saving on this record (`committing`) | pharmacist: "**Marked correct.** Publishing now."; engineer: "**Marked correct.** Saving your check now." |
 | a stage failed or did not run | "**A check failed on this record.** It returns to review after the fix and re-run." |
 | `approved` | "**Approved by a pharmacist.** This record is public." |
+| *(P1C)* dismissing on this record (dismiss sent, outcome pending) | "**Dismissing the issue.** Saving now." |
+| *(P1C)* senior viewing `issue` | "**An issue is open on this record.** If the report was a mistake, dismiss it. Otherwise it returns to review after the fix and re-run." |
 | `issue` | "**An issue is open on this record.** It returns to review after the fix and re-run." |
 | engineer viewing `engineer_checked` | "**Your check is recorded.** A pharmacist still needs to approve." |
-| otherwise | `PROMISE_PHARMACIST` or `PROMISE_ENGINEER` |
+| otherwise | `PROMISE_PHARMACIST`, `PROMISE_SENIOR` *(P1C)* or `PROMISE_ENGINEER` |
 
 **"Looks correct" is `aria-disabled="true"`** (it stays focusable; pressing it shows the hint) when:
 
@@ -702,11 +840,14 @@ Every record whose clinical drug route is not `systemic`, or whose entry was ass
 - the status is `approved` or `issue`;
 - any stage has status `fail`, or one of the four stages has no result (the API refuses it too, §7.2);
 - the report panel is open;
+- *(P1C)* the dismiss panel is open, or a dismissal is saving;
 - the evidence drawer is open;
 - the role is engineer and the status is `engineer_checked`;
 - the account is not authorised, or the session has expired.
 
-**"Report issue" is `aria-disabled`** when the record is not open, is stale, or the evidence drawer is open. Report stays available on `approved` and `issue` records. A report on an approved record withdraws it from public view, and the API allows it.
+**"Report issue" is `aria-disabled`** when the record is not open, is stale, or the evidence drawer is open. Report stays available on `approved` and `issue` records. A report on an approved record withdraws it from public view, and the API allows it. *(P1C)* This is also how a senior withdraws any approval (PO D2).
+
+*(P1C)* **"Dismiss issue" is `aria-disabled`** (it stays focusable; pressing it shows the hint) when the record is stale, the evidence drawer is open, an undo window or a failed commit is open on this record, a bot hold is active, or the account is not authorised or signed out. It is not rendered unless the role is `senior` and the status is `issue`.
 
 ### 5.8 The commit-delayed approval (8-second default window)
 
@@ -752,9 +893,26 @@ committing
   └─ NETWORK | 5xx | TIMEOUT(10 s)                                       → netErr{record, role, saved:"unknown"}
 botHold{kind:"approve"}  └─ RETRY_OK → armed (a new n-second window)   └─ RETRY_FAIL → botHold
 botHold{kind:"commit"}   └─ RETRY_OK → committing (same requestId and viewedVersion; no new window: the reviewer already had theirs)
-botHold{kind:"report"}   └─ RETRY_OK → send report
+botHold{kind:"report"}   └─ RETRY_OK → send report (P1C: or dismissal, by op.decision; same requestId and viewedVersion)
 netErr                   └─ TRY_AGAIN → committing (fresh Turnstile token, same requestId and viewedVersion, no new window)
+
+report channel (separate state beside the commit; P1C: also carries dismissals, op.decision = "issue" | "dismiss")
+idle     └─ SEND_REPORT | SEND_DISMISS [no other report or dismissal on the channel] → sending{op}
+sending  └─ OK → idle + saved   └─ CONFLICT → idle + stale banner or hint   └─ CAPTCHA → botHold{kind:"report", op}
+         └─ RATE_LIMITED → netErr{op, saved:"no"}   └─ NETWORK | 5xx | TIMEOUT(10 s) → netErr{op, saved:"unknown"}
+netErr   └─ TRY_AGAIN → sending (fresh Turnstile token, the same op: same decision, note, requestId and viewedVersion)
 ```
+
+*(P1C)* **Dismissal uses the report channel (Decision).** `commit-machine.ts` has two channels today, `commit` and `report`, each with its own `netErr`. A dismissal is sent on the **report** channel as an op with `decision: "dismiss"`; there is no third channel. So a report and a dismissal never run at the same time (the two panels are never open together either, §5.7), and an approval's undo window on another record is not affected. There is no undo window (the panel and its note are the confirm step, §5.10a). `SEND_DISMISS(record)` is allowed only for role `senior` with display status `issue`, and only while the report channel is `idle`. It sends `decision=dismiss` with the note, the record's `viewedVersion` and a new `requestId`, all held in the op. The outcomes:
+
+- `OK` → idle + saved, and `viewedVersion := outcome.version` (own saves never make the record stale);
+- `CONFLICT(stale_rerun | stale_decision)` → stale banner;
+- `CONFLICT(no_issue | removed)` → hint (§5.8.4) + refresh;
+- `CAPTCHA` → `botHold{kind:"report"}` holding the dismiss op; Retry check resends that op;
+- `RATE_LIMITED` → report-channel `netErr{saved:"no"}`; network, 5xx and timeout → `netErr{saved:"unknown"}`. **Try again** on it (`TRY_AGAIN`, channel `report`) resends the **same op**: `decision=dismiss`, the same note, `requestId` and `viewedVersion`, with a fresh Turnstile token. It never resends an approval;
+- `FORBIDDEN`, `UNAUTHENTICATED` → the no-auth or signed-out block, as for commits.
+
+**Where a failed dismissal shows.** In the report channel's crit `Banner` in the decision bar (the one that shows a failed report today, `DecisionBar.tsx`), with the dismissal copy of §5.10a chosen by `op.decision`. It is never the §5.7 approval banner ("… Decision: Looks correct on {name}."). The §5.7 promise rows "Your decision was not saved…" and "Your decision may not have been saved…" and the §5.4 row hints "Decision not saved" and "Decision not confirmed" describe the commit channel only; while a dismissal is failed, the promise stays at the "senior viewing `issue`" row. The dismiss panel stays open with its note until the dismissal is saved or cancelled.
 
 - **Own saves never make the record stale (Decision).** On OK (including a replayed outcome) for a decision or a report on record X, the island sets X's `viewedVersion` to `Outcome.version` before any later poll or refresh is compared, and refreshes X's detail subtree with it. Without this, the reviewer's own decision would change `lastDecisionId` and the next poll would show the other-reviewer stale banner (after R, after the last approval, or when X is not the open record).
 - `UNAUTHENTICATED` is the server action's `unauthenticated` outcome: no session cookie, or an expired or unreadable one (8 h, §9.6). It is distinct from `FORBIDDEN`, which means a valid session whose role cannot review.
@@ -789,7 +947,7 @@ netErr                   └─ TRY_AGAIN → committing (fresh Turnstile token,
 | R when not authorised | "Your account can't review this batch." |
 | Send report during a bot hold | "Retry the bot check first. Your earlier decision is kept." |
 | U while the decision is saving (`committing`) | "Too late to undo: {name} is saving. Use Report issue to withdraw it." |
-| A or R while the evidence drawer is open | "Close the evidence first (Esc)." |
+| A or R (and, *P1C*, D) while the evidence drawer is open | "Close the evidence first (Esc)." |
 | A on a record with a failed stage, or a stage with no result | "A check failed on this record. It returns to review after the fix and re-run." |
 | A on the same record during its window | "This record is already in its undo window. Press U to undo." |
 | A on `approved` | "This record is already approved by a pharmacist." |
@@ -808,6 +966,12 @@ netErr                   └─ TRY_AGAIN → committing (fresh Turnstile token,
 | API 409 `already_checked` at commit | "Your check is already recorded for this record." |
 | API 409 `removed` at commit | "This record was removed from the batch file. Nothing was saved." |
 | API 409 `stage_failed` at commit | "A check failed on this record. It returns to review after the fix and re-run. Nothing was saved." |
+| *(P1C)* D on a record with no open issue (senior) | "No issue is open on this record." |
+| *(P1C)* D on a stale record (senior) | "Decisions are paused. Reload the record first." |
+| *(P1C)* D during an undo window, a saving commit or a failed commit on this record | "Finish or undo your decision on this record first." |
+| *(P1C)* Send dismissal while stale | "Dismissing is paused until you reload the record. Your note is kept." |
+| *(P1C)* API 409 `no_issue` at dismissal | "No issue is open on this record any more. Nothing was saved." |
+| *(P1C)* API 409 `removed` at dismissal | "This record was removed from the batch file. Nothing was saved." |
 
 - **Saved**: "Saved. {name} is approved by a pharmacist and published." (pharmacist) or "Saved. Your check on {name} is recorded. It does not publish." (engineer). Then the advance text (§5.9) follows in the same announcement.
 - **Bot failed**: announce "Bot check failed. Your decision is kept. Retry the check to continue." On success: "Bot check passed."
@@ -843,7 +1007,7 @@ After a successful commit:
 1. If every current item is `approved`: when the committed record is the open one, switch to the **complete view** (§5.12) and close the drawer. Announce "{saved} Every record in batch {id} is approved."
 2. Otherwise, if the open record is no longer the committed one, or the report panel is open: do not move. Announce the saved text only.
 3. Otherwise, look for the next record that needs review **for this role**:
-   - pharmacist: `pending`, `back_in_review` or `engineer_checked`;
+   - pharmacist (and, *P1C*, senior): `pending`, `back_in_review` or `engineer_checked`;
    - engineer: `pending` or `back_in_review`.
    - Search the visible order first, starting after the committed record and wrapping. Then search all records by index; if the record found is outside the current filter, clear the filter and the search.
 4. If one is found, navigate to it. For 1000 ms after arriving, A on that record shows "Record changed to {name}. Press A again to approve it." and does nothing else. Announce "{saved} Opened {name}, record {k} of {n}."
@@ -879,6 +1043,35 @@ Focus stays where it was. After navigation, the island restores focus to the ele
   - announce "Issue reported for {name}. An engineer will see your note.";
   - no auto-advance.
 - **Failure states**: the same as for commits (§5.8.2), with "Couldn't send your report. Nothing was saved. Check your connection and try again." and "Try again".
+
+### 5.10a Dismiss issue (D) (P1C, PO D10, D57)
+
+**Decision.** A senior pharmacist can dismiss an open issue on a record when the report was a mistake, without a pipeline re-run. A dismissal is a new append-only decision, `decision = 'dismiss'`, in `ops.review_decision` (V7, §7.8). It has a required note of 5–1000 characters. It is audited, version-guarded and idempotent by `requestId`, like every decision (§7.2). After it, the record is `pending` (§5.2): a pharmacist approves it again. Only role `senior` may dismiss: the web refuses other roles with `forbidden`, and the API refuses them with 400 `field=reviewerRole` (§7.2). The reporter's note stays in the history (§5.6.5).
+
+- **Who sees what.** The "Dismiss issue `D`" button (§5.7) is rendered only for a senior, on a record whose display status is `issue`. A pipeline issue ("not found at source", "not a registered Drug product") is display status `pending`, not `issue` (§5.2), so it cannot be dismissed. Only a re-run clears it.
+- **D, or the button,** opens the dismiss panel and focuses its field. When the panel is already open, D focuses the field. Clicking the button while the panel is open closes the panel, keeps the draft, and leaves focus on the button. Opening it closes an open report panel, keeping that draft.
+- **Panel** (`.bar-report.bar-dismiss`, `role="group"`, `aria-labelledby` its title), top to bottom:
+  - title "Dismiss this issue";
+  - the open issue, quoted: "Reported by {a pharmacist|a senior pharmacist|an engineer|you} on {fmtDhaka(at)}:" followed by the reporter's note in `.raw`. When several counted issues are open, each is quoted, oldest first;
+  - consequence sentence: "Dismissing records that the report was a mistake. The record goes back to “Not yet reviewed by a pharmacist”, and a pharmacist approves it again. The report stays in the history.";
+  - field: label "Why was the report a mistake? Pharmacists and engineers read this note."; placeholder "For example: the strength matches the DGDA register; the report misread it"; `maxlength=1000`; help "5 to 1000 characters." followed by `NO_PHI_HELP`; counter "{len} / 1000"; error "Add at least 5 characters so the team knows why the report was dismissed." The error rules are those of §5.10 (`aria-invalid`, counter, cleared at 5);
+  - actions: "Cancel `Esc`" (tonal sm) and "Dismiss issue `Ctrl Enter`" (primary sm, busy label "Dismissing"; "⌘ Enter" on Mac). Enter alone never sends.
+- **The confirm step** is the panel: opening it, writing the note, then pressing "Dismiss issue" or Ctrl/Cmd+Enter. Nothing is sent before that second action. There is no undo window, because a dismissal publishes nothing: the record becomes `pending`.
+- **Esc** in the field closes the panel and keeps the draft. **Cancel** discards the draft. In both cases focus returns to "Dismiss issue". Drafts follow §5.10, under the key `intellidrugs-dismiss-draft:{batchId}:{conceptId}`, and are cleared on send and on sign-out.
+- **While stale**: Send is `aria-disabled`, and `.bar-report-paused` shows "Dismissing is paused until you reload the record. Your note is kept."
+- **Sending:** a trimmed length below 5 shows the error and announces it. Otherwise the island takes a Turnstile token (the report channel's bot hold, holding the dismiss op, if it has none) and calls the `decide` action on the report channel (§5.8.2) with `decision=dismiss`, the note, `viewedVersion` and a new `requestId`.
+- **On success:**
+  - the status becomes `pending`, and the pills read `NOT_REVIEWED`;
+  - the draft is cleared and the panel closes;
+  - focus moves to "Looks correct" (the dismiss button is no longer rendered);
+  - announce "Issue dismissed for {name}. The record is back in review for a pharmacist.";
+  - no auto-advance.
+- **Failure states**: on the report channel (§5.8.2), shown in its crit `Banner` in the decision bar, never in the §5.7 approval banner:
+  - not saved: title "Couldn't send your dismissal.", body "Nothing was saved. Check your connection and try again.";
+  - unconfirmed: title "Couldn't confirm your dismissal.", body "We couldn't confirm your dismissal was saved. Try again to find out; it will not be saved twice.";
+  - each with "Try again" (busy label "Dismissing"), which resends `decision=dismiss` with the same note, `requestId` and `viewedVersion`. The announcement is the banner's title and body. A 409 `no_issue` (another senior dismissed it, or a re-run cleared it) shows its hint (§5.8.4) and refreshes the record.
+- **Without JavaScript**: not possible, as for every decision (Turnstile). The `<noscript>` line of §4.4 covers it.
+- **a11y**: the button has `aria-expanded` and `aria-controls`. The panel's field has `aria-describedby` pointing at the help, the counter and the error. The quoted report is plain text before the field, so a screen reader reads it first. Focus never falls to `<body>` (§10.1).
 
 ### 5.11 Stale detection and 409 handling
 
@@ -939,7 +1132,7 @@ Focus stays where it was. After navigation, the island restores focus to the ele
 |---|---|---|
 | `extractedAt` | stale, re-run | stale (re-run) |
 | `lastDecisionId` | another reviewer | stale (other-reviewer copy) |
-| `review` | issue open, already approved, already checked | hint |
+| `review` | issue open, already approved, already checked; *(P1C)* for `dismiss`: no open issue (`no_issue`) | hint |
 | `stages` | a stage failed or has no result, or the item has no run stamp | hint (`stage_failed`) |
 | `conceptId` | removed from the batch | hint |
 
@@ -949,7 +1142,7 @@ Focus stays where it was. After navigation, the island restores focus to the ele
 |---|---|---|
 | Loading (`app/review/[batchId]/loading.tsx` and in-island transitions longer than 300 ms) | 7 skeleton rows (`.sk`, pulse), detail skeleton, decision bar disabled. Reduced motion: no pulse. The list header count reads "Loading". | `role="status"`: "Loading batch {id}". When an in-island transition longer than 300 ms ends, announce "Batch {id} loaded." (never on the first server render). Exception: the auto-advance after a save (§5.9) announces neither "Loading" nor "loaded"; its save confirmation is the only announcement for that move. |
 | Empty filter or search | see §5.3 | "No records with an issue reported." etc., "Show all {n} records" |
-| Batch complete (every current item approved) | `.done` in the record pane, no animation: approved pill, `<h2>` "Batch {id} approved. {n} records are now public.", paragraph, button | "Each record was approved by a pharmacist. If the pipeline re-runs a record, it goes back in review and leaves public view until a pharmacist approves it again." Button: "Open record 1" |
+| Batch complete (every current item approved) | `.done` in the record pane, no animation: approved pill, `<h2>` "Batch {id} approved. {n} records are now public.", paragraph, button | "Each record was approved by a pharmacist. If the pipeline re-runs a record, it goes back in review and leaves public view until a pharmacist approves it again." *(P1C, D54: the second sentence becomes "If the pipeline changes data a record's approval covered, it goes back in review and leaves public view until a pharmacist approves it again.")* Button: "Open record 1" |
 | Not authorised (role `user` on any `/review` route) | Server page, no batch data: info banner, then two buttons | title "Your account can't review this batch."; body "Ask the IntelliDrugs team for a reviewer invite, then sign in with the invited Google account."; then a warn banner "This Google account isn't on the reviewer list." with "You're signed in as {own email}. Reviewer tools need the account your invite was sent to. You can still search and check interactions."; buttons "Use another Google account" (signs out, then opens `/signin?returnTo=/review`) and "Search medicines" |
 | Not signed in on `/review` | Redirect 307 to `/signin?returnTo=/review/...` | n/a |
 | Role lowered mid-session (the server action returns `forbidden`) | The record stays on screen. The no-auth block replaces the decision bar (§5.7). An open window is cancelled. | announce "Your account can't review this batch. Your decision on {name} was not saved." |
@@ -960,10 +1153,22 @@ Focus stays where it was. After navigation, the island restores focus to the ele
 ### 5.13 Role promises and invites
 
 - **Roles** come from `REVIEWERS` (unchanged syntax `email:role,…`, roles `pharmacist` and `engineer`). They are global. **Decision**: no per-batch roles in this release. The copy "for batch {id}" names the newest `in_review` batch.
+- *(P1C, PO D2, D49)* **Senior pharmacist.** `REVIEWERS` accepts a third role token, `senior` (for example `a@x.org:senior`). Anything else is still skipped. A senior has every pharmacist power (§2.2) plus §5.10a and §5.17.
+- *(P1C)* **Every role gate learns `senior` (Decision).** The web hard-codes `pharmacist | engineer` in many places, and a senior session breaks at each one unless it changes. P1C changes all of them, and none may keep its own role list:
+  - `$WEB/lib/reviewers.ts`: `ReviewerRole` adds `senior`; `ROLES` = `["pharmacist", "engineer", "senior", "user"]` (`lib/session.ts` rejects a role outside `ROLES`, so without it a senior session decodes to null, which is signed out); `parseReviewers` accepts `senior`; `ROLE_LABEL.senior` = "Senior pharmacist"; `isReviewer()` accepts it. A new helper `actsAsPharmacist(role)` (true for `pharmacist` and `senior`) is the one test for pharmacist powers;
+  - the inline role checks are replaced by `isReviewer()`: the local `isReviewer` in `lib/actions-core.ts`, the `pharmacist`/`engineer` test in `lib/desk-core.ts` `runDecide` (which today answers a senior `forbidden`), `components/Header.tsx`, `components/review/ReviewAccount.tsx` and `components/review/ReviewToolbar.tsx`;
+  - `app/review/[batchId]/page.tsx` and `app/review/[batchId]/[conceptId]/page.tsx` pass `session.role` through unchanged. Today they turn every non-engineer into `pharmacist`, so the API would get `reviewerRole=pharmacist` and a dismissal would be refused with 400 `reviewerRole`;
+  - pharmacist-or-not tests use `actsAsPharmacist`: `components/review/desk/bar-state.ts` (the promise), `components/review/desk/advance.ts` `needsFor`, `components/review/detail/ConfirmPanel.tsx`, and `lib/review-copy.ts` `toastSub` and `savedText` (a senior's toast reads "Publishes in {n} seconds." and the saved text "…approved by a pharmacist and published.", as for a pharmacist);
+  - `lib/review-copy.ts` `historyText` gets a `senior` branch for `ok` ("Approved by a senior pharmacist. Published."), `issue` ("Issue reported by a senior pharmacist. Note:") and `dismiss` (§5.6.5). Today every role that is not `pharmacist` falls to the engineer branch, so a senior `ok` would read "Engineer checked. Not published.";
+  - `ROLE_LABEL_DESK` (`lib/review-copy.ts`) adds `senior: "Senior pharmacist"`; `lib/review-types.ts` `ReviewerRole` and the `reviewerRole` type in `lib/api.ts` (the decision body) add `senior`, and that body's `decision` adds `dismiss`;
+  - the API's `AuditService.ROLES` adds `senior` (§7.5); without it every web audit event of a senior (`sign_in`, `review_open`, `evidence_open`, `decision_denied`, `senior_open`) is refused with 400. V7 widens only the database `CHECK`.
+
+  A unit test (§11.1 `reviewers.test.ts` and `review-copy.test.tsx`) pins each point, including that a senior `ok` history line reads "Approved by a senior pharmacist. Published.".
+- *(P1C, PO D1, D50)* **Publishing is unchanged.** Any pharmacist's (or senior's) "Looks correct" approves and publishes its record, batch by batch, as today. Batches stay the unit of engineering review: an engineer checks extraction correctness record by record in its batch. The senior's clinical review (§5.17) runs across batches and after the fact.
 - **Pharmacist "Looks correct"**: publishes after the window. Engineer: records the check and never publishes.
 - **Invites are sent by the team by hand** (**Decision**: no SES automation). The fixed template is:
   - subject "You're invited to review medicines on IntelliDrugs";
-  - body "Role: {Pharmacist|Engineer}. Batch {id}, {n} records. Sign in at drugdb.eliooo.org with this Google account."
+  - body "Role: {Pharmacist|Engineer}. Batch {id}, {n} records. Sign in at drugdb.eliooo.org with this Google account." *(P1C)* For a senior: "Role: Senior pharmacist. You review batches as a pharmacist, and the interaction pairs of every batch in Senior review. Sign in at drugdb.eliooo.org with this Google account."
   - The template lives in `docs/runbooks/reviewer-invite.md`.
 - **Adding a reviewer**: append to `REVIEWERS` in the host `.env`, then `cd ~/drugdb/deploy && docker-compose up -d web` (the host has the `docker-compose` binary, and the compose file names the project `bddrug`; §12.4). That restarts only the web container.
 
@@ -976,6 +1181,7 @@ The model is scoped to the workspace region: `id="desk"`, `role="region"`, `tabi
 | A | Looks correct | §5.8 |
 | U | Undo | Cancels the open window |
 | R | Report issue | Opens the note field and focuses it, or focuses the open one |
+| D *(P1C)* | Dismiss issue | Senior only, on a record with an open issue: opens the dismiss panel and focuses its field, or focuses the open one (§5.10a). For other roles it does nothing and shows no hint. |
 | J / K | Next / previous | Moves within the visible order. At the ends: "This is the last record in this view." / "This is the first record in this view." Empty view: "No records in this view. Show all {n} records to move." |
 | ArrowDown / ArrowUp, Home / End | List navigation | Only when the listbox has focus |
 | E | Evidence | Toggles the drawer. While the drawer is open, A and R only show the hint "Close the evidence first (Esc)." (§5.7) |
@@ -983,7 +1189,7 @@ The model is scoped to the workspace region: `id="desk"`, `role="region"`, `tabi
 | ? | Shortcuts sheet | Modal (below) |
 | Esc | Close | Closes, in this order: the sheet, the drawer, the note panel (keeping the draft), the search text |
 | Enter | Never approves | On "Looks correct", blocked with or without modifiers, with a hint. Space still presses the focused button. |
-| Ctrl Enter (Cmd Enter on Mac) | Send report | Only inside the note field |
+| Ctrl Enter (Cmd Enter on Mac) | Send report | Only inside the note field. *(P1C)* Inside the dismiss field it sends the dismissal. |
 
 Rules:
 
@@ -991,7 +1197,7 @@ Rules:
 - Shortcuts are ignored when Ctrl, Cmd or Alt is held (browser shortcuts keep working).
 - Letter keys are matched case-insensitively. `?` is matched by `event.key`.
 - **Single-key shortcuts can be turned off (Decision; WCAG 2.1.4, and speech-input users).** A `Segmented` control "Single-key shortcuts: On / Off" sits in the shortcuts sheet under "Settings" and in the AccountMenu on `/review/*`. It is stored in the cookie `intellidrugs-keys` = `on` | `off` (same attributes as `intellidrugs-undo`, §5.8.1; any other value reads as `on`). When it is Off:
-  - A, U, R, J, K, E, S and ? do nothing; the buttons, links and listbox arrow keys still work;
+  - A, U, R, D *(P1C)*, J, K, E, S and ? do nothing; the buttons, links and listbox arrow keys still work;
   - Esc (closing) and Ctrl/Cmd+Enter in the note field still work, because they are not single-character keys;
   - the key row is hidden, and `Kbd` labels and `aria-keyshortcuts` are removed from the buttons;
   - the workspace `aria-label` drops the shortcut sentences: "IntelliDrugs review workspace."
@@ -1012,6 +1218,7 @@ Rules:
   - "Close the sheet, the evidence or the note"
   - "Send the report, inside the note field"
   - "Never approves"
+  - *(P1C, seniors only)* "Dismiss an open issue" (key D), after "Report an issue"
 - **Settings** (heading "Settings", below the `dl`; new copy, §1.7): "Undo window" with "8 seconds", "20 seconds", "60 seconds" (§5.8.1), and "Single-key shortcuts" with "On", "Off". Each `Segmented` is a form POST to `setDeskSettingAction` that the island enhances, like ThemeSwitch (§3.3). A change applies to the next window; an open window keeps its deadline.
 - The toolbar, panes and toast are `inert` while the sheet is open. Tab cycles within the sheet (Close and the settings controls). Esc closes it, and so does ? when single-key shortcuts are on. Clicking the scrim closes it. Focus returns to where it was.
 
@@ -1025,13 +1232,16 @@ These events are written to `ops.audit_event` (V6, §7.5) through `POST /v1/audi
 | `sign_out` | web | Cookie cleared | none |
 | `review_open` | web (island, via the `logRecordOpen` server action) | The record is shown as the open record in the desk (unreviewed data read). Never on a server render alone, so prefetches of the previous and next records (§5.4) are not logged. Without JavaScript, the record page render logs it unless the request carries `Next-Router-Prefetch: 1` or `Purpose: prefetch`. At most one per actor, record and 10 minutes. | `batch_item` `{batchId}/{conceptId}` |
 | `evidence_open` | web (island, via the `logEvidence` server action) | Drawer opened. At most one per actor, record and 10 minutes. | `batch_item` |
-| `decision` | API, in the decision transaction | Every accepted decision | `batch_item`; `outcome` = `ok` or `issue` |
+| `decision` | API, in the decision transaction | Every accepted decision | `batch_item`; `outcome` = `ok`, `issue` or, *P1C*, `dismiss` |
 | `decision_rejected` | API, in its own transaction after the decision transaction rolls back (§7.2) | 409 or 400 on a decision. `outcome` = the code. | `batch_item` |
 | `decision_denied` | web `decide` action | A decision or report stopped in the web layer before any API call. `outcome` = `captcha`, `forbidden`, `rate_limited` or `unauthenticated` (`actor_email` null when unauthenticated). | `batch_item` |
 | `flag_created`, `flag_resolved`, `partner_request` | API | Accepted | `flag` id |
+| `pair_decision` *(P1C)* | API, in the pair decision transaction | Every accepted pair decision (§7.7) | `ddinter_pair` `{ddinterA}/{ddinterB}`; `outcome` = `reviewed` or `issue` |
+| `pair_decision_rejected` *(P1C)* | API, in its own transaction after the pair decision fails | 409 or 400 on a pair decision. `outcome` = the code. | `ddinter_pair` |
+| `senior_open` *(P1C)* | web (SeniorDesk, via the `logSeniorOpen` server action) | A senior page is shown (it reads unreviewed data from every batch). Never on a prefetch. At most one per actor, page and 10 minutes. | `substance` `{bdsId}`, or `pair_queue` `{show}` |
 
 - Undo and discarded windows are **not** audit events, because nothing reached the server.
-- Audit rows hold `actor_email` (team-only, like `review_decision`), `actor_role` and `request_id`. There are no IP addresses and no free text from forms. For `decision` and `decision_rejected`, `request_id` is the decision's `requestId` (§7.2); for other events it is the web request id, the `x-request-id` header the middleware sets on every request (§9.4).
+- Audit rows hold `actor_email` (team-only, like `review_decision`), `actor_role` (*P1C*: also `senior`) and `request_id`. There are no IP addresses and no free text from forms. For `decision` and `decision_rejected`, `request_id` is the decision's `requestId` (§7.2); for other events it is the web request id, the `x-request-id` header the middleware sets on every request (§9.4).
 - The audit table cannot be changed after insert: V6 adds triggers that reject UPDATE, DELETE and TRUNCATE (§7.6).
 - The web container's stdout logs never contain emails, notes, flag messages, or the query strings of `/search` and `/check`. Logs record the route template, status, duration and request id.
 
@@ -1053,9 +1263,131 @@ No board draws these two pages. They use the reviewer toolbar (§5.1, without th
 - Each item: the target (a product or substance links to its public page; a check shows "Interaction check"), the message in `.raw` (`white-space: pre-wrap`), and "Reported {fmtDhaka(createdAt)}". No reporter email (§2.2).
 - "Resolve" (tonal sm, busy label "Resolving") posts to the existing `resolveFlagAction` with the one shared `TurnstileField` (action `resolve`, §9.2). Outcomes keep the existing `RESOLVE_OUTCOME` map, except that `resolved` reads "Report resolved." (or "Request resolved." for a partner request), shown in a `role="status"` line and announced.
 - Empty sections: "No open problem reports." and "No open partner requests."
+- *(P1C)* For seniors, when k > 0, a line under the `<h1>`: "Pair issues reported by senior pharmacists: {k}", linking to `/review/pairs?show=issue` (§5.17).
 - API error: crit `Banner` "Couldn't load the reports." / "Nothing was changed. Check your connection and try again." with "Try again".
 - Paging: 50 per section (§7.5), with "Next page" and "Previous page" links.
 - Without JavaScript the list reads fully; Resolve needs the bot check and shows the `<noscript>` line "Resolving needs JavaScript for the bot check."
+
+### 5.17 Senior clinical review (P1C, PO D2, D3, D5; D49, D51, D52)
+
+No board draws these pages. They use the reviewer toolbar (§5.1), with "Senior review" and "{t} pair[s] to review" (tabular) in place of the batch centre section. Below the toolbar sits a nav row (`<nav aria-label="Senior review">`) with the links "Pair queue" and "Substances", the current one carrying `aria-current="page"`. Then comes one column of at most 960 px, built from `ui/` components only. All copy here is new (§1.7). Every read covers **all batches at once**, so a review never misses a partner in another batch.
+
+**Access (Decision).** Role `senior` only. Anonymous visitors get the 307 sign-in redirect (§2.3). Role `user` gets the not-authorised page (§5.12). Pharmacists and engineers get status 200 and an info `Banner`: title "Senior review is for senior pharmacists.", body "Your account reviews batches. Ask the IntelliDrugs team if you need senior access.", and the button "Open the review desk". These pages carry no data for those roles (§13.1 Q8).
+
+**What "substances we hold" and "pairs" mean (Decision).**
+
+- A substance is **held** when the latest current item of at least one product carries it. "Latest current" is the item `ReviewSql.statusOf` reads, never an item marked removed. This holds in any batch and in any review state, approved or not.
+- A **pair** is one stored `curated.ddinter_pair` row whose two entries are both mapped (`substance_code` `DDINTER`) to held substances.
+- A pair **applies** when RouteRule picks each side's entry for at least one held product. An applying pair is one the checker or the desk could show for some pair of our products.
+- **The queue and the substance page list every pair (PO D3).** Both default to every stored pair between held substances, applying or not; the "Applies to our brands" filter (`pairs=applies`) narrows them (§13.1 Q11). An example of a pair that does not apply: the systemic `DDInter351` chloramphenicol pairs, while we hold only the eye drop. A non-applying pair carries a plain line (§5.17.2 item 2) and sorts after the applying pairs of the same severity. It is still reviewed like any pair: a future product on the other route would make it apply.
+
+**Pair review state (Decision).** It is computed by the API (`PairReviewRule`, §7.7) from the append-only `ops.pair_review` rows (§7.8) and the pair's current **content hash**. The hash is SHA-256 over the canonical JSON array `[ddinterA, ddinterB, severity, sorted actions, interaction text or null, management text or null]`, after `DdinterText.clean`. Partner display names are not part of it. The latest pair decision `L` gives the state:
+
+| State | Rule | Reviewer line (`PairReviewState`, reviewer) | Public line (D53) |
+|---|---|---|---|
+| `not_reviewed` | no pair decision | `PAIR_NOT_REVIEWED` | `PAIR_NOT_REVIEWED` |
+| `reviewed` | `L = reviewed`, and its stored hash equals the current hash | `PAIR_REVIEWED` with `L`'s date, plus " (you)" when `mine` | `PAIR_REVIEWED` with `L`'s date |
+| `changed` | `L = reviewed`, and the hash differs (DDInter changed the severity, actions or text after the review; PO D5) | "Pair changed in DDInter after a senior pharmacist reviewed it on {date}." | `PAIR_NOT_REVIEWED` |
+| `issue` | `L = issue` | "Pair issue reported by a senior pharmacist on {date}. Note:" followed by the note in `.raw` ("(you)" when `mine`) | `PAIR_NOT_REVIEWED` |
+
+**What a pair issue does (Decision, conservative; §13.1 Q5).** "Report pair issue" records that a senior believes the pair's DDInter data, or our use of it, needs attention. Examples: the text contradicts the severity, or the entry looks wrong for the route.
+
+- It **never** hides the pair, its severity or its text, anywhere. Hiding an interaction would show the absence of data as safety (G3). In public the pair reads `PAIR_NOT_REVIEWED`.
+- It does not change any record's review state. When the senior thinks a **record** is wrong (a mapping, a strength, a chosen entry), they use the record's Report issue on the desk, which withdraws that record's approval (PO D2). Brand rows link there.
+- **A pair issue has no engineering owner (Decision).** Engineers get no list of pair issues: no flag is created, they cannot open the senior pages, and the `/review/flags` line below is for seniors. So a pair issue is a note for seniors and a visible caution to every reviewer, not a work order. When the problem needs engineering work (our use of the pair: a wrong DDInter mapping, a wrong chosen entry, a route problem), the senior also reports an issue on at least one affected record from the desk (the pair row's brand links). That record issue is what engineers act on, as for any record (§5.10). §13.1 Q5 asks the PO to confirm.
+- The pair stays in the queue under "Issue reported" until a senior marks it reviewed. A later DDInter change does not clear the issue: an `issue` state stays `issue`.
+- No flag is created. The queue's "Issue reported" filter is the work list, and `/review/flags` (§5.16) shows the line "Pair issues reported by senior pharmacists: {k}", linking to `/review/pairs?show=issue`, when k > 0.
+
+**Marking reviewed (Decision).** "Mark reviewed" is sent at once, with no undo window. It publishes no record. It only changes a pair's state line from `PAIR_NOT_REVIEWED` to `PAIR_REVIEWED`. A mistaken mark is withdrawn with "Report pair issue". Enter never marks.
+
+#### 5.17.1 Pair queue (`/review/pairs?show=&severity=&page=`)
+
+- `<h1>` "Pair queue". Sub: "Every DDInter 2.0 pair between substances we hold, from all batches. Major first."
+- **Filters** (GET links, `aria-current` on the current one, with tabular counts):
+
+| `show` | Label | Members | Empty copy |
+|---|---|---|---|
+| `todo` (default) | To review | `not_reviewed` and `changed` | "No pairs to review." |
+| `changed` | Changed since review | `changed` | "No pair changed in DDInter since its review." |
+| `issue` | Issue reported | `issue` | "No pair issues reported." |
+| `reviewed` | Reviewed | `reviewed` | "No pairs reviewed yet." |
+| `all` | All pairs | every pair (in the current `pairs` scope) | "No pairs between the substances we hold." |
+
+- **Scope filter** (`pairs`): a `Segmented` of GET links, "All pairs" (`all`, default, PO D3(b)) and "Applies to our brands" (`applies`). The `show` counts follow the scope.
+- **Severity filter**: "All", "Major", "Moderate", "Minor", "Severity not classified by DDInter", as GET links.
+- **Order**: severity rank (Major, Moderate, Minor, unknown), then applying before non-applying, then state (`changed`, `issue`, `not_reviewed`, `reviewed`), then substance A's name, then substance B's name. 50 pairs per page, with "Next page" and "Previous page" links and "{from}–{to} of {total} pairs".
+- **Every empty state** has one link: "Show all pairs".
+
+#### 5.17.2 Pair row (one `<article class="pair-row" aria-labelledby>` per pair; the same component on the queue and the substance page)
+
+1. Head: `Severity` chip, then `<h2>` (queue) or `<h3>` (substance page) "{substance A} + {substance B}", each name linking to `/review/substances/{bdsId}`.
+2. Meta: `FROM_DDINTER`, then "`{idA}` {DDInter name A} ({route A}) + `{idB}` {DDInter name B} ({route B}). Action in DDInter: {actions}." Each id carries its DDInter `SourceLink` (§5.6.6).
+   - *(PO D3(b))* When the pair does not apply (`applies: false`), a plain line (never a hatch, never a warning tone): "Does not apply to the medicines we hold: none of them is checked against `{id}` for its route." When neither entry is chosen by a held product, `{id}` reads "`{idA}` or `{idB}`".
+3. Brands: "{a} brand[s] of {substance A} and {b} brand[s] of {substance B}, in {k} batch[es]." (a, b and k from `brandCounts`, the full totals) with a `<details>` "Brands". Inside, one group per side, each listing at most 10 held products that choose that side's entry (the API cap, §7.7; ordered by batch, then trade name): "{trade name} (batch `{batchId}`)" plus its full `ReviewStatus` pill (reviewer views may use any status), linking to `/review/{batchId}/{conceptId}`. When a side has more than 10, the group ends with "and {n} more." and the link "All brands of {substance}" to `/review/substances/{bdsId}` (§5.17.4, which lists every brand of one substance). This keeps a page of 50 pairs within the §10.6 budget when a substance such as paracetamol has hundreds of brands.
+4. Text: as a reviewer `PairCard` (§5.6.2), management first, otherwise interaction, with the Expander. Unknown severity with no text gets `UNKNOWN_PAIR_LINE`. Known severity with no text gets `NO_TEXT`. Then the `SourceLink` "Full record in DDInter 2.0" when the pair has an `interaction_id`.
+5. State line (`PairReviewState`, reviewer).
+6. For `changed`: a `<details>` "What changed in DDInter", with a two-column table, "At review" and "Now", for each changed field: "Severity", "Actions", "Interaction text", "Management text". Values come from the content stored with the review (§7.8).
+7. Actions:
+   - "Mark reviewed `M`" (primary sm, busy label "Saving", `aria-keyshortcuts="M"`). It is `aria-disabled` when the state is `reviewed` (hint "This pair is already reviewed.").
+   - "Report pair issue `R`" (tonal sm, `aria-expanded`, `aria-controls`, `aria-keyshortcuts="R"`).
+8. Report pair issue panel, with the rules of §5.10 except:
+   - label "What's wrong with this pair? Pharmacists, engineers and senior pharmacists read this note." (the note shows in the pair's state line on every reviewer surface, including the desk's pair cards, §5.6.2);
+   - placeholder "For example: the management text says to avoid the combination but the severity is Minor";
+   - help "5 to 1000 characters." followed by `NO_PHI_HELP`;
+   - error "Add at least 5 characters so the team knows what to check.";
+   - actions "Cancel `Esc`" and "Send report `Ctrl Enter`" (busy "Sending");
+   - draft key `intellidrugs-pair-draft:{ddinterA}:{ddinterB}`.
+9. `<details>` "Pair history" (oldest first): "Reviewed by a senior pharmacist" / "Issue reported by a senior pharmacist. Note:" followed by the note, each with `fmtUtc` and `fmtDhaka`, and "(you)" from `mine`. When the pair changed after a review, a line "DDInter data changed after this review" follows that entry. No email, ever.
+
+**Outcomes** (announced in the live region; the row stays in place and in order until the page is reloaded or the filter changes, so focus never jumps):
+
+- reviewed: the state line becomes `PAIR_REVIEWED`. Announce "Pair {A} + {B} marked reviewed.";
+- issue: the state line becomes the issue line and the panel closes. Announce "Pair issue reported for {A} + {B}.";
+- 409 `contentHash`: a row-level warn banner, title "This pair changed in DDInter after you opened the page.", body "Nothing was saved. Reload to review the latest text.", button "Reload". Decisions on the row pause until Reload. The note draft is kept;
+- 409 `lastPairReviewId`: the same banner pattern, with title "Another senior pharmacist decided on this pair after you opened the page." and body "Nothing was saved. Reload to see their decision.";
+- 409 `state` (already reviewed and unchanged): hint "This pair is already reviewed.";
+- network, 5xx, 429, captcha, forbidden and unauthenticated: the §5.8.2 handling and banners. Pair wording: "Couldn't save your pair review. Nothing was saved. Check your connection and try again." (not saved) and "Couldn't confirm your pair review. Try again to find out; it will not be saved twice." (unconfirmed), each with "Try again", which resends the same `requestId` and version.
+
+#### 5.17.3 Substances (`/review/substances?q=&page=`)
+
+- `<h1>` "Substances". Sub: "Every substance carried by a medicine we hold, from all batches."
+- Filter: a GET form with the field label (sr-only) "Filter substances by name or BDS id" and the placeholder "Filter by name or BDS id". No match: `No substances match “{q}”.` with "Show all substances".
+- A table (`<caption class="sr-only">` "Substances we hold") with the columns "Substance" (linked), "BDS id" (mono), "Brands", "Batches", "Pairs to review", "Major pairs to review". It is ordered by pairs to review (descending), then name. 50 per page.
+
+#### 5.17.4 Substance page (`/review/substances/[bdsId]?pairs=all|applies&severity=&page=`)
+
+1. `<h1>` the preferred name, mono BDS id. Meta: "{k} brand[s] in {b} batch[es]".
+2. **"Brands"** (from every batch): a table with the caption (sr-only) "Brands of {name} in every batch" and the columns:
+   - "Brand": linked to the desk record;
+   - "Batch": mono;
+   - "Status": a `ReviewStatus` pill;
+   - "Clinical drug": display name and mono BDC;
+   - "Strength";
+   - "Route";
+   - "Checked against": the chosen DDInter entries with ", route assumed", or the §5.6.1 no-entry line, or `NOT_RUN`, or `NoDataChip("No data")` for coverage `none`.
+3. **"Names"** with sources, and **"Codes"**: every code with its `SourceLink` and "fetched on" (§5.6.6), and the method and confidence as `CodeChip` meta.
+4. **"DDInter entries"**: each entry with its route scope, severity counts, disease and food counts, `SourceLink` and "fetched on". With coverage `none`: a `NoDataBlock` (title = name, `NO_DATA_SENTENCE`). With coverage `not_run`: `NOT_RUN`.
+5. **"Pairs with substances we hold"**: a `Segmented` (GET links) with "All pairs" (`all`, default, PO D3(a)) and "Applies to our brands" (`applies`); the severity filter; then pair rows (§5.17.2), ordered as in the queue, 50 per page. Empty: "No stored DDInter pair links {name} with another substance we hold."
+6. Coverage `none` substances show item 4's `NoDataBlock` and no pair list, and say "Pairs with {name} are not checked." Absence of data is never shown as safety.
+
+#### 5.17.5 States, keyboard and a11y
+
+- **Loading**: skeleton rows (`.sk`; no pulse with reduced motion), and `role="status"` "Loading senior review".
+- **API error**: a crit `Banner`, title "Couldn't load senior review.", body "Nothing was changed. Check your connection and try again.", button "Try again".
+- **Unknown `bdsId`**: `notFound()`, "No substance with the id {id}.", with "Open the substances list".
+- **Keyboard** (SeniorDesk). The region has `id="senior"`, `role="region"`, `tabindex="0"` and `aria-label="IntelliDrugs senior review. Shortcuts work while focus is inside. Press question mark for the list."` (with shortcuts Off: "IntelliDrugs senior review."). Keys:
+  - J / K: next or previous pair row. The row's heading receives focus (`tabindex="-1"`), and the current row has `aria-current="true"`. At the ends: "This is the last pair on this page." / "This is the first pair on this page.";
+  - M: mark the current row reviewed;
+  - R: open or focus the current row's issue panel;
+  - ?: the shortcuts sheet (`role="dialog"`, title "Keyboard shortcuts", with the rows "Next and previous pair", "Mark the pair reviewed", "Report a pair issue", "This sheet", "Close the sheet or the note", "Send the report, inside the note field", "Never marks a pair reviewed");
+  - Esc: closes the sheet, then the note panel (keeping the draft);
+  - Ctrl/Cmd+Enter: sends inside the note field;
+  - Enter: never marks. On "Mark reviewed" it is blocked, with the hint "Enter does not mark a pair reviewed. Press M, or Space on this button."
+- **Keyboard rules**: the §5.14 rules about fields, modifiers and case apply, and so does the single-key setting.
+- **Focus** stays on the acted-on control after an outcome and never falls to `<body>`. Pair rows are `<article>` elements with headings, so screen-reader users can move by heading. Severity and state always carry words.
+- **Bot check**: Turnstile action `decision` (§9.2), one widget per page, as in §5.8.5.
+- **Audit**: `senior_open` on page show and `pair_decision` on every accepted decision (§5.15).
+- **No JavaScript**: the pages read fully. Pair decisions need the bot check and show the `<noscript>` line "Reviewing pairs needs JavaScript for the bot check."
 
 ---
 
@@ -1135,7 +1467,7 @@ No board draws these two pages. They use the reviewer toolbar (§5.1, without th
 |---|---|
 | Loading | The button shows a spinner and "Opening Google", keeping its size. The line "Finish signing in in the Google window. This page updates when you're done." |
 | Signed in, reader (`?welcome=1`, role `user`) | Account row (initials, own name, own email). `<h2>` "You're signed in as a reader". "You can search medicines and check interactions. Reviewing needs an invite. If you were invited, sign out and continue with the invited Google account." Buttons "Search medicines" and "Sign out". |
-| Invited reviewer (`?welcome=1`, role pharmacist or engineer) | Role badge with shield, "Signed in as {name}". `<h2>` "You're a {pharmacist\|engineer} reviewer for batch {id}". Steps: "{n} records are waiting. Each shows [Not yet reviewed by a pharmacist] until a pharmacist approves it." / "Compare the DGDA register with the extraction, then press `A` or choose Looks correct. You have {undo} seconds to undo with `U`." ({undo} = the reviewer's undo window, §5.8.1; 8 by default, which is Board P's wording) / pharmacist: "Your approval publishes the record. If the pipeline re-runs it later, it comes back to you as [Back in review]."; engineer: "Your check is recorded but does not publish. A pharmacist approves each record." Button "Open the review desk" with "Shortcuts work inside the desk only, and pause while you type." |
+| Invited reviewer (`?welcome=1`, role pharmacist or engineer) | Role badge with shield, "Signed in as {name}". `<h2>` "You're a {pharmacist\|engineer} reviewer for batch {id}". Steps: "{n} records are waiting. Each shows [Not yet reviewed by a pharmacist] until a pharmacist approves it." / "Compare the DGDA register with the extraction, then press `A` or choose Looks correct. You have {undo} seconds to undo with `U`." ({undo} = the reviewer's undo window, §5.8.1; 8 by default, which is Board P's wording) / pharmacist: "Your approval publishes the record. If the pipeline re-runs it later, it comes back to you as [Back in review]."; engineer: "Your check is recorded but does not publish. A pharmacist approves each record." Button "Open the review desk" with "Shortcuts work inside the desk only, and pause while you type." *(P1C)* Role `senior`: the `<h2>` reads "You're a senior pharmacist reviewer for batch {id}", the pharmacist step is shown, and a fourth step follows: "Senior review shows every interaction pair between the medicines we hold, from all batches. Mark each pair reviewed, or report a pair issue." with the link "Open the pair queue". |
 | Bot check failed | crit: "We couldn't confirm you're a person." / "You weren't signed in. Retry the check. If it fails again, turn off extensions that block scripts on this page." Button "Retry check". |
 | Sign-in cancelled (popup closed) | info: "Sign-in cancelled." / "You closed the Google window before finishing. Nothing changed. Continue with Google to try again." |
 | Pop-up blocked | warn: "Your browser blocked the Google window." / "Allow pop-ups for drugdb.eliooo.org, or continue in this tab instead." Button "Continue in this tab" (`signInWithRedirect`, §9.5). |
@@ -1148,7 +1480,7 @@ No board draws these two pages. They use the reviewer toolbar (§5.1, without th
 
 - the `summary` (avatar button) carries sr-only text "Account menu for {own name}" (Board P);
 - head: avatar, own name and own email; for reviewers, the role badge plus "Batch {id}";
-- items: "Review desk" and "Problem reports and partner requests" (reviewers only), the theme control; on `/review/*` also "Keyboard shortcuts and settings" and the "Single-key shortcuts" control (§5.14); then "Sign out" (form POST to `/signout`, §2.1).
+- items: "Review desk" and "Problem reports and partner requests" (reviewers only), *(P1C)* "Senior review" (seniors only, to `/review/pairs`), the theme control; on `/review/*` also "Keyboard shortcuts and settings" and the "Single-key shortcuts" control (§5.14); then "Sign out" (form POST to `/signout`, §2.1).
 
 ### 6.3 Search (`/search?q=`)
 
@@ -1207,7 +1539,7 @@ Status 200 (**Decision**: never 404; the record exists).
 - "This is not the same as "not found" or "no data". The record exists and is in review in batch `{batchId}`.";
 - button "Search other medicines".
 
-**Removed records (Decision).** When the product's latest batch item is marked "removed from batch file", the product is served publicly as this stub, whatever its last decision (the API returns the stub with `status:"removed"`, §7.4). The pill stays `NOT_REVIEWED`, and the two review sentences are replaced by "Removed from the DGDA batch file." (new copy, §1.7). A removed product is never counted as approved anywhere (search, checker, other brands, stats).
+**Removed records (Decision).** When the product's latest batch item is marked "removed from batch file", the product is served publicly as this stub, whatever its last decision (the API returns the stub with `status:"removed"`, §7.4). The pill stays `NOT_REVIEWED`, and the two review sentences are replaced by "Removed from the DGDA batch file." (new copy, §1.7). A removed product is never counted as approved anywhere (search, checker, other brands, stats). *(P1C)* If the item comes back into its batch file, the record is re-opened (§8.3.1 item 5), so it stays this stub (with the review sentences again) until a pharmacist approves it.
 
 The same pattern applies to substance stubs: "…hides its codes and interactions…", with no batch sentence.
 
@@ -1234,6 +1566,7 @@ Layout as in Board P "Napa product page": the main column and a 300 px aside. Th
    - DDInter "The DDInter 2.0 entry the interactions below come from."
    - "How it was matched" reads "{method}, confidence {confidence 1 decimal}[, {route}]", as in Board P ("xm, confidence 1.0"). Multiple codes of one system share a row as chips.
    - The DDInter row lists **the chosen entries only**, with "route assumed" appended when assumed. Other entries of the substance appear on the substance page.
+   - *(P1C, PO D8, D58)* A fifth column, "Source", holds the code's `SourceLink` and "fetched on {date}" (§5.6.6). The table caption stays. The "Where this record comes from" aside (below) adds the row Source "DGDA register" as a `SourceLink` to the OCL concept, with "fetched on {date}". Source links appear only on approved product pages. Stubs never carry them.
 6. **"Interactions"** (subtitle "From DDInter 2.0, for {name}"; one block per substance). The block depends on the substance's coverage and chosen entries, and **never renders a count of 0 for missing data**:
    - **Data found for the route** (coverage `full`, at least one chosen entry):
      - `<h3>` "{total} drug–drug pairs" for the chosen entries;
@@ -1243,12 +1576,14 @@ Layout as in Board P "Napa product page": the main column and a 300 px aside. Th
    - **No data** (coverage `none`): a `NoDataBlock` in place of the count heading, chips and key-values, with title = the substance name, `NO_DATA_SENTENCE`, and the second line "Drug, disease and food interactions: no data in DDInter 2.0." In the Codes table (item 5), the DDInter row shows `NoDataChip("No data")`.
    - **No entry for the route** (coverage `full`, no chosen entry): the §5.6.1 line ("No DDInter entry for this product's route ({route}). Its pairs are not checked.", or its no-route form) in place of the count heading, chips and key-values. The DDInter row of the Codes table shows the plain text "No entry for route {route}" (or "No entry for this product's route" when it has none) in the Code column, with no `NoDataChip` (the substance has data; the hatch is only for coverage `none`, §3.4), and "How it was matched" is empty.
    - **Not run** (coverage `not_run`): `NOT_RUN` as plain text, and nothing else. (An approved product cannot be in this state, because approval needs the DDInter stage to have run (§7.2); it is specified for completeness.)
-   - **"With the other medicines in batch {id}"** (**Decision**: approved products of the same batch only):
-     - `PairCard`s, Major first. Head "{this brand} + {other brand}". Meta "{substance} + {substance}. Action: {actions}". Text block. Source line "Source: DDInter 2.0, `{idA}` + `{idB}`".
-     - Unclassified pairs without text are grouped in one panel: chip "Severity not classified by DDInter {k}", "{brand} with {partners, joined}." where each partner is its brand name, or "the {substance} in {brand}" for one ingredient of a combination product (Board P: "the Amoxicillin in Amoxycillin Clavulanic Acid"), and `UNKNOWN_PAIRS_LINE`.
-     - No-data partners: a `NoDataBlock` per partner substance with "Not checked: {brand} + {partner brand}". Partners with no route entry or not run use the §6.7.3 item 4 lines.
-     - Checked pairs with no interaction listed: a quiet block "No interaction listed in DDInter 2.0", "{brand} with {partner brand or 'the {substance} in {brand}'}. DDInter 2.0 lists no interaction for this pair. This is not a guarantee that they are safe to combine."
-     - Unapproved partners are not shown here. The checker covers them.
+   - **"With other approved medicines"** (**Decision, amended by P1C, PO D3, D4; D60**; replaces D25's "With the other medicines in batch {id}"). It covers approved products from **every** batch (the §7.4 visibility rule), because an interaction partner is no less real for sitting in another batch. Brand-by-brand pairing does not scale across batches (one substance can have hundreds of approved brands), so the block is **grouped by partner substance**:
+     - `PairCard`s, Major first, then by partner substance name. Head "{this substance} + {partner substance}". Meta: "With {k} approved brand[s]: {up to 3 brand names, joined}[ and {n} more]. Action: {actions}". Then `FROM_DDINTER`, then the pair's public review state (`PAIR_REVIEWED` with its date, or `PAIR_NOT_REVIEWED`; plain text, D53). Then the text block, and the source line "Source: DDInter 2.0, `{idA}` + `{idB}`". The "and {n} more" brands are listed in a `<details>` "All {k} brands", each linking to its product page.
+     - Unclassified pairs without text are grouped in one panel: chip "Severity not classified by DDInter {k}", then "{this substance} with {partner substances, joined}.", then `UNKNOWN_PAIRS_LINE`, each partner followed by its review state in brackets: "(pair reviewed by a senior pharmacist on {date})" or "(pair not yet reviewed by a senior pharmacist)".
+     - Partner substances with no data: a `NoDataBlock` per partner substance, with "Not checked: {this substance} + {partner substance}, in {k} approved brand[s]". Partners with no route entry, or not run, use the §6.7.3 item 4 lines.
+     - The "No interaction listed in DDInter 2.0" block is dropped from the product page. Across every approved product it would be a list of almost everything. The checker, where the reader chooses the medicines, keeps it (§6.7.3 item 2).
+     - Paging: 20 partner substances per page, with GET links "More interactions" / "Previous interactions" (`?ix=`), so the page stays inside the §10.6 budget.
+     - Empty (no approved partner): "No other approved medicine has an interaction with {this substance} listed in DDInter 2.0 yet. Other medicines appear here as pharmacists approve them."
+     - Unapproved partners are not shown here. The checker covers them by name, under "Not yet reviewed by a pharmacist".
 7. **"Automated checks"** (subtitle "{ok} OK, {w} Warning[s]. Notes are the pipeline's own."):
    - four `StageCheck` cards. An OK card with no note shows "No pipeline note.";
    - the DDInter warning lists text-missing pairs: "DDInter text not found for {n} pair[s]:" plus `.stage-pair` items. Severity chips are not shown on the public page, per Board P.
@@ -1258,7 +1593,7 @@ Layout as in Board P "Napa product page": the main column and a 300 px aside. Th
 - **Verification card**:
   - approved pill;
   - "A pharmacist compared this record with the DGDA register on {DD/MM/YYYY}. Decision history shows roles, not names.";
-  - "If the pipeline re-runs {brand}, the record goes back to review and leaves public view until it is approved again."
+  - "If the pipeline re-runs {brand}, the record goes back to review and leaves public view until it is approved again." *(P1C, D54)* becomes "If the pipeline changes data this approval covered, {brand} goes back to review and leaves public view until it is approved again." (§1.6 item 17)
 - **"Other brands of {clinical display}"**:
   - list of approved brands (link, company, mono DAR) from `GET /v1/clinical-drugs/{bdcId}`;
   - none: "No other approved brand maps to `{bdcId}` yet. Other DGDA brands of this clinical drug appear here as pharmacists approve them."
@@ -1279,7 +1614,7 @@ Layout as in Board P "Napa product page": the main column and a 300 px aside. Th
 
 - crumb "Medicines / {name}";
 - `<h1>` preferred name, mono BDS;
-- names list; codes table (all DDInter entries, each with its route);
+- names list; codes table (all DDInter entries, each with its route; *P1C*: with the "Source" column of §6.5 item 5);
 - coverage:
   - `full`: neutral text "Interaction data found", never green;
   - `none`: `NoDataBlock`;
@@ -1287,7 +1622,7 @@ Layout as in Board P "Napa product page": the main column and a 300 px aside. Th
 - per-entry severity counts;
 - **"Drug–drug interactions"**: a paginated list, 20 per page, from `GET /v1/substances/{bdsId}/interactions`:
   - severity filter as GET links: "All", "Major", "Moderate", "Minor", "Severity not classified by DDInter";
-  - each item is a `PairCard` with partner name, entry and route, actions and text;
+  - each item is a `PairCard` with partner name, entry and route, actions and text; *(P1C)* plus `FROM_DDINTER`, the pair's public review state (D53) and, when the pair has an `interaction_id`, the `SourceLink` "Full record in DDInter 2.0";
 - **"Drug–disease"** and **"Drug–food"**: lists of name, severity chip and truncated text with the Expander;
 - **"Products"**: approved products, linked;
 - **"Clinical drugs"**: approved clinical drugs.
@@ -1341,6 +1676,7 @@ For the selected products, the API removes the unapproved ones under public scop
 1. **Severity groups**:
    - `<h3>` "Major, {k} pair[s]" and so on. Inside a group, cards are ordered by brand pair name.
    - Card head: chip plus "{brand A} + {brand B}".
+   - *(P1C, PO D4, D53)* Directly under the head: `FROM_DDINTER` · the pair's public review state, `PAIR_REVIEWED` (with the counting review's date) or `PAIR_NOT_REVIEWED`. It is plain text, not a chip, a pill or green. Every alert is shown with its DDInter text, whatever its review state: senior review is after the fact, not a gate.
    - Known severity: meta "{substance} + {substance}. Action: {actions}", then:
      - with management: management text (truncated over 200 characters) plus "Management, truncated. Full text from DDInter 2.0." and the Expander "Show full text" / "Show less", or "Management, full text from DDInter 2.0.";
      - without management: "DDInter 2.0 gives no management text for this pair." plus the interaction-description block;
@@ -1461,6 +1797,21 @@ Inside the existing transaction, after `SELECT … FOR UPDATE` of the item and t
 - `decision_rejected` rows carry the same `requestId`. A row inserted inside the decision transaction would roll back with it, and a 400 from `ReviewService.validate` is raised before any transaction exists. So `decision_rejected` is written in its own transaction after the decision fails (`onErrorResume` → insert → rethrow the original error), for both validation (400) and conflict (409) errors.
 - An `issue` is accepted in any non-removed state, including on records with failed checks.
 
+**P1C additions (PO D2, D10; D49, D57).**
+
+- **Roles.** `reviewerRole` accepts `pharmacist`, `engineer` and `senior` (V7, §7.8). `ReviewService.ROLES` adds `senior`, and so does `AuditService.ROLES` (§7.5). The web sends the session's role unchanged (§5.13 lists every web gate that changes). `ApprovalRule` treats `senior` as a pharmacist wherever it tests `PHARMACIST`: a senior `ok` approves and publishes. Step 8 (already checked) stays engineer-only.
+- **Decision values.** `decision` accepts `ok`, `issue` and `dismiss`. Validation (400, before any transaction, audited as `decision_rejected`):
+  - `dismiss` from any role other than `senior`: 400, `field=reviewerRole`, "Only a senior pharmacist can dismiss an issue";
+  - `dismiss` note: like `issue`, 5–1000 characters after trimming (400, `field=note`).
+- **Steps for `dismiss`.** Steps 1–4 run unchanged (idempotency, run stamp, other reviewer, removed). Step 5 (checks) does not apply: a dismissal publishes nothing, and it is allowed on records with failed checks. Steps 6–8 are replaced by:
+
+| Step | Check | Response |
+|---|---|---|
+| 6d. Open issue | `decision=dismiss`, and the display status is not `issue` (no counted reviewer issue: none was reported, it was already dismissed, a re-run cleared it, or the item's `issue` is the pipeline's own) | 409 `CONFLICT`, `field=review`, "No issue is open on this record" (UI outcome `no_issue`, §5.8.4) |
+
+- **Write.** The `dismiss` row is inserted like any decision. The `decision` audit row has `outcome = 'dismiss'` and `actor_role = 'senior'`, in the same transaction. `recomputeItem` then sets `review = 'pending'` (§5.2). `recomputeBatch` runs as today, so a batch whose last open issue is dismissed stays `in_review` until that record is approved again. The `Outcome` is as for any decision.
+- **Idempotency.** A repeated `requestId` with the same target and `decision=dismiss` is a 200 replay. With any other target or decision it is 400 `field=requestId` (step 1, unchanged).
+
 ### 7.3 Reviewer read endpoints (all require the token; new `ReviewQueryController`)
 
 ```
@@ -1495,7 +1846,8 @@ GET /v1/review/batches/{b}/items/{c}            header X-Viewer-Email (token-gat
                                   reason: "no_data"|"not_run"|"no_route"|"unmapped"|"same_product" } ] },
     sourceJson, sourceUrl,
     history: [ { kind: "run"|"extract"|"decision", at, reason?: "run"|"rerun"|"shared_change",
-                 role?, decision?, note?, counts?: boolean, mine?: boolean } ],   // oldest first
+                 role?, decision?, note?, counts?: boolean, mine?: boolean,
+                 carriedFrom?: string } ],   // oldest first; carriedFrom (P1C): the batch id of a carried approval, §8.3.1 item 8
     reopen: { reason: "rerun"|"shared_change", at, previousExtractedAt, diffAvailable } | null }
 
 IngredientSummary = { bdsId, name, raw, strengthValue, strengthUnit, perValue, perUnit,
@@ -1508,11 +1860,46 @@ IngredientSummary = { bdsId, name, raw, strengthValue, strengthUnit, perValue, p
                                               diseaseCount, foodCount } ] } }
 StageNote = { kind: "text_missing"|"name_only"|"no_data"|"route_assumed"|"no_route_entry"|"other", text,
               ddinterId?, route? }
-TextMissingPair = { ddinterA, nameA, ddinterB, nameB, severity, inBatch }
+TextMissingPair = { ddinterA, nameA, ddinterB, nameB, severity, inBatch,
+                    partnerScope: "batch"|"same_product"|"other" }   // partnerScope: P1C; inBatch = (partnerScope == "batch")
 
 GET /v1/review/batches/{b}/items/{c}/diff?from=<extractedAt ISO>
 → { from, to, reason, rows: [ { field, before, now } ] }       // 404 when no snapshot exists for `from`
 ```
+
+**P1C additions to `ReviewItem` (PO D4, D6, D8, D10; D53, D55, D57, D58)**, all additive:
+
+```
+ReviewItem += {
+    brand.source: Source,                                   // DGDA register (OCL), fetchedAt = raw.ocl_concept.fetched_at
+    otherPairs: { pairs: [ { ddinterA, ddinterB, nameA, nameB, substance, partnerSubstance, partnerBdsId, severity, actions,
+                             interaction, management, source: Source|null, pairReview: PairReview,
+                             partners: [ OtherPartner ], partnerCount } ],
+                  notChecked: [ { substance, partnerSubstance, partnerBdsId|null, partners: [ OtherPartner ], partnerCount,
+                                  reason: "no_data"|"not_run"|"no_route"|"unmapped", side, route } ],
+                  otherBatches: number },                    // 0 → "There are no other batches yet."
+    history[].decision: "ok"|"issue"|"dismiss",
+    history[].uncountedBy?: "rerun"|"dismiss",              // why counts=false: chooses the §5.6.5 suffix
+    openIssues: [ { role, at, note, mine } ]                // counted issues the dismiss panel quotes (§5.10a)
+}
+batchPairs.pairs[] += { source: Source|null, pairReview: PairReview }
+IngredientSummary.codes[] += { source: Source|null }
+IngredientSummary.ddinter.entries[] += { source: Source|null }   // fetchedAt = curated.ddinter_drug.fetched_at
+OtherPartner = { conceptId, tradeName, batchId, approved: boolean }   // at most 5 per pair or line, the first 5 in partner order;
+                                                                     // partnerCount gives the total; the web never promises more (§5.6.2)
+Source = { url, label, fetchedAt: ISO|null }                      // built only by SourceLinks (§5.6.6)
+PairReview = { state: "not_reviewed"|"reviewed"|"changed"|"issue", at: ISO|null, mine: boolean, note: string|null }
+```
+
+- **`otherPairs`** is computed by a new pure function, `BatchPairs.computeFor(me, partners, rows, complete)`, over this record (`me`) and the latest current item of every product held in another batch (`partners`). "Latest current" is the item `ReviewSql.statusOf` reads; items marked removed are excluded. A product that is also in this batch is left out. `approved` is true when that latest item's display status is `approved`. Partners are ordered by batch id, then trade name.
+  - **Linear, never quadratic (Decision).** `BatchPairs.compute` first builds the all-pairs batch set over every product pair (O(n²) × substances × chosen ids) to count `totalBatchPairs`. Run over every held product of every batch (up to the ~39,000 register products), that loop would run on each desk record open. `computeFor` iterates only `me × partners` (O(n)), never partner × partner, and computes no batch-wide count; that is why `otherPairs` has no `totalPairs` and §5.6.2's "In other batches" has no "None of the {N} …" line. It returns `OtherPartner`s (with `batchId`), never `PartnerRef`, whose in-batch `index` has no meaning across batches. The pair and not-checked logic (RouteRule on both sides, `REASON_ORDER`, same-substance skip) is shared with `compute`, so the two never disagree.
+  - The queries are set-based: one product query, one code query, one pair query (as `R2dbcCheckAdapter` does), never one query per batch. The pair query reads only rows that touch one of `me`'s chosen ids.
+  - **`interactionId`.** `BatchPairs.PairRow` adds `interactionId`, and the `pairRows` SQL (`R2dbcReviewQueryAdapter`) selects `p.interaction_id`, so `batchPairs.pairs[].source` and `otherPairs.pairs[].source` can build the DDInter pair link (§5.6.6).
+  - **Scale test.** `OtherPairsScaleIntegrationTest`, like `StatsScaleIntegrationTest`: with 40,000 held products across 20 batches, a record open answers within the §10.6 API p95 (300 ms), and the query count is constant.
+- **`partnerScope`** on `TextMissingPair` *(P1C)*, computed in `ReviewQueryService.stages` from the chosen-id sets it already builds (`mine` for this record, `others` for the other current products of this batch), where the partner side is the id that is not one of `mine`: `batch` when `others` holds the partner side (when `mine` holds both ids, when `others` holds either of them); else `same_product` when `mine` holds both ids; else `other`. `inBatch` stays, unchanged (`partnerScope == "batch"`), for compatibility; the web reads `partnerScope` only (§5.5.3).
+- **`pairReview`** comes from `PairReviewRule` (§7.7). The reviewer surfaces show all four states.
+- **`openIssues`** lists the counted `issue` decisions after the last counted dismiss. The note is included (reviewers only, as in history), and the email never is.
+- **`displayStatus`** applies the §5.2 dismissal boundary (`ApprovalRule.displayStatus` and `ApprovalRule.review`), for whole batches in one decisions query, as today.
 
 Rules:
 
@@ -1553,9 +1940,9 @@ The web's public routes always send `scope=public` (§2.2). `scope=all` remains 
 |---|---|---|---|---|
 | P1/P2/P3/P4 | `GET /v1/search` | `q` (2–100), `page` (0–9 under public scope, 0–500 with the token and `scope=all`) | `{ query, total, hasMore, substances:[{bdsId, preferredName, matchedName, matchedNameType, otherNameTypes:[…], coverage, ddinterIds:[…], keyCodes:{atc:[…], rxcui:[…]}, approvedProductCount}], products:[{conceptId, tradeName, darNumber, company, dosageForm, genericContentRaw, clinicalDrug:{bdcId, displayName}, matchedOn:"trade_name"\|"dar"\|"generic"\|"substance", matchedName, status:"approved"} \| {conceptId, tradeName, status:"not_reviewed", hidden:true}], suggestion: string\|null }` | Search with synonyms and DAR, stubs, counts, "Search for warfarin" |
 | P5/P6/P7/P15 | `GET /v1/products/{id}` (extended) | as today | approved: `Product` plus `verification:{status:"approved", role:"pharmacist", approvedAt}`, `provenance:{batchId, extractedAt, source:"DGDA register", stages:[{stage, status, notes:[StageNote], textMissing:[TextMissingPair]}]}`, `clinicalDrug.ingredients[].summary: IngredientSummary`, `otherBrandsCount`. Hidden (every non-public state): `{conceptId, tradeName, status:"not_reviewed"\|"removed", batchId, hidden:true}`. The internal `reviewStatus` is no longer sent, so no product response names `issue` (the one coarse signal is `exampleUsable`, below). | Verification line, "Where this record comes from", codes and counts on the product page, stub batch sentence |
-| P10 | `GET /v1/products/{id}/interactions` | none | a `CheckResult` (below) for `{id}` against the other **public** products of its latest batch. Public scope: when `{id}` itself is not public, the product stub (as `GET /v1/products/{id}`), never a result; 404 for an unknown id. | "With the other medicines in batch …" |
+| P10 | `GET /v1/products/{id}/interactions` | *(amended by P1C, D60)* `page` (0–), `size=20` | *(P1C)* `{conceptId, page, totalPartners, partners:[{substance:{bdsId, name}, partnerSubstance:{bdsId, name}, severity, actions, interaction, management, ddinterA, ddinterB, routeAssumed, source:"DDInter 2.0", pairReview:{state:"reviewed"\|"not_reviewed", reviewedAt\|null}, brands:[{conceptId, tradeName}], brandCount}], notChecked:[{substance, partnerSubstance, reason, brandCount}]}`. It covers every other **public** product, in **any** batch, grouped by partner substance (§6.5). Pages hold 20 partner substances, Major first. Public scope: when `{id}` itself is not public, the product stub (as `GET /v1/products/{id}`), never a result; 404 for an unknown id. | "With other approved medicines" (was "With the other medicines in batch …") |
 | P8 | `GET /v1/clinical-drugs/{bdcId}` | none | `{bdcId, displayName, doseForm, route, ingredients:[{bdsId, name, strengthValue, strengthUnit, perValue, perUnit}], products:[{conceptId, tradeName, company, darNumber}]}`. Public scope: `products` lists public products only, and the whole response is 404 `NOT_FOUND` unless at least one public product maps to `bdcId`. | "Other brands of …" |
-| P9 | `GET /v1/substances/{bdsId}/interactions` | `severity` (optional), `page` (0–), `size=20` | `{bdsId, counts:{…per entry}, total, page, items:[{partnerName, partnerBdsId\|null, ddinterA, ddinterB, routeScope, severity, actions, interaction, management}]}`. Public scope: when the substance is not public, the substance stub `{bdsId, preferredName, hidden:true}`, never items or counts; `partnerBdsId` is `null` when the partner substance is not public (the partner's DDInter name is DDInter's own public data and stays). | Substance page list with text |
+| P9 | `GET /v1/substances/{bdsId}/interactions` | `severity` (optional), `page` (0–), `size=20` | `{bdsId, counts:{…per entry}, total, page, items:[{partnerName, partnerBdsId\|null, ddinterA, ddinterB, routeScope, severity, actions, interaction, management}]}`. Public scope: when the substance is not public, the substance stub `{bdsId, preferredName, hidden:true}`, never items or counts; `partnerBdsId` is `null` when the partner substance is not public (the partner's DDInter name is DDInter's own public data and stays). *(P1C)* Each item adds `pairReview:{state:"reviewed"\|"not_reviewed", reviewedAt\|null}` and `sourceUrl\|null` (the DDInter pair page, §5.6.6). | Substance page list with text |
 | P16 | `GET /v1/products/suggest` | `q` (2–100), `exclude` (0–20 concept ids already selected; excluded from the rows) | at most 10 `{conceptId, tradeName, dosageForm, status:"approved"\|"not_reviewed", clinicalDisplayName\|null, matched\|null}`. Unapproved rows match on trade name and DAR only. | Checker combobox |
 | new | `GET /v1/stats` | none | `{registerProducts:39196, productsLoaded, substances, approvedProducts, inReviewProducts, batches:[{batchId, status, itemCount, approved, items:[{conceptId, tradeName, status:"approved"\|"not_reviewed", exampleUsable}]}]}`. `exampleUsable` is false when the item's `displayStatus` is `issue` or it is removed from the batch file; Learn uses it to withdraw frozen examples (§6.8). **Decision: this is a deliberate, coarse public signal.** Learn's withdrawn block is itself visible, so a reader can tell that a pilot record is "withdrawn from examples" (issue reported, or removed, which the stub already says). It carries no note, role, time or reason, the item's `status` stays `not_reviewed`, and `/v1/stats` carries no other review detail. | Landing and Learn live numbers |
 
@@ -1577,7 +1964,8 @@ The web's public routes always send `scope=public` (§2.2). `scope=all` remains 
                 substances: [ { bdsId|null, name, coverage,
                                 ddinter: [ { ddinterId, name, routeScope, routeAssumed } ] } ] } ],   // chosen entries (Chloramphenicol fix)
   alerts: [ { severity, a: Side, b: Side, actions, interaction, management, routeAssumed,
-              ddinterA, ddinterB, interactionId, source: "DDInter 2.0" } ],                           // P11
+              ddinterA, ddinterB, interactionId, source: "DDInter 2.0",
+              pairReview: { state: "reviewed"|"not_reviewed", reviewedAt|null } } ],                // P11; pairReview: P1C
   noInteraction: [ { a: Side, b: Side, ddinterA, ddinterB } ],                                      // P12: checked, none listed
   notChecked: [ { a: Side, b: Side, reason: "no_data"|"not_run"|"no_route"|"unmapped"|"same_product" } ],  // P12, P14
   duplicates: [ { bdsId, name, conceptIds } ],
@@ -1590,13 +1978,25 @@ Side = { conceptId, tradeName, bdsId, name, routeScope }
 - `summary.totalPairs`, `checkedPairs`, `alertPairs`, `noInteractionPairs` and `notCheckedPairs` follow §6.7.2 rule 5: same-product (`notChecked` reason `same_product`) and same-BDS (`duplicates`) pairs are not counted. `summary.medicines` counts every selected product, `notReviewed` included.
 - Validation stays as today: 2–20 unique ids; 404 for an unknown id.
 
+**P1C public rules (PO D4, D7; D53, D56).**
+
+- **Every alert is returned with its DDInter text**, whatever its senior-review state. `pairReview` is the coarse public form of `PairReviewRule` (§7.7): `reviewed` only when the counting pair review's content hash equals the current one. `changed`, `issue` and `not_reviewed` are all sent as `not_reviewed`, with `reviewedAt: null`. **Decision**: like `exampleUsable` (D43), this is a deliberate, coarse public signal. It carries no note, role, email or reason, and it is served only for pairs between public products.
+- **Where it ships (amended by the P1C plan, 15/10/2026).** P1C adds `ddinterA`, `ddinterB` and `pairReview` to each alert of the existing `POST /v1/interactions/check` (additive; the other alert fields stay as they are until P2 reshapes the result). P2 renders it, and adds it to P9.
+- **Removed items are never public (PO D7).** `ReviewSql.statusOf` reads a latest item marked "removed from batch file" as `pending`, and `ReviewSql.LATEST_PUBLIC` excludes it. Both shipped with P3's `GET /v1/stats` (commit `b4f45c3`, on the P3 branch, not yet on `main`). Every public adapter that exists today reads status through them: `R2dbcProductAdapter`, `R2dbcSubstanceAdapter`, `R2dbcCheckAdapter` (the checker) and `R2dbcStatsAdapter`. Every adapter P2 adds (search, suggest, clinical drugs, P10) must do the same. P1C depends on P3 for this. It adds no second rule: it adds the approved-then-removed fixture for **every** endpoint of the `VisibilityApiIntegrationTest` matrix, including `POST /v1/interactions/check` and the reshaped P10, and a guard test. The guard test fails if a public adapter reads `ops.batch_item.review` without `statusOf` or `LATEST_PUBLIC` (§11.3). Reviewer reads already skip removed items (`ReviewSql.CURRENT_ITEM`), and `otherPairs` and the senior pages use the same rule (§7.3, §7.7).
+
 ### 7.5 Flags and audit
 
 - `GET /v1/flags?status=&targetType=&targetId=&page=&size=50` (R15). The 500 cap is replaced by paging.
 - `POST /v1/audit-events` (token):
   - body `{ event, actorEmail?, actorRole?, targetType?, targetId?, outcome, requestId }`;
-  - `event` is restricted to the list in §5.15;
+  - `event` is restricted to the list in §5.15 (*P1C*: plus `senior_open`; `pair_decision` and `pair_decision_rejected` are written by the API only);
   - returns 201.
+- *(P1C)* **`AuditService` changes** (`$API/application/AuditService.java`; V7 widens only the database checks, §7.8):
+  - `WEB_EVENTS` adds `senior_open`;
+  - `ROLES` adds `senior` (§5.13);
+  - `TARGET_TYPES` adds `substance` and `pair_queue` (the `senior_open` targets, §5.15). `ddinter_pair` is not added: only the API writes it, inside the pair decision path;
+  - the `senior_open` target ids fit the existing `TARGET_ID` pattern: a BDS id such as `BDS-000001`, or a `show` value (`todo`, `changed`, `issue`, `reviewed`, `all`). No pattern change;
+  - `AuditApiIntegrationTest` adds: `senior_open` with each target type is 201; a senior `sign_in` (role `senior`) is 201; `pair_decision` posted by the web is 400 `event`; target type `ddinter_pair` posted by the web is 400 `targetType`.
 
 ### 7.6 Schema change: `V6__item_snapshot_and_audit.sql` (unavoidable; follows the lock policy)
 
@@ -1663,6 +2063,127 @@ REVOKE UPDATE, DELETE, TRUNCATE ON ops.audit_event, ops.item_snapshot FROM PUBLI
   - tag `db-schema-v1.1`.
 - **Retention (Decision)**: audit rows and snapshots are kept indefinitely. Both are append-only and small.
 
+### 7.7 Senior review endpoints (P1C; all require the token; new `SeniorReviewController`)
+
+The web calls these only for a `senior` session (§5.17). The API trusts the token and the `reviewerRole` in the body, as it does for decisions, and checks that role on every write. `X-Viewer-Email` sets `mine`, as in §7.3.
+
+```
+GET /v1/review/pairs?show=todo|changed|issue|reviewed|all&pairs=all|applies&severity=&page=0&size=50
+→ { total, counts: { todo, changed, issue, reviewed, all },
+    items: [ PairView ] }                                   // every pair between held substances (PO D3(b)); pairs=applies keeps
+                                                            // applying pairs only (§5.17); ordered as §5.17.1
+
+GET /v1/review/substances?q=&page=0&size=50
+→ { total, items: [ { bdsId, name, brands, batches, pairsToReview, majorPairsToReview } ] }
+
+GET /v1/review/substances/{bdsId}?pairs=all|applies&severity=&page=0&size=50     // default all (PO D3(a))
+→ { bdsId, name, names: [ { name, type, source } ],
+    codes: [ { system, code, routeScope, method, confidence, source: Source|null } ],
+    coverage, entries: [ { ddinterId, name, routeScope, counts, diseaseCount, foodCount, source: Source|null } ],
+    brands: [ { conceptId, tradeName, batchId, displayStatus, clinicalDrug: { bdcId, displayName, route }|null,
+                strengthText, chosen: [ { ddinterId, routeScope, routeAssumed } ], reason|null } ],
+    pairs: { total, items: [ PairView ] } }                // 404 NOT_FOUND when the substance is not held
+
+PairView = { ddinterA, ddinterB, substanceA: { bdsId, name }, substanceB: { bdsId, name },
+             entryA: { name, routeScope }, entryB: { name, routeScope },
+             severity, actions, interaction, management, source: Source|null, applies: boolean,
+             brands: [ { conceptId, tradeName, batchId, displayStatus, side: "a"|"b" } ],   // at most 10 per side (§5.17.2)
+             brandCounts: { a, b, batches },               // full totals: brands per side, distinct batches
+             review: PairReview,                            // §7.3; reviewer form, all four states
+             changes: [ { field, atReview, now } ],         // only when state = changed
+             history: [ { decision: "reviewed"|"issue", at, note|null, mine, changedAfter: boolean } ],
+             version: { contentHash, lastPairReviewId|null } }
+
+POST /v1/review/pairs/{ddinterA}/{ddinterB}/decisions
+  { decision: "reviewed"|"issue", note, reviewerEmail, reviewerRole: "senior",
+    expectedContentHash, expectedLastPairReviewId: number|null, requestId }
+→ 201 PairOutcome { ddinterA, ddinterB, review: PairReview, version, replayed: false }
+→ 200 PairOutcome { …, replayed: true }                   // same requestId, same pair and decision
+```
+
+**Pair decision rules** (one transaction, `SELECT … FOR UPDATE` on the pair's `curated.ddinter_pair` row; the first failing step wins):
+
+| Step | Check | Response |
+|---|---|---|
+| 0. Validate (before the transaction) | `reviewerRole` must be `senior`; `decision` must be `reviewed` or `issue`; `issue` needs a note of 5–1000 characters (`reviewed` takes an optional note of 0–1000 characters); `requestId` must be a UUID; `expectedContentHash` must be 64 hex characters; `expectedLastPairReviewId` must be present | 400 `INVALID_QUERY` with the field. A wrong role: `field=reviewerRole`, "Only a senior pharmacist can review pairs" |
+| 1. Idempotency | an `ops.audit_event` row with `event='pair_decision'` and this `request_id` exists | same pair and decision: 200 `replayed:true`; otherwise 400, `field=requestId` |
+| 2. Pair exists and is held | `ddinterA < ddinterB` (text order), the row exists, and both entries map to held substances | 404, `field=pair` |
+| 3. Content | current content hash ≠ `expectedContentHash` | 409, `field=contentHash`, "This pair changed in DDInter after the page was loaded; reload it and review again" |
+| 4. Other senior | max `ops.pair_review.id` for the pair `IS DISTINCT FROM` `expectedLastPairReviewId` | 409, `field=lastPairReviewId`, "Another senior pharmacist decided on this pair after the page was loaded; reload it" |
+| 5. Already reviewed | `decision=reviewed` and state is `reviewed` | 409, `field=state`, "This pair is already reviewed" |
+
+- The insert stores the content hash and the content itself (`content` JSONB: severity, actions, interaction, management), so "What changed in DDInter" (§5.17.2) can diff it later. The `pair_decision` audit row is written in the same transaction. `pair_decision_rejected` is written in its own transaction after a 400 or 409, as in §7.2.
+- **`PairReviewRule`** (`$API/domain/PairReviewRule.java`) is the one pure function that maps the pair decisions plus the current hash to `{state, at, mine, note}` (§5.17). Every reviewer and public endpoint uses it. It is computed for a page of pairs with one query over `ops.pair_review` (no N+1).
+- **Content hash** (`$API/domain/PairContent.java`): SHA-256 hex of the UTF-8 canonical JSON `[a, b, severity, sorted(actions), interaction|null, management|null]`, after `DdinterText.clean`. A unit test pins the bytes of the canonical form.
+- **Removed and unheld items.** Brands come from latest current items only (`ReviewSql.statusOf` semantics). A product removed from its batch file is not held and is never listed.
+- **Rate limit and bot check**: as for decisions (§9.2, §9.3).
+
+### 7.8 Schema change: `V7__senior_review.sql` (P1C; follows the lock policy; tag `db-schema-v1.2`)
+
+Three needs that no existing table can meet:
+
+- a `senior` role and a `dismiss` decision, which the V4 `CHECK` constraints refuse (PO D2, D10);
+- append-only pair reviews with the content they reviewed (PO D3, D5);
+- the new audit events and the `senior` actor role (§5.15).
+
+```sql
+-- V4 named these column CHECKs implicitly; the migration test asserts the names in pg_constraint before dropping.
+ALTER TABLE ops.review_decision DROP CONSTRAINT review_decision_decision_check;
+ALTER TABLE ops.review_decision ADD CONSTRAINT review_decision_decision_check
+  CHECK (decision IN ('ok','issue','dismiss'));
+ALTER TABLE ops.review_decision DROP CONSTRAINT review_decision_reviewer_role_check;
+ALTER TABLE ops.review_decision ADD CONSTRAINT review_decision_reviewer_role_check
+  CHECK (reviewer_role IN ('pharmacist','engineer','senior'));
+ALTER TABLE ops.review_decision ADD CONSTRAINT review_decision_dismiss_by_senior
+  CHECK (decision <> 'dismiss' OR (reviewer_role = 'senior' AND length(btrim(note)) BETWEEN 5 AND 1000));
+
+CREATE TABLE ops.pair_review (
+  id             BIGSERIAL   PRIMARY KEY,
+  ddinter_a      TEXT        NOT NULL,
+  ddinter_b      TEXT        NOT NULL,
+  decision       TEXT        NOT NULL CHECK (decision IN ('reviewed','issue')),
+  note           TEXT        NOT NULL DEFAULT '' CHECK (length(note) <= 1000),
+  content_hash   TEXT        NOT NULL CHECK (content_hash ~ '^[0-9a-f]{64}$'),
+  content        JSONB       NOT NULL,      -- severity, actions, interaction, management as reviewed
+  reviewer_email TEXT        NOT NULL,      -- team-only, like review_decision
+  reviewer_role  TEXT        NOT NULL CHECK (reviewer_role = 'senior'),
+  decided_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CHECK (ddinter_a < ddinter_b),
+  CHECK (decision <> 'issue' OR length(btrim(note)) >= 5),
+  FOREIGN KEY (ddinter_a, ddinter_b) REFERENCES curated.ddinter_pair (ddinter_a, ddinter_b)
+);
+CREATE INDEX pair_review_pair_idx ON ops.pair_review (ddinter_a, ddinter_b, decided_at DESC, id DESC);
+
+CREATE TRIGGER pair_review_append_only BEFORE UPDATE OR DELETE ON ops.pair_review
+  FOR EACH ROW EXECUTE FUNCTION ops.reject_change();
+CREATE TRIGGER pair_review_no_truncate BEFORE TRUNCATE ON ops.pair_review
+  FOR EACH STATEMENT EXECUTE FUNCTION ops.reject_change();
+REVOKE UPDATE, DELETE, TRUNCATE ON ops.pair_review FROM PUBLIC;
+
+ALTER TABLE ops.audit_event DROP CONSTRAINT audit_event_event_check;
+ALTER TABLE ops.audit_event ADD CONSTRAINT audit_event_event_check CHECK (event IN (
+  'sign_in','sign_in_denied','sign_out','review_open','evidence_open',
+  'decision','decision_rejected','decision_denied',
+  'flag_created','flag_resolved','partner_request',
+  'pair_decision','pair_decision_rejected','senior_open'));
+ALTER TABLE ops.audit_event DROP CONSTRAINT audit_event_actor_role_check;
+ALTER TABLE ops.audit_event ADD CONSTRAINT audit_event_actor_role_check
+  CHECK (actor_role IN ('pharmacist','engineer','senior','user'));
+CREATE UNIQUE INDEX audit_event_pair_decision_request_uq ON ops.audit_event (request_id) WHERE event = 'pair_decision';
+```
+
+- **Additive in effect.** Existing rows all satisfy the widened checks. Constraint changes are DDL, not row changes, so the V6 append-only triggers on `ops.audit_event` are not involved.
+- **The pair FK is NO ACTION.** The ETL only inserts or updates `curated.ddinter_pair` (upserts, §8.1), and never deletes a pair row, so a reviewed pair cannot vanish. An ETL test pins that no code path deletes from `curated.ddinter_pair` (§11.3).
+- **No ETL column.** The reopen rule (§8.3) compares snapshot payloads that V6 already stores. The payload gains keys (payload `version` 2), and no column changes.
+- **Rollback**: a new migration that drops `ops.pair_review` and restores the narrower checks. It works only while no `senior` or `dismiss` row exists; otherwise rollback keeps V7, which older images ignore (§12.5).
+- **The PR must**:
+  - add the `db/migrations.lock` line for V7 and change the lock's header to `db-schema-v1.2`;
+  - explain the change under the four headings `database.md` requires;
+  - update `docs/design/database.md` and the data model page;
+  - tag `db-schema-v1.2`.
+- **Tests**: `AuditAppendOnlyIntegrationTest` adds `ops.pair_review`, and a V7 migration test asserts the constraint names, the widened checks, `review_decision_dismiss_by_senior`, and the new unique index.
+- **Retention (Decision)**: pair reviews are kept indefinitely, like decisions.
+
 ---
 
 ## 8. ETL fix: route-scoped DDInter selection
@@ -1693,6 +2214,7 @@ REVOKE UPDATE, DELETE, TRUNCATE ON ops.audit_event, ops.item_snapshot FROM PUBLI
    - `run_id`: one UUID generated per ETL invocation in `run_pipeline.main()` and passed down, so the up to four stamps of one run share it (§5.6.5);
    - `reason`: `shared_change` from `_reopen_dependents`; otherwise `run` when no earlier snapshot exists for (batch, concept), and `rerun` when one does;
    - `payload` holds the keys the API diff reads: brand fields, clinical drug, ingredients with codes and chosen entries, stage statuses and notes.
+   - *(P1C, D54)* Since P1C an item is stamped only when its covered fields change (§8.3), so a snapshot is written only for a stamp. Payload `version` 2 adds `coverage` per ingredient (`full`, `none` or `not_run`), which the reopen rule compares.
 5. **Pair-list reconciliation (`_process` and the client).** "No interaction listed" (§6.7.2) relies on the stored pair list being complete, and the graph endpoint alone is not: the repository's fixture notes record 934 graph interactions for `DDInter1951` against 936 rows in `interact-with`. For each entry it stores, the stage reads `interact_with_map` (already paged in full and memoised) as well as the graph:
    - the stored partner set is the union of both;
    - a partner present only in `interact-with` is stored as a `ddinter_pair` row with its `drug_name` as the partner name, severity from the row's `level` through the existing `severity()` helper (no level gives `unknown`), and empty actions;
@@ -1714,19 +2236,61 @@ cd ~/drugdb/deploy && docker-compose --profile jobs run --rm etl --batch /app/ba
 
 P0 also adds an optional `stages` input to `load-dgda.yml` (passed as `--stages`, validated against `dgda,substances,clinical,ddinter`), so the re-run can be started from GitHub Actions instead of a shell on the host.
 
-- The DDInter stage re-processes all 10 items. For each chunk, `reopen_review(batch, chunk, changes)`:
-  - re-stamps `extracted_at` (`clock_timestamp()`);
-  - resets `review` to `pending`;
-  - sets the batch to `in_review`;
-  - writes the snapshot.
-- **Effect on approvals:**
-  - Any decision made at or before the new stamp stops counting.
-  - A record that was `approved` becomes `back_in_review` (§5.2). It leaves public view until a pharmacist approves it again.
-  - A record with an `issue` returns to `pending` ("Not yet reviewed by a pharmacist").
-  - Because the route fix changes no shared rows (`SharedChanges` stays empty), no other product is re-opened.
-- **Today** no pilot record is approved, so the re-run changes no public view. It does replace the stage notes, giving the §1.6 item 7 triage.
-- Any reviewer page open during the run turns stale within 20 s (§5.11).
-- **Later re-runs** (other batches) use the same mechanism. Re-run only the affected items with `--concept ID`, where possible, to avoid re-opening approved records needlessly.
+#### 8.3.1 The reopen rule (P1C, Decision, PO D5, D54; replaces the P0 rule)
+
+**Before P1C** (P0, as built): every stage re-stamped every target item unconditionally (`reopen_review`: `review := 'pending'`, `extracted_at := clock_timestamp()`). It also re-stamped every other product that showed **any** shared row the run changed (`_reopen_dependents`, driven by `SharedChanges.bds_ids` **and** `SharedChanges.ddinter_ids`). `ddinter_ids` includes pairs, interaction texts, diseases and foods (`stages/ddinter.py` `_store_id_data`, `_ensure_text`). So a new DDInter pair text re-opened every approved product of both substances. PO D5 rules that out.
+
+**The rule.** A record goes back to review **only** when something its approval covered changes. The approval covers the record's **approval view**, a pure function of the V6 snapshot payload (`$ETL/load/snapshots.py` `approval_view(payload)`):
+
+- brand fields: `dar_number`, `trade_name`, `company`, `dosage_form`, `generic_content_raw`;
+- clinical drug: `bdc_id`, `display_name`, `dose_form`, `route`;
+- per ingredient (ordered by XM code): `xm_code`, `bds_id`, `substance` (preferred name), strength (`raw`, `value`, `unit`, `per_value`, `per_unit`);
+- per ingredient, codes: every non-DDInter code (`ICD11_XM`, `RXCUI`, `ATC`, `DRUGBANK`, `SNOMEDCT`), and the **chosen** DDInter entries with their route scope and `route_assumed`. A new DDInter entry for another route is not covered; it changes no chosen entry;
+- per ingredient, coverage: `full`, `none` or `not_run`. A full↔none change also changes the chosen entries; coverage is compared too, so `not_run`→`none` counts.
+
+**Not covered** (they never re-open a record): DDInter pairs, severities, actions, interaction and management texts, diseases, foods, DDInter entry names, substance synonyms (`substance_name`, §13.1 Q7), stage statuses and notes. A pair change instead makes the pair `changed` in the senior pair queue (§5.17). That needs no ETL work: the API compares the pair's current content hash with the reviewed one (§7.7).
+
+**Mechanism** (`$ETL/load/batches.py`; it replaces the unconditional stamping in `reopen_review`, `_reopen_dependents` and `_upsert_items`):
+
+1. At the end of each stage's transaction, `settle(conn, batch_id, targets, changes, run_id, reopen=False)` builds the candidate set:
+   - the stage's targets;
+   - the latest current item of every other product whose ingredients carry a `bds_id` in `changes.bds_ids` (as today's `_reopen_dependents` query, minus its DDInter-id branch).
+   
+   `SharedChanges.ddinter_ids` stays in the ETL, for the run log only. It no longer selects anyone.
+2. For each candidate, it computes `approval_view(build_payload(...))` now, and compares it with the `approval_view` of the snapshot at the item's current `extracted_at`.
+   - **Different**, or no snapshot at that stamp, or no stamp: stamp the item (`review := 'pending'`, `extracted_at := clock_timestamp()`), set its batch to `in_review`, and write the snapshot (reason `run` or `rerun` for targets, `shared_change` for the others). A new item of a product already approved in another batch follows item 8 instead.
+   - **Equal**: leave `review`, `extracted_at` and the decisions alone. Write no snapshot (V6's primary key is the stamp).
+   - **`batch_item.note` is always written**, stamped or not: the "removed from batch file" marker (§8.1 item 6) for an item that left the file, the DGDA failure reason for an item that could not be loaded (item 5), and NULL otherwise. Today `_upsert_items` writes `note = EXCLUDED.note` together with the stamp; P1C splits the two, so an equal view never skips the note, and a note change on its own never stamps (except the return to the file in item 5).
+3. Version-1 payloads (written before P1C) have no `coverage` key. When either side lacks it, coverage is left out of that one comparison; the chosen entries still catch full↔none.
+4. **Stage results** are replaced on every run, as today, whether or not the item is stamped. A run that changes no covered field but changes a stage note (for example a text-missing pair now found) updates the desk's checks without re-opening the record. Such a change does not make an open desk page stale (§5.11 compares `extractedAt` and `lastDecisionId` only). The new notes show on the next navigation.
+5. **Exceptions, always stamped:**
+   - a target whose DGDA load fails ("not found at source", "not a registered Drug product") keeps today's behaviour: `review := 'issue'` with the reason, and it is stamped, because its source is gone;
+   - an item that **comes back into its batch file** after it was marked "removed from batch file" is stamped, whatever its view, and its marker is cleared (`note := NULL`) in the same statement. Clearing the marker without a stamp would let the decision made before the removal count again, so the record would return to public view through a re-run, with no pharmacist looking at it (PO D7; §12.5 "re-runs never publish");
+   - the engineer's override `--reopen` (new `run_pipeline` flag, also a `reopen` boolean input in `load-dgda.yml`) stamps the named targets, never dependents, whatever changed. It is for a fix the approval view does not cover, or to clear an open reviewer issue after an engineering fix (§5.2). **It is an exception to PO D5's "only"**: a record it stamps leaves public view although nothing its approval covered changed. Until the PO confirms it (§13.1 Q12), it ships disabled for approved records: on a target whose `review = 'ok'`, `--reopen` stamps nothing, and the run log lists the target as "skipped: approved, --reopen not confirmed". It still re-opens targets with an open reviewer issue (which are not public), so an engineering fix can be sent back to review. Until then, a pharmacist who wants an approved record looked at again reports an issue on it (§5.10), which withdraws it.
+6. **Batch status.** `_upsert_batch` no longer forces `in_review` on every run. It recomputes it like the API's `recomputeBatch` (`approved` when every current item is `ok`), so an unchanged re-run leaves an approved batch approved.
+7. **A newly failed check on an approved, unchanged record** does not re-open it (PO D5, "only"). The failed stage shows on the desk and refuses any new `ok` (§7.2 step 5). §13.1 Q6 asks the PO to confirm. The one stage failure that does affect the public, "DDInter pair list incomplete" (§8.1 item 5), writes no pair rows. The earlier complete list stays, and the public data is unchanged.
+8. **A product listed again in a new batch (carried approval, Decision, PO D5).** A product that already has an item in another batch gets a new `batch_item` in the new batch, with a new stamp. `ReviewSql.statusOf` reads the newest item, so without this rule the product would leave public view although nothing its approval covered changed. So, for a target with no item in this batch yet:
+   - `settle` finds the product's **approved item**: its latest current item in any other batch, when `statusOf` reads it as `ok`;
+   - when that item's snapshot (at its `extracted_at`) has the same `approval_view` as the new item's payload, the new item is stamped with `review := 'ok'`. Its snapshot (reason `run`) adds the payload key `carried_from: {batchId, extractedAt}`. The product stays public;
+   - otherwise (no approved item, a different view, or no snapshot to compare) the new item is stamped `pending`, as any new record. The product leaves public view only in the "different view" case, which is a covered change;
+   - the carried approval needs no decision row and no schema change. The API reads `carried_from` from the snapshot at the item's stamp and passes it to `ApprovalRule` as a counted approval at the stamp (`ApprovalRule.displayStatus(decisions, extractedAt, carried)` and `ApprovalRule.review(…, carried)`): with no later counted decision the item is `approved`, and any later counted decision applies as usual (an `issue` gives `issue`). The history (§5.6.5) shows the `extract` entry followed by "Approval carried over from batch {batchId}: nothing it covered changed." (new copy, §1.7). Any reviewer can Report issue on it, which withdraws it as on any approved record. A dismissal after that returns it to `pending` (§5.2);
+   - the old item in the other batch is not changed, so that batch's status is not changed either.
+   §13.1 Q13 asks the PO to confirm; the alternative is that a product's first item in a new batch is a new record that a pharmacist approves again.
+
+**Effect on approvals:**
+
+- A decision made at or before a new stamp stops counting. A record that was `approved` becomes `back_in_review` (§5.2) and leaves public view until a pharmacist approves it again.
+- A record with a reviewer `issue` whose covered fields changed returns to `pending` ("Not yet reviewed by a pharmacist"). When nothing covered changed, the issue stays open: the senior dismisses it if the report was a mistake (§5.10a), or the engineer re-runs with `--reopen` after a fix.
+- A pair whose DDInter data changed returns to the senior pair queue as `changed` (§5.17), and its public line reads `PAIR_NOT_REVIEWED` until a senior reviews it again. No record is re-opened.
+- A record removed from its batch file leaves public view at once (§6.4). If it comes back into the file, it is re-opened (item 5) and stays hidden until a pharmacist approves it again.
+- A product listed again in a new batch with an unchanged approval view stays approved (item 8); with a changed view it is a new `pending` record and leaves public view.
+- Any reviewer page whose record was stamped turns stale within 20 s (§5.11).
+
+**Today** (P0's pilot re-run, before P1C): no pilot record was approved, so the re-run changed no public view. It replaced the stage notes, giving the §1.6 item 7 triage.
+
+**The P1C pilot check (§12.1).** After the P1C deploy, re-run the DDInter stage for `0001-pilot` with no `--reopen`. Expected: no item is stamped (the approval views are unchanged), every approved pilot record stays approved, and the run log lists 0 re-opened items.
+
+**Later re-runs** (other batches) use the same mechanism. Re-running only the affected items with `--concept ID` keeps runs short. The reopen rule, not the item list, decides what re-opens.
 
 ---
 
@@ -1747,6 +2311,7 @@ P0 also adds an optional `stages` input to `load-dgda.yml` (passed as `--stages`
 | Surface | Protection |
 |---|---|
 | Review decisions and reports | Turnstile `action=decision` (one widget per desk), session role, server re-check |
+| *(P1C)* Dismissals and pair decisions | Turnstile `action=decision` (one widget per desk or senior page), session role `senior` re-checked by the web action, and `reviewerRole` checked by the API (§7.2, §7.7) |
 | Flags (problem reports) | Turnstile `action=flag` |
 | Resolve flag | Turnstile `action=resolve` (one shared `TurnstileField` on `/review/flags`) |
 | Partner request | Turnstile `action=partner` |
@@ -1767,7 +2332,7 @@ P0 also adds an optional `stages` input to `load-dgda.yml` (passed as `--stages`
 | `/check/suggest`, per IP | 5/s, burst 10 | 429, empty list |
 | `/review/*/versions`, per account | 1 per 5 s, burst 3 | 429. The 20 s poll carries on unchanged. A 429 on the pre-commit call does not block the commit; the server's version guards decide (§5.11, §7.2). |
 | `POST /api/session` and `POST /signout`, per IP, each route counted separately | 10 per 10 min | 429. The sign-in page shows "Too many sign-in attempts. Wait a few minutes and try again." |
-| Decision and report actions, per account | 60 per minute | the action returns `rate_limited`. The desk shows the "not saved" network banner (§5.7), and a `decision_denied` audit event is written. |
+| Decision and report actions, per account (*P1C*: including dismissals and pair decisions, one shared budget) | 60 per minute | the action returns `rate_limited`. The desk shows the "not saved" network banner (§5.7), and a `decision_denied` audit event is written. |
 | Flags, per account | 10 per hour | flag outcome `failed` |
 | Partner requests, per account | 3 per day | flag outcome `failed` |
 
@@ -1819,9 +2384,9 @@ frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'
 ### 9.7 Privacy
 
 - **No PHI is requested.** No field asks for patient data, and a checker selection is a list of products in the URL. It is not logged (route template only), not stored, and not persisted in the browser.
-- **Free text could still carry PHI**, because three fields take free text that is stored and shown to the team: the reviewer note (`review_decision.note`, shown to every reviewer), "Report a problem" (`flag.message`) and "What you will build" (`flag.message`). Each carries `NO_PHI_HELP` (§3.6) under its label. None of these texts is ever logged or written to `audit_event`.
+- **Free text could still carry PHI**, because these fields take free text that is stored and shown to the team: the reviewer note (`review_decision.note`, shown to every reviewer; *P1C*: also the dismissal note), *(P1C)* the pair-issue note (`pair_review.note`, shown to every reviewer role, pharmacists and engineers included, in the pair's state line on the desk and the senior pages; never in public), "Report a problem" (`flag.message`) and "What you will build" (`flag.message`). Each carries `NO_PHI_HELP` (§3.6) under its label. None of these texts is ever logged or written to `audit_event`.
 - Emails:
-  - stored for the team only, in `review_decision`, `flag` and `audit_event`;
+  - stored for the team only, in `review_decision`, `flag`, `audit_event` and (*P1C*) `pair_review`;
   - never in public responses, never in logs;
   - shown only to their owner (account menu, the reader welcome state, and the "not on the reviewer list" banner).
 - `/privacy` states this, in the words of the sign-in card plus the audit-trail paragraph: "Each reviewer decision and sign-in is recorded with the account and time, for the team's audit trail. These records are never public." It adds: "Don't include patient names or other personal health details in notes, reports or requests. We don't ask for patient information."
@@ -1891,8 +2456,9 @@ These come from `tokens.css`:
 | `/` | ≤ 30 KB | ≤ 130 KB | ≤ 20 KB | ≤ 90 KB (Onest var + Plex Mono 400) | ≤ 2.5 s |
 | `/search`, `/products/[id]`, `/substances/[id]` | ≤ 50 KB | ≤ 130 KB | ≤ 20 KB | same | ≤ 2.5 s |
 | `/check` | ≤ 50 KB | ≤ 145 KB | ≤ 20 KB | same | ≤ 2.5 s |
-| `/learn/[chapter]` | ≤ 60 KB | ≤ 140 KB | ≤ 25 KB | same | ≤ 2.5 s |
+| `/learn/[chapter]` | ≤ 60 KB | ≤ 140 KB | ≤ 25 KB | same | ≤ 2.8 s (Decision, product owner 16/10/2026: Lighthouse's simulated LCP counts the self-hosted font downloads although `font-display: optional` never delays real visitors' text) |
 | `/review/[b]/[c]` (laptop, broadband) | ≤ 80 KB | ≤ 200 KB | ≤ 25 KB | same | ≤ 1.5 s; J/K to next record painted ≤ 300 ms with prefetch |
+| *(P1C)* `/review/pairs`, `/review/substances/[id]` (laptop, broadband; 50 pairs per page) | ≤ 120 KB | ≤ 180 KB | ≤ 25 KB | same | ≤ 1.5 s |
 
 - Server: API p95 ≤ 300 ms per call (existing target). Page TTFB p75 ≤ 600 ms.
 - The web container stays at `mem_limit 256m`.
@@ -1918,6 +2484,10 @@ These come from `tokens.css`:
 | Tokens | `tokens.test.ts` | `web/styles/tokens.css` SHA-256 equals the docs copy. A recomputed contrast table matches §1.4 S4 (126/126, lowest 4.69 light and 5.18 dark; boundaries 3.33 and 3.20). |
 | Islands | `client-islands.test.ts` | The `"use client"` allowlist (§4.2). |
 | Checker formatting | `check-summary.test.ts` | The summary sentence and plurals for the API result shapes in §7.4. A single combination product plus one other product: same-product pairs are not counted and the no-data wording still applies. Two products with the same BDS: the duplicate is not counted and appears only under "Same substance in more than one product". `{m}` includes not-reviewed medicines. The "Not checked {nd}" chip counts only `no_data`; other reasons show "Other not checked {other}" unhatched. |
+| *(P1C)* Reviewers | `reviewers.test.ts`, `session.test.ts`, `review-copy.test.tsx`, `advance.test.ts` | `senior` parses as a role and is in `ROLES`; a senior session token decodes to role `senior` (not null); `ROLE_LABEL.senior` and `ROLE_LABEL_DESK.senior` = "Senior pharmacist"; `isReviewer` and `actsAsPharmacist` accept it; any other token is still skipped. `runDecide` and the flag actions accept a senior session (no `forbidden`). `historyText`: a senior `ok` reads "Approved by a senior pharmacist. Published.", a senior `issue` "Issue reported by a senior pharmacist. Note:", a `dismiss` "Issue dismissed by a senior pharmacist. Note:", never an engineer line. `toastSub` and `savedText` give the pharmacist strings for a senior; `needsFor("senior", "engineer_checked")` is true. Both review pages pass role `senior` through (component test). |
+| *(P1C)* Dismiss | `commit-machine.test.ts` (extended), `desk-keys.test.tsx` (extended) | `SEND_DISMISS` only for a senior on `issue`, and only while the report channel is idle (a report sending blocks it, and the reverse); no undo window; a 409 `no_issue` gives its hint; captcha gives the report channel's `botHold` with the dismiss op, and the retry keeps the `requestId`; 429 gives report-channel `netErr{saved:"no"}` and network/5xx give `saved:"unknown"`, the commit channel stays untouched, and `TRY_AGAIN` (channel `report`) resends `decision=dismiss` with the same note, `requestId` and `viewedVersion`, never an approval; the failure copy is the §5.10a dismissal copy, not the §5.7 approval banner; an own dismissal updates `viewedVersion`. D opens or focuses the panel for a senior; for a pharmacist or engineer D does nothing and no Dismiss button is rendered; Esc keeps the draft, Cancel discards it; Ctrl/Cmd+Enter sends; Enter never sends; opening Dismiss closes Report and keeps its draft. |
+| *(P1C)* Senior keys | `senior-keys.test.tsx` | J/K move between rows; M marks the current row; Enter on "Mark reviewed" is blocked with its hint; R opens the row's panel; single-key Off disables J, K, M, R and ?. |
+| *(P1C)* Source links | `source-link.test.tsx` | `SourceLink` renders only with a URL; "fetched on" only with a stored time, in Dhaka date form; `target="_blank"`, `rel="noopener noreferrer"` and the sr-only text. |
 | Learn snapshot | `learn-snapshot.test.ts` | Counts are consistent; the 28-pair totals (§1.6 item 5) and the chapter 6 and glossary counts (§1.6 item 11); every snapshot-only value listed in §6.8 is present and dated. |
 
 ### 11.2 Component tests (server components)
@@ -1937,7 +2507,13 @@ These come from `tokens.css`:
 - the review record page (each display status, stale banner, back card, no-data ingredient, not-run ingredient, eye drop with chosen `DDInter352`, failed-stage promise, signed-out block, both network banner variants);
 - the no-JavaScript confirm page (implicit Turnstile widget; Confirm posts the URL's version; stale version renders `STALE_TITLE` and no Confirm);
 - the sign-in states;
-- the not-authorised page.
+- the not-authorised page;
+- *(P1C)* the desk "With other medicines" section: both groups; partner lines with "and {k} more"; with `partnerCount` over 5, the `<details>` reads "{s} of {n} medicines", lists the 5 returned partners and "and {k} more.", with the substance-page link for a senior and no link for a pharmacist or engineer; "There are no other batches yet."; a combination product with one coverage-`none` ingredient still shows the section (the `Interactions.tsx` fix), with that ingredient's pairs as not checked; every pair card shows `FROM_DDINTER` and its review state;
+- *(P1C)* the DDInter stage notes split by `partnerScope`: only in-batch pairs under "…in this batch.", a combination product's own ingredient pair under "…between ingredients of this product.", and pairs with partners in other batches under "…with medicines outside this batch.";
+- *(P1C)* the dismiss panel: the quoted report, the consequence sentence, the field rules; the history entries "Issue dismissed by a senior pharmacist. Note:" and the dismissal "No longer counts" suffix, with the reporter's note still present; no email anywhere;
+- *(P1C)* the senior pages: queue filters (both scopes) and empty states, the pair row in all four states (including "What changed in DDInter"), a non-applying pair with its plain line and no warning tone, a pair with more than 10 brands on a side ("and {n} more." and the substance link), the substance page with brands from two batches, the not-authorised banner for a pharmacist and for an engineer;
+- *(P1C)* source links on the desk (comparison table, ingredient block, pair footers, evidence "Sources") with the §5.6.6 hrefs for the pilot codes; the ICD-11 link text "Search ICD-11 for XM5DJ7";
+- *(P1C, P2)* public pair cards with `FROM_DDINTER` and `PAIR_REVIEWED` or `PAIR_NOT_REVIEWED`, never green; the product page "With other approved medicines" grouped by partner substance, with partners from two batches.
 
 The existing 228 tests are updated where copy or routes change. None is deleted without a replacement.
 
@@ -1976,6 +2552,14 @@ The existing 228 tests are updated where copy or routes change. None is deleted 
 - `AuditAppendOnlyIntegrationTest`: UPDATE, DELETE and TRUNCATE on `ops.audit_event` and `ops.item_snapshot` fail (§7.6).
 - `SearchApiIntegrationTest`: "paracetamol" finds Napa through the DGDA name; "acetaminophen" finds Napa; a DAR prefix; the suggestion for "warfrin"; no suggestion is returned for a name whose record left public view after the last index refresh.
 - `PilotSeed` fix (§8.2).
+- *(P1C)* `ApprovalRuleTest`: a senior `ok` approves; a carried approval (§8.3.1 item 8) with no later decision is `approved`, and an `issue` after it gives `issue`; dismiss after issue gives `pending` (also when a pharmacist `ok` came before the issue), never `approved` and never `back_in_review`; decisions at or before a dismiss do not count; a new issue after a dismissal gives `issue`; `review()` returns `pending` when the newest decision is a dismiss.
+- *(P1C)* `ReviewApiIntegrationTest` (dismiss): 201 for a senior on `issue`, and the item's `review` becomes `pending`; 400 `reviewerRole` for a pharmacist or engineer; 400 `note` under 5 characters; 409 `review` (`no_issue`) on `pending`, on `approved`, and on a pipeline issue (not found at source); 409 `extractedAt` and `lastDecisionId`; 409 `conceptId` when removed; a replayed `requestId` gives 200 `replayed:true` with one row; one `decision` audit row with `outcome='dismiss'` and `actor_role='senior'`; a 400 or 409 leaves one `decision_rejected` row; history keeps the reporter's note and gives `uncountedBy: "dismiss"`. `ReviewQueryIntegrationTest` (carried approval): an item whose snapshot has `carried_from` is `approved`, and its `extract` history entry carries `carriedFrom`.
+- *(P1C)* `ReviewQueryIntegrationTest`: `otherPairs` against a second batch (approved and not-approved partners, removed partner items excluded, a product in both batches listed only in-batch, `partnerCount` over 5); `partnerScope`: `batch` for an in-batch partner, `other` for an earlier-batch partner, for a later-batch partner when the older batch is re-run, and for a partner whose only product was removed from its batch file, and `same_product` for a pair between two ingredients of one combination product (with `inBatch` false in the last four); `BatchPairsTest.computeForMatchesCompute` (for one partner set, `computeFor` gives the same pairs and not-checked lines as `compute`); `openIssues`; `source` on codes, entries, brand and pairs, with `fetchedAt` from `raw.ocl_concept`, `raw.http_snapshot` and `curated.ddinter_drug`.
+- *(P1C)* `SourceLinksTest`: every §5.6.6 pattern with the pilot codes (`161`, `N02BE01`, `DB00316`, `387517004`, `XM5DJ7`, `DDInter14`, `DDInter352`, interaction `3039`); a code that fails its system's pattern gives no link; codes are URL-encoded.
+- *(P1C)* `PairContentTest` pins the canonical bytes and the hash. `PairReviewRuleTest` covers all four states: `changed` after a severity, action or text change; a partner-name change is not `changed`; `issue` stays `issue` after a change.
+- *(P1C)* `PairQueueIntegrationTest`: every stored pair between held substances is queued by default (PO D3(b)): `DDInter351` pairs are present with `applies: false` while only the eye drop is held, after the applying pairs of the same severity, and absent under `pairs=applies`; order; filters and counts; `changedPairReturnsToQueue` (update a pair's text and the pair is `changed`, its public `pairReview` is `not_reviewed`, and no `batch_item` changes); decisions: 201, replay, 400 role, note and requestId, 404 for an unheld pair, 409 `contentHash`, `lastPairReviewId` and `state`; the audit rows.
+- *(P1C)* `VisibilityApiIntegrationTest` (PO D7): the approved-then-removed fixture on every endpoint of the matrix, including `POST /v1/interactions/check` (listed in `notReviewed`, never in `products` or `alerts`) and P10; public `pairReview` never shows `changed` or `issue`. `PublicStatusGuardTest` scans `adapter/persistence` and fails when a public adapter reads `batch_item.review` without `ReviewSql.statusOf` or `ReviewSql.LATEST_PUBLIC`.
+- *(P1C)* `V7MigrationIntegrationTest` (§7.8), and `AuditAppendOnlyIntegrationTest` extended to `ops.pair_review`.
 
 **ETL** (`etl/tests/test_stage_ddinter.py`):
 
@@ -1993,6 +2577,22 @@ The existing 228 tests are updated where copy or routes change. None is deleted 
 - `test_removed_item_without_decisions_is_deleted_with_its_stage_results` becomes "without decisions or snapshots" (the fixture item has no snapshot);
 - `test_removed_item_with_snapshot_is_kept_and_marked` (new): an item with a snapshot and no decision is kept and marked "removed from batch file", and the run does not fail.
 - Regression fixture: `DDInter352` with 112 rows and no pilot partner; asserts that the pairs are stored and that no text fetch happens.
+
+**ETL, P1C reopen rule** (`etl/tests/test_reopen_rule.py`, new; `test_batches.py` and `test_snapshots.py` updated):
+
+- `test_unchanged_rerun_stamps_nothing`: an approved item stays `ok`, its `extracted_at` is unchanged and no snapshot is written; stage results are still replaced.
+- `test_pair_change_reopens_no_record`: a changed pair severity, a new interaction text, and a new disease or food row each re-open no product, the target included.
+- `test_covered_change_reopens`: a strength, a clinical-drug route, a substance code (ATC), a chosen-entry change, and coverage `full`→`none` each stamp the target and its dependents (`shared_change`), and nothing else.
+- `test_other_route_entry_is_not_covered`: a new `otic` entry for a substance re-opens no `systemic` product.
+- `test_v1_payload_compares_without_coverage`.
+- `test_dgda_failure_still_stamps_issue`.
+- `test_reopen_flag_stamps_targets_only`: `--reopen` stamps the named targets with an open reviewer issue and no dependent; an approved target is skipped and logged "skipped: approved, --reopen not confirmed" (§13.1 Q12).
+- `test_readded_item_is_stamped`: an approved item marked "removed from batch file" comes back into the file with an unchanged view; it is stamped `pending`, its marker is cleared in the same statement, and `statusOf` never reads it as `ok` in between.
+- `test_note_written_without_stamp`: an item that leaves the file with an unchanged view gets the "removed from batch file" marker and no stamp; an unchanged item that stays keeps a NULL note.
+- `test_relisted_product_carries_approval`: a product approved in batch A and listed in a new batch B with an unchanged view gets a B item with `review = 'ok'` and `carried_from` in its snapshot; it stays public; batch A is unchanged.
+- `test_relisted_product_with_changed_view_is_pending`: the same with a changed strength gives a `pending` B item, and the product leaves public view.
+- `test_batch_status_recomputed_not_forced`: an unchanged re-run leaves an approved batch `approved`.
+- `test_no_code_path_deletes_ddinter_pair` (§7.8).
 
 ### 11.4 End-to-end (Playwright, `web/e2e`)
 
@@ -2024,13 +2624,16 @@ The existing 228 tests are updated where copy or routes change. None is deleted 
   - complete view after 10 approvals (test DB);
   - beforeunload prompt while armed.
 - **Review flow (engineer)**: the promise copy, "Engineer checked" without publication, and the second A hint.
+- *(P1C)* **Review flow (senior)**: the role badge and `PROMISE_SENIOR`; A approves and publishes; R on an approved record withdraws it; then D opens the dismiss panel showing the reporter's note; a 4-character note shows the error; send; the status is `pending`, focus is on "Looks correct", the history shows both notes, and the database holds one `dismiss` row and one audit row; a pharmacist session on an `issue` record shows no Dismiss button and D does nothing.
+- *(P1C)* **Senior pages**: the queue lists a pair whose partner is in a second test batch; M marks it reviewed, and its row reads `PAIR_REVIEWED`; the test updates the pair text in the database, and the pair is back under "Changed since review" while the approved record stays approved (P1C pins the public `pairReview` of the checker at API level, `PairQueueIntegrationTest`; P2's checker e2e asserts `PAIR_REVIEWED` and `PAIR_NOT_REVIEWED` on the page); R reports a pair issue and the pair text stays visible in public; a pharmacist session gets the not-authorised banner.
+- *(P1C)* **Desk cross-batch**: with a second test batch, the record shows "In other batches" with both subgroups; a second-batch record whose text-missing partner was mapped by `0001-pilot` shows it under "…with medicines outside this batch.", never under "…in this batch."; a combination record whose two ingredients form a text-missing pair shows it under "…between ingredients of this product."
 - **Not authorised**: `user` on `/review`; anonymous redirect.
 - **Public scope for reviewers**: a pharmacist session on `/products/{unapprovedId}` renders the stub, and on `/check` lists that product under "Not yet reviewed by a pharmacist".
 - **Sign-in return path**: `/signin?returnTo=/\evil.com` lands on `/signin?welcome=1`.
 - **Sign-out**: drafts in `sessionStorage` are gone after `POST /signout`.
 - **Checker**: combobox keyboard; add and remove announcements; Clear all moves focus to the "Add a medicine" input (never to `<body>`); summary sentence; Major first; the no-data block; "No interaction listed"; the eye drop "What was checked" names `DDInter352`; not reviewed listed by name; the no-JS GET flow (JavaScript disabled).
 - **Public**: landing; search "paracetamol", "warfarin" (stub) and "warfrin" (suggestion); stub page; product page; sign-in state pages; partner form.
-- **axe** (`@axe-core/playwright`, WCAG 2.2 AA tags) on every page and on these desk states: ready, armed, committing, stale, net error (not saved and unconfirmed), bot hold, no-auth, signed out, complete, loading, drawer, sheet (with settings), report error, shortcuts Off, and the no-JavaScript confirm page. Each in light, dark and forced colours.
+- **axe** (`@axe-core/playwright`, WCAG 2.2 AA tags) on every page and on these desk states: ready, armed, committing, stale, net error (not saved and unconfirmed), bot hold, no-auth, signed out, complete, loading, drawer, sheet (with settings), report error, shortcuts Off, and the no-JavaScript confirm page; *(P1C)* the dismiss panel (empty, error, sending), the pair queue (each filter, a row's issue panel, a row-level 409 banner), the substance page, and the senior not-authorised banner. Each in light, dark and forced colours.
 - **Reflow** at 320 px (public and desk): no horizontal page scroll. At 1280×800 with 400% zoom (a 320×200 CSS px viewport) the focused element is never covered by the toolbar, the decision bar or the public and Learn toolbars, checked by tabbing through the desk, the product page and a Learn chapter. Learn below 860 px: the chapter nav is a sticky horizontal row and a focused heading is not covered by it.
 - **Lighthouse CI**: §1.4 S5 and the §10.6 budgets.
 
@@ -2050,28 +2653,32 @@ Playwright screenshots of the §11.4 states at 1280 px and 320 px in light and d
 | **1. Reviewer workspace** | Design-system foundation (tokens, fonts, theming, `ui/` components, CSP nonce, JWE session, `/signout`, rate-limit keys, audit plumbing, `/healthz`, the e2e harness); the sign-in function (Turnstile on `/api/session`, `returnTo`); `/review/*` with all of §5, including the desk settings; the §7.3 endpoints (with coverage `not_run`); audit events; `/review` and `/review/flags` (§5.16); redirects for `/batches` and `/flags` | §11 unit, component and e2e review suites green; axe clean; S1 session run with the pharmacist on the live pilot |
 | **2. Public surfaces** | Landing, search, product, stub (including removed), substance, checker, sign-in states, partners, privacy; §7.4 endpoints with the visibility rule; redirect `/?q=` | `VisibilityApiIntegrationTest` matrix green; S2, S3, S5 and S6 hold; licence lines confirmed (§13 Q1); no Example marker on any record data |
 | **3. Learn** | Ten chapter routes, snapshot, glossary filter, rail | The Learn e2e suite and axe are green; the §1.6 corrections are present |
+| **1C. Review model and source links** *(P1C)* | The senior role and Dismiss issue (§5.10a); senior review (§5.17, §7.7); the reopen rule (§8.3.1); cross-batch pairs and the `partnerScope` and combination fixes on the desk (§5.5.3, §5.6.2); source links on the desk (§5.6.6); the PO D7 visibility tests; V7 (§7.8) | §11 P1C suites green; `db-schema-v1.2` tagged; the P1C pilot check on production (§8.3.1: an unchanged DDInter re-run stamps nothing); a senior reviews at least the pilot's Major pairs in the queue; S8 and S9 hold |
 
 Phase 3 may ship before phase 2 (amended 15/10/2026): P3 builds the §7.4 `GET /v1/stats` row itself and uses no other phase-2 component, route or endpoint.
+
+*(P1C, 15/10/2026)* Phase 1C ships after phase 3 and before phase 2. The order is 0, 1, 3, 1C, 2. P1C needs P3's `ReviewSql.statusOf` removed-item fix (PO D7) and changes rules the public surfaces build on (pair review state, the reopen rule, P10 across batches), so P2 builds on P1C rather than being reworked after it.
 
 The pharmacist reviews the pilot in phase 1, on the workspace. The public site keeps its current pages (restyled only through the shared layout) until phase 2; only `/signin` gains the bot check, the return path and their error states in phase 1 (§12.2, P1A).
 
 ### 12.2 Implementation plans (Decision)
 
-This spec is **not one implementation plan**. It is split into five plans, each written, reviewed and executed on its own, in this order. Each plan cites the sections it implements and may not change a Decision here without amending this spec first.
+This spec is **not one implementation plan**. It is split into six plans (*P1C*: five before 15/10/2026), each written, reviewed and executed on its own, in this order. Each plan cites the sections it implements and may not change a Decision here without amending this spec first.
 
 | Plan | Phase | Scope | Depends on |
 |---|---|---|---|
 | **P0 Safety prerequisites** | 0 | §8 (ETL route fix, pair-list reconciliation, snapshots, removed-item rule, re-run, the `stages` input of `load-dgda.yml`), §7.1, §7.2, §7.6, the phase-0 current-web adjustments in §12.1, and their §11.3 tests, including the updates to existing API and ETL tests | none |
 | **P1A Foundation** | 1 | §3 (tokens, fonts, theming, `ui/` components, copy constants), §4 (islands allowlist and check), §9 (CSP nonce, `next.config.ts` header changes, nonce on `components/Turnstile.tsx`, request id, JWE session, `/signout` and the removal of `DELETE /api/session`, rate-limit keys, Turnstile action and hostname checks), §5.15 and §7.5 audit plumbing, `safeReturnTo()`, `/healthz`, the §12.4 environment and compose changes, and the e2e harness (§11.4 environment). **Sign-in function ships here**, together with the `/api/session` Turnstile check, so sign-in never breaks between plans: the SignInButton's `TurnstileField` (action `signin`), `turnstileToken` and `returnTo` (through `safeReturnTo()`) in the POST, and the `/signin` states "Bot check failed", "Session request failed" and "Too many sign-in attempts" (§6.2). | P0 |
 | **P1B Reviewer workspace** | 1 | §5 entirely, §7.3, `/review` and `/review/flags` (§5.16), the `/batches` and `/flags` redirects, `docs/runbooks/reviewer-invite.md` (new), and the review parts of §11 | P1A |
-| **P2 Public surfaces** | 2 | §6.1–§6.7, §6.9, §7.4 (reusing `GET /v1/stats` from P3, and switching every public adapter to the one §7.4 rule), the `/?q=` redirect, `docs/runbooks/partner-requests.md` (new), and the public parts of §11. For sign-in, P2 adds only the visual card (§6.2 "Card") and the welcome states. | P1A (P1B not required) |
+| **P2 Public surfaces** | 2 | §6.1–§6.7, §6.9, §7.4 (reusing `GET /v1/stats` from P3, and switching every public adapter to the one §7.4 rule), the `/?q=` redirect, `docs/runbooks/partner-requests.md` (new), and the public parts of §11. For sign-in, P2 adds only the visual card (§6.2 "Card") and the welcome states (including the P1C senior step). *(P1C)* P2 builds the P1C model: P10 across batches, grouped by partner substance (§6.5); `FROM_DDINTER` and the public pair review state on every pair card (§6.5–§6.7.3); the check result's `pairReview` rendered on the page (P1C ships the API field) and P9; source links on approved product and substance pages (§6.5). | P1A, P1C (P1B not required) |
 | **P3 Learn** | 3 | §6.8, the §1.6 Learn corrections, and the §7.4 `GET /v1/stats` row | P0, P1A, P1B; builds the §7.4 `GET /v1/stats` row |
+| **P1C Review model and source links** *(P1C)* | 1C | The senior role (§2.2; §5.13, every role gate listed there; `AuditService` in §7.5); Dismiss issue (§5.2, §5.6.5, §5.7, §5.8, §5.10a, §7.2); senior review (§5.17, §7.7, the `SeniorDesk` island, §4.2); the reopen rule (§8.1 item 4, §8.3.1: `settle`, `approval_view`, `--reopen`, batch status); the desk's cross-batch pairs, the `partnerScope` note split and the `Interactions.tsx` combination fix (§5.5.3, §5.6.1, §5.6.2, §7.3 `otherPairs`); source links on the desk (§5.5.2, §5.6.3, §5.6.6, `SourceLinks.java`); the PO D7 visibility tests (§7.4); the checker alerts' `ddinterA`, `ddinterB` and public `pairReview` (§7.4, API only); V7 and `db-schema-v1.2` (§7.8); the P1C §1.7 copy; and the P1C rows of §11. **Not in P1C**: public pages (P2 builds §6.5–§6.7 on this model) and Learn (PO D9). Learn's re-run sentences (§1.6 item 4) still describe the pre-P1C rule; they are listed for the next Learn amendment. | P0, P1A, P1B, P3; ships before P2 |
 
 P1A may ship as its own release: it changes the shared layout, security and the sign-in function, and no other surface's behaviour. P1B and P2 each ship as one release (§12.3).
 
 ### 12.3 Feature flags
 
-**Decision: no runtime feature flags.** Each phase is one release (an image tag) with its own redirects. This avoids a second code path for safety rules. Partially built surfaces are not deployed, and the branch model enforces it: every push to `main` that passes CI deploys at once (§12.4), so each plan's PRs merge into a `phase-N` integration branch (`phase-0`, `phase-1`, `phase-2`, `phase-3`), and only the phase-complete merge of that branch into `main` deploys. P0, P1A and P3 are the exceptions that may merge to `main` on their own, because each is a complete release (§12.2; P3 is the whole of phase 3).
+**Decision: no runtime feature flags.** Each phase is one release (an image tag) with its own redirects. This avoids a second code path for safety rules. Partially built surfaces are not deployed, and the branch model enforces it: every push to `main` that passes CI deploys at once (§12.4), so each plan's PRs merge into a `phase-N` integration branch (`phase-0`, `phase-1`, `phase-2`, `phase-3`), and only the phase-complete merge of that branch into `main` deploys. P0, P1A and P3 are the exceptions that may merge to `main` on their own, because each is a complete release (§12.2; P3 is the whole of phase 3). *(P1C)* P1C is the whole of phase 1C and may merge to `main` on its own, after P3. V7 runs through Flyway on deploy (§12.4), and the P1C pilot check (§8.3.1) follows the deploy.
 
 ### 12.4 Deploy without touching other services
 
@@ -2095,8 +2702,9 @@ P1A may ship as its own release: it changes the shared layout, security and the 
   - V6 is additive, so the previous API runs against the new schema.
   - A1 and the §7.2 guards revert with the image.
   - Sessions issued by the new web (JWE) are not readable by the old web. Reviewers sign in again; this is accepted.
-- **ETL**: a rollback does not restore stage notes. Re-run the ddinter stage with the previous image if needed. Re-runs only ever re-open review; they never publish.
+- **ETL**: a rollback does not restore stage notes. Re-run the ddinter stage with the previous image if needed. Re-runs only ever re-open review; they never publish. *(P1C)* A carried approval (§8.3.1 item 8) keeps an already public product public when nothing it covered changed; it never makes public a product that was not, and a record that comes back into its batch file is always re-opened (§8.3.1 item 5).
 - **V6**: do not drop it on rollback. It is harmless to older images. Dropping it follows the lock policy (a new migration).
+- *(P1C)* **V7**: the same. Older images never write `senior`, `dismiss` or pair reviews, and they read decisions with the V4 values, but a pre-P1C `ApprovalRule` would ignore a `dismiss` row. So a rollback below P1C must be preceded by a check that no `dismiss` row is counted on a current item (runbook query in `docs/runbooks/reviewer-invite.md`). Otherwise a pharmacist re-approves, or anyone re-reports, those records first (amended by the P1C plan, 15/10/2026: a pre-P1C `ApprovalRule` counts an `ok` only from role `pharmacist`, so a senior's re-approval would read as pending under the older image; the runbook query lists a record until a counted `issue`, or a `pharmacist` `ok`, follows its latest dismissal).
 
 ---
 
@@ -2107,6 +2715,16 @@ P1A may ship as its own release: it changes the shared layout, security and the 
 1. **Licence lines.** The exact attribution and licence wording for DDInter 2.0, ATC, DrugBank and SNOMED CT in the footer and in Learn. Board P marks these "Licence line(s) to confirm". **This blocks phase 2 public launch.**
 2. **Systemic note for route-specific products.** Should the checker and product page show an informational line such as "Systemic chloramphenicol (DDInter351) has moderate interactions with warfarin (metabolism), simvastatin and amlodipine. These apply to oral or IV chloramphenicol, not to this product."? If yes, it is never counted as an alert. Default until decided: **not shown**. This is a clinical-content decision for the pharmacist and the PO.
 3. **Indexing at public launch.** The site stays `noindex` with `robots.txt Disallow: /` during the pilot. When the first batch is approved, should public pages become indexable? Default until decided: stay `noindex`.
+4. *(P1C)* **What a dismissal restores.** After a senior dismisses an issue, does the record go back to `pending`, so a pharmacist re-approves it, or does it go back to `approved`, when a pharmacist's `ok` preceded the issue and nothing else changed? Default until decided: **`pending`** (§5.2, D57). Restoring would re-publish without anyone looking at the record at that moment. The senior can approve straight after with A.
+5. *(P1C)* **What a pair issue does in public, and who acts on it.** Default until decided: **nothing beyond `PAIR_NOT_REVIEWED`** (§5.17, D52). The pair and its DDInter text stay visible; hiding them would present missing data as safety. Alternative: a public caution line on the pair, for example "A senior pharmacist is checking this pair." Second part: a pair issue creates no engineering work item. Default until decided: **the senior also reports an issue on an affected record when engineering work is needed** (§5.17). Alternative: engineers get the `/review/flags` count line and a read-only list of pair issues.
+6. *(P1C)* **A newly failed check on an approved, unchanged record.** PO D5 says a record re-opens "only" when covered data changes. Default until decided: **it stays approved**; the failed check shows on the desk and blocks new approvals (§8.3.1 item 7). Alternative: any newly failed stage re-opens the record.
+7. *(P1C)* **Substance synonyms.** Should a new or changed synonym (`substance_name`), which public search uses, re-open the products of that substance? Default until decided: **no**, because PO D5's list does not name it (§8.3.1).
+8. *(P1C)* **Who may read the senior pages.** Default until decided: **seniors only** (§5.17). Alternative: pharmacists and engineers may read them, without the Mark and Report controls.
+9. *(P1C)* **ICD-11 and SNOMED CT deep links.** The ICD-11 browser deep-links only by entity id (verified: `#173693607` opens XM5DJ7), and we store only the XM code. The SNOMED International browser refused connections on 15/10/2026. Default until decided: **the ICD-11 browser home with "Search ICD-11 for {code}", and SNOMED CT through RxNav's SNOMEDCT search** (§5.6.6). Alternatives: store ICD-11 entity ids (needs WHO ICD API credentials in the ETL), and switch SNOMED CT to `browser.ihtsdotools.org` once it is reachable and its licence terms suit.
+10. *(P1C)* **Licences for linking.** The user takes responsibility for licences (PO D8). Q1's attribution lines still block the P2 public launch, now including any line that DrugBank, SNOMED International and WHO require for links.
+11. *(P1C)* **Pair queue scope.** PO D3(b) asks for every stored pair between substances we hold, and that is the default (§5.17). Pairs that apply to no pair of our brands (no held product is checked against one of the pair's two entries, for example the systemic `DDInter351` chloramphenicol pairs while we hold only the eye drop) are listed with the line "Does not apply to the medicines we hold…" (§5.17.2 item 2), after the applying pairs of the same severity, and the "Applies to our brands" filter hides them. Question: should the queue's default narrow to applying pairs? Default until decided: **no, every stored pair** (PO D3).
+12. *(P1C)* **`--reopen` as an exception to PO D5's "only".** The engineer's override (§8.3.1 item 5) re-opens named records whatever changed, for a fix the approval view does not cover. On an approved record that takes it out of public view with no covered change. Default until decided: **`--reopen` skips approved targets** (it re-opens only targets with an open reviewer issue, which are not public); a pharmacist withdraws an approved record with Report issue. Alternative: `--reopen` re-opens approved targets too.
+13. *(P1C)* **A product listed again in a new batch.** Default until decided: **its approval is carried over** when its approval view equals the view its approval covered (§8.3.1 item 8), because PO D5 re-opens a record only on a covered change. Alternative: a product's first item in a new batch is a new record that a pharmacist approves again (it leaves public view until then).
 
 ### 13.2 Decisions taken in this spec
 
@@ -2129,14 +2747,14 @@ P1A may ship as its own release: it changes the shared layout, security and the 
 | D15 | A checked pair with no DDInter row = "No interaction listed in DDInter 2.0" (counted as checked, with the caveat); pairs inside one product = not checked | §6.7.2 |
 | D16 | Search stubs match on trade name and DAR only; public paging capped at 10 pages; spelling suggestion in memory (no trigram migration) | §6.3, §7.4 |
 | D17 | Partner access requests stored as flags (`other`/`partner-access`), no schema change | §6.9 |
-| D18 | V6 adds `ops.item_snapshot` and `ops.audit_event`, the decision `request_id` unique index, and append-only triggers; nothing else changes in the schema | §7.6 |
+| D18 | V6 adds `ops.item_snapshot` and `ops.audit_event`, the decision `request_id` unique index, and append-only triggers; nothing else changes in the schema *(P1C: V7, D59, is the next and only other change)* | §7.6 |
 | D19 | Global reviewer roles; invites sent by hand from a fixed template | §5.13 |
 | D20 | Encrypted session cookie (JWE) with the `__Host-` prefix; the old cookie is retired | §9.6 |
 | D21 | Nonce-based CSP without `script-src 'unsafe-inline'`; Turnstile on sign-in | §9.2, §9.4 |
 | D22 | No checker persistence in browser storage; no query strings in logs | §6.7.1, §9.7 |
 | D23 | Infrastructure identifiers keep the `bddrug` names | §9.8 |
 | D24 | No runtime feature flags; phase releases by image tag, through `phase-N` branches; rollback by tag | §12.3, §12.5 |
-| D25 | Product page "With the other medicines" is limited to approved products of the same batch | §6.5 |
+| D25 | Product page "With the other medicines" is limited to approved products of the same batch. *(Superseded by D60 in P1C: approved products of every batch, grouped by partner substance.)* | §6.5 |
 | D26 | Hero lookup card uses `HERO_CONCEPT_ID`: live when approved; brand and `NOT_REVIEWED` only until then (overrides Board P) | §1.6, §6.1 |
 | D27 | Learn text corrections and the post-fix pilot counts replace the board values listed in §1.6 | §1.6 |
 | D28 | Public routes always read with public scope; unapproved data only under `/review/*`; one visibility rule for every public endpoint, pinned by a matrix test | §2.2, §7.4, §11.3 |
@@ -2160,3 +2778,15 @@ P1A may ship as its own release: it changes the shared layout, security and the 
 | D46 | The hatch and `NoDataChip` mean coverage `none` only; other not-checked reasons are plain text | §3.4, §6.5, §6.7 |
 | D47 | Checker counts exclude same-product and same-BDS pairs; `{m}` counts every selected medicine | §6.7.2, §7.4 |
 | D48 | Learn (P3) ships before the public surfaces (P2): P3 builds `GET /v1/stats` and depends on P0, P1A and P1B; until P2 serves the §7.4 hidden stub, Learn leaves out the sentences that describe it; a failed stats read shows a banner inside the Learn shell, never a chapter | §6.8, §7.4, §12.1–§12.3 |
+| D49 | *(P1C, PO D2)* Senior pharmacist role `senior`: every pharmacist power plus senior review and Dismiss issue; public verification still reads "Approved by a pharmacist" | §2.2, §5.13 |
+| D50 | *(P1C, PO D1)* Publishing is unchanged: any pharmacist's or senior's "Looks correct" approves and publishes a record, batch by batch; batches are the unit of engineering review | §5.13 |
+| D51 | *(P1C, PO D3)* Senior review by substance and as a pair queue, across all batches; pair decisions (`reviewed`, `issue`) are append-only, audited, idempotent by `requestId` and versioned by content hash and last pair review id | §5.17, §7.7, §7.8 |
+| D52 | *(P1C)* A pair issue never hides a pair or its text; it records a note, shows `PAIR_NOT_REVIEWED` in public, and stays in the queue until a senior marks the pair reviewed | §5.17 |
+| D53 | *(P1C, PO D4)* Public pair cards show every DDInter pair between approved products with its text, `FROM_DDINTER` and a coarse senior-review state (reviewed with date, or not yet reviewed); plain text, never green; senior review is not a gate | §3.6, §6.5–§6.7, §7.4 |
+| D54 | *(P1C, PO D5)* Reopen rule: a record re-opens only when its approval view (brand, clinical drug, ingredient substances, strengths, codes, chosen DDInter entries, coverage) changes; pair, text, disease and food changes never re-open a record and instead mark the pair `changed`; `batch_item.note` is written whether or not the item is stamped; a record that comes back into its batch file after removal is always re-opened; a product listed again in a new batch carries its approval when its view is unchanged (§13.1 Q13); `--reopen` is the engineer's explicit override, limited to non-approved targets until the PO confirms it (§13.1 Q12) | §8.3.1 |
+| D55 | *(P1C, PO D6)* The desk shows pairs with medicines in other batches (approved and not yet approved, grouped); the batch block survives a no-data ingredient of a combination; text-missing notes are split by the new `partnerScope` (this batch, this product's own ingredients, outside this batch), not by `inBatch` alone | §5.5.3, §5.6.2, §7.3 |
+| D56 | *(P1C, PO D7)* A latest item removed from its batch file is never public, through `ReviewSql.statusOf` and `LATEST_PUBLIC` only, pinned for every public endpoint, the checker included | §7.4, §11.3 |
+| D57 | *(P1C, PO D10)* Dismiss issue: seniors only; an append-only `dismiss` decision with a 5–1000 character note, audited, version-guarded and idempotent; it is a review boundary that returns the record to `pending`; the reporter's note stays in the history | §5.2, §5.10a, §7.2 |
+| D58 | *(P1C, PO D8)* Every code links to its source page, built only by the API from a validated code, with "fetched on" where a fetch time is stored; desk for every record, public pages for approved records only; SNOMED CT through RxNav search and ICD-11 through the browser home, because neither has a working deep link by code | §5.6.6, §6.5 |
+| D59 | *(P1C)* V7 widens the decision and role checks, adds `ops.pair_review` (append-only by trigger) and the new audit events; tag `db-schema-v1.2` | §7.8 |
+| D60 | *(P1C)* Plan P1C ships after P3 and before P2; P2 builds the P1C public model, including P10 across batches grouped by partner substance (replacing D25's batch-only rule) | §6.5, §12.1, §12.2 |

@@ -7,12 +7,15 @@ import com.niramoy.bddrug.domain.ApprovalRule;
 import com.niramoy.bddrug.domain.BatchPairs;
 import com.niramoy.bddrug.domain.DdinterCode;
 import com.niramoy.bddrug.domain.ItemHistory;
+import com.niramoy.bddrug.domain.PairContent;
+import com.niramoy.bddrug.domain.PairReviewRule;
 import com.niramoy.bddrug.domain.ReviewDecision;
 import com.niramoy.bddrug.domain.ReviewItem;
 import com.niramoy.bddrug.domain.ReviewTriage;
 import com.niramoy.bddrug.domain.ReviewViews;
 import com.niramoy.bddrug.domain.RouteRule;
 import com.niramoy.bddrug.domain.SnapshotDiff;
+import com.niramoy.bddrug.domain.SourceLinks;
 import com.niramoy.bddrug.domain.StageNotes;
 import com.niramoy.bddrug.domain.ReviewViews.BatchSummary;
 import com.niramoy.bddrug.domain.ReviewViews.Counts;
@@ -23,8 +26,6 @@ import com.niramoy.bddrug.domain.ReviewViews.VersionRow;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
@@ -165,17 +166,12 @@ public class ReviewQueryService {
         return n;
     }
 
-    public static final String OCL_CONCEPT = "https://tr.ocl.dghs.gov.bd/#/orgs/MoHFW/sources/DGDA-Drugs/concepts/";
+    public static final String OCL_CONCEPT = SourceLinks.OCL_CONCEPT;
     private static final List<String> STAGES = List.of("dgda", "substances", "clinical", "ddinter");
 
-    /**
-     * The OCL concept URL, as web/lib/evidence.ts builds it with encodeURIComponent. URLEncoder escapes five characters
-     * that encodeURIComponent keeps (! ' ( ) ~) and writes a space as "+", so both are undone here.
-     */
+    /** The OCL concept URL (§7.3 sourceUrl); built by SourceLinks, the one URL builder (§5.6.6). */
     public static String sourceUrl(String conceptId) {
-        String encoded = URLEncoder.encode(conceptId, StandardCharsets.UTF_8).replace("+", "%20")
-            .replace("%21", "!").replace("%27", "'").replace("%28", "(").replace("%29", ")").replace("%7E", "~");
-        return OCL_CONCEPT + encoded + "/";
+        return SourceLinks.oclUrl(conceptId);
     }
 
     private static Assessed find(List<Assessed> all, String conceptId) {
@@ -193,19 +189,28 @@ public class ReviewQueryService {
                     String route = d.clinical() == null ? null : d.clinical().route();
                     return Mono.zip(port.ingredients(conceptId, d.bdcId(), route), pairs(batchId, conceptId), port.snapshots(batchId, conceptId),
                             port.fullRuns(batchId))
-                        .flatMap(t -> stages(me, t.getT2().products(), conceptId).map(stages -> {
-                            List<Instant> runs = t.getT4().isEmpty() ? List.of(batch.runAt()) : t.getT4();
-                            List<ItemHistory.Decision> decisions = me.facts().decisions().stream().map(x -> new ItemHistory.Decision(
-                                x.id(), x.decision(), x.note(), x.reviewerRole(), x.decidedAt(),
-                                viewerEmail != null && x.reviewerEmail() != null && x.reviewerEmail().equalsIgnoreCase(viewerEmail.strip()))).toList();
-                            ItemHistory.Result history = ItemHistory.build(runs, t.getT3(), decisions, me.facts().extractedAt());
-                            return new ReviewItem(batchId, conceptId, me.index(), all.size(), me.displayStatus(), me.facts().review(),
-                                me.version(), new ReviewItem.BatchInfo(batch.runAt(), all.size(), batch.status()), d.brand(),
-                                d.dgdaIngredients(), d.clinical(), t.getT1(), stages, t.getT2().result(), d.sourceJson(),
-                                sourceUrl(conceptId), history.history(), history.reopen());
-                        }));
+                        .flatMap(t -> Mono.zip(stages(me, t.getT2().products(), conceptId),
+                                crossBatch(batchId, conceptId, t.getT2(), viewerEmail))
+                            .map(u -> {
+                                List<Instant> runs = t.getT4().isEmpty() ? List.of(batch.runAt()) : t.getT4();
+                                List<ItemHistory.Decision> decisions = me.facts().decisions().stream().map(x -> new ItemHistory.Decision(
+                                    x.id(), x.decision(), x.note(), x.reviewerRole(), x.decidedAt(), isMine(x.reviewerEmail(), viewerEmail))).toList();
+                                ItemHistory.Result history = ItemHistory.build(runs, t.getT3(), decisions, me.facts().extractedAt());
+                                List<ReviewItem.OpenIssue> openIssues = ApprovalRule.openIssues(me.facts().decisions(), me.facts().extractedAt())
+                                    .stream().map(x -> new ReviewItem.OpenIssue(x.reviewerRole(), x.decidedAt(), x.note(),
+                                        isMine(x.reviewerEmail(), viewerEmail))).toList();
+                                return new ReviewItem(batchId, conceptId, me.index(), all.size(), me.displayStatus(), me.facts().review(),
+                                    me.version(), new ReviewItem.BatchInfo(batch.runAt(), all.size(), batch.status()), d.brand(),
+                                    d.dgdaIngredients(), d.clinical(), t.getT1(), u.getT1(), u.getT2().batch(), d.sourceJson(),
+                                    sourceUrl(conceptId), history.history(), history.reopen(), openIssues, u.getT2().other());
+                            }));
                 });
         }));
+    }
+
+    /** §7.3 mine: the decision's email equals X-Viewer-Email, case-insensitively. */
+    static boolean isMine(String reviewerEmail, String viewerEmail) {
+        return viewerEmail != null && reviewerEmail != null && reviewerEmail.equalsIgnoreCase(viewerEmail.strip());
     }
 
     /** The batch products and the pair result for the open record (RouteRule on both sides, §5.6.2). */
@@ -219,6 +224,43 @@ public class ReviewQueryService {
             return Mono.zip(port.pairRows(ids), port.entryNames(ids))
                 .map(t -> new PairsAndProducts(products, BatchPairs.compute(conceptId, products, t.getT1(), t.getT2().keySet())));
         });
+    }
+
+    /** batchPairs and otherPairs with each pair's link and senior-review state, from one pair-review query. */
+    private record Cross(BatchPairs.Result batch, BatchPairs.OtherResult other) {}
+
+    private Mono<Cross> crossBatch(String batchId, String conceptId, PairsAndProducts inBatch, String viewerEmail) {
+        BatchPairs.Product me = inBatch.products().stream().filter(p -> p.conceptId().equals(conceptId)).findFirst().orElse(null);
+        if (me == null) return Mono.just(new Cross(inBatch.result(), new BatchPairs.OtherResult(List.of(), List.of(), 0)));
+        Set<String> mine = new HashSet<>();
+        for (BatchPairs.Substance s : me.substances()) for (DdinterCode c : s.codes()) mine.add(c.code());
+        return port.otherProducts(batchId).flatMap(partners -> {
+            Set<String> theirs = new HashSet<>();
+            for (BatchPairs.OtherProduct q : partners)
+                for (BatchPairs.Substance s : q.substances()) for (DdinterCode c : s.codes()) theirs.add(c.code());
+            Set<String> every = new HashSet<>(mine);
+            every.addAll(theirs);
+            for (BatchPairs.Pair p : inBatch.result().pairs()) { every.add(p.ddinterA()); every.add(p.ddinterB()); }
+            return Mono.zip(port.pairRowsTouching(mine, theirs), port.entryNames(every), port.pairReviews(every, viewerEmail))
+                .map(t -> {
+                    BatchPairs.OtherResult other = BatchPairs.computeFor(me, partners, t.getT1(), t.getT2().keySet());
+                    Map<String, List<PairReviewRule.Decision>> reviews = t.getT3();
+                    List<BatchPairs.Pair> batchPairs = inBatch.result().pairs().stream().map(p -> p.with(
+                        SourceLinks.pair(p.interactionId()).orElse(null),
+                        reviewOf(reviews, p.ddinterA(), p.ddinterB(), p.severity(), p.actions(), p.interaction(), p.management()))).toList();
+                    List<BatchPairs.OtherPair> otherPairs = other.pairs().stream().map(p -> p.with(
+                        SourceLinks.pair(p.interactionId()).orElse(null),
+                        reviewOf(reviews, p.ddinterA(), p.ddinterB(), p.severity(), p.actions(), p.interaction(), p.management()))).toList();
+                    return new Cross(new BatchPairs.Result(inBatch.result().totalBatchPairs(), batchPairs, inBatch.result().notChecked()),
+                        new BatchPairs.OtherResult(otherPairs, other.notChecked(), other.otherBatches()));
+                });
+        });
+    }
+
+    static PairReviewRule.Review reviewOf(Map<String, List<PairReviewRule.Decision>> reviews, String a, String b, String severity,
+                                          List<String> actions, String interaction, String management) {
+        String hash = PairContent.hash(a, b, new PairContent.Content(severity, actions, interaction, management));
+        return PairReviewRule.review(reviews.getOrDefault(a + "|" + b, List.of()), hash);
     }
 
     /** The ids each product checks with (RouteRule on its own route). */
@@ -248,9 +290,9 @@ public class ReviewQueryService {
                     if ("ddinter".equals(stage))
                         for (String[] m : textMissing(s.evidence())) {
                             BatchPairs.PairRow row = rows.get(m[0] + "|" + m[1]);
-                            String other = mine.contains(m[0]) ? m[1] : m[0];
+                            String scope = BatchPairs.partnerScope(m[0], m[1], mine, others);
                             pairs.add(new ReviewItem.TextMissingPair(m[0], name(t.getT1(), row, m[0], true), m[1],
-                                name(t.getT1(), row, m[1], false), row == null ? null : row.severity(), others.contains(other)));
+                                name(t.getT1(), row, m[1], false), row == null ? null : row.severity(), "batch".equals(scope), scope));
                         }
                     out.add(new ReviewItem.Stage(s.stage(), s.status(), StageNotes.parse(s.stage(), s.status(), s.note()),
                         List.copyOf(pairs), s.evidence()));

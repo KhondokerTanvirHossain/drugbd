@@ -14,14 +14,16 @@ import org.springframework.transaction.reactive.TransactionalOperator;
 import reactor.core.publisher.Mono;
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 /**
  * Review decisions. {@code ops.review_decision} and {@code ops.audit_event} are append-only: rows are inserted, never
- * updated or deleted. Lock order is batch_item, then batch, the same as the pipeline's {@code reopen_review}, so the two
- * serialize instead of deadlocking; two sends of one requestId serialize on the item lock, so step 1 answers the second.
+ * updated or deleted. Lock order is batch_item, then batch, the same as the pipeline's {@code settle()} (which locks its
+ * target items before it recomputes any batch row), so the two serialize instead of deadlocking; two sends of one
+ * requestId serialize on the item lock, so step 1 answers the second.
  */
 @Component
 public class R2dbcReviewAdapter implements ReviewPort {
@@ -145,12 +147,26 @@ public class R2dbcReviewAdapter implements ReviewPort {
         return tx.transactional(spec.fetch().rowsUpdated()).then();
     }
 
-    /** Applies the approval rule; with no decision since the latest run the pipeline's value stays. */
+    /**
+     * Applies the approval rule; with no decision since the latest run (and no dismissal or carried approval) the pipeline's
+     * value stays. A dismissal sets pending (§5.2); a carried approval (§8.3.1 item 8) counts as an ok at the stamp.
+     */
     private Mono<Void> recomputeItem(String batchId, String conceptId, Instant extractedAt) {
-        return decisions(batchId, conceptId, false).flatMap(list -> ApprovalRule.review(list, extractedAt)
-            .map(review -> db.sql("UPDATE ops.batch_item SET review = :r WHERE batch_id = :b AND concept_id = :c")
-                .bind("r", review).bind("b", batchId).bind("c", conceptId).fetch().rowsUpdated().then())
-            .orElse(Mono.empty()));
+        return Mono.zip(decisions(batchId, conceptId, false), carried(batchId, conceptId, extractedAt))
+            .flatMap(t -> ApprovalRule.review(t.getT1(), extractedAt, t.getT2())
+                .map(review -> db.sql("UPDATE ops.batch_item SET review = :r WHERE batch_id = :b AND concept_id = :c")
+                    .bind("r", review).bind("b", batchId).bind("c", conceptId).fetch().rowsUpdated().then())
+                .orElse(Mono.empty()));
+    }
+
+    /** True when the snapshot at the item's stamp carried an approval from another batch (payload key carried_from). */
+    private Mono<Boolean> carried(String batchId, String conceptId, Instant extractedAt) {
+        if (extractedAt == null) return Mono.just(false);
+        return db.sql("""
+                SELECT EXISTS (SELECT 1 FROM ops.item_snapshot WHERE batch_id = :b AND concept_id = :c AND extracted_at = :t
+                               AND payload -> 'carried_from' IS NOT NULL) AS carried""")
+            .bind("b", batchId).bind("c", conceptId).bind("t", extractedAt.atOffset(ZoneOffset.UTC))
+            .map(r -> Boolean.TRUE.equals(r.get("carried", Boolean.class))).one();
     }
 
     /** approved when every item still in the batch file is ok (and there is at least one); otherwise in_review. */

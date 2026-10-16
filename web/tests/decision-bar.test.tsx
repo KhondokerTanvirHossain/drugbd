@@ -10,6 +10,7 @@ import DecisionBar from "@/components/review/desk/DecisionBar";
 import DeskRecordContext from "@/components/review/desk/DeskRecordContext";
 import { initialMachine, type MachineState, type Op } from "@/components/review/desk/commit-machine";
 import { barFromRegistration } from "@/components/review/desk/context";
+import { DESK } from "@/lib/review-copy";
 import { makeReg } from "./desk-reg";
 import { WithDesk, stubDesk } from "./desk-stub";
 
@@ -151,6 +152,22 @@ describe("DeskRecordContext (§4.2, §5.11)", () => {
     </WithDesk>);
     expect(document.getElementById("evidence")!.textContent).toContain("evidence as opened");
     expect(document.body.textContent).not.toContain("evidence after the re-run");
+  });
+
+  it("a senior's sidebar reads Batches, Show, Senior review, batch card; the narrow disclosure holds Senior review, not the batch card (§5.1)", () => {
+    const desk = stubDesk(NAPA, { role: "senior", slots: {
+      batchesNav: <nav data-part="batches">Batches</nav>, seniorLinks: <div data-part="senior">Senior review</div>, batchCard: <div data-part="card">batch card</div> } });
+    const { container } = render(<WithDesk desk={desk}>
+      <DeskRecordContext reg={NAPA} filters={<div data-part="show">Show</div>} evidence={null} fallbackWidget={null} confirm={null} emptyText={null} pane={null}>
+        <p>napa</p>
+      </DeskRecordContext>
+    </WithDesk>);
+    const parts = (root: Element) => [...root.querySelectorAll("[data-part]")].map((e) => e.getAttribute("data-part"));
+    const aside = container.querySelector("aside.side")!;
+    expect(aside.getAttribute("aria-label")).toBe(DESK.sidebarLabel);
+    expect(parts(aside)).toEqual(["batches", "show", "senior", "card"]);
+    const disclosure = screen.getByText(DESK.sidebarLabel, { selector: "summary" }).closest("details")!;
+    expect(parts(disclosure)).toEqual(["batches", "show", "senior"]);
   });
 
   it("the complete view replaces the record; an empty view offers Show all", () => {

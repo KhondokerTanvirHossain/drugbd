@@ -11,10 +11,11 @@ public record IngredientSummary(String bdsId, String name, String raw, BigDecima
                                 BigDecimal perValue, String perUnit, List<Name> names, List<Code> codes, Coverage coverage,
                                 Ddinter ddinter) {
     public record Name(String name, String type, String source) {}
-    public record Code(String system, String code, String routeScope, String method, double confidence) {}
+    public record Code(String system, String code, String routeScope, String method, double confidence, SourceLinks.Source source) {}
     public record Coverage(String coverage, String note) {}
     public record Chosen(String ddinterId, String name, String routeScope, boolean routeAssumed) {}
     public record Counts(int major, int moderate, int minor, int unknown, int total) {}
-    public record Entry(String ddinterId, String name, String routeScope, Counts counts, int diseaseCount, int foodCount) {}
+    public record Entry(String ddinterId, String name, String routeScope, Counts counts, int diseaseCount, int foodCount,
+                        SourceLinks.Source source) {}
     public record Ddinter(List<Chosen> chosen, List<Entry> entries) {}
 }

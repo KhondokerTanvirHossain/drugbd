@@ -16,3 +16,5 @@ export { default as Severity } from "./Severity";
 export { default as StageCheck } from "./StageCheck";
 export { default as Wordmark, type WordmarkSize } from "./Wordmark";
 export { default as PairCard } from "./PairCard";
+export { default as SourceLink, SourceOf } from "./SourceLink";
+export { default as PairReviewState } from "./PairReviewState";

@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { DESK_NEW, NEW_COPY, NEW_COPY_ROWS, NOT_REVIEWED, fill } from "@/lib/copy";
-import { DESK, fillNodes, historyText, plural, savedText } from "@/lib/review-copy";
+import { DESK, ROLE_LABEL_DESK, fillNodes, historyText, plural, savedText, toastSub } from "@/lib/review-copy";
 
 const WEB = fileURLToPath(new URL("..", import.meta.url));
 
@@ -69,6 +69,10 @@ describe("P1B rows of the §1.7 table", () => {
       issueEngineer: "Issue reported by an engineer. Note:",
       noLongerCounts: "No longer counts: the record was re-run after it.",
       backSharedChange: `Shared substance data for this record changed after a pharmacist approved it. Readers see “${NOT_REVIEWED}” until a pharmacist approves it again.`,
+      carriedOver: "Approval carried over from batch {batchId}: nothing it covered changed.",
+      approvedSenior: "Approved by a senior pharmacist. Published.",
+      approvedSeniorMine: "Approved by a senior pharmacist (you). Published.",
+      issueSenior: "Issue reported by a senior pharmacist. Note:",
     });
     expect(NEW_COPY[NEW_COPY_ROWS.shortcutsMenuItem]).toEqual({ item: "Keyboard shortcuts and settings" });
     expect(NEW_COPY[NEW_COPY_ROWS.reviewLists]).toEqual({
@@ -157,6 +161,37 @@ describe("P1B rows of the §1.7 table", () => {
       .toBe("Issue reported by an engineer. Note:");
     expect(historyText({ kind: "decision", at, decision: "issue", role: "engineer", counts: true, mine: true }, "b"))
       .toBe("Issue reported (you). Note:");
+  });
+
+  it("P1C: a senior's lines are a pharmacist's, never an engineer's (§5.6.5, §5.13)", () => {
+    const at = "2026-10-15T09:00:00Z";
+    expect(ROLE_LABEL_DESK.senior).toBe("Senior pharmacist");
+    expect(toastSub("senior", 8)).toBe("Publishes in 8 seconds.");
+    expect(savedText("senior", "Napa")).toBe("Saved. Napa is approved by a pharmacist and published.");
+    expect(historyText({ kind: "decision", at, decision: "ok", role: "senior", counts: true, mine: false }, "b"))
+      .toBe("Approved by a senior pharmacist. Published.");
+    expect(historyText({ kind: "decision", at, decision: "ok", role: "senior", counts: true, mine: true }, "b"))
+      .toBe("Approved by a senior pharmacist (you). Published.");
+    expect(historyText({ kind: "decision", at, decision: "issue", role: "senior", counts: true, mine: false }, "b"))
+      .toBe("Issue reported by a senior pharmacist. Note:");
+    expect(historyText({ kind: "decision", at, decision: "dismiss", role: "senior", counts: true, mine: false }, "b"))
+      .toBe("Issue dismissed by a senior pharmacist. Note:");
+    expect(historyText({ kind: "decision", at, decision: "dismiss", role: "senior", counts: true, mine: true }, "b"))
+      .toBe("Issue dismissed (you). Note:");
+  });
+
+  it("P1C: the complete view says what re-opens a record now (§1.6 item 17, §5.12, D54)", () => {
+    expect(DESK.doneBody).toBe("Each record was approved by a pharmacist. If the pipeline changes data a record's approval covered, it goes back in review and leaves public view until a pharmacist approves it again.");
+  });
+
+  it("P1C: the dismissal's No longer counts suffix, and the re-run suffix when both apply (§5.6.5)", () => {
+    const at = "2026-10-15T09:00:00Z";
+    expect(historyText({ kind: "decision", at, decision: "issue", role: "pharmacist", counts: false, uncountedBy: "dismiss", mine: false }, "b"))
+      .toBe("Issue reported by a pharmacist. Note: No longer counts: a senior pharmacist dismissed the issue after it.");
+    expect(historyText({ kind: "decision", at, decision: "ok", role: "pharmacist", counts: false, uncountedBy: "rerun", mine: false }, "b"))
+      .toBe("Approved by a pharmacist. Published. No longer counts: the record was re-run after it.");
+    expect(historyText({ kind: "decision", at, decision: "ok", role: "pharmacist", counts: false, mine: false }, "b"))
+      .toBe("Approved by a pharmacist. Published. No longer counts: the record was re-run after it.");
   });
 });
 

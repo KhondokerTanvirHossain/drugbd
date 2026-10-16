@@ -28,7 +28,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang="en" data-theme={htmlThemeAttr(theme)}>
       <head>
-        <link rel="preload" href={ONEST_URL} as="font" type="font/woff2" crossOrigin="" />
+        {/* Low priority: the preload must not take bandwidth from the render-blocking CSS on Slow 4G (at default
+            priority Learn's LCP was 2505–2512 ms, §10.6). With font-display: optional a late Onest only means the
+            fallback font on that first view; later views use the cached font (§3.2, PO 16/10/2026). */}
+        <link rel="preload" href={ONEST_URL} as="font" type="font/woff2" crossOrigin="" fetchPriority="low" />
       </head>
       <body>
         {ownShell ? children : (

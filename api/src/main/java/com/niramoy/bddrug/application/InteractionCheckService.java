@@ -12,6 +12,8 @@ import com.niramoy.bddrug.domain.CheckResult.NotReviewed;
 import com.niramoy.bddrug.domain.CheckResult.SubstanceCoverage;
 import com.niramoy.bddrug.domain.DdinterCode;
 import com.niramoy.bddrug.domain.InteractionAlert;
+import com.niramoy.bddrug.domain.PairContent;
+import com.niramoy.bddrug.domain.PairReviewRule;
 import com.niramoy.bddrug.domain.RouteRule;
 import com.niramoy.bddrug.domain.Scope;
 import com.niramoy.bddrug.domain.Severity;
@@ -106,7 +108,7 @@ public class InteractionCheckService {
             for (int j = i + 1; j < usable.size(); j++)
                 for (Usable a : usable.get(i))
                     for (Usable b : usable.get(j))
-                        if (!a.bdsId().equals(b.bdsId())) alertsFor(a, b, pairs, alerts);
+                        if (!a.bdsId().equals(b.bdsId())) alertsFor(a, b, pairs, data.reviews(), alerts);
         alerts.sort(Comparator.comparingInt(a -> Severity.rank(a.severity())));   // stable: keeps product order
 
         List<Duplicate> duplicates = new ArrayList<>();
@@ -135,7 +137,8 @@ public class InteractionCheckService {
         return out;
     }
 
-    private static void alertsFor(Usable a, Usable b, Map<String, PairRow> pairs, List<InteractionAlert> out) {
+    private static void alertsFor(Usable a, Usable b, Map<String, PairRow> pairs, Map<String, List<PairReviewRule.Decision>> reviews,
+                                  List<InteractionAlert> out) {
         boolean assumed = a.choice().routeAssumed() || b.choice().routeAssumed();
         Set<String> seen = new HashSet<>();
         for (DdinterCode ca : a.choice().codes())
@@ -144,10 +147,13 @@ public class InteractionCheckService {
                 String key = pairKey(ca.code(), cb.code());
                 PairRow pair = pairs.get(key);
                 if (pair == null || !seen.add(key)) continue;
+                String hash = PairContent.hash(pair.ddinterA(), pair.ddinterB(),
+                    new PairContent.Content(pair.severity(), pair.actions(), pair.interaction(), pair.management()));
                 out.add(new InteractionAlert(pair.severity(),
                     new InteractionAlert.Side(a.conceptId(), a.bdsId(), a.name()),
                     new InteractionAlert.Side(b.conceptId(), b.bdsId(), b.name()),
-                    pair.actions(), pair.interaction(), pair.management(), assumed, SOURCE));
+                    pair.actions(), pair.interaction(), pair.management(), assumed, SOURCE, pair.ddinterA(), pair.ddinterB(),
+                    PairReviewRule.publicReview(reviews.getOrDefault(pair.ddinterA() + "|" + pair.ddinterB(), List.of()), hash)));
             }
     }
 

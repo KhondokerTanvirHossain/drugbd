@@ -4,20 +4,20 @@ import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type 
 import TurnstileField from "@/components/TurnstileField";
 import ProgressMeter from "@/components/ui/ProgressMeter";
 import Wordmark from "@/components/ui/Wordmark";
-import { DESK_NEW, STALE_TITLE, fill } from "@/lib/copy";
+import { DESK_NEW, P1C_COPY, STALE_TITLE, fill } from "@/lib/copy";
 import { decide, loadDiff, logEvidence, logRecordOpen } from "@/lib/desk-actions";
 import { announce as announceTo } from "@/lib/live-region";
 import { DESK_SETTINGS_EVENT, KEYS_COOKIE, UNDO_COOKIE, deskCookieString, type UndoSeconds } from "@/lib/desk-settings";
 import { DESK, ROLE_LABEL_DESK, savedText } from "@/lib/review-copy";
 import { sameVersion, type DiffRow, type DisplayStatus, type ReviewerRole, type Version } from "@/lib/review-types";
 import { advance, type AdvanceRow } from "./desk/advance";
-import { NOTE_MIN, approveHint, noteLength, reportHint, sendHint, type BarCtx } from "./desk/bar-state";
+import { NOTE_MIN, approveHint, dismissHint, noteLength, reportHint, sendDismissHint, sendHint, type BarCtx } from "./desk/bar-state";
 import {
   TOKEN_WAIT_MS, blocksUnload, initialMachine, staleReason, step, toOutcome, toastView, tokenPlan, unconfirmedOn, windowOn,
   type Effect, type Event, type MachineState, type Op,
 } from "./desk/commit-machine";
 import { DeskCtx, type DeskApi, type HeldRecord, type RecordRegistration, type RowRef } from "./desk/context";
-import { clearDraft, loadDraft, saveDraft } from "./desk/drafts";
+import { clearDraft, dismissDraftKey, loadDraft, loadDraftAt, saveDraft, saveDraftAt } from "./desk/drafts";
 import { batchHref, isDeskPath, recordHref, versionsHref } from "./desk/hrefs";
 import { IS_MAC_RE, keyAction, targetKind } from "./desk/keys";
 import { POLL_MS, compareRows, pollVerdict } from "./desk/poll";
@@ -28,7 +28,7 @@ import styles from "./desk.module.css";
 export type ReviewDeskProps = {
   batchId: string; role: ReviewerRole; total: number; counts: { approved: number; issue: number };
   undoSeconds: UndoSeconds; singleKeys: boolean; siteKey: string | null; nonce?: string;
-  account: ReactNode; batchesNav: ReactNode; batchCard: ReactNode; children: ReactNode;
+  account: ReactNode; batchesNav: ReactNode; batchCard: ReactNode; seniorLinks?: ReactNode; children: ReactNode;
 };
 
 const TRANSITION_MS = 300;
@@ -65,6 +65,10 @@ export default function ReviewDesk(props: ReviewDeskProps) {
   const reportRef = useRef(false);
   const [note, setNoteText] = useState("");
   const [noteError, setNoteError] = useState(false);
+  const [dismissOpen, setDismissOpen] = useState(false);
+  const dismissRef = useRef(false);
+  const [dismissNote, setDismissNoteText] = useState("");
+  const [dismissError, setDismissError] = useState(false);
   const [hint, setHintText] = useState<string | null>(null);
   const hintTimer = useRef<number | undefined>(undefined);
   /** The page's one polite live region (§10.2). P1A's announce() clears it and writes after ANNOUNCE_DELAY_MS (60 ms). */
@@ -114,6 +118,7 @@ export default function ReviewDesk(props: ReviewDeskProps) {
   };
   const statusOf = (id: string, fallback: DisplayStatus) => overridesRef.current[id] ?? fallback;
   const setReport = (v: boolean) => { reportRef.current = v; setReportOpen(v); };
+  const setDismiss = (v: boolean) => { dismissRef.current = v; setDismissOpen(v); };
   const setDone = (v: boolean) => { completeRef.current = v; setComplete(v); };
   const inBatch = (pathname: string) => isDeskPath(pathname, batchId) || pathname === batchHref(batchId);
 
@@ -121,7 +126,7 @@ export default function ReviewDesk(props: ReviewDeskProps) {
     const o = openRef.current;
     return { loading: navigating.current, complete: completeRef.current, role, batchId,
       record: o ? { conceptId: o.conceptId, name: o.tradeName, status: statusOf(o.conceptId, o.displayStatus), stagesBlocked: o.stagesBlocked } : null,
-      stale: o ? staleRef.current[o.conceptId] !== undefined : false, drawerOpen, reportOpen: reportRef.current, machine: m.current,
+      stale: o ? staleRef.current[o.conceptId] !== undefined : false, drawerOpen, reportOpen: reportRef.current, dismissOpen: dismissRef.current, machine: m.current,
       undoSeconds, advanceGuard: guard, now: performance.now() };
   }
 
@@ -256,8 +261,14 @@ export default function ReviewDesk(props: ReviewDeskProps) {
     setOverrides(overridesRef.current);
     const o = openRef.current;
     if (fx.channel === "report") {
-      clearDraft(batchId, id);
-      if (o?.conceptId === id) { setNoteText(""); setNoteError(false); setReport(false); requestFocus("report"); }
+      if (fx.op.decision === "dismiss") {
+        // §5.10a on success: draft cleared, panel closed, focus to Looks correct (the Dismiss button is gone), no auto-advance.
+        saveDraftAt(dismissDraftKey(batchId, id), "");
+        if (o?.conceptId === id) { setDismissNoteText(""); setDismissError(false); setDismiss(false); requestFocus("approve"); }
+      } else {
+        clearDraft(batchId, id);
+        if (o?.conceptId === id) { setNoteText(""); setNoteError(false); setReport(false); requestFocus("report"); }
+      }
       router.refresh();
       return;
     }
@@ -338,6 +349,14 @@ export default function ReviewDesk(props: ReviewDeskProps) {
     const prev = openRef.current;
     openRef.current = reg;
     setOpen(reg);
+    // §5.8.2: SEND_DISMISS is allowed only while the record is `issue`. When a refresh shows it no longer is (another senior
+    // dismissed it, a 409 no_issue, a re-run), the panel closes and its draft stays; focus leaves the closed panel.
+    if (dismissRef.current && statusOf(reg.conceptId, reg.displayStatus) !== "issue") {
+      const inPanel = document.getElementById("bar-dismiss")?.contains(document.activeElement) ?? false;
+      setDismiss(false);
+      setDismissError(false);
+      if (inPanel) requestFocus("approve");
+    }
     if (prev?.conceptId === reg.conceptId) {
       // Same record, new filter or search (Show all): the list is what changed, so focus goes where navigate() asked.
       announceLoaded();
@@ -352,6 +371,9 @@ export default function ReviewDesk(props: ReviewDeskProps) {
     setReport(false);
     setNoteError(false);
     setNoteText(loadDraft(batchId, reg.conceptId));
+    setDismiss(false);
+    setDismissError(false);
+    setDismissNoteText(loadDraftAt(dismissDraftKey(batchId, reg.conceptId)));
     setDiff(null);
     setDiffOpen(false);
     if (staleRef.current[reg.conceptId] === "rerun") loadDiffFor(reg.conceptId);
@@ -406,7 +428,7 @@ export default function ReviewDesk(props: ReviewDeskProps) {
     navigate(o.rows[j].href);
   }
 
-  function newOp(o: RecordRegistration, decision: "ok" | "issue", text: string): Op {
+  function newOp(o: RecordRegistration, decision: "ok" | "issue" | "dismiss", text: string): Op {
     return { conceptId: o.conceptId, name: o.tradeName, role, decision, note: text,
       viewedVersion: viewed.current.get(o.conceptId)?.version ?? o.version, requestId: crypto.randomUUID() };
   }
@@ -424,6 +446,7 @@ export default function ReviewDesk(props: ReviewDeskProps) {
     if (reportRef.current) { requestFocus("note"); return; }
     const h = reportHint(barNow());
     if (h.block || !o) { if (h.text) showHint(h.text); return; }
+    if (dismissRef.current) setDismiss(false);   // one panel at a time; the dismiss draft stays (§5.7)
     setNoteText(loadDraft(batchId, o.conceptId));
     setNoteError(false);
     setReport(true);
@@ -452,6 +475,57 @@ export default function ReviewDesk(props: ReviewDeskProps) {
     if (h) { showHint(h); return; }
     if (noteLength(note) < NOTE_MIN) { setNoteError(true); announce(DESK.noteError); requestFocus("note"); return; }
     fire({ type: "SEND_REPORT", op: newOp(o, "issue", note.trim()), token: tokenState() });
+  }
+
+  /** D and the Dismiss issue button (§5.10a). For any role but senior, D does nothing and shows no hint. */
+  function keyDismiss() {
+    const o = openRef.current;
+    if (role !== "senior") return;
+    if (dismissRef.current) { requestFocus("dismiss-note"); return; }
+    const h = dismissHint(barNow());
+    if (h.block || !o) { if (h.text) showHint(h.text); return; }
+    if (reportRef.current) setReport(false);   // opening Dismiss closes Report; its draft stays in storage
+    setDismissNoteText(loadDraftAt(dismissDraftKey(batchId, o.conceptId)));
+    setDismissError(false);
+    setDismiss(true);
+    requestFocus("dismiss-note");
+  }
+
+  function closeDismiss(focusBack: boolean, discard: boolean) {
+    const o = openRef.current;
+    if (discard && o) { saveDraftAt(dismissDraftKey(batchId, o.conceptId), ""); setDismissNoteText(""); }
+    setDismiss(false);
+    setDismissError(false);
+    if (focusBack) requestFocus("dismiss");
+  }
+
+  function setDismissNote(v: string) {
+    setDismissNoteText(v);
+    const o = openRef.current;
+    if (o) saveDraftAt(dismissDraftKey(batchId, o.conceptId), v);
+    if (noteLength(v) >= NOTE_MIN) setDismissError(false);
+  }
+
+  function sendDismiss() {
+    const o = openRef.current;
+    if (!o) return;
+    if (barNow().record?.status !== "issue") {
+      // §5.8.2: a dismissal only for an `issue` record; the reducer cannot see the status. The draft stays.
+      showHint(P1C_COPY.dismiss.hintNoIssue);
+      setDismiss(false);
+      setDismissError(false);
+      requestFocus("approve");
+      return;
+    }
+    const h = sendDismissHint(barNow());
+    if (h) { showHint(h); return; }
+    if (noteLength(dismissNote) < NOTE_MIN) {
+      setDismissError(true);
+      announce(P1C_COPY.dismiss.noteError);
+      requestFocus("dismiss-note");
+      return;
+    }
+    fire({ type: "SEND_DISMISS", op: newOp(o, "dismiss", dismissNote.trim()), token: tokenState() });
   }
 
   function toggleDrawer(on = !drawerOpen) {
@@ -517,13 +591,13 @@ export default function ReviewDesk(props: ReviewDeskProps) {
     clearStale(id);
     if (openRef.current?.conceptId !== id) return;
     announce(DESK.reloaded);
-    requestFocus(reportRef.current ? "note" : "approve");
+    requestFocus(reportRef.current ? "note" : dismissRef.current ? "dismiss-note" : "approve");
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
     const target = e.target as HTMLElement;
     const action = keyAction(e, { singleKeys, sheetOpen, target: targetKind(target), drawerOpen, reportOpen: reportRef.current,
-      searchHasText: target instanceof HTMLInputElement && target.value.length > 0 });
+      dismissOpen: dismissRef.current, searchHasText: target instanceof HTMLInputElement && target.value.length > 0 });
     if (!action) return;
     e.preventDefault();
     switch (action) {
@@ -542,6 +616,9 @@ export default function ReviewDesk(props: ReviewDeskProps) {
       case "closeReport": closeReport(true, false); break;
       case "clearSearch": searchClear.current?.(); break;
       case "sendReport": sendReport(); break;
+      case "dismiss": keyDismiss(); break;
+      case "closeDismiss": closeDismiss(true, false); break;
+      case "sendDismiss": sendDismiss(); break;
       case "enterBlocked": showHint(DESK.enterBlocked); break;
     }
   }
@@ -574,7 +651,7 @@ export default function ReviewDesk(props: ReviewDeskProps) {
   useEffect(() => {
     if (!focusReq) return;
     const el = focusReq.key === "desk" ? root.current
-      : focusReq.key === "note" ? document.getElementById("note")
+      : focusReq.key === "note" || focusReq.key === "dismiss-note" ? document.getElementById(focusReq.key)
       : root.current?.querySelector<HTMLElement>(`[data-fk="${focusReq.key}"]`) ?? root.current;
     el?.focus();
   }, [focusReq]);
@@ -664,7 +741,7 @@ export default function ReviewDesk(props: ReviewDeskProps) {
   const reportErr = machine.report.kind === "netErr" ? machine.report : null;
   const api: DeskApi = {
     ready, batchId, role, total: props.total, singleKeys, undoSeconds, machine, bar, complete, hint, botState, retryBusy,
-    drawerOpen, sheetOpen, reportOpen, note, noteError, diff, diffOpen, slots: { batchesNav: props.batchesNav, batchCard: props.batchCard },
+    drawerOpen, sheetOpen, reportOpen, note, noteError, dismissOpen, dismissNote, dismissError, diff, diffOpen, slots: { batchesNav: props.batchesNav, batchCard: props.batchCard, seniorLinks: props.seniorLinks },
     staleFor: (id) => stale[id] ?? null,
     netErrFor: (id) => (commitErr?.op.conceptId === id ? commitErr.saved : reportErr?.op.conceptId === id ? reportErr.saved : null),
     statusFor: (id, fallback) => overrides[id] ?? fallback,
@@ -675,6 +752,7 @@ export default function ReviewDesk(props: ReviewDeskProps) {
     },
     clickReport: () => (reportRef.current ? setReport(false) : keyReport()),
     closeReport, setNote, sendReport,
+    clickDismiss: () => (dismissRef.current ? setDismiss(false) : keyDismiss()), closeDismiss, setDismissNote, sendDismiss,
     undo: () => {
       const inToast = document.activeElement?.closest(".toast");
       fire({ type: "PRESS_U" });
@@ -713,7 +791,7 @@ export default function ReviewDesk(props: ReviewDeskProps) {
           <Toast view={toastView(machine)} seconds={machine.undoMs / 1000} singleKeys={singleKeys} onUndo={api.undo} />
         </div>
         <ShortcutsSheet open={sheetOpen} onClose={closeSheet} undoSeconds={undoSeconds} singleKeys={singleKeys} sendKeys={sendKeys}
-          onUndo={chooseUndo} onKeys={chooseKeys} />
+          onUndo={chooseUndo} onKeys={chooseKeys} role={role} />
         {props.siteKey && (
           <div className={styles.turnstile}>
             <TurnstileField siteKey={props.siteKey} action="decision" nonce={props.nonce} resetKey={resetKey} appearance="interaction-only"

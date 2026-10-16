@@ -1,6 +1,6 @@
 import { Fragment, createElement, type ReactNode } from "react";
-import { APPROVED, DESK_NEW, UNCLASSIFIED_NOT_LOW_RISK, fill } from "./copy";
-import type { HistoryEntry, ReviewerRole, StageKey } from "./review-types";
+import { APPROVED, DESK_NEW, P1C_COPY, UNCLASSIFIED_NOT_LOW_RISK, fill } from "./copy";
+import { actsAsPharmacist, type DisplayStatus, type HistoryEntry, type ReviewerRole, type StageKey } from "./review-types";
 
 /*
  * Board R wording for the review workspace (docs/artifacts/2026-10-12-intellidrugs-reviewer.html). Client-safe.
@@ -170,7 +170,7 @@ export const DESK = {
   emptyView: "No records in this view. Show all {n} records to move.",
   noAuthAnnounce: "Your account can't review this batch. Your decision on {name} was not saved.",
   doneTitle: "Batch {id} approved. {n} records are now public.",
-  doneBody: "Each record was approved by a pharmacist. If the pipeline re-runs a record, it goes back in review and leaves public view until a pharmacist approves it again.",
+  doneBody: "Each record was approved by a pharmacist. If the pipeline changes data a record's approval covered, it goes back in review and leaves public view until a pharmacist approves it again.",
   openRecord1: "Open record 1",
   loadingStatus: "Loading batch {id}",
   loaded: "Batch {id} loaded.",
@@ -185,7 +185,7 @@ export const DESK = {
   reviewDesk: "Review desk",
 } as const;
 
-export const ROLE_LABEL_DESK: Record<ReviewerRole, string> = { pharmacist: "Pharmacist", engineer: "Engineer" };
+export const ROLE_LABEL_DESK: Record<ReviewerRole, string> = { pharmacist: "Pharmacist", engineer: "Engineer", senior: P1C_COPY.senior.badge };
 export const STAGE_NAME: Record<StageKey, string> = { dgda: "DGDA load", substances: "Substances", clinical: "Clinical drug", ddinter: "DDInter" };
 
 /** The key row under the decision bar (Board R), as [keys, words] pairs. */
@@ -194,21 +194,38 @@ export const KEY_ROW: [string[], string][] = [
   [["S"], "DGDA source"], [["?"], "all keys"],
 ];
 
-/** The shortcuts sheet rows (Board R); the first uses the reviewer's undo window. */
-export const SHEET_ROWS = (n: number): [string, string][] => [
+/** §5.7 item 8: for a senior on an `issue` record, "D dismiss issue" follows "R report". */
+export function keyRow(role: ReviewerRole, status: DisplayStatus | undefined): [string[], string][] {
+  if (role !== "senior" || status !== "issue") return KEY_ROW;
+  const at = KEY_ROW.findIndex(([keys]) => keys[0] === "R") + 1;
+  return [...KEY_ROW.slice(0, at), [["D"], P1C_COPY.dismiss.keyRow], ...KEY_ROW.slice(at)];
+}
+
+const THIS_SHEET = "This sheet";
+const SEND_IN_FIELD = "Send the report, inside the note field";
+/** The shortcuts sheet rows (Board R); the first uses the reviewer's undo window. A senior also gets D (§5.14 P1C). */
+export const SHEET_ROWS = (n: number, role: ReviewerRole = "pharmacist"): [string, string][] => [
   ["A", `Looks correct, then an ${n}-second undo window`], ["U", "Undo during the window"], ["R", "Report an issue"],
+  ...(role === "senior" ? [["D", P1C_COPY.dismiss.sheetRow] as [string, string]] : []),
   ["J K", "Next and previous record"], ["E", "Evidence: raw DGDA row and pipeline notes"], ["S", "Open the DGDA source"],
-  ["?", "This sheet"], ["Esc", "Close the sheet, the evidence or the note"], ["SEND", "Send the report, inside the note field"],
+  ["?", THIS_SHEET], ["Esc", "Close the sheet, the evidence or the note"], ["SEND", SEND_IN_FIELD],
   ["Enter", "Never approves"],
+];
+
+/** §5.17.5 senior shortcuts sheet. "SEND" is the platform's Ctrl/Cmd Enter. */
+export const SENIOR_SHEET_ROWS: [string, string][] = [
+  ["J K", P1C_COPY.review.sheetNext], ["M", P1C_COPY.review.sheetMark], ["R", P1C_COPY.review.sheetReport], ["?", THIS_SHEET],
+  ["Esc", P1C_COPY.review.sheetClose], ["SEND", SEND_IN_FIELD], ["Enter", P1C_COPY.review.sheetEnter],
 ];
 
 export const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 
+/** A senior's toast and saved text are a pharmacist's (§5.13): a senior's approval publishes. */
 export const toastSub = (role: ReviewerRole, n: number) =>
-  role === "pharmacist" ? `Publishes in ${n} seconds.` : `Your check saves in ${n} seconds. It does not publish.`;
+  actsAsPharmacist(role) ? `Publishes in ${n} seconds.` : `Your check saves in ${n} seconds. It does not publish.`;
 
 export const savedText = (role: ReviewerRole, name: string) =>
-  role === "pharmacist" ? `Saved. ${name} is approved by a pharmacist and published.` : `Saved. Your check on ${name} is recorded. It does not publish.`;
+  actsAsPharmacist(role) ? `Saved. ${name} is approved by a pharmacist and published.` : `Saved. Your check on ${name} is recorded. It does not publish.`;
 
 /** Substitutes placeholders with nodes (mono ids), keeping the text around them. */
 export function fillNodes(template: string, values: Record<string, ReactNode>): ReactNode[] {
@@ -218,19 +235,24 @@ export function fillNodes(template: string, values: Record<string, ReactNode>): 
   });
 }
 
-/** One history line (§5.6.5). The note itself is rendered separately, in .raw. */
+/** One history line (§5.6.5). The note itself is rendered separately, in .raw; a carried approval's line by History. */
 export function historyText(e: HistoryEntry, batchId: string): string {
-  const h = DESK_NEW.history;
+  const h = DESK_NEW.history, d = P1C_COPY.dismiss;
   let text: string;
   if (e.kind === "run") return fill(h.run, { id: batchId });
   if (e.kind === "extract") return e.reason === "shared_change" ? h.sharedChange : e.reason === "rerun" ? DESK.reran : DESK.extracted;
-  if (e.decision === "ok") {
-    if (e.role === "pharmacist") text = e.mine ? DESK.approvedHistoryMine : DESK.approvedHistory;
+  if (e.decision === "dismiss") {
+    text = e.mine ? d.historyDismissedMine : d.historyDismissed;
+  } else if (e.decision === "ok") {
+    if (e.role === "senior") text = e.mine ? h.approvedSeniorMine : h.approvedSenior;
+    else if (e.role === "pharmacist") text = e.mine ? DESK.approvedHistoryMine : DESK.approvedHistory;
     else text = e.mine ? h.engineerCheckedMine : h.engineerChecked;
   } else {
-    text = e.mine ? DESK.issueMine : e.role === "pharmacist" ? h.issuePharmacist : h.issueEngineer;
+    text = e.mine ? DESK.issueMine : e.role === "senior" ? h.issueSenior : e.role === "pharmacist" ? h.issuePharmacist : h.issueEngineer;
   }
-  return e.counts === false ? `${text} ${h.noLongerCounts}` : text;
+  if (e.counts !== false) return text;
+  // §5.6.5: when a decision is at or before both a dismissal and the current stamp, the re-run suffix wins (the API sends "rerun").
+  return `${text} ${e.uncountedBy === "dismiss" ? d.noLongerCountsDismiss : h.noLongerCounts}`;
 }
 
 /** The approved pill's wording, for the "done" view (rendered through ReviewStatus elsewhere). */
@@ -239,4 +261,14 @@ export const APPROVED_TEXT = APPROVED;
 /** §5.16 Board DS copy that Board R does not draw: the batch banner body. New §1.7 copy lives in NEW_COPY (Task 9). */
 export const REVIEW_LISTS = {
   batchBannerBody: "The batch is approved when every record is approved by a pharmacist.",
+} as const;
+
+/**
+ * Short labels the P1C surfaces need that other modules already print as literals (the substance page, Learn, CodeChip,
+ * the desk). As NEW_COPY values they would fail P1A's retyping guard on those modules, so they are shared words here.
+ */
+export const SHARED_WORDS = {
+  status: "Status", substance: "Substance", substances: "Substances", reload: "Reload", bdsId: "BDS id",
+  ddinterEntries: "DDInter entries", sources: "Sources", names: "Names", codes: "Codes", route: "Route", strength: "Strength",
+  all: "All", ddinter: "DDInter 2.0", drugbank: "DrugBank", icd11: "ICD-11", clinicalDrug: "Clinical drug", severity: "Severity",
 } as const;

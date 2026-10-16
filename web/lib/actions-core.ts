@@ -5,7 +5,7 @@ import { createFlag, resolveFlag, type FlagTarget } from "./api";
 import { allowAccountAction } from "./limits";
 import { clientIp } from "./rate-limit";
 import { requestId } from "./request-id";
-import type { ReviewerRole } from "./reviewers";
+import { isReviewer } from "./reviewers";
 import { getSession, type Session } from "./session";
 import { TURNSTILE_RESPONSE_FIELD, verifyTurnstile } from "./turnstile";
 import type { TurnstileAction } from "./turnstile-actions";
@@ -32,8 +32,6 @@ const field = (fd: FormData, name: string) => {
   const v = fd.get(name);
   return typeof v === "string" ? v : "";
 };
-const isReviewer = (s: Session | null): s is Session & { role: ReviewerRole } =>
-  s?.role === "pharmacist" || s?.role === "engineer";
 const validId = (s: string) => s.length > 0 && s.length <= ID_MAX;
 
 async function turnstilePassed(fd: FormData, action: TurnstileAction): Promise<boolean> {

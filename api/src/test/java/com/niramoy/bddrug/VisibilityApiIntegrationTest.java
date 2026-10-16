@@ -21,7 +21,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Review Focus 1 at API level: an anonymous (scope=public) request never sees an unapproved record.
  * Approved here: W-1, N-1 and C-CAP (C-CAP's latest batch item is ok). Hidden: A-1 (pending), C-EYE (issue),
- * W-2 (approved in an older batch, pending in the newer one) and every product without a batch item.
+ * W-2 (approved in an older batch, pending in the newer one) and every product without a batch item. D-1 (Motigut) was approved and then removed from its batch file: its latest item is ok and marked removed (PO D7).
  */
 @Testcontainers
 @SpringBootTest
@@ -44,6 +44,12 @@ class VisibilityApiIntegrationTest {
              ('V-old','DGDA-Drugs','C-CAP','pending', now() - interval '3 hour'),
              ('V-new','DGDA-Drugs','W-2','pending', now() - interval '1 hour'),
              ('V-new','DGDA-Drugs','C-CAP','ok', now() - interval '1 hour');
+            -- PO D7: approved, then removed from its batch file (the product's latest item): never public anywhere
+            INSERT INTO ops.batch (batch_id, item_count, run_at) VALUES ('V-rm', 0, now() - interval '4 hour');
+            INSERT INTO ops.batch_item (batch_id, source, concept_id, review, note, extracted_at) VALUES
+             ('V-rm','DGDA-Drugs','D-1','ok','removed from batch file', now() - interval '4 hour');
+            INSERT INTO ops.review_decision (batch_id, concept_id, decision, note, reviewer_email, reviewer_role, decided_at) VALUES
+             ('V-rm','D-1','ok','','pharma.reviewer@example.org','pharmacist', now() - interval '230 minute');
             """);
     }
 
@@ -109,7 +115,7 @@ class VisibilityApiIntegrationTest {
     @Test void unapprovedProductDetailIsTheHiddenShape() {
         expectHidden("A-1", "Ecosprin", "pending");
         expectHidden("C-EYE", "Optimycin", "issue");
-        expectHidden("D-1", "Motigut", "pending");          // no batch item at all
+        expectHidden("D-1", "Motigut", "pending");          // approved, then removed from its batch file (PO D7)
         expectHidden("W-2", "Coumarol", "pending");         // approved before, re-run in a newer batch
     }
 
@@ -284,5 +290,52 @@ class VisibilityApiIntegrationTest {
             .returnResult().getResponseBody());
         assertThat(body).doesNotContain("Warfarin", "Test Pharma", "BDS-", "BDC-", "XM5S93", "DDInter", "genericContentRaw",
             "reviewStatus", "\"issue\"", "company", "strength");
+    }
+
+    // ---- PO D7 (§7.4, §11.3): the approved-then-removed fixture on every public endpoint of the matrix
+
+    @Test void anApprovedThenRemovedProductIsNeverPublicOnAnyEndpoint() {
+        expectHidden("D-1", "Motigut", "pending");
+        web.get().uri("/v1/products?q=motigut").exchange().expectStatus().isOk().expectBody().jsonPath("$.data.length()").isEqualTo(0);
+        String loaded = str(web.get().uri("/v1/products/loaded").exchange().expectStatus().isOk().expectBody().returnResult().getResponseBody());
+        assertThat(loaded).doesNotContain("D-1", "Motigut");
+        web.get().uri("/v1/substances/BDS-000004").exchange().expectStatus().isOk().expectBody().jsonPath("$.data.hidden").isEqualTo(true);
+        String checked = str(check(web, null, "W-1", "D-1").expectStatus().isOk().expectBody()
+            .jsonPath("$.data.products[*].conceptId").isEqualTo(List.of("W-1"))
+            .jsonPath("$.data.notReviewed[*].conceptId").isEqualTo(List.of("D-1"))
+            .jsonPath("$.data.alerts.length()").isEqualTo(0)
+            .jsonPath("$.data.noData.length()").isEqualTo(0)
+            .returnResult().getResponseBody());
+        assertThat(checked).doesNotContain("Motigut", "Domperidone", "BDS-000004");
+        web.get().uri("/v1/stats").exchange().expectStatus().isOk().expectBody()
+            .jsonPath("$.data.approvedProducts").isEqualTo(3)
+            .jsonPath("$.data.batches[?(@.batchId == 'V-rm')].items[0].status").isEqualTo(List.of("not_reviewed"))
+            .jsonPath("$.data.batches[?(@.batchId == 'V-rm')].items[0].exampleUsable").isEqualTo(List.of(false));
+    }
+
+    // ---- P1C public pairReview (§7.4, D53): coarse, never changed or issue, never a note, role or email
+
+    @Test void publicPairReviewIsReviewedOnlyForACurrentReview() throws Exception {
+        check(web, null, "N-1", "W-1").expectStatus().isOk().expectBody()
+            .jsonPath("$.data.alerts[0].ddinterA").isEqualTo("DDInter14")
+            .jsonPath("$.data.alerts[0].ddinterB").isEqualTo("DDInter1951")
+            .jsonPath("$.data.alerts[0].pairReview.state").isEqualTo("not_reviewed")
+            .jsonPath("$.data.alerts[0].pairReview.reviewedAt").isEmpty();
+        String row = "INSERT INTO ops.pair_review (ddinter_a, ddinter_b, decision, note, content_hash, content, reviewer_email, reviewer_role) " +
+                     "VALUES ('DDInter14', 'DDInter1951', '%s', '%s', '%s', '{}', 'senior.reviewer@example.org', 'senior')";
+        String current = com.niramoy.bddrug.domain.PairContent.hash("DDInter14", "DDInter1951",
+            new com.niramoy.bddrug.domain.PairContent.Content("moderate", List.of(), null, null));
+        exec(pg, row.formatted("reviewed", "", "f".repeat(64)));                         // reviewed, then DDInter changed it
+        exec(pg, row.formatted("issue", "Text contradicts the severity; check", current));   // then a senior reported an issue
+        String body = str(check(web, null, "N-1", "W-1").expectStatus().isOk().expectBody()
+            .jsonPath("$.data.alerts[0].pairReview.state").isEqualTo("not_reviewed")
+            .jsonPath("$.data.alerts[0].interaction").isEmpty()
+            .jsonPath("$.data.alerts[0].severity").isEqualTo("moderate")   // the alert is never hidden (G3)
+            .returnResult().getResponseBody());
+        assertThat(body).doesNotContain("contradicts", "senior", "issue", "changed", "@example.org");
+        exec(pg, row.formatted("reviewed", "", current));
+        check(web, null, "N-1", "W-1").expectStatus().isOk().expectBody()
+            .jsonPath("$.data.alerts[0].pairReview.state").isEqualTo("reviewed")
+            .jsonPath("$.data.alerts[0].pairReview.reviewedAt").isNotEmpty();
     }
 }

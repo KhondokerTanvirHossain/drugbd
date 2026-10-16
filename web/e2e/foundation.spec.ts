@@ -1,5 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test } from "@playwright/test";
+import { type APIRequestContext, expect, test } from "@playwright/test";
 import { BASE_URL, signInAs } from "./session";
 
 const WCAG = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
@@ -40,6 +40,57 @@ test.describe("liveness and headers (§9.4)", () => {
     await expect(page.getByText("Bot check passed")).toBeVisible({ timeout: 20_000 });
     expect(violations).toEqual([]);
   });
+});
+
+test.describe("self-hosted fonts (§3.2)", () => {
+  // Every /fonts/*.woff2 a page preloads in its HTML or references from its stylesheets must ship in the web image.
+  const fontUrls = async (request: APIRequestContext, path: string) => {
+    const html = await (await request.get(path)).text();
+    const sheets = (html.match(/<link\b[^>]*>/g) ?? []).filter((t) => /\brel="stylesheet"/.test(t))
+      .map((t) => /\bhref="([^"]+)"/.exec(t)?.[1]).filter((h): h is string => !!h);
+    expect(sheets.length).toBeGreaterThan(0);
+    const css = await Promise.all(sheets.map(async (s) => (await request.get(s)).text()));
+    const urls = [html, ...css].flatMap((t) => [...t.matchAll(/\/fonts\/[\w.-]+\.woff2/g)].map((m) => m[0]));
+    return [...new Set(urls)];
+  };
+
+  for (const path of ["/learn/start", "/signin"]) {
+    test(`every font ${path} preloads or references answers 200 as a font`, async ({ request }) => {
+      const urls = await fontUrls(request, path);
+      expect(urls).toEqual(expect.arrayContaining(["/fonts/onest-latin-wght-normal.woff2",
+        "/fonts/ibm-plex-mono-latin-400-normal.woff2", "/fonts/ibm-plex-mono-latin-500-normal.woff2"]));
+      for (const url of urls) {
+        const res = await request.get(url);
+        expect(`${url} ${res.status()}`).toBe(`${url} 200`);
+        expect(res.headers()["content-type"]).toMatch(/^font\/woff2/);
+      }
+    });
+
+    // font-display: optional (§3.2, PO 16/10/2026): a first view may keep the fallback if Onest misses the ~100 ms block
+    // period, so the first view only proves Onest loads; the reload, with Onest cached, must render the heading in it.
+    test(`${path} loads Onest and a reload renders in Onest, not a fallback font`, async ({ page }) => {
+      const onestState = () => page.evaluate(async () => {
+        await document.fonts.ready;
+        const onest = [...document.fonts].filter((f) => f.family.replace(/"/g, "") === "Onest").map((f) => f.status);
+        return { onest, check: document.fonts.check("16px Onest") };
+      });
+      await page.goto(path);
+      expect(await onestState()).toEqual({ onest: ["loaded"], check: true });
+
+      await page.reload();
+      expect(await onestState()).toEqual({ onest: ["loaded"], check: true });
+      const cdp = await page.context().newCDPSession(page);
+      await cdp.send("DOM.enable");
+      await cdp.send("CSS.enable");
+      const { root } = await cdp.send("DOM.getDocument");
+      const { nodeId } = await cdp.send("DOM.querySelector", { nodeId: root.nodeId, selector: "h1" });
+      expect(nodeId).toBeGreaterThan(0);
+      const { fonts } = await cdp.send("CSS.getPlatformFontsForNode", { nodeId });
+      // The font that drew most of the heading's glyphs (a glyph outside the latin subset may fall back).
+      const main = fonts.reduce((a, b) => (b.glyphCount > a.glyphCount ? b : a));
+      expect(`${main.familyName} custom=${main.isCustomFont}`).toMatch(/^Onest\b.* custom=true$/);
+    });
+  }
 });
 
 test.describe("theme (§3.3)", () => {

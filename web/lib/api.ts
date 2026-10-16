@@ -1,7 +1,9 @@
 import "server-only";
 import type {
-  DeskOutcome, FilterKey, FlagItem, FlagPage, ItemsPage, ReviewBatchSummary, ReviewDiff, ReviewItem, VersionRow,
+  DeskOutcome, FilterKey, FlagItem, FlagPage, ItemsPage, ReviewBatchSummary, ReviewDiff, ReviewItem, ReviewerRole, VersionRow,
 } from "./review-types";
+import type { PairOutcome, PairQuery, PairsPage, SubstanceDetail, SubstancesPage } from "./senior-types";
+import { SENIOR_PAGE_SIZE } from "./senior-types";
 import { parseStats, type SiteStats } from "./stats";
 
 /**
@@ -168,6 +170,41 @@ export async function getReviewDiff(batchId: string, conceptId: string, from: st
   return reviewData<ReviewDiff>(`/v1/review/batches/${enc(batchId)}/items/${enc(conceptId)}/diff?${new URLSearchParams({ from })}`);
 }
 
+// ---- Senior review (spec §7.7): unreviewed data from every batch; the pages call these for a senior session only. ----
+
+function seniorParams(q: Partial<PairQuery>, size = SENIOR_PAGE_SIZE): URLSearchParams {
+  const p = new URLSearchParams();
+  if (q.show) p.set("show", q.show);
+  if (q.pairs) p.set("pairs", q.pairs);
+  p.set("page", String(q.page ?? 0));
+  p.set("size", String(size));
+  if (q.severity) p.set("severity", q.severity);
+  return p;
+}
+
+/**
+ * The pair queue. Any failure throws: the page shows "Couldn't load senior review." (§5.17.5). `size` 1 reads only the
+ * counts (the desk sidebar and /review/flags, Task 24).
+ */
+export async function getPairQueue(q: PairQuery, viewerEmail: string, size = SENIOR_PAGE_SIZE): Promise<PairsPage> {
+  const data = await reviewData<PairsPage>(`/v1/review/pairs?${seniorParams(q, size)}`, { "X-Viewer-Email": viewerEmail });
+  if (!data) throw new Error("API error 404");
+  return data;
+}
+
+export async function listSeniorSubstances(q: string, page: number): Promise<SubstancesPage> {
+  const p = new URLSearchParams({ page: String(page), size: String(SENIOR_PAGE_SIZE) });
+  if (q) p.set("q", q);
+  const data = await reviewData<SubstancesPage>(`/v1/review/substances?${p}`);
+  if (!data) throw new Error("API error 404");
+  return data;
+}
+
+/** One substance from every batch; null when it is not held (404, §7.7). */
+export async function getSeniorSubstance(bdsId: string, q: Omit<PairQuery, "show">, viewerEmail: string): Promise<SubstanceDetail | null> {
+  return reviewData<SubstanceDetail>(`/v1/review/substances/${enc(bdsId)}?${seniorParams(q)}`, { "X-Viewer-Email": viewerEmail });
+}
+
 /** The desk's decision write (spec §7.2), with the outcome's version (spec §5.8.2 "own saves"). */
 export async function postDeskDecision(batchId: string, conceptId: string, d: DecisionRequest): Promise<WriteResult<DeskOutcome>> {
   const payload = { decision: d.decision, note: d.note, reviewerEmail: d.reviewerEmail, reviewerRole: d.reviewerRole,
@@ -176,6 +213,20 @@ export async function postDeskDecision(batchId: string, conceptId: string, d: De
   if (!r.ok) return r;
   return { ok: true, data: { review: r.data?.review, displayStatus: r.data?.displayStatus, batchStatus: r.data?.batchStatus,
     version: { extractedAt: r.data?.version?.extractedAt ?? null, lastDecisionId: r.data?.version?.lastDecisionId ?? null },
+    replayed: r.data?.replayed === true } };
+}
+
+export type PairDecisionRequest = {
+  decision: "reviewed" | "issue"; note: string; reviewerEmail: string; reviewerRole: "senior"; expectedContentHash: string;
+  expectedLastPairReviewId: number | null; requestId: string;
+};
+
+/** The pair decision write (§7.7): 201 or a 200 replay, with the pair's new state and version. */
+export async function postPairDecision(a: string, b: string, d: PairDecisionRequest): Promise<WriteResult<PairOutcome>> {
+  const r = await write<PairOutcome>(`/v1/review/pairs/${enc(a)}/${enc(b)}/decisions`, d);
+  if (!r.ok) return r;
+  return { ok: true, data: { ddinterA: r.data?.ddinterA, ddinterB: r.data?.ddinterB, review: r.data?.review,
+    version: { contentHash: r.data?.version?.contentHash, lastPairReviewId: r.data?.version?.lastPairReviewId ?? null },
     replayed: r.data?.replayed === true } };
 }
 
@@ -276,7 +327,7 @@ async function write<T>(path: string, payload: unknown): Promise<WriteResult<T>>
 }
 
 export type DecisionRequest = {
-  decision: "ok" | "issue"; note: string; reviewerEmail: string; reviewerRole: "pharmacist" | "engineer";
+  decision: "ok" | "issue" | "dismiss"; note: string; reviewerEmail: string; reviewerRole: ReviewerRole;
   /** The version the page showed (spec §7.2): both required by the API, null when the item has none. */
   extractedAt: string | null;
   expectedLastDecisionId: number | null;

@@ -4,7 +4,7 @@ import { fill } from "@/lib/copy";
 import { DESK } from "@/lib/review-copy";
 
 /** §5.5.3 toggle for the text-missing pair list: open by default; renders nothing until hydrated (the list stays open). */
-export default function StagePairs({ targetId, count }: { targetId: string; count: number }) {
+export default function StagePairs({ targetId, count, fk = "pairs" }: { targetId: string; count: number; fk?: string }) {
   const [ready, setReady] = useState(false);
   const [open, setOpen] = useState(true);
   useEffect(() => setReady(true), []);
@@ -17,7 +17,7 @@ export default function StagePairs({ targetId, count }: { targetId: string; coun
     setOpen(next);
   };
   return (
-    <button type="button" className="btn btn--plain btn--sm" data-fk="pairs" aria-expanded={open} aria-controls={targetId} onClick={toggle}>
+    <button type="button" className="btn btn--plain btn--sm" data-fk={fk} aria-expanded={open} aria-controls={targetId} onClick={toggle}>
       {label}
     </button>
   );

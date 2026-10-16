@@ -5,6 +5,7 @@ import FaqChapter from "@/content/learn/faq";
 import GlossaryChapter from "@/content/learn/glossary";
 import { P } from "@/content/learn/pilot-snapshot";
 import { NOT_REVIEWED, NO_DATA_SENTENCE, STALE_TITLE } from "@/lib/copy";
+import type { StatsBatch } from "@/lib/stats";
 import { pilotStats } from "./fixtures/learn-stats";
 
 const gl = (stats = pilotStats()) => renderToStaticMarkup(<GlossaryChapter ctx={learnContext(stats)} />);
@@ -104,7 +105,7 @@ describe("chapter 10, FAQ", () => {
   it("the Napa answer only while no pilot record is approved (Review Focus 5)", () => {
     // With the batch unreported no record is usable, so the Domperidone and Napa-name answers go too (Task 12 G3 ruling).
     for (const [stats, n] of [[pilotStats({ approved: [P.napa] }), 9], [pilotStats({ approved: [P.napa, P.aspirin, P.warfarin, P.domperidone] }), 9],
-      [{ ...pilotStats(), batches: [] }, 7]] as const) {
+      [{ ...pilotStats(), batches: [] as StatsBatch[] }, 7]] as const) {
       const html = faq(stats);
       expect(html).not.toContain("Why can&#x27;t I see Napa on the public site?");
       expect(html).not.toContain("Every pilot record is");

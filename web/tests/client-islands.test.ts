@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { ISLANDS, checkIslands, clientFiles, importsOf } from "../scripts/check-client-islands.mjs";
+import { ISLANDS, ISLAND_DIRS, checkIslands, clientFiles, importsOf } from "../scripts/check-client-islands.mjs";
 
 const WEB = fileURLToPath(new URL("..", import.meta.url));
 function fixture(files: Record<string, string>): string {
@@ -48,6 +48,13 @@ describe("client-island allowlist (§4.2)", () => {
 
   it("allows any file under components/review/desk/", () => {
     expect(checkIslands(fixture({ "components/review/desk/commit-machine.ts": '"use client";\nexport const x = 1;\n' }))).toEqual([]);
+  });
+
+  it("P1C: SeniorDesk plus components/review/senior/* (§4.2)", () => {
+    expect(ISLAND_DIRS).toEqual(["components/review/desk/", "components/review/senior/"]);
+    expect(checkIslands(fixture({ "components/review/senior/SeniorDesk.tsx": '"use client";\nexport default 1;\n' }))).toEqual([]);
+    expect(checkIslands(fixture({ "components/review/senior/X.tsx": '"use client";\nimport "@/lib/api";\n' })))
+      .toEqual(["components/review/senior/X.tsx: imports @/lib/api"]);
   });
 
   it("fails an island that imports @/lib/api, @/lib/session, server-only or next/headers", () => {

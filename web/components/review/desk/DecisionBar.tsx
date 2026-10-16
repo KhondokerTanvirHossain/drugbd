@@ -5,14 +5,20 @@ import BotCheck from "@/components/ui/BotCheck";
 import Button from "@/components/ui/Button";
 import Field from "@/components/ui/Field";
 import Kbd from "@/components/ui/Kbd";
-import { DESK_NEW, NO_PHI_HELP, fill } from "@/lib/copy";
+import { DESK_NEW, NO_PHI_HELP, P1C_COPY, fill } from "@/lib/copy";
 import { decideFormAction } from "@/lib/desk-actions";
-import { DESK, KEY_ROW } from "@/lib/review-copy";
-import { approveDisabled, noteLength, promise, reportDisabled, sendDisabled } from "./bar-state";
+import { fmtDhaka } from "@/lib/format";
+import { DESK, keyRow } from "@/lib/review-copy";
+import type { OpenIssue } from "@/lib/review-types";
+import { approveDisabled, dismissDisabled, noteLength, promise, reportDisabled, sendDisabled } from "./bar-state";
 import { barFromRegistration, useDesk, type RecordRegistration } from "./context";
 import { signInHref } from "./hrefs";
 import { IS_MAC_RE } from "./keys";
 import styles from "../desk.module.css";
+
+const d = P1C_COPY.dismiss;
+/** "Reported by {a pharmacist|a senior pharmacist|an engineer|you}" (§5.10a). */
+const reporter = (i: OpenIssue) => (i.mine ? d.byYou : i.role === "senior" ? d.bySenior : i.role === "pharmacist" ? d.byPharmacist : d.byEngineer);
 
 /**
  * §5.7 decision bar. Before the desk runs (no JavaScript, or the island failed to load) it is the native form of §5.8.6:
@@ -37,10 +43,14 @@ export default function DecisionBar({ reg, fallbackWidget }: { reg: RecordRegist
           body={fill(commitErr.saved === "no" ? DESK.netBody : DESK_NEW.decisionUnconfirmed.bannerBody, { name: commitErr.op.name })}
           action={<Button variant="tonal" size="sm" busyLabel={DESK.saving} onClick={desk.tryAgain}>{DESK.tryAgain}</Button>} />
       )}
-      {!commitErr && reportErr && (
+      {!commitErr && reportErr && (reportErr.op.decision === "dismiss" ? (
+        <Banner tone="crit" title={reportErr.saved === "no" ? d.failedTitle : d.unconfirmedTitle}
+          body={reportErr.saved === "no" ? DESK_NEW.deskMisc.reportFailedBody : d.unconfirmedBody}
+          action={<Button variant="tonal" size="sm" busyLabel={d.busy} onClick={desk.tryAgain}>{DESK.tryAgain}</Button>} />
+      ) : (
         <Banner tone="crit" title={DESK_NEW.deskMisc.reportFailedTitle} body={DESK_NEW.deskMisc.reportFailedBody}
           action={<Button variant="tonal" size="sm" busyLabel={DESK.sending} onClick={desk.tryAgain}>{DESK.tryAgain}</Button>} />
-      )}
+      ))}
       {desk.reportOpen && m.auth === "ok" && (
         <div className={styles.report} id="bar-report">
           <Field id="note" label={DESK.noteLabel}
@@ -54,6 +64,28 @@ export default function DecisionBar({ reg, fallbackWidget }: { reg: RecordRegist
             <Button variant="tonal" size="sm" onClick={() => desk.closeReport(true, true)}>{DESK.cancel} <Kbd keys="Esc" /></Button>
             <Button variant="primary" size="sm" aria-disabled={sendDisabled(ctx)} busy={m.report.kind === "sending"} busyLabel={DESK.sending}
               onClick={desk.sendReport}>{DESK.sendReport} <Kbd keys={sendKeys} /></Button>
+          </div>
+        </div>
+      )}
+      {desk.dismissOpen && m.auth === "ok" && (
+        <div className={styles.report} id="bar-dismiss" role="group" aria-labelledby="bar-dismiss-h">
+          <p className={styles.dismissTitle} id="bar-dismiss-h">{d.title}</p>
+          {reg.openIssues.map((i, n) => (
+            <p className={styles.dismissQuote} key={n}>{fill(d.quote, { who: reporter(i), date: fmtDhaka(i.at) })} <span className="raw">{i.note}</span></p>
+          ))}
+          <p>{d.consequence}</p>
+          <Field id="dismiss-note" label={d.noteLabel}
+            control={<textarea className="textarea" maxLength={1000} placeholder={d.notePlaceholder} value={desk.dismissNote} data-desk="dismiss-note"
+              onChange={(e) => desk.setDismissNote(e.target.value)} />}
+            help={<>{!desk.dismissError && `${DESK.noteHelp} `}{NO_PHI_HELP}</>}
+            error={desk.dismissError ? d.noteError : undefined}
+            counter={fill(DESK.noteCount, { len: noteLength(desk.dismissNote) })} />
+          <div className={styles.reportActs}>
+            {ctx.stale && <span className={styles.reportPaused}>{d.paused}</span>}
+            <Button variant="tonal" size="sm" onClick={() => desk.closeDismiss(true, true)}>{DESK.cancel} <Kbd keys="Esc" /></Button>
+            <Button variant="primary" size="sm" aria-disabled={ctx.stale}
+              busy={m.report.kind === "sending" && m.report.op.decision === "dismiss"} busyLabel={d.busy}
+              onClick={desk.sendDismiss}>{d.button} <Kbd keys={sendKeys} /></Button>
           </div>
         </div>
       )}
@@ -76,6 +108,12 @@ export default function DecisionBar({ reg, fallbackWidget }: { reg: RecordRegist
           <p className="decision-promise"><b>{p.lead}</b> {p.body}</p>
           <div className="decision-actions">
             <BotCheck state={desk.botState} />
+            {desk.role === "senior" && ctx.record?.status === "issue" && (
+              <Button variant="tonal" data-fk="dismiss" data-desk="dismiss" aria-disabled={dismissDisabled(ctx)} aria-expanded={desk.dismissOpen}
+                aria-controls="bar-dismiss" aria-keyshortcuts={k ? "D" : undefined} onClick={desk.clickDismiss}>
+                {d.button}{k && <> <Kbd keys="D" /></>}
+              </Button>
+            )}
             <Button variant="tonal" data-fk="report" data-desk="report" aria-disabled={reportDisabled(ctx)} aria-expanded={desk.reportOpen}
               aria-controls="bar-report" aria-keyshortcuts={k ? "R" : undefined} onClick={desk.clickReport}>
               {DESK.reportIssue}{k && <> <Kbd keys="R" /></>}
@@ -96,7 +134,7 @@ export default function DecisionBar({ reg, fallbackWidget }: { reg: RecordRegist
       <p className="decision-hint" hidden={!desk.hint}>{desk.hint}</p>
       {k && m.auth === "ok" && (
         <div className="decision-keys" aria-hidden="true">
-          {KEY_ROW.map(([keys, words]) => <span key={words}>{keys.map((x) => <Kbd key={x} keys={x} />)} {words}</span>)}
+          {keyRow(desk.role, ctx.record?.status).map(([keys, words]) => <span key={words}>{keys.map((x) => <Kbd key={x} keys={x} />)} {words}</span>)}
         </div>
       )}
     </div>

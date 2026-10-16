@@ -13,7 +13,7 @@ export const actions = {
 export const turnstile: { props: TurnstileFieldProps | null } = { props: null };
 
 export function Desk({ reg, children, singleKeys = true, role = "pharmacist", evidence = <p>evidence body</p> }:
-    { reg: RecordRegistration; children: React.ReactNode; singleKeys?: boolean; role?: "pharmacist" | "engineer"; evidence?: React.ReactNode }) {
+    { reg: RecordRegistration; children: React.ReactNode; singleKeys?: boolean; role?: "pharmacist" | "engineer" | "senior"; evidence?: React.ReactNode }) {
   return (
     <ReviewDesk batchId="0001-pilot" role={role} total={10} counts={{ approved: 0, issue: 0 }} undoSeconds={8} singleKeys={singleKeys}
       siteKey="1x00000000000000000000AA" account={<a href="/search">elsewhere</a>} batchesNav={null} batchCard={null}>
