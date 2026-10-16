@@ -1,7 +1,10 @@
 package com.niramoy.bddrug;
 
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.reactive.AutoConfigureWebTestClient;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -22,6 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Testcontainers
 @SpringBootTest
 @AutoConfigureWebTestClient
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class SearchApiIntegrationTest {
     @Container static PostgreSQLContainer<?> pg = new PostgreSQLContainer<>("postgres:16");
     @DynamicPropertySource static void props(DynamicPropertyRegistry r) { TestSupport.props(r, pg); }
@@ -45,7 +49,7 @@ class SearchApiIntegrationTest {
             StandardCharsets.UTF_8);
     }
 
-    @Test void paracetamolFindsNapaThroughTheDgdaName() {
+    @Order(1) @Test void paracetamolFindsNapaThroughTheDgdaName() {
         web.get().uri("/v1/search?q=paracetamol").exchange().expectStatus().isOk().expectBody()
             .jsonPath("$.data.query").isEqualTo("paracetamol")
             .jsonPath("$.data.counts.substances").isEqualTo(1)
@@ -65,14 +69,14 @@ class SearchApiIntegrationTest {
             .jsonPath("$.data.products[?(@.conceptId == 'N-1')].clinicalDrug.bdcId").isEqualTo("BDC-000006");
     }
 
-    @Test void acetaminophenFindsNapaThroughTheSubstance() {
+    @Order(1) @Test void acetaminophenFindsNapaThroughTheSubstance() {
         web.get().uri("/v1/search?q=acetaminophen").exchange().expectStatus().isOk().expectBody()
             .jsonPath("$.data.substances[0].matchedNameType").isEqualTo("preferred")
             .jsonPath("$.data.products[0].conceptId").isEqualTo("N-1")
             .jsonPath("$.data.products[0].matchedOn").isEqualTo("substance");
     }
 
-    @Test void darPrefixAndStubsMatchOnTradeNameAndDarOnly() {
+    @Order(1) @Test void darPrefixAndStubsMatchOnTradeNameAndDarOnly() {
         web.get().uri("/v1/search?q=008").exchange().expectStatus().isOk().expectBody()
             .jsonPath("$.data.products[0].conceptId").isEqualTo("N-1")
             .jsonPath("$.data.products[0].matchedOn").isEqualTo("dar");
@@ -85,7 +89,7 @@ class SearchApiIntegrationTest {
         web.get().uri("/v1/search?q=aspirin").exchange().expectBody().jsonPath("$.data.total").isEqualTo(0);
     }
 
-    @Test void orderIsSubstancesThenApprovedThenStubs() {
+    @Order(1) @Test void orderIsSubstancesThenApprovedThenStubs() {
         web.get().uri("/v1/search?q=warfarin").exchange().expectStatus().isOk().expectBody()
             .jsonPath("$.data.total").isEqualTo(2)
             .jsonPath("$.data.counts.products").isEqualTo(1)
@@ -97,7 +101,7 @@ class SearchApiIntegrationTest {
     }
 
     // Review Focus 2
-    @Test void wildcardsAreLiteralAndBengaliIsEmpty() {
+    @Order(1) @Test void wildcardsAreLiteralAndBengaliIsEmpty() {
         // template variables, so WebTestClient encodes each value once (as ProductApiIntegrationTest does)
         web.get().uri("/v1/search?q={q}", "100%").exchange().expectStatus().isOk().expectBody()
             .jsonPath("$.data.products[0].tradeName").isEqualTo("PCT 100% Max");
@@ -111,10 +115,25 @@ class SearchApiIntegrationTest {
             .jsonPath("$.data.suggestion").value(v -> assertThat(v).isNull());
     }
 
-    @Test void publicPagesStopAtIndexNine() {
+    @Order(1) @Test void publicPagesStopAtIndexNine() {
         web.get().uri("/v1/search?q=napa&page=9").exchange().expectStatus().isOk().expectBody().jsonPath("$.data.hasMore").isEqualTo(false);
         web.get().uri("/v1/search?q=napa&page=10").exchange().expectStatus().isBadRequest()
             .expectBody().jsonPath("$.errors[0].field").isEqualTo("page");
         internal(web).get().uri("/v1/search?q=napa&page=10&scope=all").exchange().expectStatus().isOk();
+    }
+
+    // §11.3: the suggestion for "warfrin", and none once its record left public view after the last index refresh
+    @Order(2) @Test void warfrinSuggestsWarfarinUntilItLeavesPublicView() throws Exception {
+        web.get().uri("/v1/search?q=warfrin").exchange().expectStatus().isOk().expectBody()
+            .jsonPath("$.data.total").isEqualTo(0)
+            .jsonPath("$.data.suggestion").isEqualTo("Warfarin");
+        // W-1 goes back into review after the index was built: the re-check drops the name (§7.4)
+        exec(pg, """
+            INSERT INTO ops.batch (batch_id, item_count, run_at) VALUES ('Q-2', 1, now() + interval '1 minute');
+            INSERT INTO ops.batch_item (batch_id, source, concept_id, review, extracted_at)
+              VALUES ('Q-2','DGDA-Drugs','W-1','pending', now() + interval '1 minute');
+            """);
+        web.get().uri("/v1/search?q=warfrin").exchange().expectStatus().isOk().expectBody()
+            .jsonPath("$.data.suggestion").value(v -> assertThat(v).isNull());
     }
 }

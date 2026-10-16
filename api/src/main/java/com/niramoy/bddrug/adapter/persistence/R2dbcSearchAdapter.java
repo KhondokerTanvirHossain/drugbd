@@ -1,4 +1,5 @@
 package com.niramoy.bddrug.adapter.persistence;
+import com.niramoy.bddrug.application.port.NameIndexPort;
 import com.niramoy.bddrug.application.port.SearchPort;
 import com.niramoy.bddrug.domain.DdinterCode;
 import com.niramoy.bddrug.domain.SearchResult;
@@ -11,9 +12,10 @@ import java.util.*;
 /**
  * Search SQL (§7.4). Public status only through ReviewSql.LATEST_PUBLIC. Every LIKE escapes %, _ and \ (likePattern), so
  * a query is a literal, case-insensitive substring (DAR: a prefix). Stubs match trade name and DAR only (D16).
+ * Also the spelling index's names (§7.4 "Suggestion"): public trade names and public substances' names, never a stub's.
  */
 @Component
-public class R2dbcSearchAdapter implements SearchPort {
+public class R2dbcSearchAdapter implements SearchPort, NameIndexPort {
     /** Java " ESCAPE '\\'" is the SQL text ESCAPE '\', as in R2dbcProductAdapter (standard_conforming_strings on). */
     static final String ESC = " ESCAPE '\\'";
     /** Public substances with their public product count (§7.4: "a substance is public only when at least one public product carries it"). */
@@ -42,6 +44,22 @@ public class R2dbcSearchAdapter implements SearchPort {
 
     private final DatabaseClient db;
     public R2dbcSearchAdapter(DatabaseClient db) { this.db = db; }
+
+    /** Publicly visible names: public products' trade names, public substances' preferred names and synonyms (§7.4). */
+    private static final String PUBLIC_NAMES = " SELECT bp.trade_name AS name FROM curated.brand_product bp" +
+        " JOIN latest l ON l.concept_id = bp.concept_id AND l.pub" +
+        " UNION SELECT s.preferred_name FROM curated.substance s JOIN pubsub ps ON ps.bds_id = s.bds_id" +
+        " UNION SELECT sn.name FROM curated.substance_name sn JOIN pubsub ps ON ps.bds_id = sn.bds_id";
+
+    @Override public Flux<String> publicNames() {
+        return db.sql("WITH " + ReviewSql.LATEST_PUBLIC + ", " + PUBSUB + PUBLIC_NAMES).map(r -> r.get("name", String.class)).all();
+    }
+
+    @Override public Mono<Boolean> stillPublic(String name) {
+        return db.sql("WITH " + ReviewSql.LATEST_PUBLIC + ", " + PUBSUB + ", names AS (" + PUBLIC_NAMES + ")" +
+                      " SELECT EXISTS (SELECT 1 FROM names WHERE lower(name) = lower(:n)) AS pub")
+            .bind("n", name).map(r -> Boolean.TRUE.equals(r.get("pub", Boolean.class))).one();
+    }
 
     static String prefix(String term) {
         return term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
