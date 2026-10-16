@@ -131,6 +131,72 @@ class PublicPairsTest {
         assertThat(p9.page()).isEqualTo(9);
     }
 
+    /** PARTNERS less NAPA as R2dbcProductInteractionsAdapter's SQL groups them: one PartnerGroup per partner substance and route. */
+    static final List<PartnerGroup> GROUPS = List.of(
+        new PartnerGroup(ACETAMINOPHEN, "systemic", List.of(new Brand("ACE", "Ace")), 1),
+        new PartnerGroup(WARFARIN, "systemic", List.of(new Brand("GW", "G Warfarin"), new Brand("WA", "Warin")), 2),
+        new PartnerGroup(CHLOR, "ophthalmic", List.of(new Brand("EYE", "Chloramex Eye")), 1),
+        new PartnerGroup(CHLOR, "systemic", List.of(new Brand("CAP", "Chloramex")), 1),
+        new PartnerGroup(sub("BDS-10", "Domperidone", "none"), "systemic", List.of(new Brand("DOM", "Motigut")), 1),
+        new PartnerGroup(sub("BDS-7", "Oticmol", "full", new DdinterCode("DDInter700", "otic")), "systemic",
+            List.of(new Brand("OTI", "Otimol")), 1),
+        new PartnerGroup(sub("BDS-4", "Aspirin", "full", sys("DDInter20")), "systemic", List.of(new Brand("ASP", "Asprin")), 1),
+        new PartnerGroup(sub("BDS-8", "Amoxicillin", "full", sys("DDInter83")), "systemic", List.of(new Brand("AMX", "Moxaclav")), 1),
+        new PartnerGroup(sub("BDS-11", "Clavulanic acid", "full", sys("DDInter394")), "systemic", List.of(new Brand("AMX", "Moxaclav")), 1),
+        new PartnerGroup(sub("BDS-12", "Herbalol", "full", sys("DDInter500")), null, List.of(new Brand("HERB", "Herbex")), 1));
+
+    @Test void partnerGroupsGiveExactlyTheResultOfPartnerProducts() {
+        PairReviewRule.PublicReview reviewed = new PairReviewRule.PublicReview("reviewed", Instant.parse("2026-10-16T05:20:00Z"));
+        for (Map<String, PairReviewRule.PublicReview> reviews : List.of(Map.<String, PairReviewRule.PublicReview>of(),
+                Map.of("DDInter14|DDInter1951", reviewed)))
+            for (int page : new int[] {0, 1})
+                assertThat(PublicPairs.computeGroups("NAPA", "systemic", List.of(ACETAMINOPHEN), GROUPS, ROWS, COMPLETE, reviews, page))
+                    .isEqualTo(napa(PARTNERS, ROWS, reviews, page));
+    }
+
+    /**
+     * Partner substances at two routes, each group sending only its first 50 brands and its full count: Warfarin (60
+     * systemic brands, 70 with no route, both reaching the same pair), Domperidone (10 brands, no data at either route) and
+     * Oticmol (55 brands, no route for either). The merged result is the one the 195 partner products give.
+     */
+    @Test void cappedGroupsMergeIntoTheFirstFiftyBrandsAndTheFullCount() {
+        BatchPairs.Substance dom = sub("BDS-10", "Domperidone", "none");
+        BatchPairs.Substance otic = sub("BDS-7", "Oticmol", "full", new DdinterCode("DDInter700", "otic"));
+        List<Partner> products = new ArrayList<>();
+        Map<List<Object>, List<Brand>> byGroup = new LinkedHashMap<>();
+        java.util.function.BiConsumer<Brand, Partner> add = (b, q) -> {
+            products.add(q);
+            byGroup.computeIfAbsent(Arrays.asList(q.substances().get(0), q.route()), k -> new ArrayList<>()).add(b);
+        };
+        for (int i = 0; i < 130; i++) {
+            Brand b = new Brand("W" + i, String.format("Warfarin brand %03d", 129 - i));
+            add.accept(b, new Partner(b.conceptId(), b.tradeName(), i % 13 < 6 ? "systemic" : null, List.of(WARFARIN)));
+        }
+        for (int i = 0; i < 10; i++) {
+            Brand b = new Brand("D" + i, "Motigut " + i);
+            add.accept(b, new Partner(b.conceptId(), b.tradeName(), i % 2 == 0 ? "systemic" : "topical", List.of(dom)));
+        }
+        for (int i = 0; i < 55; i++) {
+            Brand b = new Brand("O" + i, "Otimol " + i);
+            add.accept(b, new Partner(b.conceptId(), b.tradeName(), i % 2 == 0 ? "systemic" : "topical", List.of(otic)));
+        }
+        Comparator<Brand> order = Comparator.comparing((Brand b) -> b.tradeName().toLowerCase(Locale.ROOT)).thenComparing(Brand::conceptId);
+        List<PartnerGroup> groups = new ArrayList<>();
+        byGroup.forEach((k, brands) -> groups.add(new PartnerGroup((BatchPairs.Substance) k.get(0), (String) k.get(1),
+            brands.stream().sorted(order).limit(PublicPairs.BRANDS_MAX).toList(), brands.size())));
+        Result grouped = PublicPairs.computeGroups("NAPA", "systemic", List.of(ACETAMINOPHEN), groups, ROWS, COMPLETE, Map.of(), 0);
+        assertThat(grouped).isEqualTo(napa(products, ROWS, Map.of(), 0));
+        Pair w = grouped.partners().get(0);
+        assertThat(w.brandCount()).isEqualTo(130);
+        assertThat(w.brands()).hasSize(50);
+        assertThat(w.brands().get(0).tradeName()).isEqualTo("Warfarin brand 000");
+        assertThat(w.routeAssumed()).isTrue();
+        assertThat(grouped.notChecked()).extracting(n -> n.partnerSubstance().name() + ":" + n.reason() + ":" + n.route() + ":" + n.brandCount())
+            .containsExactly("Domperidone:no_data:null:10", "Oticmol:no_route:systemic:28", "Oticmol:no_route:topical:27");
+        assertThat(grouped.notChecked().get(1).brands()).hasSize(28);
+        assertThat(grouped.notChecked().get(2).brands()).hasSize(27);
+    }
+
     @Test void anUnusableSubstanceOfThisProductTakesNoPart() {
         Result r = PublicPairs.compute("DOMP", "systemic", List.of(sub("BDS-10", "Domperidone", "none")), PARTNERS, ROWS, COMPLETE, Map.of(), 0);
         assertThat(r.totalPartners()).isZero();

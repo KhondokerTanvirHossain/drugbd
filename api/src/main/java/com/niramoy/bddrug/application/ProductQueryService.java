@@ -59,7 +59,7 @@ public class ProductQueryService {
             if (scope == Scope.PUBLIC && !"ok".equals(p.reviewStatus()))
                 return port.latestItem(conceptId).map(Optional::of).defaultIfEmpty(Optional.empty())
                     .map(item -> (Object) stub(p, item.orElse(null)));
-            return interactions.facts(conceptId).map(f -> (Object) PublicPairs.compute(conceptId, f.route(), f.mine(), f.partners(),
+            return interactions.facts(conceptId).map(f -> (Object) PublicPairs.computeGroups(conceptId, f.route(), f.mine(), f.partners(),
                 f.rows(), f.complete(), f.reviews(), page));
         });
     }
