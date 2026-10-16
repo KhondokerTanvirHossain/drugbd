@@ -138,7 +138,13 @@ export default function SeniorDesk(props: SeniorDeskProps) {
     if (w) { window.clearTimeout(w.timer); w.resolve(t); setBotState("passed"); return; }
     setBotState("passed");
     token.current = { value: t, at: performance.now() };
-    if (retrying.current) { retrying.current = false; setRetryBusy(false); fire({ type: "RETRY_OK" }); }
+    if (retrying.current) { retrying.current = false; setRetryBusy(false); retryOk(); }
+  }
+  /** §5.17.5: RETRY_OK unmounts the Retry check button; focus the held row's closest control, else the region. */
+  function retryOk() {
+    const held = Object.entries(m.current.rows).find(([, x]) => x.kind === "botHold")?.[0];
+    fire({ type: "RETRY_OK" });
+    if (held && refOf(held)) focusRow(held); else focus("#senior");
   }
   function onWidgetError() {
     token.current = null;

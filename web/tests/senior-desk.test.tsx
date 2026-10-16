@@ -160,6 +160,22 @@ describe("focus never falls to <body> after an outcome (§5.17.5)", () => {
     expect(document.activeElement).toBe(document.querySelector(MARK));
   });
 
+  it("a passed Retry check: the held decision is sent and focus moves to the held row's Mark reviewed, not <body>", async () => {
+    await mount();
+    act(() => turnstile.props!.onError!());
+    await press(document.querySelector<HTMLElement>(MARK)!);
+    expect(pairDecide).not.toHaveBeenCalled();
+    const retry = within(document.getElementById("senior")!).getByRole("button", { name: "Retry check" });
+    await press(retry);
+    expect(document.activeElement).toBe(retry);
+    pairDecide.mockReturnValueOnce(new Promise(() => {}));
+    await act(async () => { turnstile.props!.onToken!("tok-3"); });
+    expect(within(document.getElementById("senior")!).queryByRole("button", { name: "Retry check" })).toBeNull();
+    expect(pairDecide).toHaveBeenCalledTimes(1);
+    notBody();
+    expect(document.activeElement).toBe(document.querySelector(MARK));
+  });
+
   it("forbidden: the buttons go and focus moves to the senior region", async () => {
     await mount();
     pairDecide.mockResolvedValue({ ok: false, code: "forbidden" });
