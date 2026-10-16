@@ -52,12 +52,6 @@ export const PAIR_NOT_REVIEWED = "Pair not yet reviewed by a senior pharmacist";
 /** P0 (spec §12.1): what anonymous and `user` sessions see on /batches and /batches/[id]. Both pages import it. */
 export const BATCHES_REVIEWERS_ONLY = "Only pharmacists and engineers can see batches.";
 
-/**
- * Legacy: the pre-IntelliDrugs checker and substance pages still print this for a pair whose interaction text is
- * missing while management text exists. P2 rewrites both pages with NO_TEXT / NO_MANAGEMENT and deletes it.
- */
-export const NO_INTERACTION_TEXT = "Interaction text not available from DDInter.";
-
 // ---- Board copy used by P1A ----
 export const SIGN_IN = {
   heading: "Sign in to IntelliDrugs",

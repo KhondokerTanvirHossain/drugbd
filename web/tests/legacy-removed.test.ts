@@ -28,6 +28,12 @@ describe("the pre-P2 public code is gone (§11.2: each replaced, none deleted wi
       expect(api, name).not.toMatch(new RegExp(`export (async )?(function|type|const) ${name}\\b`));
   });
 
+  it("lib/copy.ts no longer carries the legacy NO_INTERACTION_TEXT (replaced by NO_TEXT / NO_MANAGEMENT)", () => {
+    const copy = readFileSync(join(WEB, "lib/copy.ts"), "utf8");
+    expect(copy).not.toMatch(/\bNO_INTERACTION_TEXT\b/);
+    expect(copy).not.toContain("Interaction text not available from DDInter.");
+  });
+
   it("no source file imports the removed modules", () => {
     const files = ["app", "components", "lib", "content", "tests", "e2e"].filter((d) => existsSync(join(WEB, d)))
       .flatMap((d) => [...sources(join(WEB, d))]).filter((f) => f !== "tests/legacy-removed.test.ts");
