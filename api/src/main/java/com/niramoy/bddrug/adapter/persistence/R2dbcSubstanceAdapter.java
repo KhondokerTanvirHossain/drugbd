@@ -34,6 +34,19 @@ public class R2dbcSubstanceAdapter implements SubstanceQueryPort {
                    JOIN latest l ON l.concept_id = bp.concept_id AND l.pub
                    JOIN curated.brand_product_ingredient bpi ON bpi.concept_id = bp.concept_id
                    JOIN curated.substance_code x ON x.system = 'ICD11_XM' AND x.code = bpi.xm_code)""";
+    /**
+     * Both sides of each stored pair (ddinter_a < ddinter_b) for this substance's entries: partner_id is whichever side is
+     * not this substance's entry. The substance detail and P9 both run over it; it follows MINE_CTE.
+     */
+    static final String SIDES_CTE = """
+        , sides AS (
+          SELECT p.ddinter_a, p.ddinter_b, p.ddinter_b AS partner_id, p.partner_name_b AS partner_name, p.severity, p.actions,
+                 p.interaction_id, m.route_scope
+          FROM mine m JOIN curated.ddinter_pair p ON p.ddinter_a = m.code
+          UNION ALL
+          SELECT p.ddinter_a, p.ddinter_b, p.ddinter_a, p.partner_name_a, p.severity, p.actions, p.interaction_id, m.route_scope
+          FROM mine m JOIN curated.ddinter_pair p ON p.ddinter_b = m.code)
+        """;
     /** ICD-11 "fetched on" for a substance page: the DGDA register's latest fetch of any product carrying the XM code (as P1C's senior substance page). */
     static final String ICD11_FETCHED_AT = "SELECT max(rc.fetched_at) FROM curated.brand_product_ingredient bpi " +
         "JOIN raw.ocl_concept rc ON rc.concept_id = bpi.concept_id WHERE bpi.xm_code = c.code";
@@ -74,24 +87,13 @@ public class R2dbcSubstanceAdapter implements SubstanceQueryPort {
                            List<String> actions, String interactionId, String interaction, String management) {}
 
     @Override public Mono<InteractionsPage> interactionsPage(String bdsId, String severity, int limit, int offset, boolean publicOnly) {
-        String partner = publicOnly
-            ? "(SELECT min(c.bds_id) FROM curated.substance_code c JOIN pubsub ps ON ps.bds_id = c.bds_id WHERE c.system = 'DDINTER' AND c.code = s.partner_id)"
-            : "(SELECT min(c.bds_id) FROM curated.substance_code c WHERE c.system = 'DDINTER' AND c.code = s.partner_id)";
-        String sides = "WITH " + ReviewSql.LATEST_PUBLIC + ", " + PUBLIC_SUBSTANCES + ", " + MINE_CTE + """
-            , sides AS (
-              SELECT p.ddinter_a, p.ddinter_b, p.ddinter_b AS partner_id, p.partner_name_b AS partner_name, p.severity, p.actions,
-                     p.interaction_id, m.route_scope
-              FROM mine m JOIN curated.ddinter_pair p ON p.ddinter_a = m.code
-              UNION ALL
-              SELECT p.ddinter_a, p.ddinter_b, p.ddinter_a, p.partner_name_a, p.severity, p.actions, p.interaction_id, m.route_scope
-              FROM mine m JOIN curated.ddinter_pair p ON p.ddinter_b = m.code)
-            """;
+        String sides = "WITH " + ReviewSql.LATEST_PUBLIC + ", " + PUBLIC_SUBSTANCES + ", " + MINE_CTE + SIDES_CTE;
         String where = " WHERE (CAST(:sev AS text) IS NULL OR s.severity = :sev) ";
         DatabaseClient.GenericExecuteSpec count = db.sql(sides + "SELECT count(*) AS n FROM sides s" + where).bind("id", bdsId);
         count = severity == null ? count.bindNull("sev", String.class) : count.bind("sev", severity);
         DatabaseClient.GenericExecuteSpec page = db.sql(sides + """
                 SELECT s.ddinter_a, s.ddinter_b, s.partner_name, s.severity, s.actions, s.interaction_id, s.route_scope,
-                       t.interaction, t.management,\s""" + partner + " AS partner_bds_id " +
+                       t.interaction, t.management,\s""" + partnerBdsIdSql(publicOnly) + " AS partner_bds_id " +
                 "FROM sides s LEFT JOIN curated.ddinter_interaction_text t ON t.interaction_id = s.interaction_id" + where +
                 "ORDER BY " + SEVERITY_RANK.formatted("s.severity") + ", lower(s.partner_name), s.partner_name, s.route_scope, s.partner_id " +
                 "LIMIT :limit OFFSET :offset")
@@ -174,23 +176,20 @@ public class R2dbcSubstanceAdapter implements SubstanceQueryPort {
     }
 
     /**
-     * Pairs are stored once (ddinter_a < ddinter_b); the partner is whichever side is not this substance's entry. Under
-     * public scope the partner's BDS id is looked up among public substances only, so a private partner is never linked (§7.4).
+     * The partner's BDS id for a row of SIDES_CTE. Under public scope it is looked up among public substances only (pubsub),
+     * so a private partner is never linked and P9 serves it no pair review (§7.4). One rule for the substance detail and P9.
      */
-    private Mono<List<Substance.Interaction>> interactions(String id, boolean publicOnly) {
-        String partner = publicOnly
+    static String partnerBdsIdSql(boolean publicOnly) {
+        return publicOnly
             ? "(SELECT min(c.bds_id) FROM curated.substance_code c JOIN pubsub ps ON ps.bds_id = c.bds_id " +
               "WHERE c.system = 'DDINTER' AND c.code = s.partner_id)"
             : "(SELECT min(c.bds_id) FROM curated.substance_code c WHERE c.system = 'DDINTER' AND c.code = s.partner_id)";
-        return db.sql("WITH " + ReviewSql.LATEST_PUBLIC + ", " + PUBLIC_SUBSTANCES + ", " + MINE_CTE + """
-                , sides AS (
-                  SELECT p.ddinter_b AS partner_id, p.partner_name_b AS partner_name, p.severity, p.actions,
-                         p.interaction_id, m.route_scope
-                  FROM mine m JOIN curated.ddinter_pair p ON p.ddinter_a = m.code
-                  UNION ALL
-                  SELECT p.ddinter_a, p.partner_name_a, p.severity, p.actions, p.interaction_id, m.route_scope
-                  FROM mine m JOIN curated.ddinter_pair p ON p.ddinter_b = m.code)
-                SELECT s.partner_name, s.severity, s.actions, s.interaction_id, s.route_scope,\s""" + partner + """
+    }
+
+    /** The substance detail's pair list: SIDES_CTE with the partner looked up by partnerBdsIdSql (§7.4). */
+    private Mono<List<Substance.Interaction>> interactions(String id, boolean publicOnly) {
+        return db.sql("WITH " + ReviewSql.LATEST_PUBLIC + ", " + PUBLIC_SUBSTANCES + ", " + MINE_CTE + SIDES_CTE + """
+                SELECT s.partner_name, s.severity, s.actions, s.interaction_id, s.route_scope,\s""" + partnerBdsIdSql(publicOnly) + """
                  AS partner_bds_id
                 FROM sides s
                 ORDER BY\s""" + SEVERITY_RANK.formatted("s.severity") +
