@@ -92,6 +92,23 @@ describe("SignInButton island (§6.2)", () => {
     await act(async () => finish(user("id-1")));
   });
 
+  it("Board P's Google button: .gbtn with Google's glyph, the spinner while loading, and the Cloudflare Turnstile row", async () => {
+    let finish!: (v: unknown) => void;
+    fb.signInWithPopup.mockReturnValue(new Promise((r) => { finish = r; }));
+    renderButton();
+    expect(google().className).toBe("gbtn");
+    expect(google().querySelector('svg[aria-hidden="true"]')).toBeTruthy();
+    expect(screen.getByText("Cloudflare Turnstile").className).toBe("turnBy");
+    expect(screen.getByTestId("turnstile").parentElement!.className).toBe("turn");
+    passBotCheck();
+    fireEvent.click(google());
+    const busy = await screen.findByRole("button", { name: "Opening Google" });
+    expect(busy.className).toBe("gbtn");
+    expect(busy.querySelector(".btn-spinner")).toBeTruthy();
+    expect(busy.querySelector("svg")).toBeNull();
+    await act(async () => finish(user("id-1")));
+  });
+
   it("bot check failed: the crit banner and Retry check, which asks for a fresh token", async () => {
     fetchMock.mockResolvedValue(json(403, { success: false, errors: [{ code: "CAPTCHA" }] }));
     renderButton();

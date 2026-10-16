@@ -11,7 +11,8 @@ import type { Theme } from "@/lib/theme";
 import KeysSwitch from "./desk/KeysSwitch";
 import styles from "@/app/review/review.module.css";
 
-const initials = (s: Session) => ((s.name ?? "").trim() || s.email)
+/** Two initials from the display name, else from the email's parts (the account menu and the reader welcome, §6.2). */
+export const initials = (s: Session) => ((s.name ?? "").trim() || s.email)
   .split(/[\s@._-]+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join("");
 
 /** The newest in_review batch: the one the copy "Batch {id}" names (§5.13). */

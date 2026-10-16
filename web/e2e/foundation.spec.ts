@@ -171,7 +171,7 @@ test.describe("sign-out (§9.6)", () => {
     await signInAs(context, "pharmacist", "Farhana Islam");
     await page.goto("/signin");
     // The minted cookie is read by the server (Ruling C.3): the page and the header both show the signed-in state.
-    await expect(page.getByText("Signed in as Pharmacist.")).toBeVisible();
+    await expect(page.getByText("Signed in as Farhana Islam")).toBeVisible();
     await expect(page.locator("header summary")).toContainText("Account menu for Farhana Islam");
     await page.evaluate(() => sessionStorage.setItem("intellidrugs-note-draft", "draft text"));
     await page.locator("header summary").click();
