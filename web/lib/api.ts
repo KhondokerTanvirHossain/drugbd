@@ -1,4 +1,6 @@
 import "server-only";
+import type { CheckResult as PublicCheckResult, ClinicalDrugView, ProductInteractions, ProductStub, PublicProduct, PublicSubstance,
+  SearchResult as PublicSearchResult, SeverityFilter, SubstanceInteractions, SubstanceStub, SuggestRow } from "./public-types";
 import type {
   DeskOutcome, FilterKey, FlagItem, FlagPage, ItemsPage, ReviewBatchSummary, ReviewDiff, ReviewItem, ReviewerRole, VersionRow,
 } from "./review-types";
@@ -49,6 +51,8 @@ function internalToken(): string | null {
   return token.length >= MIN_TOKEN_LENGTH ? token : null;
 }
 
+const enc = encodeURIComponent;
+
 const read = (url: string, headers: Record<string, string> = {}) =>
   fetch(url, { headers, cache: "no-store", signal: AbortSignal.timeout(5000) });
 
@@ -98,6 +102,81 @@ export async function getStats(): Promise<SiteStats> {
   return stats;
 }
 
+// ---- Public reads (§7.4). scope=public always (§2.2), never the token. ----
+
+export type Read<T> = { ok: true; data: T } | { ok: false; status: number };
+
+async function publicRead<T>(path: string, params: URLSearchParams = new URLSearchParams()): Promise<Read<T>> {
+  params.set("scope", "public");
+  let res: Response;
+  try {
+    res = await read(`${base()}${path}?${params}`);
+  } catch {
+    return { ok: false, status: 0 };
+  }
+  if (!res.ok) return { ok: false, status: res.status };
+  const body = await res.json().catch(() => null);
+  if (!body || body.data === undefined || body.data === null) return { ok: false, status: 502 };
+  return { ok: true, data: body.data as T };
+}
+
+/** A §7.4 stub (product or substance): it carries hidden: true and nothing else of the record. */
+export function isStub(x: unknown): x is ProductStub | SubstanceStub {
+  return isHidden(x);
+}
+
+export const searchMedicines = (q: string, page: number) =>
+  publicRead<PublicSearchResult>("/v1/search", new URLSearchParams({ q, page: String(page) }));
+export const getPublicProduct = (id: string) => publicRead<PublicProduct | ProductStub>(`/v1/products/${enc(id)}`);
+export const getProductInteractions = (id: string, page: number) =>
+  publicRead<ProductInteractions | ProductStub>(`/v1/products/${enc(id)}/interactions`, new URLSearchParams({ page: String(page) }));
+export const getClinicalDrug = (bdcId: string) => publicRead<ClinicalDrugView>(`/v1/clinical-drugs/${enc(bdcId)}`);
+export const getPublicSubstance = (bdsId: string) => publicRead<PublicSubstance | SubstanceStub>(`/v1/substances/${enc(bdsId)}`);
+export function getSubstanceInteractions(bdsId: string, severity: SeverityFilter | null, page: number) {
+  const params = new URLSearchParams();
+  if (severity) params.set("severity", severity);
+  params.set("page", String(page));
+  return publicRead<SubstanceInteractions | SubstanceStub>(`/v1/substances/${enc(bdsId)}/interactions`, params);
+}
+export function suggestProducts(q: string, exclude: string[]) {
+  const params = new URLSearchParams({ q });
+  for (const id of exclude) params.append("exclude", id);
+  return publicRead<SuggestRow[]>("/v1/products/suggest", params);
+}
+
+export type CheckRead = { ok: true; data: PublicCheckResult } | { ok: false; status: number; unknownId: string | null };
+const CHECK_LISTS = ["products", "alerts", "noInteraction", "notChecked", "duplicates", "noData", "notReviewed"] as const;
+const NOT_FOUND = /^Product not found: (.+)$/;
+
+/** POST /v1/interactions/check (§7.4). A 404 names the unknown id (the API's own message), so the page drops it (§6.7.3). */
+export async function checkPublic(ids: string[]): Promise<CheckRead> {
+  let res: Response;
+  try {
+    res = await fetch(`${base()}/v1/interactions/check?scope=public`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ conceptIds: ids }),
+      cache: "no-store", signal: AbortSignal.timeout(5000),
+    });
+  } catch {
+    return { ok: false, status: 0, unknownId: null };
+  }
+  const body = await res.json().catch(() => null);
+  if (!res.ok) {
+    const m = res.status === 404 ? NOT_FOUND.exec(String(body?.errors?.[0]?.message ?? "")) : null;
+    return { ok: false, status: res.status, unknownId: m && ids.includes(m[1]) ? m[1] : null };
+  }
+  const d = body?.data;
+  if (!d || typeof d.summary !== "object" || !CHECK_LISTS.every((k) => Array.isArray(d[k]))) return { ok: false, status: 502, unknownId: null };
+  return { ok: true, data: d as PublicCheckResult };
+}
+
+/**
+ * §6.9 (D17): a partner access request is a flag on (other, partner-access); the API writes the partner_request audit row.
+ * It goes through createFlag, the one flag write path (Ruling F17).
+ */
+export async function requestPartnerAccess(message: string, reporterEmail: string, requestId: string): Promise<WriteResult<unknown>> {
+  return createFlag({ targetType: "other", targetId: "partner-access", message, reporterEmail, requestId });
+}
+
 /** Batch evidence shows unreviewed records: reviewers only (A1). These reads carry the token and fail without one. */
 async function reviewerRead(path: string, headers: Record<string, string> = {}): Promise<Response> {
   const token = internalToken();
@@ -106,8 +185,6 @@ async function reviewerRead(path: string, headers: Record<string, string> = {}):
 }
 
 // ---- Reviewer reads (spec §7.3). Every one needs the token; an unknown batch, record or snapshot is null. ----
-
-const enc = encodeURIComponent;
 
 async function reviewData<T>(path: string, headers: Record<string, string> = {}): Promise<T | null> {
   const res = await reviewerRead(path, headers);
@@ -334,7 +411,7 @@ export type DecisionRequest = {
   /** A UUID rendered with the form and reused on every resend, so a retry is answered once (§7.2 step 1). */
   requestId: string;
 };
-export type FlagTarget = "product" | "substance" | "check";
+export type FlagTarget = "product" | "substance" | "check" | "other";
 export type FlagRequest = { targetType: FlagTarget; targetId: string; message: string; reporterEmail: string; requestId?: string };
 
 export async function createFlag(f: FlagRequest): Promise<WriteResult<unknown>> {
