@@ -125,6 +125,8 @@ docker-compose up -d --no-deps web     # recreates only web with the new list; a
 
 To invite a new pharmacist or engineer (the email template and the exact host steps), follow [`docs/runbooks/reviewer-invite.md`](docs/runbooks/reviewer-invite.md). Reviewers work on `/review`; the old `/batches` and `/flags` addresses redirect there.
 
+To read and answer partner access requests (the read-only reply-address query), follow [`docs/runbooks/partner-requests.md`](docs/runbooks/partner-requests.md).
+
 A removed reviewer loses review rights on their next request. A reviewer whose role changed signs out and in again. Rotating `SESSION_SECRET` signs everyone out (`docker-compose up -d --no-deps web`). Rotating `INTERNAL_API_TOKEN` needs both services: `docker-compose up -d --no-deps api web`.
 
 ### Firebase auth domain (before the P1A deploy, in this order)

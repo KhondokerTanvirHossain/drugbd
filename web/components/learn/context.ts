@@ -2,11 +2,11 @@ import { PILOT_SNAPSHOT, type PilotId } from "@/content/learn/pilot-snapshot";
 import { exampleUsable, findBatch, findItem, pillStatus, type SiteStats, type StatsBatch, type StatsItem } from "@/lib/stats";
 
 /**
- * True once GET /v1/products/{id} serves the §7.4 hidden stub ({conceptId, tradeName, status, batchId, hidden}, no
- * reviewStatus) and notReviewed[] carries tradeName. P2 ships that; until then Learn leaves out the sentences that
- * describe it (§6.8 "Before P2"). learn-parts.test.tsx pins this constant to HiddenRecord.java.
+ * True: GET /v1/products/{id} serves the §7.4 hidden stub ({conceptId, tradeName, status, batchId, hidden}, no
+ * reviewStatus) (P2 Task 1). While false, Learn leaves out the sentences that describe it (§6.8 "Before P2").
+ * learn-parts.test.tsx pins this constant to HiddenRecord.java.
  */
-export const API_STUB_SHAPE = false;
+export const API_STUB_SHAPE = true;
 
 /**
  * What every Learn chapter renders from: the live /v1/stats answer and the one rule that decides whether a frozen pilot

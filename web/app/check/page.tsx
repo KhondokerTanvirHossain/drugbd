@@ -1,138 +1,73 @@
-import legacy from "@/app/legacy.module.css";
-import FlagForm from "@/components/FlagForm";
-import { Badge } from "@/components/badges";
-import { checkInteractions, listLoadedProducts, type AlertSide, type CheckOutcome, type CheckResult } from "@/lib/api";
-import { NO_INTERACTION_TEXT, NO_MANAGEMENT } from "@/lib/copy";
-import { ddinterText } from "@/lib/ddinter-text";
-import { firstParam, listParam } from "@/lib/params";
-import { cspNonce } from "@/lib/nonce";
-import { getSession } from "@/lib/session";
-import { groupBySeverity, severityLabel, severityText } from "@/lib/severity";
+import { redirect } from "next/navigation";
+import CheckResults, { CheckLegend, CheckSummary } from "@/components/check/CheckResults";
+import CheckSide, { type Selected } from "@/components/check/CheckSide";
+import styles from "@/components/check/check.module.css";
+import Banner from "@/components/ui/Banner";
+import { buttonClass } from "@/components/ui/Button";
+import { checkPublic, getPublicProduct, isStub, suggestProducts } from "@/lib/api";
+import { availableScenarios } from "@/lib/check-scenarios";
+import { DESK_NEW, PUBLIC_NEW } from "@/lib/copy";
+import type { CheckResult, PublicProduct, SuggestRow } from "@/lib/public-types";
+import { CHECK } from "@/lib/public-copy";
+import { CHECK_MAX, checkHref, parseCheckIds, parseQuery } from "@/lib/public-params";
 export const dynamic = "force-dynamic";
+export const metadata = { title: "Check interactions · IntelliDrugs" };
 
-const MIN_SELECTED = 2, MAX_SELECTED = 20;   // the API accepts 2-20 unique product IDs
-const FLAG_TARGET_MAX = 200;                 // the API's limit for a flag's targetId
-
-type Option = { conceptId: string; label: string };
-
-/** The light product list (approved products only under public scope), sorted by the API. null when unavailable. */
-async function loadOptions(): Promise<Option[] | null> {
-  try {
-    return (await listLoadedProducts()).map((p) => ({ conceptId: p.conceptId, label: `${p.tradeName} (${p.dosageForm})` }));
-  } catch {
-    return null;
-  }
-}
-
-/** The flag target for this check: the selected IDs, as many as fit the API's limit; "check" when none is selected. */
-function flagTarget(ids: string[]): string {
-  let target = "";
-  for (const id of ids) {
-    const next = target ? `${target},${id}` : id;
-    if (next.length > FLAG_TARGET_MAX) break;
-    target = next;
-  }
-  return target || "check";
-}
-
-export default async function CheckPage({ searchParams }: {
-  searchParams: Promise<{ ids?: string | string[]; flag?: string | string[] }> }) {
+/** §6.7. Public scope for every session (§2.2); the selection lives only in the URL (§6.7.1). */
+export default async function CheckPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const sp = await searchParams;
-  const ids = listParam(sp.ids);
-  const session = await getSession();
-  const nonce = await cspNonce();
-  const checkable = ids.length >= MIN_SELECTED && ids.length <= MAX_SELECTED;
-  const [options, outcome] = await Promise.all([
-    loadOptions(),   // public scope for every session (spec §2.2)
-    checkable ? checkInteractions(ids) : Promise.resolve<CheckOutcome | null>(null),
-  ]);
-  const selected = new Set(ids);
-  const known = new Set((options ?? []).map((o) => o.conceptId));
-  // Selected IDs that are not in the list (e.g. from a shared link) stay in the form so the selection round-trips.
-  const shown = [...(options ?? []), ...ids.filter((id) => !known.has(id)).map((id) => ({ conceptId: id, label: id }))];
+  const sel = parseCheckIds(sp);
+  const query = parseQuery(sp.q);
+  if (sel.changed && (sp.q === undefined || sp.remove !== undefined || sp.clear !== undefined)) redirect(checkHref(sel.ids));
 
+  const reads = await Promise.all(sel.ids.map((id) => getPublicProduct(id).catch(() => ({ ok: false as const, status: 0 }))));
+  const unknown = sel.ids.filter((_, i) => !reads[i].ok && reads[i].status === 404);
+  const selected: Selected[] = [];
+  sel.ids.forEach((id, i) => {
+    const r = reads[i];
+    if (!r.ok) { if (r.status !== 404) selected.push({ conceptId: id, tradeName: id, display: null, status: "unknown" }); return; }
+    if (isStub(r.data)) { selected.push({ conceptId: id, tradeName: r.data.tradeName, display: null, status: "not_reviewed" }); return; }
+    const p = r.data as PublicProduct;
+    selected.push({ conceptId: id, tradeName: p.tradeName, display: p.clinicalDrug?.displayName ?? p.dosageForm, status: "approved" });
+  });
+  let ids = selected.map((s) => s.conceptId);
+  let result: CheckResult | null = null, failed = false, dropped = unknown.length > 0;
+  if (ids.length >= 2) {
+    let r = await checkPublic(ids);
+    if (!r.ok && r.status === 404 && r.unknownId) {   // gone between the two reads
+      dropped = true;
+      const gone = r.unknownId;   // r is reassigned below, so the closure must not read it (TS2339 under next build)
+      ids = ids.filter((id) => id !== gone);
+      r = ids.length >= 2 ? await checkPublic(ids) : { ok: false, status: 0, unknownId: null };
+    }
+    if (r.ok) result = r.data; else failed = ids.length >= 2;
+  }
+  const matches: SuggestRow[] | null = !query.problem && ids.length < CHECK_MAX
+    ? await suggestProducts(query.q, ids).then((r) => (r.ok ? r.data : [])).catch(() => []) : null;
+  const scenarios = await availableScenarios();
+  const shown = selected.filter((s) => ids.includes(s.conceptId)).map((s) => fromCheck(s, result));
   return (
-    <>
-      <h1>Interaction checker</h1>
-      <form method="get" action="/check">
-        <fieldset>
-          <legend>Products reviewed by a pharmacist</legend>
-          {options === null && <p role="alert">The product list is temporarily unavailable.</p>}
-          {options !== null && shown.length === 0 && <p>No reviewed products yet.</p>}
-          {shown.map((o) => (
-            <div key={o.conceptId}>
-              <label>
-                <input type="checkbox" name="ids" value={o.conceptId} defaultChecked={selected.has(o.conceptId)} />
-                {` ${o.label}`}
-              </label>
-            </div>))}
-        </fieldset>
-        <button type="submit">Check interactions</button>
-      </form>
-
-      {ids.length < MIN_SELECTED && <p>Select at least two products to check.</p>}
-      {ids.length > MAX_SELECTED && <p>Select at most 20 products to check.</p>}
-      {outcome?.error && <p role="alert">{outcome.error}</p>}
-      {outcome?.result && <Results r={outcome.result} />}
-      <FlagForm nonce={nonce} session={session} targetType="check" targetId={flagTarget(ids)} outcome={firstParam(sp.flag)} />
-    </>
+    <div className={styles["s-chk"]}>
+      <CheckSide ids={ids} selected={shown} matches={matches} q={query.q} scenarios={scenarios} />
+      <div className={styles["s-chk-main"]}>
+        {dropped && <Banner tone="info" title={PUBLIC_NEW.checker.unknownId} />}
+        <CheckSummary result={result} m={ids.length} failed={failed} />
+        {failed && <Banner tone="crit" title={PUBLIC_NEW.checker.failTitle} body={PUBLIC_NEW.checker.failBody}
+          action={<a className={buttonClass("tonal", "sm")} href={checkHref(ids)}>{DESK_NEW.reviewLists.tryAgain}</a>} />}
+        {ids.length < 2 && <p className={styles["s-chk-empty"]}>{CHECK.emptyResults}</p>}
+        {result && <CheckResults result={result} />}
+        <CheckLegend />
+      </div>
+      <p id="check-live" className="sr-only" aria-live="polite" aria-atomic="true" />
+    </div>
   );
 }
 
-function Results({ r }: { r: CheckResult }) {
-  const tradeName = new Map(r.products.map((p) => [p.conceptId, p.tradeName]));
-  const product = (conceptId: string) => tradeName.get(conceptId) ?? conceptId;
-  const side = (s: AlertSide) => `${s.name} (${product(s.conceptId)})`;
-  const substance = (bdsId: string | null, name: string) =>
-    bdsId ? <a href={`/substances/${encodeURIComponent(bdsId)}`}>{name}</a> : <>{name}</>;
-  return (
-    <>
-      <p>{`Checked: ${r.products.map((p) => p.tradeName).join(", ")}`}</p>
-
-      <h2>Interactions</h2>
-      {r.alerts.length === 0 && (r.noData.length > 0 || r.notReviewed.length > 0
-        ? <p>No alerts for the substances DDInter 2.0 covers. Substances without data and products not yet reviewed are
-            listed below.</p>
-        : <p>DDInter 2.0 lists no interactions between the selected products.</p>)}
-      {groupBySeverity(r.alerts).map(([sev, alerts]) => (
-        <section key={sev}>
-          <h3>{`${severityLabel(sev)} (${alerts.length})`}</h3>
-          {alerts.map((a, n) => {
-            // A missing text (or DDInter's "None" placeholder) is never printed: it could read as "no interaction".
-            const management = ddinterText(a.management);
-            return (
-              <div key={n} className={legacy.box}>
-                <p><strong>{`${side(a.a)} + ${side(a.b)}`}</strong> <Badge>{severityText(a.severity)}</Badge></p>
-                {a.actions.length > 0 && <p>{`Actions: ${a.actions.join(", ")}`}</p>}
-                <p>{ddinterText(a.interaction) || NO_INTERACTION_TEXT}</p>
-                <p>{management ? `Management: ${management}` : NO_MANAGEMENT}</p>
-                {a.routeAssumed && <p><small>Route assumed: the general DDInter entry was used for at least one of these products.</small></p>}
-                <p><small>{`Source: ${a.source}`}</small></p>
-              </div>);
-          })}
-        </section>))}
-
-      {r.duplicates.length > 0 && (<>
-        <h2>Same substance in more than one product</h2>
-        <ul>{r.duplicates.map((d) => (
-          <li key={d.bdsId}>{substance(d.bdsId, d.name)}{`: ${d.conceptIds.map(product).join(", ")}`}</li>))}</ul>
-      </>)}
-
-      {r.notReviewed.length > 0 && (<>
-        <h2>Not yet reviewed</h2>
-        <p>These products are not yet reviewed by a pharmacist, so they were not checked. This does not mean it is safe to
-          combine them.</p>
-        <ul>{r.notReviewed.map((n) => <li key={n.conceptId}>{n.conceptId}</li>)}</ul>
-      </>)}
-
-      {r.noData.length > 0 && (<>
-        <h2>No interaction data</h2>
-        <p>No interaction data in DDInter for the substances below. This does not mean it is safe to combine.</p>
-        <ul>{r.noData.map((d, n) => (
-          <li key={`${d.conceptId}|${d.bdsId ?? d.name}|${n}`}>
-            {substance(d.bdsId, d.name)}{` in ${product(d.conceptId)}`}{d.bdsId ? "" : " (no substance mapping)"}
-          </li>))}</ul>
-      </>)}
-    </>
-  );
+/** A failed product read (5xx, timeout) takes its brand and review status from the check when the check names it; else it stays unknown. */
+function fromCheck(s: Selected, result: CheckResult | null): Selected {
+  if (s.status !== "unknown" || !result) return s;
+  const nr = result.notReviewed.find((p) => p.conceptId === s.conceptId);
+  if (nr) return { ...s, tradeName: nr.tradeName, status: "not_reviewed" };
+  const p = result.products.find((x) => x.conceptId === s.conceptId);
+  return p ? { ...s, tradeName: p.tradeName, status: "approved" } : s;
 }

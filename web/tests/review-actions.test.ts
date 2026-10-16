@@ -18,7 +18,7 @@ vi.mock("@/lib/limits", async (importOriginal) => {
 });
 
 import { submitFlag, submitResolve } from "@/lib/actions-core";
-import { flagAction, resolveFlagAction } from "@/lib/review-actions";
+import { resolveFlagAction } from "@/lib/review-actions";
 
 const TOKEN = "test-internal-token-0123456789abcdef";
 const PHARMACIST = { email: "pharm@example.org", role: "pharmacist" };
@@ -90,17 +90,6 @@ describe("submitFlag (flag a problem server action)", () => {
     verifyTurnstile.mockResolvedValue(false);
     expect(await submitFlag(flag())).toMatchObject({ status: 403, code: "captcha" });
     expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it("flagAction redirects back to the flagged page with the outcome", async () => {
-    getSession.mockResolvedValue(null);
-    await expect(flagAction(flag({ targetType: "substance", targetId: "BDS-1" }))).rejects.toSatisfy((e) =>
-      redirectTarget(e) === "/substances/BDS-1?flag=forbidden#flag");
-    getSession.mockResolvedValue(USER);
-    fetchMock.mockResolvedValue(ok({ id: 1 }, 201));
-    await expect(flagAction(flag())).rejects.toSatisfy((e) => redirectTarget(e) === "/products/P-1?flag=sent#flag");
-    await expect(flagAction(flag({ targetType: "check", targetId: "P-1,P 2" }))).rejects.toSatisfy((e) =>
-      redirectTarget(e) === "/check?ids=P-1&ids=P+2&flag=sent#flag");
   });
 });
 
@@ -193,16 +182,15 @@ describe("Turnstile actions (§9.2)", () => {
 });
 
 describe("server action log line (§5.15, §9.7)", () => {
-  it("logs action:flag and action:resolve with their status, never a message or an email", async () => {
+  // action:flag is now logged by the /flag route handler (form-post-routes.test.ts).
+  it("logs action:resolve with its status, never an email", async () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
     getSession.mockResolvedValue(PHARMACIST);
-    await flagAction(flag({ message: "Wrong company for Rahim" })).catch(() => {});
     fetchMock.mockResolvedValue(ok({ id: 1, status: "resolved" }));
     await resolveFlagAction(form({ flagId: "7", "cf-turnstile-response": "ts-token" })).catch(() => {});
     const lines = log.mock.calls.map((c) => JSON.parse(String(c[0])));
-    expect(lines.map((l) => [l.route, l.method, typeof l.status, typeof l.ms])).toEqual([
-      ["action:flag", "POST", "number", "number"], ["action:resolve", "POST", "number", "number"]]);
-    expect(JSON.stringify(log.mock.calls)).not.toMatch(/Rahim|pharm@/);
+    expect(lines.map((l) => [l.route, l.method, typeof l.status, typeof l.ms])).toEqual([["action:resolve", "POST", "number", "number"]]);
+    expect(JSON.stringify(log.mock.calls)).not.toMatch(/pharm@/);
     log.mockRestore();
   });
 });

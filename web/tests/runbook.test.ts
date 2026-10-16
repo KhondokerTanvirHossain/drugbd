@@ -59,3 +59,19 @@ describe("reviewer-invite runbook (§5.13)", () => {
     expect(readme).toContain("docker-compose up -d --no-deps api web");
   });
 });
+
+describe("partner-requests runbook (§2.2, §6.9)", () => {
+  const path = repo("docs/runbooks/partner-requests.md");
+  it("reads the requests with a read-only query on the host, and never holds an email address", () => {
+    expect(existsSync(path)).toBe(true);
+    const md = readFileSync(path, "utf8");
+    expect(md).toContain("default_transaction_read_only=on");
+    expect(md).toContain("target_type = 'other' AND target_id = 'partner-access'");
+    expect(md).toContain("reporter_email");
+    expect(md).toContain("/review/flags");
+    expect(md).not.toMatch(/[A-Za-z0-9._%+-]+@(?!example\.com\b)[A-Za-z0-9.-]+\.[a-z]{2,}/);
+  });
+  it("the README links to it", () => {
+    expect(readFileSync(repo("README.md"), "utf8")).toContain("docs/runbooks/partner-requests.md");
+  });
+});

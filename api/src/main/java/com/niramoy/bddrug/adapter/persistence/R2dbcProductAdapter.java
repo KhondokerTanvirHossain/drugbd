@@ -64,6 +64,14 @@ public class R2dbcProductAdapter implements ProductQueryPort {
             .all();
     }
 
+    @Override public Mono<LatestItem> latestItem(String conceptId) {
+        return db.sql("SELECT batch_id, (note IS NOT DISTINCT FROM '" + ReviewSql.REMOVED_NOTE + "') AS removed FROM ops.batch_item " +
+                      "WHERE concept_id = :c ORDER BY extracted_at DESC NULLS LAST, batch_id DESC LIMIT 1")
+            .bind("c", conceptId)
+            .map(r -> new LatestItem(r.get("batch_id", String.class), Boolean.TRUE.equals(r.get("removed", Boolean.class))))
+            .one();
+    }
+
     /** A product row from a query that selects review_status. */
     static Row toRow(Readable r) { return rowWithReview(r, r.get("review_status", String.class)); }
 

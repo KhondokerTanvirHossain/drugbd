@@ -7,6 +7,7 @@ const PROJECT_ID = /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/;
 const config: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
+  experimental: { cssChunking: false },
   async headers() {
     return [
       // The app CSP is per request (middleware.ts). Everything but the Firebase auth proxy refuses framing.

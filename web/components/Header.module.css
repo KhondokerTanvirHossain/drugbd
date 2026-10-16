@@ -1,9 +1,36 @@
-.bar { display: flex; align-items: center; gap: var(--s5); max-width: 1040px; margin: 0 auto; padding: var(--s3) var(--s4); border-bottom: 1px solid var(--line); }
+/* Board P .s-nav (plain bar) and .s-bar (material search bar), ported with the same values. Only the plain bar gets the
+   canvas: on the search bar .material (tokens.css) paints it, and a module background would override it (loaded later). */
+.bar { display: flex; align-items: center; gap: 28px; padding: 16px 56px; border-bottom: 1px solid var(--line); }
+.bar:not(.sticky) { background: var(--canvas); }
+.sticky { position: sticky; top: 0; z-index: 30; gap: 22px; min-height: 60px; padding: 0 32px; }
+@media (max-height: 480px) { .sticky { position: static; } }
 .home { color: var(--fg); text-decoration: none; min-height: 24px; display: inline-flex; align-items: center; }
-.nav { display: flex; flex-wrap: wrap; gap: var(--s4); }
-.end { margin-left: auto; }
+.searchForm { flex: 0 1 320px; min-width: 0; }
+.searchForm :global(.search) { height: 36px; }
+.nav { display: flex; align-items: center; }
+.links { display: flex; gap: 2px; }
+.links a { display: inline-flex; align-items: center; min-height: 34px; padding: 0 10px; border-radius: 8px; color: var(--fg-2); text-decoration: none; font: 500 14px/1 var(--font-ui); }
+.links a:hover { background: var(--surface-2); color: var(--fg); }
+.links a[aria-current="page"] { color: var(--fg); font-weight: 600; }
+.narrowMenu { display: none; position: relative; }
+.narrowMenu > summary { list-style: none; }
+.narrowMenu > summary::-webkit-details-marker { display: none; }
+.menuPanel { position: absolute; right: 0; top: calc(100% + 8px); z-index: 20; min-width: 220px; padding: 6px; border-radius: var(--r-panel); background: var(--surface); box-shadow: var(--shadow-2); }
+.menuPanel .links { flex-direction: column; }
+.end { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+.end :global(.signInNarrow) { display: none; }
 .avatar { display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font: 600 13px/1 var(--font-ui); }
 .panel { position: absolute; right: 0; top: calc(100% + var(--s2)); z-index: 20; min-width: 260px; display: flex; flex-direction: column; align-items: flex-start; gap: var(--s3); padding: var(--s4); border-radius: var(--r-panel); background: var(--surface); box-shadow: var(--shadow-2); }
 .who { display: flex; flex-direction: column; gap: 2px; }
 .who span { color: var(--fg-2); font-size: 13px; overflow-wrap: anywhere; }
-@media (max-width: 720px) { .bar { flex-wrap: wrap; gap: var(--s3); } }
+@media (max-width: 720px) {
+  .bar { padding: 14px 16px; gap: 10px; flex-wrap: wrap; }
+  .sticky { padding: 8px 16px; }
+  .searchForm { order: 3; flex: 1 1 100%; }
+  .wide { display: none; }
+  .narrowMenu { display: block; }
+  .nav { margin-left: auto; order: 2; }
+  .end { margin-left: 0; order: 2; }
+  .end :global(.signInWide) { display: none; }
+  .end :global(.signInNarrow) { display: inline-flex; }
+}

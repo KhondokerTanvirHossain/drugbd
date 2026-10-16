@@ -15,7 +15,7 @@ describe("the P1C rows of §1.7, verbatim", () => {
     expect(NEW_COPY[NEW_COPY_ROWS.deskOtherMedicines]).toBe(P1C_COPY.other);
     expect(NEW_COPY[NEW_COPY_ROWS.dismissIssue]).toBe(P1C_COPY.dismiss);
     expect(NEW_COPY[NEW_COPY_ROWS.sourceLinks]).toBe(P1C_COPY.sources);
-    expect(NEW_COPY[NEW_COPY_ROWS.productOtherApproved]).toEqual({});   // P2 fills it (§6.5)
+    expect(NEW_COPY[NEW_COPY_ROWS.productOtherApproved]).toMatchObject({ heading: "With other approved medicines" });   // P2 Task 16 filled it (§6.5)
   });
 
   it("senior role (§2.2, §5.1, §5.13, §6.2)", () => {

@@ -9,7 +9,7 @@ const METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"];
 /** Routes logged as they are. P1B and P2 add theirs. */
 export const STATIC_ROUTES: readonly string[] = ["/", "/search", "/check", "/check/suggest", "/signin", "/signout",
   "/api/session", "/healthz", "/robots.txt", "/icon.svg", "/batches", "/flags", "/review", "/review/flags",
-  "/review/pairs", "/review/substances"];
+  "/review/pairs", "/review/substances", "/partners", "/partners/request", "/flag", "/privacy"];
 /** Dynamic routes: the pattern and the template logged for it, most specific first. P1B and P2 add theirs. */
 export const DYNAMIC_ROUTES: readonly (readonly [RegExp, string])[] = [
   [/^\/review\/substances\/[^/]+$/, "/review/substances/[bdsId]"],

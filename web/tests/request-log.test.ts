@@ -14,6 +14,7 @@ describe("routeTemplate", () => {
     ["/review/pairs", "/review/pairs"], ["/review/substances", "/review/substances"],
     ["/review/substances/BDS-000003", "/review/substances/[bdsId]"],
     ["/review/flags", "/review/flags"], ["/__/auth/handler", "/__/auth/[...path]"], ["/", "/"], ["/api/session", "/api/session"],
+    ["/partners", "/partners"], ["/partners/request", "/partners/request"], ["/flag", "/flag"], ["/privacy", "/privacy"],
   ])("%s is logged as %s", (path, template) => {
     expect(routeTemplate(path)).toBe(template);
   });

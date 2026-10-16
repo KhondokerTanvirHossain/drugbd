@@ -21,6 +21,11 @@ export const ENDPOINTS: Endpoint[] = [
   { method: "GET", path: "/v1/products/loaded", what: "A light list for the checker's picker: concept id, trade name, dosage form", access: ["Public", "All"] },
   { method: "GET", path: "/v1/products/{conceptId}", what: "One product with ingredients, clinical drug and DDInter entries. Unapproved: a hidden stub.", access: ["Public", "All"] },
   { method: "GET", path: "/v1/substances/{bdsId}", what: "Names, codes, coverage, products, and drug, disease and food interactions by severity", access: ["Public", "All"] },
+  { method: "GET", path: "/v1/substances/{bdsId}/interactions?severity=&page=", what: "A substance's DDInter pairs with their text, 20 a page", access: ["Public", "All"] },
+  { method: "GET", path: "/v1/search?q=&page=", what: "Search by brand, substance or DAR number: approved records, and stubs for the rest", access: ["Public", "All"] },
+  { method: "GET", path: "/v1/products/suggest?q=&exclude=", what: "Up to 10 suggestions for the checker. Unapproved rows match on trade name and DAR only.", access: ["Public"] },
+  { method: "GET", path: "/v1/products/{conceptId}/interactions?page=", what: "Pairs with approved products of every batch, by partner substance, 20 a page", access: ["Public", "All"] },
+  { method: "GET", path: "/v1/clinical-drugs/{bdcId}", what: "A clinical drug, its ingredients and its approved brands", access: ["Public", "All"] },
   { method: "POST", path: "/v1/interactions/check", what: "Checks a list of products: alerts, duplicates, noData, notReviewed", access: ["Public", "All"] },
   { method: "GET", path: "/v1/stats", what: "Counts, and each batch's records by trade name and public status", access: ["Public"] },
   { method: "GET", path: "/v1/batches", what: "All batches, newest first", access: ["Reviewer"] },
@@ -44,7 +49,7 @@ export const ENDPOINTS: Endpoint[] = [
 ];
 
 /** Board L's "Planned endpoints" (api-versions). learn-partners.test.tsx fails once a controller serves one of them. */
-export const PLANNED = ["/v1/search", "/v1/substances/{bdsId}/interactions", "/v1/releases"] as const;
+export const PLANNED = ["/v1/releases"] as const;
 
 // ---- The example bodies, in the §7.4 shapes (§1.6 item 13; learn-partners.test.ts pins them). ----
 

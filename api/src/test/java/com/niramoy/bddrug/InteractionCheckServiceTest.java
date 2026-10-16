@@ -69,12 +69,12 @@ class InteractionCheckServiceTest {
     static final Set<String> LISTED = CODES.values().stream().flatMap(List::stream).map(DdinterCode::code)
         .filter(c -> !c.equals("DDInter1000") && !c.equals("DDInter1101")).collect(Collectors.toSet());
     static final List<PairRow> PAIRS = List.of(
-        new PairRow("DDInter1951", "DDInter20", "major", List.of("Avoid"), "bleeding", "avoid it"),
-        new PairRow("DDInter1951", "DDInter351", "minor", List.of(), null, null),
-        new PairRow("DDInter1951", "DDInter352", "moderate", List.of("Monitor"), "eye text", "monitor INR"),
-        new PairRow("DDInter1951", "DDInter700", "major", List.of(), null, null),
-        new PairRow("DDInter80", "DDInter90", "major", List.of(), null, null),
-        new PairRow("DDInter1100", "DDInter1951", "major", List.of("Monitor"), "qt text", "monitor"));
+        new PairRow("DDInter1951", "DDInter20", "major", List.of("Avoid"), "bleeding", "avoid it", null),
+        new PairRow("DDInter1951", "DDInter351", "minor", List.of(), null, null, null),
+        new PairRow("DDInter1951", "DDInter352", "moderate", List.of("Monitor"), "eye text", "monitor INR", null),
+        new PairRow("DDInter1951", "DDInter700", "major", List.of(), null, null, null),
+        new PairRow("DDInter80", "DDInter90", "major", List.of(), null, null, null),
+        new PairRow("DDInter1100", "DDInter1951", "major", List.of("Monitor"), "qt text", "monitor", null));
 
     static class FakePort implements CheckQueryPort {
         final List<List<String>> calls = new ArrayList<>();

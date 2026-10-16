@@ -45,6 +45,8 @@ const SPEC_ROWS = [
   "Dismiss issue: control, panel, consequence sentence, hints, 409 outcomes, the not-saved and unconfirmed failure banners (report channel), announcements, history entries and the dismissal \"No longer counts\" suffix",
   "Source links: link labels, \"fetched on {date}\", the ICD-11 search link, the evidence drawer's \"Sources\" section, the product page's \"Source\" column",
   "Product page \"With other approved medicines\" (cross-batch, grouped by partner substance) and its paging",
+  // P2 final review finding 3 (the spec's "*(P2)* " marker removed, as for P1C)
+  "Public page could not load (`app/error.tsx`)",
 ];
 
 describe("§3.6 fixed safety strings", () => {
@@ -96,6 +98,11 @@ describe("§1.7 new copy", () => {
     expect(Object.keys(copy.NEW_COPY).sort()).toEqual([...SPEC_ROWS].sort());
   });
 
+  it("pins the public error page strings (§4.2 ErrorBoundary, §3.5: never a bare Something went wrong)", () => {
+    expect(copy.NEW_COPY[copy.NEW_COPY_ROWS.pageError]).toEqual({ title: "Couldn't load this page.",
+      body: "Nothing was changed. Check your connection and try again.", tryAgain: "Try again" });
+  });
+
   it("pins the sign-in strings P1A ships (§6.2, §4.4, §9.3)", () => {
     expect(copy.NEW_COPY[copy.NEW_COPY_ROWS.signIn]).toEqual({
       notConfiguredTitle: "Sign-in is not available right now.",
@@ -107,8 +114,19 @@ describe("§1.7 new copy", () => {
       unverifiedBody: "Your Google account email is not verified.",
       staleAuthBody: "Sign-in is too old. Please sign in again.",
       invalidBody: "Sign-in could not be verified. Please try again.",
+      welcomeEngineerStep: "Your check is recorded but does not publish. A pharmacist approves each record.",
     });
-    expect(copy.NEW_COPY[copy.NEW_COPY_ROWS.noPhiHelp]).toEqual({ help: copy.NO_PHI_HELP });
+    expect(copy.NEW_COPY[copy.NEW_COPY_ROWS.noPhiHelp]).toMatchObject({ help: copy.NO_PHI_HELP });
+    expect(copy.PUBLIC_NEW.privacy).toEqual({
+      audit: "Each reviewer decision and sign-in is recorded with the account and time, for the team's audit trail. These records are never public.",
+      noPhi: "Don't include patient names or other personal health details in notes, reports or requests. We don't ask for patient information.",
+    });
+    expect(copy.PUBLIC_NEW.welcome).toEqual({
+      welcomeEngineerStep: "Your check is recorded but does not publish. A pharmacist approves each record.",
+      welcomeSeniorHeading: copy.P1C_COPY.senior.welcomeHeading,
+      welcomeSeniorStep: copy.P1C_COPY.senior.welcomeStep,
+      openPairQueue: copy.P1C_COPY.senior.welcomeLink,
+    });
     expect(copy.NEW_COPY[copy.NEW_COPY_ROWS.phase0Gate]).toEqual({ notReviewer: "Only pharmacists and engineers can see batches." });
   });
 
@@ -167,17 +185,16 @@ function* sources(dir: string): Generator<string> {
   }
 }
 const stripComments = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
-/**
- * Legacy pages that still retype copy. P2 rewrites app/check/page.tsx and app/page.tsx (the home page's `>Next page<`)
- * and empties this list.
- */
-const LEGACY_EXEMPT = ["app/check/page.tsx", "app/page.tsx"];
+/** The copy modules: lib/copy.ts, and the §1.7 row it re-exports from a module light enough for the root error boundary. */
+const COPY_MODULES = ["lib/copy.ts", "lib/page-error-copy.ts"];
+/** Legacy pages that still retype copy. P2 rewrote both pages (app/check/page.tsx and app/page.tsx), so none remain. */
+const LEGACY_EXEMPT: string[] = [];
 /** Files that may hold the compact pill's short form (§3.4). */
 const SHORT_FORM_ALLOWED = ["components/ui/ReviewStatus.tsx"];
 /** P3 adds content/ (Learn chapters, §6.8): Learn copy is held to the same rules as every page. */
 const scanned = () => ["app", "components", "lib", "content"].filter((d) => existsSync(join(WEB, d)))
   .flatMap((d) => [...sources(join(WEB, d))])
-  .filter((f) => f !== "lib/copy.ts" && !LEGACY_EXEMPT.includes(f));
+  .filter((f) => !COPY_MODULES.includes(f) && !LEGACY_EXEMPT.includes(f));
 const text = (f: string) => stripComments(readFileSync(join(WEB, f), "utf8"));
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 /**

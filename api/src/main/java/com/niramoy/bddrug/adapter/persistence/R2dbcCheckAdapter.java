@@ -16,8 +16,8 @@ public class R2dbcCheckAdapter implements CheckQueryPort {
         this.pairReviews = pairReviews;
     }
 
-    private record CodeRow(String bdsId, DdinterCode code, boolean listed) {}
-    private record Codes(Map<String, List<DdinterCode>> byBds, Set<String> listed) {}
+    private record CodeRow(String bdsId, DdinterCode code, boolean listed, String name) {}
+    private record Codes(Map<String, List<DdinterCode>> byBds, Set<String> listed, Map<String, String> names) {}
 
     @Override public Mono<CheckData> load(List<String> conceptIds) {
         String[] ids = conceptIds.toArray(String[]::new);
@@ -48,31 +48,36 @@ public class R2dbcCheckAdapter implements CheckQueryPort {
                 .toArray(String[]::new);
             return codes(bds).flatMap(codes -> Mono.zip(pairs(codes.byBds()),
                     pairReviews.forCodes(codes.byBds().values().stream().flatMap(List::stream).map(DdinterCode::code).toList(), null))
-                .map(p -> new CheckData(t.getT1(), t.getT2(), codes.byBds(), codes.listed(), p.getT1(), p.getT2())));
+                .map(p -> new CheckData(t.getT1(), t.getT2(), codes.byBds(), codes.listed(), p.getT1(), p.getT2(), codes.names())));
         });
     }
 
-    /** Every DDINTER code of the substances; listed = it has a ddinter_drug row (its full pair list is stored, §7.4). */
+    /**
+     * Every DDINTER code of the substances; listed = it has a ddinter_drug row (its full pair list is stored, §7.4);
+     * names = DDInter's own name of each listed code.
+     */
     private Mono<Codes> codes(String[] bdsIds) {
-        if (bdsIds.length == 0) return Mono.just(new Codes(Map.of(), Set.of()));
+        if (bdsIds.length == 0) return Mono.just(new Codes(Map.of(), Set.of(), Map.of()));
         return db.sql("""
-                SELECT c.bds_id, c.code, c.route_scope, d.ddinter_id IS NOT NULL AS listed
+                SELECT c.bds_id, c.code, c.route_scope, d.ddinter_id IS NOT NULL AS listed, d.name
                 FROM curated.substance_code c
                 LEFT JOIN curated.ddinter_drug d ON d.ddinter_id = c.code
                 WHERE c.system = 'DDINTER' AND c.bds_id = ANY(:bds)""")
             .bind("bds", bdsIds)
             .map(r -> new CodeRow(r.get("bds_id", String.class),
                 new DdinterCode(r.get("code", String.class), r.get("route_scope", String.class)),
-                Boolean.TRUE.equals(r.get("listed", Boolean.class))))
+                Boolean.TRUE.equals(r.get("listed", Boolean.class)), r.get("name", String.class)))
             .all().collectList()
             .map(rows -> {
                 Map<String, List<DdinterCode>> byBds = new HashMap<>();
                 Set<String> listed = new HashSet<>();
+                Map<String, String> names = new HashMap<>();
                 for (CodeRow c : rows) {
                     byBds.computeIfAbsent(c.bdsId(), k -> new ArrayList<>()).add(c.code());
                     if (c.listed()) listed.add(c.code().code());
+                    if (c.name() != null) names.put(c.code().code(), c.name());
                 }
-                return new Codes(byBds, listed);
+                return new Codes(byBds, listed, names);
             });
     }
 
@@ -80,14 +85,14 @@ public class R2dbcCheckAdapter implements CheckQueryPort {
         String[] all = codes.values().stream().flatMap(List::stream).map(DdinterCode::code).distinct().toArray(String[]::new);
         if (all.length < 2) return Mono.just(List.of());
         return db.sql("""
-                SELECT p.ddinter_a, p.ddinter_b, p.severity, p.actions, t.interaction, t.management
+                SELECT p.ddinter_a, p.ddinter_b, p.severity, p.actions, p.interaction_id, t.interaction, t.management
                 FROM curated.ddinter_pair p
                 LEFT JOIN curated.ddinter_interaction_text t ON t.interaction_id = p.interaction_id
                 WHERE p.ddinter_a = ANY(:codes) AND p.ddinter_b = ANY(:codes)""")
             .bind("codes", all)
             .map(r -> new PairRow(r.get("ddinter_a", String.class), r.get("ddinter_b", String.class),
                 r.get("severity", String.class), R2dbcSubstanceAdapter.list(r, "actions"),
-                r.get("interaction", String.class), r.get("management", String.class)))
+                r.get("interaction", String.class), r.get("management", String.class), r.get("interaction_id", String.class)))
             .all().collectList();
     }
 }
