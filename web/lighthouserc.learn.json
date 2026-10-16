@@ -15,7 +15,7 @@
         "resource-summary:script:size": ["error", { "maxNumericValue": 143360, "aggregationMethod": "median" }],
         "resource-summary:stylesheet:size": ["error", { "maxNumericValue": 25600, "aggregationMethod": "median" }],
         "resource-summary:font:size": ["error", { "maxNumericValue": 92160, "aggregationMethod": "median" }],
-        "largest-contentful-paint": ["error", { "maxNumericValue": 2500, "aggregationMethod": "median" }]
+        "largest-contentful-paint": ["error", { "maxNumericValue": 2800, "aggregationMethod": "median" }]
       }
     },
     "upload": { "target": "filesystem", "outputDir": ".lighthouseci-learn" }

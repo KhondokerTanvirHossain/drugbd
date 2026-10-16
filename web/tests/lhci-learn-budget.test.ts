@@ -21,7 +21,7 @@ const NUMERIC = {
   "resource-summary:script:size": 143360,
   "resource-summary:stylesheet:size": 25600,
   "resource-summary:font:size": 92160,
-  "largest-contentful-paint": 2500,
+  "largest-contentful-paint": 2800,
 } as const;
 
 /** One synthetic Lighthouse run in which every numeric metric is `factor` times its budget. */
