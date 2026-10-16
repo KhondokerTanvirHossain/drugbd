@@ -49,7 +49,7 @@ export default function ComparisonTable({ item }: { item: ReviewItem }) {
   return (
     <section className={s.sec} aria-labelledby="sec-cmp">
       <div className={s.secT}><h2 id="sec-cmp">{DESK.cmpTitle}</h2><span>{DESK.cmpSub}</span></div>
-      <div className="cmp-wrap" tabIndex={0} role="region" aria-labelledby="sec-cmp">
+      <div className={`cmp-wrap ${s.cmpWrap}`} tabIndex={0} role="region" aria-labelledby="sec-cmp">
         <table className="cmp">
           <caption className="sr-only">{fill(DESK.cmpCaption, { name: b?.tradeName ?? item.conceptId })}</caption>
           <thead><tr><th scope="col">{DESK.cmpField}</th><th scope="col" className={`cmp-src ${s.srcHead}`}>{DESK.cmpSource}{b?.source && <> <SourceOf source={b.source} /></>}</th>

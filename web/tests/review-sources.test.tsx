@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { renderToStaticMarkup as r } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import ComparisonTable from "@/components/review/detail/ComparisonTable";
@@ -60,6 +62,13 @@ describe("source links on the desk (§5.6.6, §11.2)", () => {
     expect(html).toContain(`<dt>RxNav</dt><dd><span>${rxnav}</span><span>${snomed}</span><span>${snomed2}</span></dd>`);
     expect(html).toContain(`<dt>DGDA register (OCL)</dt><dd><span><span class="mono">${item.conceptId}</span> `);
     expect(html).not.toContain("<br/>");
+  });
+
+  it("the comparison table's scroll region contains its links' sr-only text, so the record never scrolls sideways at 320 px (§10.4)", () => {
+    // .sr-only is position:absolute; without a positioned .cmp-wrap the spans escape its overflow-x and widen the page.
+    expect(r(<ComparisonTable item={item} />)).toContain('<div class="cmp-wrap cmpWrap" tabindex="0" role="region" aria-labelledby="sec-cmp">');
+    const css = readFileSync(join(__dirname, "..", "components", "review", "detail", "detail.module.css"), "utf8");
+    expect(css).toMatch(/\.cmpWrap \{ position: relative; \}/);
   });
 
   it("without sources from the API nothing links and no Sources section shows (a code that failed its pattern)", () => {

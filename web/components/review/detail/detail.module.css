@@ -61,3 +61,6 @@
 .partners li > a { display: inline-block; min-height: 24px; line-height: 24px; }
 /* A cross-batch not-checked line whose partners carry the details list (§5.6.2). */
 .ncOther { display: flex; flex-direction: column; gap: 4px; }
+/* The SourceLinks in the comparison table carry .sr-only text (position: absolute). A positioned .cmp-wrap is their
+   containing block, so its overflow-x holds them and the record never scrolls sideways at 320 px (§10.4). */
+.cmpWrap { position: relative; }
