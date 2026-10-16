@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
 import { applyP1cFixture, auditOutcomes, lastDecision, otherReviewerReports, pairReviews, sql } from "./db";
-import { PILOT_IDS, deskReady, interceptActions, openRecord, shown } from "./review-helpers";
+import { PILOT_IDS, deskReady, interceptActions, openRecord, shown, sourceLinkTargets } from "./review-helpers";
 import { BASE_URL, signInAs } from "./session";
 import { installTurnstileFake } from "./turnstile-fake";
 
@@ -148,6 +148,17 @@ test("senior pages: M marks a cross-batch pair reviewed, a DDInter change brings
 
   await page.goto(`/check?ids=${P1C.ibufen}&ids=${P1C.warin}`);
   await expect(page.getByText("Ibuprofen may increase the anticoagulant effect of warfarin.")).toBeVisible();
+  await context.close();
+});
+
+test("senior pages: source links outside the pair meta line are 24 × 24 px targets (§10.4, WCAG 2.5.8)", async ({ browser }) => {
+  const { context, page } = await as(browser, "senior");
+  for (const url of ["/review/substances/BDS-000003", "/review/pairs?show=all"]) {
+    await page.goto(url);
+    const links = await sourceLinkTargets(page);
+    expect(links.measured, url).toBeGreaterThan(0);
+    expect(links.small, url).toEqual([]);
+  }
   await context.close();
 });
 

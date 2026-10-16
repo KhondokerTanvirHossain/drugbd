@@ -1,6 +1,7 @@
 import { P1C_COPY, fill } from "@/lib/copy";
 import { fmtDhakaDate } from "@/lib/format";
 import type { Source } from "@/lib/review-types";
+import "./SourceLink.css";
 
 /**
  * §3.4 SourceLink: a plain link to the source page the API built (SourceLinks.java; the web never builds a source URL),

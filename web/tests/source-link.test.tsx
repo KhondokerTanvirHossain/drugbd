@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { renderToStaticMarkup as r } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import SourceLink, { SourceOf } from "@/components/ui/SourceLink";
@@ -16,5 +18,20 @@ describe("SourceLink (§3.4, §5.6.6, §11.1)", () => {
     expect(r(<SourceLink url={null} label="RxNav" fetchedAt="2026-10-11T19:00:00Z" />)).toBe("");
     expect(r(<SourceOf source={null} />)).toBe("");
     expect(r(<SourceOf source={{ url: "https://x.test/", label: "x", fetchedAt: null }} />)).not.toMatch(/btn|<button/);
+  });
+});
+
+describe("SourceLink is a 24 × 24 px target (§10.4, WCAG 2.5.8)", () => {
+  const read = (f: string) => readFileSync(join(process.cwd(), f), "utf8");
+  it("its component stylesheet gives .src-link a 24 px line, inline-block so it stays in its line of text (never flex)", () => {
+    const rule = /(?:^|\})\s*\.src-link\s*\{([^}]*)\}/.exec(read("components/ui/SourceLink.css").replace(/\/\*[\s\S]*?\*\//g, ""));
+    expect(rule).not.toBeNull();
+    expect(rule![1]).toMatch(/display:\s*inline-block/);
+    expect(rule![1]).toMatch(/min-height:\s*24px/);
+    expect(rule![1]).toMatch(/line-height:\s*24px/);
+  });
+  it("SourceLink imports that stylesheet, and tokens.css stays without a .src-link rule", () => {
+    expect(read("components/ui/SourceLink.tsx")).toMatch(/^import "\.\/SourceLink\.css";$/m);
+    expect(read("styles/tokens.css")).not.toContain(".src-link");
   });
 });

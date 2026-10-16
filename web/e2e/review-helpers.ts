@@ -85,3 +85,19 @@ export async function blockIslands(page: Page): Promise<void> {
  */
 export const shown = (page: Page, text: string | RegExp, options?: { exact?: boolean }): Locator =>
   page.getByText(text, options).and(page.locator(':not([data-desk="live"])'));
+
+/**
+ * §10.4 "Interactive targets are at least 24 × 24 px" (WCAG 2.5.8) for SourceLinks: every rendered `a.src-link` outside
+ * the pair meta line (running text, WCAG's inline exception). Returns how many were measured and those under 24 px.
+ */
+export async function sourceLinkTargets(page: Page): Promise<{ measured: number; small: string[] }> {
+  return page.evaluate(() => {
+    const links = [...document.querySelectorAll<HTMLAnchorElement>("a.src-link")].filter((a) => !a.closest(".pair-meta"));
+    const shownLinks = links.map((a) => ({ a, r: a.getBoundingClientRect() })).filter(({ r }) => r.width > 0 && r.height > 0);
+    return {
+      measured: shownLinks.length,
+      small: shownLinks.filter(({ r }) => r.width < 24 || r.height < 24)
+        .map(({ a, r }) => `"${a.firstChild?.textContent}" ${Math.round(r.width)}×${Math.round(r.height)} (${getComputedStyle(a).display})`),
+    };
+  });
+}
