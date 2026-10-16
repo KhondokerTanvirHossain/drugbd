@@ -16,7 +16,8 @@ export const FLAG_OUTCOME: Record<string, string> = {
   invalid: `A flag needs a message of ${FLAG_MESSAGE_MIN} to ${FLAG_MESSAGE_MAX} characters.`,
   failed: "The flag could not be sent. Please try again.",
 };
-const TURNSTILE_OFF = "Verification is not configured, so this action is disabled.";
+/** Shown in place of the bot check when Turnstile is not configured; the server action then fails closed. */
+export const TURNSTILE_OFF = "Verification is not configured, so this action is disabled.";
 
 /**
  * §6.5 "Report a problem": a <details>; signed in, the labelled field (5–2000 characters, NO_PHI_HELP), the bot check
