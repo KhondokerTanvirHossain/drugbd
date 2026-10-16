@@ -147,7 +147,9 @@ test("senior pages: M marks a cross-batch pair reviewed, a DDInter change brings
   expect(pairReviews("DDInter1951", "DDInter926")).toBe(2);
 
   await page.goto(`/check?ids=${P1C.ibufen}&ids=${P1C.warin}`);
-  await expect(page.getByText("Ibuprofen may increase the anticoagulant effect of warfarin.")).toBeVisible();
+  // §6.7.3: the public pair card shows DDInter's management text when the pair has one (the interaction description only
+  // without it), so the changed management text, issue reported, is what stays public (G3).
+  await expect(page.locator("main").getByText("Re-check the INR within 3 days.")).toBeVisible();
   await context.close();
 });
 
