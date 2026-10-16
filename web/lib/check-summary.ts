@@ -16,18 +16,43 @@ export const medicinesOnly = (m: number) => `${m} ${medicines(m)}`;
 export const hasNoData = (r: CheckResult, s: Side) =>
   r.products.some((p) => p.conceptId === s.conceptId && p.substances.some((x) => x.bdsId === s.bdsId && x.coverage === "none"));
 
-/** The substances, by name and in result order, that make the not-checked pairs not checked because of no data. The API
- *  names one `side` per row (side "a" when both have none), so the opposite side is named too when its substance has none. */
+type NotCheckedRow = CheckResult["notChecked"][number];
+
+/** The no-data sides of a no_data row as [mine, other] pairs: the API's `side` (side "a" when both have none), then the
+ *  opposite side too when its own substance has coverage "none". */
+function noDataSides(r: CheckResult, n: NotCheckedRow): [Side, Side][] {
+  const [chosen, other] = n.side === "a" ? [n.a, n.b] : [n.b, n.a];
+  return hasNoData(r, other) ? [[chosen, other], [other, chosen]] : [[chosen, other]];
+}
+
+/** The substances, by name and in result order, that make the not-checked pairs not checked because of no data. */
 export function noDataNames(r: CheckResult): string[] {
   const names: string[] = [];
-  const add = (name: string) => { if (!names.includes(name)) names.push(name); };
   for (const n of r.notChecked) {
     if (n.reason !== "no_data") continue;
-    const [chosen, other] = n.side === "a" ? [n.a, n.b] : [n.b, n.a];
-    add(chosen.name);
-    if (hasNoData(r, other)) add(other.name);
+    for (const [mine] of noDataSides(r, n)) if (!names.includes(mine.name)) names.push(mine.name);
   }
   return names;
+}
+
+export type NoDataBlockItem = { conceptId: string; brand: string; name: string; bdsId: string | null; chips: string[] };
+
+/** §6.7.3 item 3: one NO_DATA_SENTENCE block per product x no-data substance, in result order, each listing its not-checked
+ *  pairs as "{brand} + {other brand}" (plus " ({other substance})" when the other product has several substances). Built
+ *  from both sides of every no_data row, so a pair of two no-data medicines gives each its own block. */
+export function noDataBlocks(r: CheckResult): NoDataBlockItem[] {
+  const blocks = new Map<string, NoDataBlockItem>();
+  for (const n of r.notChecked) {
+    if (n.reason !== "no_data") continue;
+    for (const [mine, other] of noDataSides(r, n)) {
+      const key = `${mine.conceptId}|${mine.bdsId ?? mine.name}`;
+      const block = blocks.get(key) ?? { conceptId: mine.conceptId, brand: mine.tradeName, name: mine.name, bdsId: mine.bdsId, chips: [] };
+      const several = (r.products.find((p) => p.conceptId === other.conceptId)?.substances.length ?? 1) > 1;
+      block.chips.push(`${mine.tradeName} + ${other.tradeName}${several ? ` (${other.name})` : ""}`);
+      blocks.set(key, block);
+    }
+  }
+  return [...blocks.values()];
 }
 
 export function summarySentence(r: CheckResult | null, m: number): string {

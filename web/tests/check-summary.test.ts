@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { countChips, hasNoData, joinAnd, medicinesOnly, summarySentence } from "@/lib/check-summary";
+import { countChips, hasNoData, joinAnd, medicinesOnly, noDataBlocks, summarySentence } from "@/lib/check-summary";
 import type { CheckResult, Side } from "@/lib/public-types";
 import { emptyCheck } from "./fixtures/public";
 
@@ -88,6 +88,30 @@ describe("summary sentence (§6.7.2, §11.1 check-summary)", () => {
     expect(hasNoData(r, side("W", "G Warfarin", "Warfarin", "BDS-W"))).toBe(false);
     expect(hasNoData(r, side("W2", "Other", "Warfarin", "BDS-W"))).toBe(true);
     expect(hasNoData(r, side("Z", "Absent", "Domperidone", "BDS-D"))).toBe(false);
+  });
+
+  it("noDataBlocks (§6.7.3): one block per product x no-data substance, from both sides of each no_data row", () => {
+    const sub = (bdsId: string, name: string, coverage: "none" | "full") => ({ bdsId, name, coverage, ddinter: [] });
+    const r = emptyCheck({
+      products: [
+        { conceptId: "D", tradeName: "Domperidone", route: null, substances: [sub("BDS-D", "Domperidone", "none")] },
+        { conceptId: "X", tradeName: "Xbrand", route: null, substances: [sub("BDS-X", "Xsub", "none")] },
+        { conceptId: "W", tradeName: "G Warfarin", route: null, substances: [sub("BDS-W", "Warfarin", "full")] },
+        { conceptId: "AMC", tradeName: "Moxaclav", route: null,
+          substances: [sub("BDS-AM", "Amoxicillin", "full"), sub("BDS-CL", "Clavulanic acid", "full")] }],
+      notChecked: [
+        // both sides none: the API names side "a" only; X must still get its own block
+        { a: side("D", "Domperidone", "Domperidone", "BDS-D"), b: side("X", "Xbrand", "Xsub", "BDS-X"), reason: "no_data", side: "a" },
+        { a: side("W", "G Warfarin", "Warfarin", "BDS-W"), b: side("D", "Domperidone", "Domperidone", "BDS-D"), reason: "no_data", side: "b" },
+        { a: side("AMC", "Moxaclav", "Amoxicillin", "BDS-AM"), b: side("X", "Xbrand", "Xsub", "BDS-X"), reason: "no_data", side: "b" },
+        { a: side("W", "G Warfarin", "Warfarin", "BDS-W"), b: side("AMC", "Moxaclav", "Amoxicillin", "BDS-AM"), reason: "no_route", side: "b" }] });
+    expect(noDataBlocks(r)).toEqual([
+      { conceptId: "D", brand: "Domperidone", name: "Domperidone", bdsId: "BDS-D", chips: ["Domperidone + Xbrand", "Domperidone + G Warfarin"] },
+      { conceptId: "X", brand: "Xbrand", name: "Xsub", bdsId: "BDS-X", chips: ["Xbrand + Domperidone", "Xbrand + Moxaclav (Amoxicillin)"] }]);
+    // the opposite side has data: no block for it
+    const one = emptyCheck({ products: r.products, notChecked: [r.notChecked[1]] });
+    expect(noDataBlocks(one).map((b) => b.name)).toEqual(["Domperidone"]);
+    expect(noDataBlocks(emptyCheck())).toEqual([]);
   });
 
   it("helpers", () => {
