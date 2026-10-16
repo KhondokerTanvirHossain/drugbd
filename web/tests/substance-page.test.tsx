@@ -162,6 +162,6 @@ describe("substance page", () => {
   it("calls notFound for an unknown substance", async () => {
     getSubstance.mockResolvedValue(null);
     await expect(SubstancePage({ params: Promise.resolve({ id: "BDS-999999" }) })).rejects.toSatisfy(
-      (e: { digest?: string }) => /NEXT_HTTP_ERROR_FALLBACK;404|NEXT_NOT_FOUND/.test(String(e.digest)));
+      (e: unknown) => /NEXT_HTTP_ERROR_FALLBACK;404|NEXT_NOT_FOUND/.test(String((e as { digest?: string }).digest)));
   });
 });

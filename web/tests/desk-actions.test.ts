@@ -21,12 +21,13 @@ vi.mock("next/navigation", () => ({ redirect: (u: string) => redirect(u) }));
 
 import { conflictCode, decideStatus, runDecide } from "@/lib/desk-core";
 import { decide, decideFormAction, loadDiff, logEvidence, logRecordOpen } from "@/lib/desk-actions";
+import type { DeskOutcome } from "@/lib/review-types";
 
 const PHARMACIST = { email: "pharm@e2e.test", name: "P", role: "pharmacist" as const };
 const RID = "0c6f7a49-8f1b-4c62-9d0e-0a3f5a9a1b22";
 const input = (over = {}) => ({ batchId: "0001-pilot", conceptId: "186-0030-006--napa", decision: "ok", note: "",
   extractedAt: "2026-10-12T09:00:00.123456Z", expectedLastDecisionId: 41, requestId: RID, turnstileToken: "tok", ...over });
-const OUTCOME = { review: "ok", displayStatus: "approved", batchStatus: "in_review",
+const OUTCOME: DeskOutcome = { review: "ok", displayStatus: "approved", batchStatus: "in_review",
   version: { extractedAt: "2026-10-12T09:00:00.123456Z", lastDecisionId: 42 }, replayed: false };
 
 beforeEach(() => {

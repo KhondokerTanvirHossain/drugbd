@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { POLL_MS, compareRows, pollVerdict } from "@/components/review/desk/poll";
 import { batchHref, isDeskPath, recordHref, signInHref, versionsHref } from "@/components/review/desk/hrefs";
+import type { DisplayStatus, VersionRow } from "@/lib/review-types";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
-const row = (conceptId: string, extractedAt: string | null, lastDecisionId: number | null = null, displayStatus = "pending") =>
+const row = (conceptId: string, extractedAt: string | null, lastDecisionId: number | null = null, displayStatus: DisplayStatus = "pending"): VersionRow =>
   ({ conceptId, extractedAt, lastDecisionId, displayStatus });
 
 describe("versions poll (§5.11)", () => {

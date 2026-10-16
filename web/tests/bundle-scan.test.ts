@@ -2,7 +2,6 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-// @ts-expect-error -- plain .mjs build script without type declarations
 import { findLeaks, needlesFrom, TEST_TOKEN_VALUES } from "../scripts/check-client-bundle.mjs";
 
 const tree = (files: Record<string, string>) => {
