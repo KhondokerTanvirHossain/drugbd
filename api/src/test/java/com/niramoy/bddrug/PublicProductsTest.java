@@ -92,4 +92,24 @@ class PublicProductsTest {
         assertThat(java.util.Arrays.stream(PublicProduct.class.getRecordComponents()).map(c -> c.getName()))
             .doesNotContain("reviewStatus").contains("verification", "provenance", "otherBrandsCount");
     }
+
+    static ReviewDecision rd(long id, String decision, String role, Instant at) {
+        return new ReviewDecision(id, decision, null, null, role, at);
+    }
+
+    // Spec gap 10, §5.2 (D57): the newest counted pharmacist or senior ok of the latest item; a dismissal is a boundary.
+    @Test void theVerificationDateIsTheNewestCountedOkOfTheLatestItem() {
+        Instant t1 = EXTRACTED.plusSeconds(3600), t2 = t1.plusSeconds(600), t3 = t2.plusSeconds(600), t4 = t3.plusSeconds(600);
+        // a pharmacist ok, an issue, a senior's dismissal, then a new ok: the new ok dates it
+        assertThat(PublicProducts.approvedAt(List.of(rd(1, "ok", "pharmacist", t1), rd(2, "issue", "pharmacist", t2),
+            rd(3, "dismiss", "senior", t3), rd(4, "ok", "pharmacist", t4)), EXTRACTED)).isEqualTo(t4);
+        // any input order; an engineer's later ok never dates it; a senior's ok does (D49)
+        assertThat(PublicProducts.approvedAt(List.of(rd(5, "ok", "engineer", t4), rd(4, "ok", "senior", t2)), EXTRACTED)).isEqualTo(t2);
+        // an ok before the dismissal never dates the line
+        assertThat(PublicProducts.approvedAt(List.of(rd(1, "ok", "pharmacist", t1), rd(2, "issue", "pharmacist", t2),
+            rd(3, "dismiss", "senior", t3)), EXTRACTED)).isEqualTo(EXTRACTED);
+        // an ok before the run stamp is an earlier run's: a carried approval counts at the stamp (§8.3.1 item 8)
+        assertThat(PublicProducts.approvedAt(List.of(rd(1, "ok", "pharmacist", EXTRACTED.minusSeconds(60))), EXTRACTED)).isEqualTo(EXTRACTED);
+        assertThat(PublicProducts.approvedAt(List.of(), null)).isNull();
+    }
 }

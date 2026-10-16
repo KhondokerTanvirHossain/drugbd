@@ -34,6 +34,24 @@ public final class PublicProducts {
             f.otherBrandsCount());
     }
 
+    /**
+     * The verification line's date (§6.5, spec gap 10): the newest ok by a pharmacist or senior pharmacist among the latest
+     * item's counted decisions: those after the item's run stamp and after the latest dismissal since it (§5.2, D57, the
+     * boundary ApprovalRule applies). When none counts, the record is public through an approval carried to this stamp
+     * (§8.3.1 item 8), so the stamp dates it. Pass only the latest item's decisions: other batches' items never date it.
+     */
+    public static Instant approvedAt(List<ReviewDecision> latestItemDecisions, Instant extractedAt) {
+        List<ReviewDecision> since = latestItemDecisions.stream()
+            .filter(d -> extractedAt == null || d.decidedAt().isAfter(extractedAt))
+            .sorted(Comparator.comparing(ReviewDecision::decidedAt).thenComparingLong(ReviewDecision::id)).toList();
+        int start = 0;
+        for (int i = 0; i < since.size(); i++) if (ApprovalRule.DISMISS.equals(since.get(i).decision())) start = i + 1;
+        Instant at = null;
+        for (ReviewDecision d : since.subList(start, since.size()))
+            if (ApprovalRule.OK.equals(d.decision()) && ApprovalRule.actsAsPharmacist(d.reviewerRole())) at = d.decidedAt();
+        return at != null ? at : extractedAt;
+    }
+
     private static PublicProduct.Clinical clinical(ClinicalDrug cd, List<IngredientSummary> summaries) {
         if (cd == null) return null;
         Map<String, IngredientSummary> byBds = new HashMap<>();

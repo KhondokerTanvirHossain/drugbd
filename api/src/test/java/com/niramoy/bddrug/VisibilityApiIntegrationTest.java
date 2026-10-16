@@ -126,7 +126,7 @@ class VisibilityApiIntegrationTest {
         web.get().uri("/v1/products/W-1").exchange().expectStatus().isOk()
             .expectBody()
             .jsonPath("$.data.hidden").doesNotExist()
-            .jsonPath("$.data.reviewStatus").isEqualTo("ok")
+            .jsonPath("$.data.verification.status").isEqualTo("approved").jsonPath("$.data.reviewStatus").doesNotExist()
             .jsonPath("$.data.genericContentRaw").isEqualTo("Warfarin Sodium 5 mg")
             .jsonPath("$.data.ingredients[0].xmCode").isEqualTo("XM5S93")
             .jsonPath("$.data.clinicalDrug.bdcId").isEqualTo("BDC-000001");
