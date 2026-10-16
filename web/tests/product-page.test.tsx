@@ -291,4 +291,17 @@ describe("approved product (§6.5 item 7 and the aside)", () => {
     expect(html).toContain("Thank you. Your flag was sent to the reviewers.");
     expect(html).not.toContain("reader@example.org");
   });
+
+  it("Report a problem adds no live region (§10.2): a failed outcome and the disabled-verification notice are plain text", async () => {
+    getSession.mockResolvedValue({ email: "reader@example.org", role: "user" });
+    vi.stubEnv("NEXT_PUBLIC_TURNSTILE_SITE_KEY", "");
+    const html = await renderProduct(NAPA.conceptId, { flag: "failed" });
+    expect(html).toContain("The flag could not be sent. Please try again.");
+    expect(html).toContain("Verification is not configured, so this action is disabled.");
+    expect(html).not.toContain('role="alert"');
+    expect(html).not.toContain('role="status"');
+    const sent = await renderProduct(NAPA.conceptId, { flag: "sent" });
+    expect(sent).toContain("Thank you. Your flag was sent to the reviewers.");
+    expect(sent).not.toContain('role="status"');
+  });
 });

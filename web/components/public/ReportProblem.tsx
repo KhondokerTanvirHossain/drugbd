@@ -21,14 +21,15 @@ const TURNSTILE_OFF = "Verification is not configured, so this action is disable
 /**
  * §6.5 "Report a problem": a <details>; signed in, the labelled field (5–2000 characters, NO_PHI_HELP), the bot check
  * (action flag) and "Send report"; anonymous, a sign-in link back to this page. The email comes from the session in the
- * server action, never from the form.
+ * server action, never from the form. The outcome and the disabled-verification notice are plain text with no role:
+ * §10.2 allows one polite, sr-only live region per page and no assertive ones, and this page has no island to own it.
  */
 export default function ReportProblem({ conceptId, session, outcome, siteKey, nonce }:
     { conceptId: string; session: Session | null; outcome?: string; siteKey: string | null; nonce?: string }) {
   const message = outcome ? FLAG_OUTCOME[outcome] : undefined;
   return (
     <div id="flag">
-      {message && <p role={outcome === "sent" ? "status" : "alert"}>{message}</p>}
+      {message && <p>{message}</p>}
       <details open={outcome !== undefined && outcome !== "sent" ? true : undefined}>
         <summary>{PRODUCT.report}</summary>
         {session ? (
@@ -38,7 +39,7 @@ export default function ReportProblem({ conceptId, session, outcome, siteKey, no
             <Field id="report-message" label={PUBLIC_NEW.productPage.reportLabel}
               control={<textarea className="textarea" name="message" required minLength={FLAG_MESSAGE_MIN} maxLength={FLAG_MESSAGE_MAX} rows={4} />}
               help={`${PUBLIC_NEW.productPage.reportHelp} ${NO_PHI_HELP}`} />
-            {siteKey ? <TurnstileField siteKey={siteKey} action="flag" nonce={nonce} /> : <p role="alert">{TURNSTILE_OFF}</p>}
+            {siteKey ? <TurnstileField siteKey={siteKey} action="flag" nonce={nonce} /> : <p>{TURNSTILE_OFF}</p>}
             <Button variant="primary" type="submit">{DESK.sendReport}</Button>
           </form>
         ) : (
