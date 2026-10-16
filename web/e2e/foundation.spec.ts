@@ -1,5 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test } from "@playwright/test";
+import { type APIRequestContext, expect, test } from "@playwright/test";
 import { BASE_URL, signInAs } from "./session";
 
 const WCAG = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
@@ -40,6 +40,42 @@ test.describe("liveness and headers (§9.4)", () => {
     await expect(page.getByText("Bot check passed")).toBeVisible({ timeout: 20_000 });
     expect(violations).toEqual([]);
   });
+});
+
+test.describe("self-hosted fonts (§3.2)", () => {
+  // Every /fonts/*.woff2 a page preloads in its HTML or references from its stylesheets must ship in the web image.
+  const fontUrls = async (request: APIRequestContext, path: string) => {
+    const html = await (await request.get(path)).text();
+    const sheets = (html.match(/<link\b[^>]*>/g) ?? []).filter((t) => /\brel="stylesheet"/.test(t))
+      .map((t) => /\bhref="([^"]+)"/.exec(t)?.[1]).filter((h): h is string => !!h);
+    expect(sheets.length).toBeGreaterThan(0);
+    const css = await Promise.all(sheets.map(async (s) => (await request.get(s)).text()));
+    const urls = [html, ...css].flatMap((t) => [...t.matchAll(/\/fonts\/[\w.-]+\.woff2/g)].map((m) => m[0]));
+    return [...new Set(urls)];
+  };
+
+  for (const path of ["/learn/start", "/signin"]) {
+    test(`every font ${path} preloads or references answers 200 as a font`, async ({ request }) => {
+      const urls = await fontUrls(request, path);
+      expect(urls).toContain("/fonts/onest-latin-wght-normal.woff2");
+      for (const url of urls) {
+        const res = await request.get(url);
+        expect(`${url} ${res.status()}`).toBe(`${url} 200`);
+        expect(res.headers()["content-type"]).toMatch(/^font\/woff2/);
+      }
+    });
+
+    test(`${path} renders in Onest, not a fallback font`, async ({ page }) => {
+      await page.goto(path);
+      const state = await page.evaluate(async () => {
+        await document.fonts.ready;
+        const onest = [...document.fonts].filter((f) => f.family.replace(/"/g, "") === "Onest").map((f) => f.status);
+        return { onest, check: document.fonts.check("16px Onest") };
+      });
+      expect(state.onest).toEqual(["loaded"]);
+      expect(state.check).toBe(true);
+    });
+  }
 });
 
 test.describe("theme (§3.3)", () => {

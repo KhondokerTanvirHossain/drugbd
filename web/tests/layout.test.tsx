@@ -31,6 +31,11 @@ describe("RootLayout (§3.1, §3.2)", () => {
     expect(preloads[0]).toContain('crossorigin=""');
   });
 
+  it("preloads Onest at low fetch priority, so it never takes bandwidth from render-blocking CSS (§10.6 LCP)", async () => {
+    const preload = (await render()).match(/<link[^>]*rel="preload"[^>]*>/)![0];
+    expect(preload).toMatch(/fetchpriority="low"/i);
+  });
+
   it("renders the page inside <main id=content> after a Skip to content link", async () => {
     const html = await render();
     expect(html).toContain('<a class="skipLink" href="#content">Skip to content</a>');

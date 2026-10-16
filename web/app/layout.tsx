@@ -28,7 +28,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang="en" data-theme={htmlThemeAttr(theme)}>
       <head>
-        <link rel="preload" href={ONEST_URL} as="font" type="font/woff2" crossOrigin="" />
+        {/* Low priority: with font-display: swap the text never waits for Onest, so its preload must not take
+            bandwidth from the render-blocking CSS on Slow 4G. At default priority Learn's LCP was 2505–2512 ms (§10.6). */}
+        <link rel="preload" href={ONEST_URL} as="font" type="font/woff2" crossOrigin="" fetchPriority="low" />
       </head>
       <body>
         {ownShell ? children : (
