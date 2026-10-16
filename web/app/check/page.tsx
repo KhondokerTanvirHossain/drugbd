@@ -25,9 +25,10 @@ export default async function CheckPage({ searchParams }: { searchParams: Promis
   const selected: Selected[] = [];
   sel.ids.forEach((id, i) => {
     const r = reads[i];
-    if (!r.ok) { if (r.status !== 404) selected.push({ conceptId: id, tradeName: id, display: null }); return; }
-    selected.push(isStub(r.data) ? { conceptId: id, tradeName: r.data.tradeName, display: null }
-      : { conceptId: id, tradeName: (r.data as PublicProduct).tradeName, display: (r.data as PublicProduct).clinicalDrug?.displayName ?? null });
+    if (!r.ok) { if (r.status !== 404) selected.push({ conceptId: id, tradeName: id, display: null, status: "unknown" }); return; }
+    if (isStub(r.data)) { selected.push({ conceptId: id, tradeName: r.data.tradeName, display: null, status: "not_reviewed" }); return; }
+    const p = r.data as PublicProduct;
+    selected.push({ conceptId: id, tradeName: p.tradeName, display: p.clinicalDrug?.displayName ?? p.dosageForm, status: "approved" });
   });
   let ids = selected.map((s) => s.conceptId);
   let result: CheckResult | null = null, failed = false, dropped = unknown.length > 0;
@@ -44,14 +45,14 @@ export default async function CheckPage({ searchParams }: { searchParams: Promis
   const matches: SuggestRow[] | null = !query.problem && ids.length < CHECK_MAX
     ? await suggestProducts(query.q, ids).then((r) => (r.ok ? r.data : [])).catch(() => []) : null;
   const scenarios = await availableScenarios();
-  const shown = selected.filter((s) => ids.includes(s.conceptId));
+  const shown = selected.filter((s) => ids.includes(s.conceptId)).map((s) => fromCheck(s, result));
   return (
     <div className={styles["s-chk"]}>
       <CheckSide ids={ids} selected={shown} matches={matches} q={query.q} scenarios={scenarios} />
       <div className={styles["s-chk-main"]}>
-        {dropped && <Banner tone="info" role="status" title={PUBLIC_NEW.checker.unknownId} />}
+        {dropped && <Banner tone="info" title={PUBLIC_NEW.checker.unknownId} />}
         <CheckSummary result={result} m={ids.length} failed={failed} />
-        {failed && <Banner tone="crit" role="alert" title={PUBLIC_NEW.checker.failTitle} body={PUBLIC_NEW.checker.failBody}
+        {failed && <Banner tone="crit" title={PUBLIC_NEW.checker.failTitle} body={PUBLIC_NEW.checker.failBody}
           action={<a className={buttonClass("tonal", "sm")} href={checkHref(ids)}>{DESK_NEW.reviewLists.tryAgain}</a>} />}
         {ids.length < 2 && <p className={styles["s-chk-empty"]}>{CHECK.emptyResults}</p>}
         {result && <CheckResults result={result} />}
@@ -60,4 +61,13 @@ export default async function CheckPage({ searchParams }: { searchParams: Promis
       <p id="check-live" className="sr-only" aria-live="polite" aria-atomic="true" />
     </div>
   );
+}
+
+/** A failed product read (5xx, timeout) takes its brand and review status from the check when the check names it; else it stays unknown. */
+function fromCheck(s: Selected, result: CheckResult | null): Selected {
+  if (s.status !== "unknown" || !result) return s;
+  const nr = result.notReviewed.find((p) => p.conceptId === s.conceptId);
+  if (nr) return { ...s, tradeName: nr.tradeName, status: "not_reviewed" };
+  const p = result.products.find((x) => x.conceptId === s.conceptId);
+  return p ? { ...s, tradeName: p.tradeName, status: "approved" } : s;
 }

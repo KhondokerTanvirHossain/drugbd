@@ -9,7 +9,8 @@ import { suggestionSub } from "@/lib/check-summary";
 import CheckerCombobox from "./CheckerCombobox";
 import styles from "./check.module.css";
 
-export type Selected = { conceptId: string; tradeName: string; display: string | null };
+/** One selected medicine. The NOT_REVIEWED pill is shown only for not_reviewed (§3.6); unknown (a failed read) shows no status. */
+export type Selected = { conceptId: string; tradeName: string; display: string | null; status: "approved" | "not_reviewed" | "unknown" };
 
 /**
  * The side column: one GET form holding the current ids (hidden), the field, the no-JS matches (submit buttons named ids),
@@ -41,7 +42,7 @@ export default function CheckSide({ ids, selected, matches, q, scenarios }:
           {empty ? <li className={styles["s-med-empty"]}>{CHECK.none}</li> : selected.map((s) => (
             <li key={s.conceptId} className={styles["s-med"]}>
               <b>{s.tradeName}</b>
-              <span>{s.display ?? <ReviewStatus status="pending" />}</span>
+              <span>{s.status === "not_reviewed" ? <ReviewStatus status="pending" /> : s.display}</span>
               <button type="submit" name="remove" value={s.conceptId} className={`${buttonClass("tonal")} btn--icon`} data-remove={s.conceptId}>
                 <svg width="14" height="14" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" fill="none" /></svg>
                 <span className="sr-only">{fill(CHECK.remove, { brand: s.tradeName })}</span>

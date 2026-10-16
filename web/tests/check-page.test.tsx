@@ -14,6 +14,9 @@ import { SCENARIOS } from "@/content/check-scenarios";
 const render = async (sp: Record<string, string | string[]>) => renderToStaticMarkup(await CheckPage({ searchParams: Promise.resolve(sp) }));
 const approved = (id: string, tradeName: string) => ({ ok: true, data: { ...NAPA, conceptId: id, tradeName } });
 const stub = (id: string, tradeName: string) => ({ ok: true, data: { conceptId: id, tradeName, status: "not_reviewed", batchId: "B", hidden: true } });
+/** The second line of one selected row (between the brand and its remove button). */
+const selLine = (html: string, brand: string) => html.match(new RegExp(`<b>${brand}</b><span>(.*?)</span><button`))?.[1];
+const PILL = "Not yet reviewed by a pharmacist";
 
 beforeEach(() => {
   getPublicProduct.mockReset();
@@ -101,5 +104,44 @@ describe("/check (§6.7)", () => {
     expect(html).toContain(`>${SCENARIOS[0].label}</a>`);
     expect(html).not.toContain(`>${SCENARIOS[1].label}</a>`);
     expect(html).not.toContain(`>${SCENARIOS[2].label}</a>`);    // shares the unknown simvastatin id
+  });
+
+  // §10.2: #check-live is the only live region; banners carry no role (Task 32 announces them through #check-live).
+  it("the unknown-id and failed-check banners render with no role, so #check-live stays the only live region", async () => {
+    checkPublic.mockResolvedValue({ ok: false, status: 503, unknownId: null });
+    const html = await render({ ids: ["A", "gone", "B"] });
+    expect(html).toContain("One medicine in the link no longer exists, so it was removed.");
+    expect(html).toContain("Couldn&#x27;t check these medicines.");
+    expect(html).toContain("Nothing was saved. Try again in a moment.");
+    expect(html).not.toContain('role="alert"');
+    expect(html).not.toContain('role="status"');
+    expect(html.match(/aria-live=/g)).toHaveLength(1);
+  });
+
+  // §3.6 / §6.7.1: the NOT_REVIEWED pill is only for an unapproved record.
+  it("an approved product with no clinical drug shows its dosage form, never the not-reviewed pill", async () => {
+    getPublicProduct.mockImplementation(async (id: string) => id === "C"
+      ? { ok: true, data: { ...NAPA, conceptId: "C", tradeName: "Cough Syrup", dosageForm: "Syrup", clinicalDrug: null } }
+      : approved(id, `Brand ${id}`));
+    const html = await render({ ids: ["A", "C"] });
+    expect(selLine(html, "Cough Syrup")).toBe("Syrup");
+    expect(selLine(html, "Brand A")).toBe("Acetaminophen 500 mg tablet");
+    expect(html).not.toContain(PILL);
+  });
+
+  it("a product read that fails (503) takes its brand and status from the check, and never shows a pill for an unknown status", async () => {
+    getPublicProduct.mockImplementation(async (id: string) => ["X", "Y", "Z"].includes(id) ? { ok: false, status: 503 } : approved(id, `Brand ${id}`));
+    checkPublic.mockImplementation(async (ids: string[]) => ({ ok: true, data: emptyCheck({
+      summary: { ...emptyCheck().summary, medicines: ids.length },
+      products: [{ conceptId: "X", tradeName: "Xylo", route: null, substances: [] }],
+      notReviewed: [{ conceptId: "Y", tradeName: "Yellow" }] }) }));
+    const html = await render({ ids: ["A", "X", "Y", "Z"] });
+    expect(selLine(html, "Xylo")).toBe("");                       // approved per the check, no clinical line to show
+    expect(selLine(html, "Yellow")).toContain(PILL);              // unapproved per the check
+    expect(selLine(html, "Z")).toBe("");                          // unknown: the id, and no pill
+    checkPublic.mockResolvedValue({ ok: false, status: 503, unknownId: null });
+    const failed = await render({ ids: ["A", "X"] });
+    expect(selLine(failed, "X")).toBe("");                        // the check failed too: the id, never the pill
+    expect(failed).not.toContain(PILL);
   });
 });
