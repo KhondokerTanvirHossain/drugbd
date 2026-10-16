@@ -2,7 +2,7 @@ import "@/styles/tokens.css";
 import "@/styles/fonts.css";
 import { cookies, headers } from "next/headers";
 import Footer from "@/components/Footer";
-import Header from "@/components/Header";
+import Header, { hasSearchBar } from "@/components/Header";
 import { newestInReview } from "@/components/review/ReviewAccount";
 import { listReviewBatches } from "@/lib/api";
 import { ONEST_URL } from "@/lib/fonts";
@@ -20,13 +20,16 @@ export const metadata = { title: "IntelliDrugs", robots: { index: false, follow:
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const theme = parseTheme((await cookies()).get(THEME_COOKIE)?.value);
   // /review/* and the Learn chapters bring their own toolbar, skip links and <main> (spec §5.1, §5.16, §6.8).
-  const path = (await headers()).get("x-pathname") ?? "";
+  const h = await headers();
+  const path = h.get("x-pathname") ?? "";
+  // The header's search field shows the query on /search only (§6.1); x-search is never logged.
+  const q = path === "/search" ? new URLSearchParams(h.get("x-search") ?? "").get("q") ?? "" : "";
   const ownShell = isReviewSurface(path) || isLearnSurface(path);
   const session = ownShell ? null : await getSession();
   // The account menu names the newest batch in review (§6.2); a failed read only leaves the name out.
   const batchId = isReviewer(session) ? newestInReview(await listReviewBatches().catch(() => [])) : null;
   return (
-    <html lang="en" data-theme={htmlThemeAttr(theme)}>
+    <html lang="en" data-theme={htmlThemeAttr(theme)} className={!ownShell && hasSearchBar(path) ? styles.stickyBar : undefined}>
       <head>
         {/* Low priority: the preload must not take bandwidth from the render-blocking CSS on Slow 4G (at default
             priority Learn's LCP was 2505–2512 ms, §10.6). With font-display: optional a late Onest only means the
@@ -37,7 +40,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         {ownShell ? children : (
           <>
             <a className={styles.skipLink} href="#content">Skip to content</a>
-            <Header session={session} theme={theme} batchId={batchId} />
+            <Header session={session} theme={theme} batchId={batchId} path={path} q={q} />
             <main id="content" className={styles.main}>{children}</main>
             <Footer theme={theme} />
           </>

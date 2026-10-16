@@ -26,6 +26,7 @@ export const MATERIAL_ALLOWED: string[] = [
   "components/review/desk/LoadingPanes.tsx",
   "content/learn/reviewers.tsx",   // P3: Learn chapter 7 pictures the decision bar (§3.4: the bar is material)
   "components/learn/LearnShell.tsx",   // P3: the Learn toolbar and chapter nav (Board L, §6.8)
+  "components/Header.tsx",   // P2: §6.1 the public search bar is .material (a toolbar)
 ];
 
 describe("§3.4 mark exclusivity", () => {

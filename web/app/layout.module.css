@@ -11,7 +11,10 @@
 }
 .skipLink:focus-visible { top: var(--s2); }
 .main {
-  max-width: 1040px;
   margin: 0 auto;
   padding: var(--s5) var(--s4) var(--s7);
 }
+/* §6.1: the sticky material bar is 60 px high; a focused element is never hidden under it (WCAG 2.4.11). */
+.stickyBar { --public-bar-h: 60px; scroll-padding-top: calc(var(--public-bar-h) + 8px); }
+@media (max-width: 720px) { .stickyBar { --public-bar-h: 108px; } }
+@media (max-height: 480px) { .stickyBar { scroll-padding-top: 0; } }
