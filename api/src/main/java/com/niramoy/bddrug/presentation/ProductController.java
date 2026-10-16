@@ -41,4 +41,13 @@ public class ProductController {
         return service.get(conceptId, auth.scope(scope, token)).map(ApiResponse::ok)
             .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Product not found")));
     }
+
+    /** §7.4 P10. Under public scope a product that is not public is the stub (as GET /v1/products/{id}), never a result. */
+    @GetMapping("/{conceptId}/interactions")
+    public Mono<ApiResponse<Object>> interactions(@PathVariable String conceptId, @RequestParam(defaultValue = "0") int page,
+                                                  @RequestParam(required = false) String scope,
+                                                  @RequestHeader(value = InternalAuth.HEADER, required = false) String token) {
+        return service.interactions(conceptId, page, auth.scope(scope, token)).map(ApiResponse::ok)
+            .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Product not found")));
+    }
 }
