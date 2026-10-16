@@ -304,4 +304,11 @@ describe("approved product (§6.5 item 7 and the aside)", () => {
     expect(sent).toContain("Thank you. Your flag was sent to the reviewers.");
     expect(sent).not.toContain('role="status"');
   });
+
+  it("Report a problem posts natively to /flag; an inherited key (?flag=constructor) is no outcome, never an empty line", async () => {
+    getSession.mockResolvedValue({ email: "reader@example.org", role: "user" });
+    expect(await renderProduct()).toMatch(/<form action="\/flag" method="post">/);
+    for (const code of ["constructor", "toString", "__proto__"])
+      expect(await renderProduct(NAPA.conceptId, { flag: code }), code).toContain('<div id="flag"><details');
+  });
 });

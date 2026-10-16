@@ -7,7 +7,6 @@ import { NO_PHI_HELP, PUBLIC_NEW, fill } from "@/lib/copy";
 import { cspNonce } from "@/lib/nonce";
 import { firstParam } from "@/lib/params";
 import { LANDING, NAV, PARTNERS } from "@/lib/public-copy";
-import { partnerRequestAction } from "@/lib/public-actions";
 import { getSession } from "@/lib/session";
 import { turnstileSiteKey } from "@/lib/turnstile";
 import styles from "./page.module.css";
@@ -19,7 +18,9 @@ const P = PUBLIC_NEW.partner;
 /**
  * §6.9: Board P's partner band and Learn chapter 8's "Where the API stands", condensed; the request form for signed-in
  * visitors. The outcome and the disabled-verification notice are plain text with no role, as on the product page: §10.2
- * allows one polite, sr-only live region per page and no assertive ones, and this page has no island to own it.
+ * allows one polite, sr-only live region per page and no assertive ones, and this page has no island to own it. So the
+ * form posts natively to /partners/request, whose 303 to ?partner=<code>#request is a full navigation with or without
+ * JavaScript: the browser keeps the fragment and lands on the outcome (lib/form-post.ts).
  */
 export default async function PartnersPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const sp = await searchParams;
@@ -51,7 +52,7 @@ export default async function PartnersPage({ searchParams }: { searchParams: Pro
         {!session ? (
           <p>{LANDING.requestNote} <a href={`/signin?${new URLSearchParams({ returnTo: "/partners" })}`}>{NAV.signIn}</a></p>
         ) : outcome === "sent" ? null : (
-          <form action={partnerRequestAction} className={styles.form}>
+          <form method="post" action="/partners/request" className={styles.form}>
             <Field id="p-org" label={P.organisation} control={<input className="input" name="organisation" required minLength={ORG_MIN} maxLength={ORG_MAX} />} />
             <Field id="p-kind" label={P.kind} control={<select className="input" name="kind" required>{PARTNER_KINDS.map((k) => <option key={k}>{k}</option>)}</select>} />
             <Field id="p-use" label={P.use} help={`${P.useHelp} ${NO_PHI_HELP}`}

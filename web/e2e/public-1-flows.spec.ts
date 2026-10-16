@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { sql } from "./db";
 import { partnerRequests, publish, resetPublic } from "./public-helpers";
 import { PILOT_IDS as P } from "./review-helpers";
 import { E2E_EMAILS, signInAs } from "./session";
@@ -114,6 +115,33 @@ test("welcome states: a reader sees their own email once; a pharmacist sees the 
   await pharm.close();
 });
 
+/*
+ * The two public write forms post natively and the server answers 303 to the page with the outcome and its #anchor, so
+ * with JavaScript too the browser keeps the fragment and lands on the outcome line (a server action's soft navigation
+ * dropped it and unmounted the focused submit button, leaving a screen-reader user nowhere: Task 37 fix round 1).
+ */
+test("report a problem: a signed-in reader's report lands on the outcome at #flag (§6.5)", async ({ browser }) => {
+  const ctx = await browser.newContext();
+  await signInAs(ctx, "user", "E2E Reader");
+  const p = await ctx.newPage();
+  await installTurnstileFake(p, "pass");
+  try {
+    await p.goto(`/products/${P.napa}`);
+    await p.getByText("Report a problem with this record").click();
+    await p.getByLabel("What's wrong? The IntelliDrugs team reads this.").fill("E2E: the pack size looks wrong.");
+    await expect(p.locator('#flag form input[name="cf-turnstile-response"]')).toHaveValue(/.+/, { timeout: 20_000 });
+    await p.getByRole("button", { name: "Send report" }).click();
+    await expect(p).toHaveURL(new RegExp(`/products/${P.napa}\\?flag=sent#flag$`));
+    const line = p.locator("#flag > p").filter({ hasText: "Thank you." });
+    await expect(line).toHaveText("Thank you. Your flag was sent to the reviewers.");
+    await expect(line).toBeInViewport();
+    expect(sql(`SELECT count(*) FROM ops.flag WHERE target_type = 'product' AND target_id = '${P.napa}' AND reporter_email = '${E2E_EMAILS.user}'`)).toBe("1");
+  } finally {
+    sql(`DELETE FROM ops.flag WHERE target_type = 'product' AND reporter_email = '${E2E_EMAILS.user}'`);
+    await ctx.close();
+  }
+});
+
 test("partner access: signed out sees the sign-in line; signed in sends a request stored as a flag (§6.9)", async ({ browser, page }) => {
   await page.goto("/partners");
   await expect(page.getByText("Sign in first. Access is granted by the IntelliDrugs team.")).toBeVisible();
@@ -130,11 +158,11 @@ test("partner access: signed out sees the sign-in line; signed in sends a reques
   await p.getByLabel("Expected checks per day").selectOption("Under 1,000");
   await expect(p.locator('#request form input[name="cf-turnstile-response"]')).toHaveValue(/.+/, { timeout: 20_000 });
   await p.getByRole("button", { name: "Request partner access" }).click();
-  // The action redirects to ?partner=sent#request; Next's client router drops the fragment on the JavaScript path.
-  await expect(p).toHaveURL(/\/partners\?partner=sent(#request)?$/);
+  await expect(p).toHaveURL(/\/partners\?partner=sent#request$/);
   // The outcome is a plain paragraph with no role (Task 34 Ruling: §10.2 allows one polite live region per page).
-  await expect(p.locator("#request p").filter({ hasText: "Request sent." }))
-    .toHaveText(`Request sent. The IntelliDrugs team replies to ${E2E_EMAILS.user}.`);
+  const line = p.locator("#request p").filter({ hasText: "Request sent." });
+  await expect(line).toHaveText(`Request sent. The IntelliDrugs team replies to ${E2E_EMAILS.user}.`);
+  await expect(line).toBeInViewport();
   expect(partnerRequests(E2E_EMAILS.user)[0]).toBe("Organisation: E2E Clinic");
   await ctx.close();
 });

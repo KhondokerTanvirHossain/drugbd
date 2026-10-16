@@ -8,7 +8,6 @@ vi.mock("@/lib/api", async (importOriginal) => ({ ...(await importOriginal<typeo
 vi.mock("@/lib/turnstile", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/turnstile")>()),
   verifyTurnstile: (...a: unknown[]) => verifyTurnstile(...a) }));
 vi.mock("next/headers", () => ({ headers: async () => new Headers({ "x-nonce": "n1", "x-request-id": "11111111-1111-4111-8111-111111111111" }) }));
-vi.mock("@/lib/public-actions", () => ({ partnerRequestAction: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 import PartnersPage from "@/app/partners/page";
 import { createLimits } from "@/lib/limits";
@@ -36,6 +35,8 @@ describe("/partners (§6.9)", () => {
     for (const opt of ["EMR", "Pharmacy", "Pharma company", "Other", "Under 1,000", "1,000–10,000", "Over 10,000"]) expect(html).toContain(`>${opt}</option>`);
     expect(html).toContain("Don&#x27;t include patient names or other personal health details.");
     expect(html).toContain(">Request partner access</button>");
+    // A native POST: the 303 to ?partner=<code>#request keeps its fragment with JavaScript too (form-post-routes.test.ts).
+    expect(html).toContain('<form class="form" action="/partners/request" method="post">');
   });
 
   it("signed out: the sign-in line and link, no form", async () => {
@@ -102,19 +103,5 @@ describe("submitPartnerRequest (§6.9, §9.3)", () => {
     const limits = createLimits();
     for (let i = 0; i < 3; i++) expect((await submitPartnerRequest(fd(GOOD), limits)).code).toBe("sent");
     expect((await submitPartnerRequest(fd(GOOD), limits)).code).toBe("failed");
-  });
-});
-
-describe("partnerRequestAction (§6.9, §9.7)", () => {
-  it("logs action:partner with its status and request id, never a field, then redirects to the outcome at #request", async () => {
-    const { partnerRequestAction } = await vi.importActual<typeof import("@/lib/public-actions")>("@/lib/public-actions");
-    const log = vi.spyOn(console, "log").mockImplementation(() => {});
-    const err = await partnerRequestAction(fd(GOOD)).then(() => null, (e: unknown) => e);
-    expect(String((err as { digest?: string }).digest).split(";")[2]).toBe("/partners?partner=sent#request");
-    const lines = log.mock.calls.map((c) => String(c[0]));
-    log.mockRestore();
-    expect(lines.map((l) => JSON.parse(l))).toEqual([{ msg: "request", route: "action:partner", method: "POST", status: 200,
-      ms: expect.any(Number), requestId: "11111111-1111-4111-8111-111111111111" }]);
-    for (const l of lines) for (const v of [...Object.values(GOOD), "me@example.org"]) expect(l).not.toContain(v);
   });
 });
