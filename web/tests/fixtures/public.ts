@@ -58,9 +58,9 @@ export const NAPA_PAIRS: ProductInteractions = {
       pairReview: { state: "reviewed", reviewedAt: "2026-10-15T08:00:00Z" }, brands: brands(["076-0028-006--aspirin", "Aspirin"]), brandCount: 1 },
   ],
   notChecked: [
-    { substance: ACET, partnerSubstance: { bdsId: "BDS-000010", name: "Domperidone" }, reason: "no_data", route: null,
+    { substance: ACET, partnerSubstance: { bdsId: "BDS-000010", name: "Domperidone" }, reason: "no_data", side: "partner", route: null,
       brands: brands(["127-0263-018--domperidone", "Domperidone"]), brandCount: 1 },
-    { substance: ACET, partnerSubstance: { bdsId: "BDS-000007", name: "Oticmol" }, reason: "no_route", route: "systemic",
+    { substance: ACET, partnerSubstance: { bdsId: "BDS-000007", name: "Oticmol" }, reason: "no_route", side: "partner", route: "systemic",
       brands: brands(["OTI-1", "Otimol"]), brandCount: 1 },
   ],
 };

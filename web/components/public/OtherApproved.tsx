@@ -39,29 +39,35 @@ function AllBrands({ p }: { p: { brands: InteractionPair["brands"]; brandCount: 
 
 const isUnclassifiedNoText = (p: InteractionPair) => severityOf(p.severity) === "unknown" && pairText(p) === null;
 
-/** §6.7.3 item 4 line for one partner brand (no_route, not_run, unmapped). */
-function otherLine(n: InteractionNotChecked, brand: string): string {
+/** §6.7.3 item 4 line for one brand and the substance whose reason it is (no_route, not_run, unmapped). */
+function otherLine(n: InteractionNotChecked, brand: string, substance: string): string {
   if (n.reason === "no_route") return n.route
-    ? fill(DESK_NEW.routeAware.notCheckedNoRoute, { brand, route: n.route, substance: n.partnerSubstance.name })
-    : fill(DESK_NEW.routeAware.notCheckedNoRouteNoRoute, { brand, substance: n.partnerSubstance.name });
-  if (n.reason === "not_run") return fill(DESK_NEW.notRun.notCheckedNotRun, { substance: n.partnerSubstance.name, brand });
-  return fill(DESK_NEW.routeAware.notCheckedUnmapped, { ingredient: n.partnerSubstance.name, brand });
+    ? fill(DESK_NEW.routeAware.notCheckedNoRoute, { brand, route: n.route, substance })
+    : fill(DESK_NEW.routeAware.notCheckedNoRouteNoRoute, { brand, substance });
+  if (n.reason === "not_run") return fill(DESK_NEW.notRun.notCheckedNotRun, { substance, brand });
+  return fill(DESK_NEW.routeAware.notCheckedUnmapped, { ingredient: substance, brand });
 }
 
 /**
  * §6.5 "With other approved medicines" (D60): approved products of every batch, grouped by partner substance, 20 partner
  * substances a page (?ix=). Unapproved partners are not shown here (the checker names them). "No interaction listed" is
- * dropped from the product page.
+ * dropped from the product page. A not-checked line whose reason is this product's own substance (side "this", G3) is
+ * never dropped: a no-data one is one hatch block per own substance listing each partner; any other is its item 4 line
+ * once, naming this brand ({brand}).
  */
-export default function OtherApproved({ data, ix, conceptId, subject }:
-    { data: ProductInteractions; ix: number; conceptId: string; subject: string }) {
+export default function OtherApproved({ data, ix, conceptId, subject, brand }:
+    { data: ProductInteractions; ix: number; conceptId: string; subject: string; brand: string }) {
   const href = (page: number) => `/products/${enc(conceptId)}?ix=${page}#with-other`;
   const texted = data.partners.filter((p) => !isUnclassifiedNoText(p));
   const quiet = data.partners.filter(isUnclassifiedNoText);
   const quietBy = new Map<string, InteractionPair[]>();
   for (const p of quiet) quietBy.set(p.substance.name, [...(quietBy.get(p.substance.name) ?? []), p]);
-  const noData = data.notChecked.filter((n) => n.reason === "no_data");
-  const others = data.notChecked.filter((n) => n.reason !== "no_data");
+  const theirs = data.notChecked.filter((n) => n.side !== "this"), mine = data.notChecked.filter((n) => n.side === "this");
+  const noData = theirs.filter((n) => n.reason === "no_data");
+  const others = theirs.filter((n) => n.reason !== "no_data");
+  const ownNoData = new Map<string, InteractionNotChecked[]>();
+  for (const n of mine.filter((x) => x.reason === "no_data")) ownNoData.set(n.substance.name, [...(ownNoData.get(n.substance.name) ?? []), n]);
+  const ownLines = [...new Set(mine.filter((n) => n.reason !== "no_data").map((n) => otherLine(n, brand, n.substance.name)))];
   const empty = data.totalPartners === 0;
   const last = Math.max(0, Math.ceil(data.totalPartners / 20) - 1);
   const past = !empty && ix > last;   // an edited or stale ?ix= past the end: back to the last real page (Review Focus 5)
@@ -87,12 +93,18 @@ export default function OtherApproved({ data, ix, conceptId, subject }:
           <p>{UNKNOWN_PAIRS_LINE}</p>
         </div>
       ))}
+      {[...ownNoData.entries()].map(([substance, list]) => (
+        <NoDataBlock key={`own|${substance}`} title={substance} bdsId={list[0].substance.bdsId ?? undefined}
+          extra={list.map((n) => <p key={n.partnerSubstance.name} className="nodata-pairs">{fill(N.notCheckedIn, { substance,
+            partner: n.partnerSubstance.name, k: n.brandCount, brands: brandsWord(n.brandCount) })}</p>)} />
+      ))}
+      {ownLines.map((line) => <p key={line}>{line}</p>)}
       {noData.map((n) => (
         <NoDataBlock key={n.partnerSubstance.name} title={n.partnerSubstance.name} bdsId={n.partnerSubstance.bdsId ?? undefined}
           extra={<p className="nodata-pairs">{fill(N.notCheckedIn, { substance: n.substance.name, partner: n.partnerSubstance.name,
             k: n.brandCount, brands: brandsWord(n.brandCount) })}</p>} />
       ))}
-      {others.map((n) => n.brands.map((b) => <p key={`${n.partnerSubstance.name}|${n.reason}|${b.conceptId}`}>{otherLine(n, b.tradeName)}</p>))}
+      {others.map((n) => n.brands.map((b) => <p key={`${n.partnerSubstance.name}|${n.reason}|${b.conceptId}`}>{otherLine(n, b.tradeName, n.partnerSubstance.name)}</p>))}
       {!empty && (ix > 0 || more) && (
         <p className={styles.pager}>
           {ix > 0 && <a href={href(prev)}>{N.previous}</a>}

@@ -228,6 +228,44 @@ describe("approved product (§6.5 item 6)", () => {
     expect(past).not.toContain("No other approved medicine has an interaction");
   });
 
+  // Final review finding 1 (G3): this product's own substance with no usable entry is not checked against every partner;
+  // the empty line ("No other approved medicine has an interaction …") is never printed over it.
+  it("this product's no-data substance: one hatch block naming it, a Not checked line per partner, never the empty line", async () => {
+    const ACET = NAPA_PAIRS.notChecked[0].substance;
+    getProductInteractions.mockResolvedValue({ ok: true, data: { conceptId: NAPA.conceptId, page: 0, totalPartners: 2, partners: [],
+      notChecked: [
+        { substance: ACET, partnerSubstance: { bdsId: "BDS-000004", name: "Acetylsalicylic acid" }, reason: "no_data", side: "this",
+          route: null, brands: [{ conceptId: "076-0028-006--aspirin", tradeName: "Aspirin" }], brandCount: 1 },
+        { substance: ACET, partnerSubstance: { bdsId: "BDS-000003", name: "Warfarin" }, reason: "no_data", side: "this", route: null,
+          brands: [{ conceptId: "W-9", tradeName: "Warin" }, { conceptId: "185-0138-012--g-warfarin", tradeName: "G Warfarin" }], brandCount: 2 },
+      ] } });
+    const html = await renderProduct();
+    const other = html.slice(html.indexOf('id="with-other"'));
+    expect(other).not.toContain("No other approved medicine has an interaction");
+    expect(other.match(/class="nodata-block hatch"/g)).toHaveLength(1);
+    expect(other).toContain('<p class="nodata-title">Acetaminophen <span class="mono');
+    expect(other).toContain(">BDS-000001</span>");
+    expect(other).toContain("Not checked: Acetaminophen + Acetylsalicylic acid, in 1 approved brand<");
+    expect(other).toContain("Not checked: Acetaminophen + Warfarin, in 2 approved brands<");
+  });
+
+  it("this product's no-route or not-run substance: its own item 4 line once, naming this brand, never per partner brand", async () => {
+    const ACET = NAPA_PAIRS.notChecked[0].substance;
+    const line = (partner: string, reason: "not_run" | "no_route", route: string | null) => ({ substance: ACET,
+      partnerSubstance: { bdsId: null, name: partner }, reason, side: "this" as const, route,
+      brands: [{ conceptId: `${partner}-1`, tradeName: `${partner} One` }, { conceptId: `${partner}-2`, tradeName: `${partner} Two` }], brandCount: 2 });
+    getProductInteractions.mockResolvedValue({ ok: true, data: { conceptId: NAPA.conceptId, page: 0, totalPartners: 2, partners: [],
+      notChecked: [line("Warfarin", "not_run", null), line("Aspirin", "not_run", null)] } });
+    const notRun = (await renderProduct()).split("Not checked: DDInter mapping has not run for Acetaminophen in Napa.");
+    expect(notRun).toHaveLength(2);
+    expect(notRun.join("")).not.toContain("Warfarin One");
+    getProductInteractions.mockResolvedValue({ ok: true, data: { conceptId: NAPA.conceptId, page: 0, totalPartners: 1, partners: [],
+      notChecked: [line("Warfarin", "no_route", "ophthalmic")] } });
+    const noRoute = await renderProduct();
+    expect(noRoute).toContain("Not checked: Napa&#x27;s route is ophthalmic and DDInter has no entry for Acetaminophen on that route.");
+    expect(noRoute).not.toContain("No other approved medicine has an interaction");
+  });
+
   it("placeholder text from DDInter is never printed on a partner card; unknown severity with only placeholders joins the panel", async () => {
     const [warf, amlo, asa] = NAPA_PAIRS.partners;
     getProductInteractions.mockResolvedValue({ ok: true, data: { ...NAPA_PAIRS, partners: [

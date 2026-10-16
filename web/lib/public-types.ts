@@ -44,7 +44,9 @@ export type InteractionPair = { substance: SubstanceRef; partnerSubstance: Subst
   interaction: string | null; management: string | null; ddinterA: string; ddinterB: string; routeAssumed: boolean; source: string;
   pairReview: PublicPairReview; brands: Brand[]; brandCount: number };
 export type InteractionNotChecked = { substance: SubstanceRef; partnerSubstance: SubstanceRef;
-  reason: "no_data" | "not_run" | "no_route" | "unmapped"; route: string | null; brands: Brand[]; brandCount: number };
+  reason: "no_data" | "not_run" | "no_route" | "unmapped"; route: string | null; brands: Brand[]; brandCount: number;
+  /** Whose reason it is (§6.7.2 REASON_ORDER, this side on a tie): this product's substance, or the partner brands'. */
+  side: "this" | "partner" };
 export type ProductInteractions = { conceptId: string; page: number; totalPartners: number; partners: InteractionPair[];
   notChecked: InteractionNotChecked[] };
 

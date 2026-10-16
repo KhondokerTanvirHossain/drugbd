@@ -166,3 +166,22 @@ test("partner access: signed out sees the sign-in line; signed in sends a reques
   expect(partnerRequests(E2E_EMAILS.user)[0]).toBe("Organisation: E2E Clinic");
   await ctx.close();
 });
+
+/*
+ * Final review finding 1 (G3): Domperidone (coverage none) approved while Napa, Aspirin and G Warfarin are public. Its
+ * pairs with them were never checked, so the page must say so; the §6.5 empty sentence ("No other approved medicine has
+ * an interaction … yet") would read as safety.
+ */
+test("an approved no-data product lists each approved partner as not checked, never the empty line (§6.5, G3)", async ({ page }) => {
+  publish(P.domperidone);
+  await page.goto(`/products/${P.domperidone}`);
+  await expect(page.locator("h1")).toHaveText("Domperidone");
+  const other = page.locator("div:has(> #with-other)");
+  await expect(other.getByRole("heading", { name: "With other approved medicines" })).toBeVisible();
+  await expect(other).not.toContainText("No other approved medicine has an interaction");
+  const block = other.locator(".nodata-block.hatch");
+  await expect(block).toHaveCount(1);
+  await expect(block.locator(".nodata-title")).toContainText("Domperidone");
+  await expect(block).toContainText("Not checked: Domperidone + Acetaminophen, in 1 approved brand");
+  expect(await block.locator(".nodata-pairs").filter({ hasText: /^Not checked: Domperidone \+ / }).count()).toBeGreaterThanOrEqual(3);
+});

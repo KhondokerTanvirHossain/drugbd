@@ -35,7 +35,7 @@ export default function ProductView(props: ProductViewProps) {
             <div className={styles["s-psec-h"]}><h2 id="interactions" className={styles.h2}>{PRODUCT.interactions}</h2></div>
             {items.map((i) => <SubstanceInteractions key={i.bdsId} item={i} route={product.clinicalDrug?.route ?? null} />)}
             {props.interactions && <OtherApproved data={props.interactions} ix={props.ix} conceptId={product.conceptId}
-              subject={crumb(product)?.label ?? product.tradeName} />}
+              subject={crumb(product)?.label ?? product.tradeName} brand={product.tradeName} />}
           </section>
         )}
         <AutomatedChecks stages={product.provenance.stages} />
