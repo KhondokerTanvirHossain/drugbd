@@ -1,5 +1,6 @@
 package com.niramoy.bddrug.application;
 import com.niramoy.bddrug.application.port.ProductQueryPort;
+import com.niramoy.bddrug.application.port.ProductQueryPort.LatestItem;
 import com.niramoy.bddrug.domain.HiddenRecord;
 import com.niramoy.bddrug.domain.LoadedProduct;
 import com.niramoy.bddrug.domain.Product;
@@ -8,6 +9,7 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import java.util.Locale;
+import java.util.Optional;
 
 @Service
 public class ProductQueryService {
@@ -24,10 +26,17 @@ public class ProductQueryService {
         return port.search(term, PAGE_SIZE, page * PAGE_SIZE, scope == Scope.PUBLIC);
     }
 
-    /** Emits the Product, or for an anonymous request on an unapproved product a HiddenRecord.Product; empty when unknown. */
+    /** The Product; under public scope a non-public product is the §7.4 stub; empty when unknown. */
     public Mono<Object> get(String conceptId, Scope scope) {
-        return port.findByConceptId(conceptId).map(p -> scope == Scope.PUBLIC && !"ok".equals(p.reviewStatus())
-            ? new HiddenRecord.Product(p.conceptId(), p.tradeName(), p.reviewStatus()) : p);
+        return port.findByConceptId(conceptId).flatMap(p -> scope == Scope.PUBLIC && !"ok".equals(p.reviewStatus())
+            ? port.latestItem(conceptId).map(Optional::of).defaultIfEmpty(Optional.empty()).map(item -> (Object) stub(p, item.orElse(null)))
+            : Mono.just((Object) p));
+    }
+
+    /** §6.4: "removed" whatever the last decision when the latest item left the batch file; otherwise "not_reviewed". */
+    public static HiddenRecord.Product stub(Product p, LatestItem item) {
+        String status = item != null && item.removed() ? HiddenRecord.REMOVED : HiddenRecord.NOT_REVIEWED;
+        return new HiddenRecord.Product(p.conceptId(), p.tradeName(), status, item == null ? null : item.batchId());
     }
 
     public Flux<LoadedProduct> loaded(Scope scope) { return port.loaded(scope == Scope.PUBLIC); }

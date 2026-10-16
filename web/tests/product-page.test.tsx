@@ -27,7 +27,7 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllEnvs());
 
 describe("product page visibility (spec §2.2: public scope for every session)", () => {
-  const hidden = { conceptId: "H-1", tradeName: "Secretname", reviewStatus: "pending", hidden: true };
+  const hidden = { conceptId: "H-1", tradeName: "Secretname", status: "not_reviewed", batchId: "0001-pilot", hidden: true };
 
   it("asks the API with the id only, which reads public scope", async () => {
     await render("x");

@@ -75,9 +75,9 @@ test("the §1.6 Learn corrections are on the pages (§12.1 phase 3 exit)", async
     await page.goto(`/learn/${slug}`);
     for (const t of texts) await expect(main(page), `${slug}: ${t}`).toContainText(t);
   };
-  // Before P2 (§6.8, Task 0): the API sentences of chapter 1 and the chapter 8 product caption are not rendered yet.
   await has("start", "This is Napa as the review desk shows it.", "What a public visitor sees for Napa today.");
-  await expect(main(page)).not.toContainText("The API returns the same thing");
+  // P2 serves the §7.4 stub (Task 1), so chapter 1 states the API's answer (§6.8 "Before P2").
+  await expect(main(page)).toContainText('The API returns the same thing: the id, trade name, status "not_reviewed" and hidden: true.');
   await has("model", "This eye-drop product is checked against DDInter352, the ophthalmic entry. When a product's route has no DDInter entry, the systemic entry is used and marked \"route assumed\".");
   await has("process", "Approval comes from the decision history. Each decision updates the record's review status, and a re-run resets it, so a decision made before the latest extraction never counts.",
     "9 of 10 records warned. Eight list pairs with no DDInter text. Domperidone has no DDInter data. Chloramphenicol is OK.",
@@ -88,7 +88,8 @@ test("the §1.6 Learn corrections are on the pages (§12.1 phase 3 exit)", async
     "Opens the undo window (8 seconds by default; 20 or 60 in desk settings).");
   await has("partners", "scope=all with the internal token, used only by integration tests. Reviewers read unreviewed data through /v1/review/*.",
     "Decision history, newest first, with notes, roles and reviewer emails. Internal token only.");
-  await expect(main(page)).not.toContainText("a public caller gets its id");
+  // ...and chapter 8's caption under the public product body (§6.8 "Before P2").
+  await expect(main(page)).toContainText('Napa is not approved yet, so a public caller gets its id, trade name and status "not_reviewed", with hidden: true.');
   await has("glossary", "4 Major, 6 Moderate, 2 Minor, 16 not classified", "DDInter for 9 of 10 records",
     'The undo window after "Looks correct" (8 seconds by default; 20 or 60 in desk settings) when U cancels it.');
   await has("faq", "Press U or Undo before the undo window closes (8 seconds unless you lengthened it).");

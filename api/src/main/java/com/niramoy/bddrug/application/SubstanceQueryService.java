@@ -15,6 +15,6 @@ public class SubstanceQueryService {
     public Mono<Object> get(String bdsId, Scope scope) {
         boolean pub = scope == Scope.PUBLIC;
         return port.find(bdsId, pub).map(s -> pub && s.products().isEmpty()
-            ? new HiddenRecord.Substance(s.bdsId(), s.preferredName(), "pending") : s);
+            ? new HiddenRecord.Substance(s.bdsId(), s.preferredName()) : s);
     }
 }
