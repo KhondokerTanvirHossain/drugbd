@@ -91,3 +91,57 @@ describe("approved product (§6.5): reads", () => {
     expect(html).toContain(">Napa</h1>");
   });
 });
+
+describe("approved product (§6.5 items 1–5)", () => {
+  it("crumb, h1, meta and the verification line", async () => {
+    const html = await renderProduct();
+    expect(html).toContain('<a href="/search">Medicines</a><span aria-hidden="true">/</span><a href="/substances/BDS-000001">Acetaminophen</a><span aria-hidden="true">/</span><span>Napa</span>');
+    expect(html).toContain('<span>Tablet</span><span>Beximco Pharmaceuticals Ltd.</span><span class="mono">DAR 186-0030-006</span>');
+    expect(html).toContain('<span class="rv rv--approved">Approved by a pharmacist</span><span>on 14/10/2026, 11:20 Dhaka time</span>');
+  });
+
+  it("a combination product's crumb uses the clinical drug display name", async () => {
+    const item = NAPA.clinicalDrug!.ingredients[0];
+    getPublicProduct.mockResolvedValue({ ok: true, data: { ...NAPA, clinicalDrug: { ...NAPA.clinicalDrug!, displayName: "Amoxicillin + Clavulanic acid tablet",
+      ingredients: [item, { ...item, bdsId: "BDS-000002", name: "Clavulanic acid" }] } } });
+    expect(await renderProduct()).toContain('<span aria-hidden="true">/</span><span>Amoxicillin + Clavulanic acid tablet</span><span aria-hidden="true">/</span><span>Napa</span>');
+  });
+
+  it("What's in it: the three trace columns and the names grouped with their sources", async () => {
+    const html = await renderProduct();
+    expect(html).toContain("What&#x27;s in it");
+    expect(html).toContain("Brand, as filed with DGDA");
+    expect(html).toContain('<span class="raw">Paracetamol 500 mg</span>');
+    expect(html).toContain("Tablet, systemic route");
+    expect(html).toContain("Acetaminophen, 500 mg");
+    expect(html).toContain("Also listed as Paracetamol");
+    expect(html).toMatch(/<li>Paracetamol <span>DGDA register<\/span><\/li><li>acetaminophen <span>RxNorm<\/span><\/li><li>Acetaminophen <span>ICD-11, DDInter<\/span><\/li>/);
+  });
+
+  it("Codes: one labelled scroll region with a caption, five columns, the Source links, and the chosen DDInter entry", async () => {
+    const html = await renderProduct();
+    expect(html).toContain('role="region" aria-label="Codes for Acetaminophen"');
+    expect(html).toContain('<caption class="sr-only">Crosswalk codes for Acetaminophen</caption>');
+    for (const col of ["System", "Code", "What the system is", "How it was matched", "Source"]) expect(html).toContain(`<th scope="col">${col}</th>`);
+    expect(html).toContain("5 code systems and the DDInter entry, for Acetaminophen");
+    expect(html).toContain("WHO&#x27;s ICD-11 medicament code. The DGDA register lists ingredients with it.");
+    expect(html).toContain("xm, confidence 1.0");
+    expect(html).toContain("drugbank, confidence 1.0, systemic");
+    expect(html).toContain('href="https://mor.nlm.nih.gov/RxNav/search?searchBy=RXCUI&amp;searchTerm=161"');
+    expect(html).toContain('target="_blank"');
+    expect(html).toContain("Search ICD-11 for XM5DJ7");
+    expect(html).toContain('<span class="code">387517004</span><span class="code">90332006</span>');
+  });
+
+  it("a no-data substance's DDInter row is the No data chip; a no-route one is plain text with no hatch", async () => {
+    const item = NAPA.clinicalDrug!.ingredients[0];
+    const none = { ...item, summary: { ...item.summary!, coverage: { coverage: "none" as const, note: "" }, ddinter: { chosen: [], entries: [] } } };
+    getPublicProduct.mockResolvedValue({ ok: true, data: { ...NAPA, clinicalDrug: { ...NAPA.clinicalDrug!, ingredients: [none] } } });
+    expect(await renderProduct()).toContain('<td><span class="sev sev--nodata">No data</span></td>');
+    const noRoute = { ...item, summary: { ...item.summary!, ddinter: { ...item.summary!.ddinter, chosen: [] } } };
+    getPublicProduct.mockResolvedValue({ ok: true, data: { ...NAPA, clinicalDrug: { ...NAPA.clinicalDrug!, route: "otic", ingredients: [noRoute] } } });
+    const html = await renderProduct();
+    expect(html).toContain("No entry for route otic");
+    expect(html).not.toContain("sev--nodata");
+  });
+});

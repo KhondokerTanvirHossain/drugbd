@@ -134,7 +134,7 @@ export const PRODUCT = {
   clinicalForm: "{form}, {route} route", alsoListed: "Also listed as {name}", namesLabel: "Names for this substance",
   codes: "Codes", codesSub: "{k} code systems and the DDInter entry, for {name} {bdsId}", codesCaption: "Crosswalk codes for {name}",
   codesRegion: "Codes for {name}",
-  colSystem: "System", colCode: "Code", colWhat: "What the system is", colHow: "How it was matched",
+  colSystem: "System", colCode: "Code", colWhat: "What the system is", colHow: "How it was matched", colSource: "Source",
   how: "{method}, confidence {confidence}",
   systems: {
     ICD11_XM: ["ICD-11", "WHO's ICD-11 medicament code. The DGDA register lists ingredients with it."],
