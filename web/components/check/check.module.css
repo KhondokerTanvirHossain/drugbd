@@ -1,0 +1,39 @@
+.s-chk { display: grid; grid-template-columns: minmax(0, 340px) minmax(0, 1fr); min-height: 640px; max-width: 1240px; margin: 0 auto; }
+.s-chk-side { padding: 24px; background: var(--surface-2); border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.s-chk-main { padding: 24px 28px 28px; display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.h1 { font: var(--t-title2); letter-spacing: var(--tr-title2); }
+.s-sel-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.s-sel-h p { font: 600 13px/1.3 var(--font-ui); color: var(--fg); }
+.s-sel { display: flex; flex-direction: column; gap: 8px; }
+.s-med { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; align-items: center; padding: 10px 8px 10px 14px; border-radius: var(--r-card); background: var(--surface); box-shadow: var(--shadow-1); }
+.s-med b { font: 600 14px/1.3 var(--font-ui); overflow-wrap: anywhere; }
+.s-med > span { font-size: 12.5px; color: var(--fg-2); grid-column: 1; }
+.s-med :global(.btn) { grid-column: 2; grid-row: 1 / span 2; }
+.s-med-empty { font-size: 13px; color: var(--fg-2); padding: 12px 14px; border-radius: var(--r-card); box-shadow: inset 0 0 0 1px var(--line-strong); }
+.s-presets { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.s-presets :global(.btn) { white-space: normal; text-align: left; line-height: 1.25; padding-block: 6px; height: auto; }
+.s-group-h { font: 600 13px/1.3 var(--font-ui); color: var(--fg-2); }
+.s-group { display: flex; flex-direction: column; gap: 10px; }
+.s-sevrow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.other { font-size: 12.5px; color: var(--fg-2); }
+.results { display: flex; flex-direction: column; gap: 20px; }
+.s-quiet { padding: 14px 16px; border-radius: var(--r-panel); box-shadow: inset 0 0 0 1px var(--line-strong); display: flex; flex-direction: column; gap: 8px; font-size: 13.5px; color: var(--fg-2); }
+.s-quiet h3 { font: 600 14px/1.3 var(--font-ui); color: var(--fg); }
+.s-quiet ul { display: flex; flex-direction: column; gap: 4px; color: var(--fg); }
+.s-route { font-size: 12px; color: var(--fg-2); }
+.plain { font-size: 13.5px; color: var(--fg); }
+.checkedList { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; font-size: 13.5px; }
+.s-legend { display: flex; flex-direction: column; gap: 10px; padding-top: 18px; border-top: 1px solid var(--line); }
+.s-legend h3 { font: 600 13px/1.3 var(--font-ui); color: var(--fg-2); }
+.s-legend dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 14px; align-items: center; font-size: 13px; color: var(--fg-2); }
+.s-legend dd { min-width: 0; }
+.s-disc { font-size: 13px; color: var(--fg); padding: 12px 14px; border-radius: var(--r-card); box-shadow: inset 0 0 0 1px var(--line-strong); }
+.s-chk-empty { padding: 18px; border-radius: var(--r-panel); box-shadow: inset 0 0 0 1px var(--line-strong); color: var(--fg-2); font-size: 14px; }
+.matches { display: flex; flex-direction: column; gap: 4px; }
+.matches button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; padding: 9px 10px; border: 0; border-radius: 8px; background: var(--surface); color: var(--fg); font: 600 14px/1.3 var(--font-ui); text-align: left; cursor: pointer; }
+.matches button span { font: 400 12.5px/1.3 var(--font-ui); color: var(--fg-2); }
+@media (max-width: 920px) { .s-chk { grid-template-columns: 1fr; } .s-chk-side { border-right: 0; border-bottom: 1px solid var(--line); } }
+@media (max-width: 560px) { .s-legend dl { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 520px) { .s-chk-side, .s-chk-main { padding: 18px 16px; } }
+/* Board P .s-sum: a global class (scoped under a local one, as CSS Modules require), so tests read the board's name. */
+.s-chk-main :global(.s-sum) { font: var(--t-title2); letter-spacing: var(--tr-title2); text-wrap: pretty; }
