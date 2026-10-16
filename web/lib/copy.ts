@@ -3,6 +3,7 @@
  * each one and greps the tree for paraphrases). New copy for the states the boards do not draw (§1.7) lives in
  * NEW_COPY, keyed by the verbatim §1.7 row; each plan adds the keys for the states it builds.
  */
+import { PAGE_ERROR } from "./page-error-copy";
 
 // ---- §3.6 fixed safety strings ----
 export const NO_DATA_SENTENCE = "No interaction data in DDInter for this substance. This does not mean it is safe to combine.";
@@ -112,6 +113,8 @@ export const NEW_COPY_ROWS = {
   dismissIssue: "Dismiss issue: control, panel, consequence sentence, hints, 409 outcomes, the not-saved and unconfirmed failure banners (report channel), announcements, history entries and the dismissal \"No longer counts\" suffix",
   sourceLinks: "Source links: link labels, \"fetched on {date}\", the ICD-11 search link, the evidence drawer's \"Sources\" section, the product page's \"Source\" column",
   productOtherApproved: "Product page \"With other approved medicines\" (cross-batch, grouped by partner substance) and its paging",
+  // P2 final review finding 3 (the spec's "*(P2)* " marker removed, as for P1C)
+  pageError: "Public page could not load (`app/error.tsx`)",
 } as const;
 export type NewCopyState = (typeof NEW_COPY_ROWS)[keyof typeof NEW_COPY_ROWS];
 
@@ -494,6 +497,8 @@ export const NEW_COPY: Record<NewCopyState, Record<string, string>> = {
     previous: "Previous interactions",
     empty: "No other approved medicine has an interaction with {substance} listed in DDInter 2.0 yet. Other medicines appear here as pharmacists approve them.",
   },
+  // Defined in lib/page-error-copy.ts so the root error boundary does not ship this module to every page (§10.6).
+  [NEW_COPY_ROWS.pageError]: PAGE_ERROR,
 };
 /** Typed shortcut for the sign-in row. */
 export const SIGN_IN_STATES = NEW_COPY[NEW_COPY_ROWS.signIn] as {

@@ -53,6 +53,12 @@ describe("public CSS stays within §10.6: no review, desk or Learn stylesheet re
     ]);
   });
 
+  // Final review finding 3: the root error boundary loads with every route, so it may reach only the layout's own modules.
+  it("the root error boundary reaches no CSS module the root layout does not already load", () => {
+    const layout = cssModulesFrom("app/layout.tsx");
+    expect(cssModulesFrom("app/error.tsx").filter((f) => !layout.includes(f))).toEqual([]);
+  });
+
   it.each(["app/page.tsx", "app/search/page.tsx", "app/products/[id]/page.tsx", "app/substances/[id]/page.tsx", "app/check/page.tsx"])(
     "%s reaches no review, desk or Learn CSS module", (page) => {
       expect(cssModulesFrom(page).filter((f) => NOT_PUBLIC.test(f))).toEqual([]);
