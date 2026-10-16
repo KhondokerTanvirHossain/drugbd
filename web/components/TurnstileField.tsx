@@ -50,13 +50,15 @@ export type TurnstileFieldProps = {
   onToken?: (token: string | null) => void; onError?: () => void;
   /** §5.8.5: the desk uses "interaction-only" and refresh-expired "auto"; the desk shows its own BotCheck (hideStatus). */
   appearance?: "always" | "interaction-only"; refreshExpired?: "auto" | "manual"; hideStatus?: boolean;
+  /** §10.4: sign-in asks for "compact" (150 px wide) on narrow screens, where the 300 px widget would scroll the page sideways. */
+  size?: "normal" | "compact";
 };
 
 /**
  * Island (§4.2): explicit Turnstile render, reset and status. Turnstile puts the `cf-turnstile-response` field into
  * the enclosing form; `onToken` hands the same token to a fetch-based caller (sign-in).
  */
-export default function TurnstileField({ siteKey, action, nonce, resetKey = 0, onToken, onError, appearance, refreshExpired, hideStatus }: TurnstileFieldProps) {
+export default function TurnstileField({ siteKey, action, nonce, resetKey = 0, onToken, onError, appearance, refreshExpired, hideStatus, size }: TurnstileFieldProps) {
   const box = useRef<HTMLDivElement>(null);
   const widget = useRef<string | null>(null);
   const callbacks = useRef({ onToken, onError });
@@ -74,6 +76,7 @@ export default function TurnstileField({ siteKey, action, nonce, resetKey = 0, o
         "response-field-name": "cf-turnstile-response",
         ...(appearance ? { appearance } : {}),
         ...(refreshExpired ? { "refresh-expired": refreshExpired } : {}),
+        ...(size ? { size } : {}),
         callback: (token: string) => { setState("passed"); callbacks.current.onToken?.(token); },
         "error-callback": () => { setState("failed"); callbacks.current.onToken?.(null); callbacks.current.onError?.(); },
         "expired-callback": () => { setState("checking"); callbacks.current.onToken?.(null); },
@@ -88,7 +91,7 @@ export default function TurnstileField({ siteKey, action, nonce, resetKey = 0, o
       if (widget.current && window.turnstile) window.turnstile.remove(widget.current);
       widget.current = null;
     };
-  }, [siteKey, action, nonce, appearance, refreshExpired, loadAttempt]);
+  }, [siteKey, action, nonce, appearance, refreshExpired, size, loadAttempt]);
 
   useEffect(() => {
     if (resetKey === 0) return;

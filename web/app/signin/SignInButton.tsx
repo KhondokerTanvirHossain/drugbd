@@ -16,6 +16,8 @@ export type FirebaseWebConfig = { apiKey: string; authDomain: string; projectId:
 /** sessionStorage flag set before signInWithRedirect; Clear-Site-Data on sign-out removes it with everything else. */
 export const REDIRECT_FLAG = "intellidrugs-signin-redirect";
 const WELCOME = "/signin?welcome=1";
+/** §10.4: at 440 px and below the card leaves under 300 px for Turnstile, so the widget goes compact (150 px). */
+const NARROW = "(max-width: 440px)";
 
 type Status = "idle" | "loading" | "captcha" | "cancelled" | "blocked" | "failed" | "rejected" | "rate_limited";
 /** The 401 codes of POST /api/session (Task 19) and their §1.7 bodies; anything else reads as "request failed". */
@@ -64,6 +66,19 @@ export default function SignInButton({ config, siteKey, returnTo, siteOrigin, no
   const [resetKey, setResetKey] = useState(0);
   const live = useRef<HTMLParagraphElement>(null);
   const googleButton = useRef<HTMLButtonElement>(null);
+  // The initial read keeps a phone from rendering the normal widget only to remove it (the size never reaches the markup).
+  const [compact, setCompact] = useState(() => typeof window !== "undefined" && typeof window.matchMedia === "function"
+    && window.matchMedia(NARROW).matches);
+
+  // Read on mount and on change; a change re-renders the widget at the new size (TurnstileField's render effect).
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const mq = window.matchMedia(NARROW);
+    setCompact(mq.matches);
+    const onChange = (e: { matches: boolean }) => setCompact(e.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
 
   const onToken = useCallback((t: string | null) => { tokenRef.current = t; setToken(t); }, []);
   const freshCheck = useCallback(() => { tokenRef.current = null; setToken(null); setResetKey((k) => k + 1); }, []);
@@ -214,7 +229,7 @@ export default function SignInButton({ config, siteKey, returnTo, siteOrigin, no
       {status === "loading" && <p className={styles.hint}>{SIGN_IN.loadingHint}</p>}
       <div className={styles.turn}>
         <TurnstileField siteKey={siteKey} action="signin" nonce={nonce} resetKey={resetKey} onToken={onToken}
-          onError={() => setStatus("captcha")} />
+          onError={() => setStatus("captcha")} size={compact ? "compact" : undefined} />
         <span className={styles.turnBy}>{SIGNIN_CARD.turnstile}</span>
       </div>
       <div>{banner}</div>

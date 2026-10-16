@@ -115,6 +115,16 @@ describe("TurnstileField island (§4.2)", () => {
     await waitFor(() => expect(document.head.querySelectorAll(sel)).toHaveLength(1));
   });
 
+  it("passes a compact size to the widget when asked, and no size key otherwise (§10.4 reflow at 320 px)", async () => {
+    const { rerender } = render(<TurnstileField siteKey="k" action="signin" />);
+    await waitFor(() => expect(api.render).toHaveBeenCalledTimes(1));
+    expect(opts()).not.toHaveProperty("size");
+    rerender(<TurnstileField siteKey="k" action="signin" size="compact" />);
+    await waitFor(() => expect(api.render).toHaveBeenCalledTimes(2));
+    expect(api.remove).toHaveBeenCalledWith("w1");
+    expect(api.render.mock.calls[1][1]).toMatchObject({ size: "compact", action: "signin" });
+  });
+
   it("passes interaction-only appearance and auto refresh, can hide its status, and reuses a script already on the page", async () => {
     render(<TurnstileField siteKey="k" action="decision" appearance="interaction-only" refreshExpired="auto" hideStatus />);
     await waitFor(() => expect(api.render).toHaveBeenCalled());
