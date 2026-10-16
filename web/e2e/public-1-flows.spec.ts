@@ -202,7 +202,9 @@ test("hostile URLs answer the site's own pages, never a 500 (Review Focus 2)", a
   for (const [url, status, h1] of cases) {
     const res = await page.goto(url);
     expect(res?.status(), url).toBe(status);
-    await expect(page.locator("html"), url).not.toHaveAttribute("id", "__next_error__");
+    // A notFound() page is Next 15's __next_error__ document with the not-found tree streamed in (app/not-found.tsx); a
+    // 200 must be the plain site document.
+    if (status === 200) await expect(page.locator("html"), url).not.toHaveAttribute("id", "__next_error__");
     await expect(page.getByRole("link", { name: "Skip to content" }), url).toBeAttached();
     await expect(page.locator("h1"), url).toHaveText(h1);
   }
