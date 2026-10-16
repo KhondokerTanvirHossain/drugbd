@@ -107,8 +107,19 @@ describe("§1.7 new copy", () => {
       unverifiedBody: "Your Google account email is not verified.",
       staleAuthBody: "Sign-in is too old. Please sign in again.",
       invalidBody: "Sign-in could not be verified. Please try again.",
+      welcomeEngineerStep: "Your check is recorded but does not publish. A pharmacist approves each record.",
     });
-    expect(copy.NEW_COPY[copy.NEW_COPY_ROWS.noPhiHelp]).toEqual({ help: copy.NO_PHI_HELP });
+    expect(copy.NEW_COPY[copy.NEW_COPY_ROWS.noPhiHelp]).toMatchObject({ help: copy.NO_PHI_HELP });
+    expect(copy.PUBLIC_NEW.privacy).toEqual({
+      audit: "Each reviewer decision and sign-in is recorded with the account and time, for the team's audit trail. These records are never public.",
+      noPhi: "Don't include patient names or other personal health details in notes, reports or requests. We don't ask for patient information.",
+    });
+    expect(copy.PUBLIC_NEW.welcome).toEqual({
+      welcomeEngineerStep: "Your check is recorded but does not publish. A pharmacist approves each record.",
+      welcomeSeniorHeading: copy.P1C_COPY.senior.welcomeHeading,
+      welcomeSeniorStep: copy.P1C_COPY.senior.welcomeStep,
+      openPairQueue: copy.P1C_COPY.senior.welcomeLink,
+    });
     expect(copy.NEW_COPY[copy.NEW_COPY_ROWS.phase0Gate]).toEqual({ notReviewer: "Only pharmacists and engineers can see batches." });
   });
 

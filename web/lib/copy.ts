@@ -305,15 +305,80 @@ export const NEW_COPY: Record<NewCopyState, Record<string, string>> = {
     heading: "Settings", undoLabel: "Undo window", undo8: "8 seconds", undo20: "20 seconds", undo60: "60 seconds",
     keysLabel: "Single-key shortcuts", on: "On", off: "Off", workspacePlain: "IntelliDrugs review workspace.",
   },
-  [NEW_COPY_ROWS.noPhiHelp]: { help: NO_PHI_HELP },
   [NEW_COPY_ROWS.notRun]: {
     rowHint: "DDInter not run yet",
     notCheckedNotRun: "Not checked: DDInter mapping has not run for {substance} in {brand}.",
   },
-  [NEW_COPY_ROWS.productIngredientNoData]: {},
-  [NEW_COPY_ROWS.removedStub]: {},
-  [NEW_COPY_ROWS.checkerMax]: {},
-  [NEW_COPY_ROWS.heroCard]: {},
+  [NEW_COPY_ROWS.productIngredientNoData]: {
+    codesNoEntry: "No entry for route {route}",
+    codesNoEntryNoRoute: "No entry for this product's route",
+  },
+  [NEW_COPY_ROWS.removedStub]: { removed: "Removed from the DGDA batch file." },
+  [NEW_COPY_ROWS.checkerMax]: { help: "20 medicines is the maximum. Remove one to add another." },
+  [NEW_COPY_ROWS.heroCard]: {
+    pendingLine: "Its clinical drug, codes and interactions appear here after a pharmacist approves it.",
+    ariaLabel: "Lookup for {name}",
+    statBatches: "medicines in {k} batches, under pharmacist review now",
+  },
+  [NEW_COPY_ROWS.search]: {
+    tooShort: "Type at least 2 characters.",
+    tooLong: "Use 100 characters or fewer.",
+    pageCap: "Showing the first 200 results. Refine your search to see more.",
+    hitRxnorm: "Matched {matched}, the RxNorm name.",
+    hitDdinter: "Matched {matched}, the DDInter name.",
+    approvedOne: "{k} approved product",
+    approvedMany: "{k} approved products",
+  },
+  [NEW_COPY_ROWS.productNotFound]: { text: "No medicine with the id {id}." },
+  [NEW_COPY_ROWS.productPage]: {
+    reportLabel: "What's wrong? The IntelliDrugs team reads this.",
+    reportHelp: "5 to 2000 characters.",
+    signInToReport: "Sign in to report a problem",
+    noOtherBrand: "No other approved brand maps to {bdcId} yet. Other DGDA brands of this clinical drug appear here as pharmacists approve them.",
+    verificationRerun: "If the pipeline changes data this approval covered, {brand} goes back to review and leaves public view until it is approved again.",
+  },
+  [NEW_COPY_ROWS.checker]: {
+    summary: "{m} {medicines} · {checked} of {total} {pairs} checked · {alerts} with an interaction listed",
+    ncNoData: " · {nc} {pairs} not checked because {names} {has} no interaction data",
+    nc: " · {nc} {pairs} not checked",
+    nr: " · {nr} {medicines} not yet reviewed by a pharmacist",
+    otherNotChecked: "Other not checked",
+    noInteractionHeading: "No interaction listed in DDInter 2.0, {k} {pairs}",
+    noInteractionCaveat: "DDInter 2.0 lists no interaction for these pairs. This is not a guarantee that they are safe to combine.",
+    sameProduct: "Not checked: {a} + {b} are in the same product, {brand}. Pairs inside one product are not checked.",
+    routeAssumedPair: "Route assumed: {brand}'s route is {route} and DDInter has no {route} entry for {substance}, so the systemic entry {id} was used.",
+    routeAssumedPairNoRoute: "Route assumed: {brand} has no route on record, so the systemic entry {id} was used.",
+    sameSubstanceHeading: "Same substance in more than one product",
+    notReviewedCount: "{k} {products}",
+    notReviewedNote: "These products were not checked. A pharmacist hasn't approved them yet.",
+    whatChecked: "What was checked",
+    checkedLine: "{brand}: {substance} checked against {id} {name} ({route})",
+    unknownId: "One medicine in the link no longer exists, so it was removed.",
+    failTitle: "Couldn't check these medicines.",
+    failBody: "Nothing was saved. Try again in a moment.",
+    find: "Find",
+    noMatch: 'No medicine matches "{q}".',
+  },
+  [NEW_COPY_ROWS.partnerSent]: {
+    sent: "Request sent. The IntelliDrugs team replies to {email}.",
+    organisation: "Organisation",
+    kind: "Kind of system",
+    kindEmr: "EMR",
+    kindPharmacy: "Pharmacy",
+    kindPharma: "Pharma company",
+    kindOther: "Other",
+    use: "What you will build",
+    useHelp: "20 to 1500 characters.",
+    volume: "Expected checks per day",
+    volumeLow: "Under 1,000",
+    volumeMid: "1,000–10,000",
+    volumeHigh: "Over 10,000",
+  },
+  [NEW_COPY_ROWS.noPhiHelp]: {
+    help: NO_PHI_HELP,
+    privacyAudit: "Each reviewer decision and sign-in is recorded with the account and time, for the team's audit trail. These records are never public.",
+    privacyNoPhi: "Don't include patient names or other personal health details in notes, reports or requests. We don't ask for patient information.",
+  },
   [NEW_COPY_ROWS.learnSnapshotDate]: { asStored: "as stored on {date}" },
   [NEW_COPY_ROWS.learnStatsFailed]: {
     failTitle: "Couldn't load this chapter.",
@@ -393,8 +458,8 @@ export const NEW_COPY: Record<NewCopyState, Record<string, string>> = {
     unverifiedBody: "Your Google account email is not verified.",
     staleAuthBody: "Sign-in is too old. Please sign in again.",
     invalidBody: "Sign-in could not be verified. Please try again.",
+    welcomeEngineerStep: "Your check is recorded but does not publish. A pharmacist approves each record.",
   },
-  [NEW_COPY_ROWS.search]: {},
   [NEW_COPY_ROWS.routeAware]: {
     dataFound: "Interaction data found for this product's route ({route}): {ids}",
     dataFoundNoRoute: "Interaction data found: {ids}, route assumed",
@@ -410,10 +475,6 @@ export const NEW_COPY: Record<NewCopyState, Record<string, string>> = {
     notCheckedUnmapped: "Not checked: {ingredient} in {brand} has no substance mapping yet.",
     notCheckedSameProduct: "Not checked: {a} + {b} are ingredients of this product.",
   },
-  [NEW_COPY_ROWS.productNotFound]: {},
-  [NEW_COPY_ROWS.productPage]: {},
-  [NEW_COPY_ROWS.checker]: {},
-  [NEW_COPY_ROWS.partnerSent]: {},
   [NEW_COPY_ROWS.routeAssumed]: {
     noRouteStatement: "Route assumed: this product has no route on record, so the systemic entry {id} is used.",
   },
@@ -423,7 +484,22 @@ export const NEW_COPY: Record<NewCopyState, Record<string, string>> = {
   [NEW_COPY_ROWS.deskOtherMedicines]: OTHER_MEDICINES,
   [NEW_COPY_ROWS.dismissIssue]: DISMISS,
   [NEW_COPY_ROWS.sourceLinks]: SOURCE_LINKS,
-  [NEW_COPY_ROWS.productOtherApproved]: {},
+  [NEW_COPY_ROWS.productOtherApproved]:
+  {
+    heading: "With other approved medicines",
+    meta: "With {k} approved {brands}: {list}. Action: {actions}",
+    metaMore: "With {k} approved {brands}: {list} and {n} more. Action: {actions}",
+    allBrands: "All {k} brands",
+    unclassifiedWith: "{substance} with {partners}.",
+    reviewedBracket: "(pair reviewed by a senior pharmacist on {date})",
+    notReviewedBracket: "(pair not yet reviewed by a senior pharmacist)",
+    notCheckedIn: "Not checked: {substance} + {partner}, in {k} approved {brands}",
+    brandsMore: "and {n} more.",
+    allBrandsOf: "All brands of {substance}",
+    more: "More interactions",
+    previous: "Previous interactions",
+    empty: "No other approved medicine has an interaction with {substance} listed in DDInter 2.0 yet. Other medicines appear here as pharmacists approve them.",
+  },
 };
 /** Typed shortcut for the sign-in row. */
 export const SIGN_IN_STATES = NEW_COPY[NEW_COPY_ROWS.signIn] as {
@@ -495,4 +571,38 @@ export const LEARN_BOARD = {
   undoWindow: `undo window ${UNDO_WINDOW_DETAIL}`,
   /** The FAQ's shorter form of the same window (§1.6 item 14). */
   undoWindowFaq: "(8 seconds unless you lengthened it)",
+} as const;
+
+/** Typed views of the P2 rows, so public modules never index NEW_COPY by row text. */
+export const PUBLIC_NEW = {
+  ingredient: NEW_COPY[NEW_COPY_ROWS.productIngredientNoData] as Record<"codesNoEntry" | "codesNoEntryNoRoute", string>,
+  removed: NEW_COPY[NEW_COPY_ROWS.removedStub] as Record<"removed", string>,
+  checkerMax: NEW_COPY[NEW_COPY_ROWS.checkerMax] as Record<"help", string>,
+  hero: NEW_COPY[NEW_COPY_ROWS.heroCard] as Record<"pendingLine" | "ariaLabel" | "statBatches", string>,
+  search: NEW_COPY[NEW_COPY_ROWS.search] as Record<"tooShort" | "tooLong" | "pageCap" | "hitRxnorm" | "hitDdinter" | "approvedOne"
+    | "approvedMany", string>,
+  notFound: NEW_COPY[NEW_COPY_ROWS.productNotFound] as Record<"text", string>,
+  productPage: NEW_COPY[NEW_COPY_ROWS.productPage] as Record<"reportLabel" | "reportHelp" | "signInToReport" | "noOtherBrand"
+    | "verificationRerun", string>,
+  checker: NEW_COPY[NEW_COPY_ROWS.checker] as Record<"summary" | "ncNoData" | "nc" | "nr" | "otherNotChecked" | "noInteractionHeading"
+    | "noInteractionCaveat" | "sameProduct" | "routeAssumedPair" | "routeAssumedPairNoRoute" | "sameSubstanceHeading"
+    | "notReviewedCount" | "notReviewedNote" | "whatChecked" | "checkedLine" | "unknownId" | "failTitle" | "failBody" | "find"
+    | "noMatch", string>,
+  partner: NEW_COPY[NEW_COPY_ROWS.partnerSent] as Record<"sent" | "organisation" | "kind" | "kindEmr" | "kindPharmacy" | "kindPharma"
+    | "kindOther" | "use" | "useHelp" | "volume" | "volumeLow" | "volumeMid" | "volumeHigh", string>,
+  privacy: { audit: NEW_COPY[NEW_COPY_ROWS.noPhiHelp].privacyAudit, noPhi: NEW_COPY[NEW_COPY_ROWS.noPhiHelp].privacyNoPhi },
+  welcome: {
+    welcomeEngineerStep: (NEW_COPY[NEW_COPY_ROWS.signIn] as Record<"welcomeEngineerStep", string>).welcomeEngineerStep,
+    welcomeSeniorHeading: P1C_COPY.senior.welcomeHeading,
+    welcomeSeniorStep: P1C_COPY.senior.welcomeStep,
+    openPairQueue: P1C_COPY.senior.welcomeLink,
+  },
+  otherApproved: NEW_COPY[NEW_COPY_ROWS.productOtherApproved] as Record<"heading" | "meta" | "metaMore" | "allBrands" | "unclassifiedWith"
+    | "reviewedBracket" | "notReviewedBracket" | "notCheckedIn" | "brandsMore" | "allBrandsOf" | "more" | "previous" | "empty", string>,
+} as const;
+
+/** Board P strings that name "low risk" (the paraphrase guard allows them only here). */
+export const PUBLIC_BOARD = {
+  unknownPromise: "Unknown severity is never called low risk",
+  legendUnclassified: "Never treated as low risk, never merged with Minor.",
 } as const;
