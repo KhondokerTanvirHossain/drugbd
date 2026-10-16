@@ -90,6 +90,14 @@ describe("summary sentence (§6.7.2, §11.1 check-summary)", () => {
     expect(hasNoData(r, side("Z", "Absent", "Domperidone", "BDS-D"))).toBe(false);
   });
 
+  it("hasNoData with an unmapped side (bdsId null) matches that product's null-bdsId substance by name, not any null-bdsId one", () => {
+    const sub = (name: string, coverage: "none" | "full") => ({ bdsId: null, name, coverage, ddinter: [] });
+    const r = emptyCheck({ products: [
+      { conceptId: "U", tradeName: "Unbrand", route: null, substances: [sub("Alphamol", "none"), sub("Betamol", "full")] }] });
+    expect(hasNoData(r, side("U", "Unbrand", "Betamol", null))).toBe(false);
+    expect(hasNoData(r, side("U", "Unbrand", "Alphamol", null))).toBe(true);
+  });
+
   it("noDataBlocks (§6.7.3): one block per product x no-data substance, from both sides of each no_data row", () => {
     const sub = (bdsId: string, name: string, coverage: "none" | "full") => ({ bdsId, name, coverage, ddinter: [] });
     const r = emptyCheck({
