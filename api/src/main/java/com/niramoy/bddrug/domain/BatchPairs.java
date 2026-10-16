@@ -66,7 +66,7 @@ public final class BatchPairs {
     public static final List<String> REASON_ORDER = List.of("no_data", "unmapped", "not_run", "no_route");
     private static final List<String> SEVERITY_ORDER = List.of("major", "moderate", "minor");
 
-    private record Use(List<String> chosen, String reason) {}
+    record Use(List<String> chosen, String reason) {}
 
     /**
      * §6.7.2 rule 1, the one copy the desk (§5.6.2) and the public checker both call: why a substance cannot be checked,
