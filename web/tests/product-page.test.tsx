@@ -240,3 +240,55 @@ describe("approved product (§6.5 item 6)", () => {
     expect(html).toContain("Acetaminophen with Amlodipine (pair not yet reviewed by a senior pharmacist) and Acetylsalicylic acid (pair reviewed by a senior pharmacist on 15/10/2026).");
   });
 });
+
+describe("approved product (§6.5 item 7 and the aside)", () => {
+  it("automated checks: four cards, the subtitle, No pipeline note on OK, and the public text-missing list", async () => {
+    const html = await renderProduct();
+    expect(html).toContain("3 OK, 1 Warning. Notes are the pipeline&#x27;s own.");
+    expect(html.match(/class="stage stage--ok"/g)).toHaveLength(3);
+    expect(html).toContain("No pipeline note.");
+    expect(html).toContain("DDInter text not found for 1 pair:");
+    expect(html).toContain('<li class="stage-pair">Metformin + Acetaminophen <span class="mono">DDInter1164/DDInter14</span></li>');
+    expect(html).not.toContain("sev sev--unclassified\">Severity not classified by DDInter</span></li>");
+  });
+
+  it("the verification card with its date and the P1C re-run sentence; other brands; where from with the DGDA source link", async () => {
+    const html = await renderProduct();
+    expect(html).toContain("A pharmacist compared this record with the DGDA register on 14/10/2026. Decision history shows roles, not names.");
+    expect(html).toContain("If the pipeline changes data this approval covered, Napa goes back to review and leaves public view until it is approved again.");
+    expect(html).not.toContain("If the pipeline re-runs");
+    expect(html).toContain('No other approved brand maps to <span class="mono">BDC-000001</span> yet.');
+    expect(html).toContain("DGDA register (OCL)");
+    expect(html).toContain("12/10/2026 03:28 Dhaka time");
+    expect(html).toContain("<dd>3 OK, 1 Warning</dd>");
+    expect(html).toContain('href="/check?ids=186-0030-006--napa">Check Napa with other medicines</a>');
+  });
+
+  it("other brands of the clinical drug, without the product itself", async () => {
+    getPublicProduct.mockResolvedValue({ ok: true, data: { ...NAPA, otherBrandsCount: 1 } });
+    getClinicalDrug.mockResolvedValue({ ok: true, data: { bdcId: "BDC-000001", displayName: "Acetaminophen 500 mg tablet", doseForm: "Tablet",
+      route: "systemic", ingredients: [], products: [{ conceptId: NAPA.conceptId, tradeName: "Napa", company: "Beximco", darNumber: "186-0030-006" },
+        { conceptId: "ACE-1", tradeName: "Ace", company: "Square Pharmaceuticals", darNumber: "001-0001-001" }] } });
+    const html = await renderProduct();
+    expect(html).toContain("Other brands of Acetaminophen 500 mg tablet");
+    expect(html).toContain('<a href="/products/ACE-1">Ace</a>');
+    expect(html).not.toContain('<a href="/products/186-0030-006--napa">Napa</a>');
+  });
+
+  it("Report a problem: a sign-in link for anonymous readers; a labelled field with the no-PHI help and the bot check when signed in", async () => {
+    const anon = await renderProduct();
+    expect(anon).toContain("<summary");
+    expect(anon).toContain("Report a problem with this record");
+    expect(anon).toContain('href="/signin?returnTo=%2Fproducts%2F186-0030-006--napa">Sign in to report a problem</a>');
+    getSession.mockResolvedValue({ email: "reader@example.org", role: "user" });
+    const html = await renderProduct(NAPA.conceptId, { flag: "sent" });
+    expect(html).toContain("What&#x27;s wrong? The IntelliDrugs team reads this.");
+    expect(html).toContain("5 to 2000 characters. Don&#x27;t include patient names or other personal health details.");
+    expect(html).toContain('name="targetType" value="product"');
+    expect(html).toMatch(/minlength="5"/i);
+    expect(html).toMatch(/maxlength="2000"/i);
+    expect(html).toContain(">Send report</button>");
+    expect(html).toContain("Thank you. Your flag was sent to the reviewers.");
+    expect(html).not.toContain("reader@example.org");
+  });
+});

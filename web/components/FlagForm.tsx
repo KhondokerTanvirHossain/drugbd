@@ -3,15 +3,7 @@ import type { FlagTarget } from "@/lib/api";
 import { FLAG_MESSAGE_MAX, FLAG_MESSAGE_MIN } from "@/lib/actions-core";
 import type { Session } from "@/lib/session";
 import { flagAction } from "@/lib/review-actions";
-
-/** Fixed messages for the flag action's outcome codes; anything else in the URL is ignored. */
-const OUTCOME: Record<string, string> = {
-  sent: "Thank you. Your flag was sent to the reviewers.",
-  forbidden: "Sign in to flag a problem.",
-  captcha: "The verification check failed. Please try again.",
-  invalid: `A flag needs a message of ${FLAG_MESSAGE_MIN} to ${FLAG_MESSAGE_MAX} characters.`,
-  failed: "The flag could not be sent. Please try again.",
-};
+import { FLAG_OUTCOME as OUTCOME } from "@/components/public/ReportProblem";
 
 /**
  * "Flag a problem" for any signed-in visitor (role user included). A plain server-action <form>: works without JS.
