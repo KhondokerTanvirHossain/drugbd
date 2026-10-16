@@ -33,3 +33,15 @@ describe("product.module.css .h1 reflows at 320 px (§10.4, WCAG 1.4.10)", () =>
     expect(body).toMatch(/min-width:\s*0/);
   });
 });
+
+// The codes table scrolls in its own labelled region (.s-tw, §10.4). SourceLink's sr-only "(opens in a new tab)" is
+// position: absolute; with an unpositioned region its containing block lies outside the region, so the overflow:auto
+// never clips it and the spans in the last column widened the product and substance pages to 684 px at 320 CSS px.
+describe("product.module.css .s-tw contains its absolutely positioned descendants (§10.4, WCAG 1.4.10)", () => {
+  it(".s-tw is the containing block of the table's sr-only text", () => {
+    const m = css.match(/^\.s-tw\s*\{([^}]*)\}/m);
+    expect(m, ".s-tw rule").not.toBeNull();
+    expect(m![1]).toMatch(/position:\s*relative/);
+    expect(m![1]).toMatch(/overflow-x:\s*auto/);
+  });
+});
