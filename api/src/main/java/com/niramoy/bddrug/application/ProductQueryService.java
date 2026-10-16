@@ -3,6 +3,7 @@ import com.niramoy.bddrug.application.port.ProductDetailPort;
 import com.niramoy.bddrug.application.port.ProductInteractionsPort;
 import com.niramoy.bddrug.application.port.ProductQueryPort;
 import com.niramoy.bddrug.application.port.ProductQueryPort.LatestItem;
+import com.niramoy.bddrug.application.port.SuggestPort;
 import com.niramoy.bddrug.domain.ClinicalDrug;
 import com.niramoy.bddrug.domain.HiddenRecord;
 import com.niramoy.bddrug.domain.LoadedProduct;
@@ -10,9 +11,11 @@ import com.niramoy.bddrug.domain.Product;
 import com.niramoy.bddrug.domain.PublicPairs;
 import com.niramoy.bddrug.domain.PublicProducts;
 import com.niramoy.bddrug.domain.Scope;
+import com.niramoy.bddrug.domain.SuggestRow;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 
@@ -20,13 +23,17 @@ import java.util.Optional;
 public class ProductQueryService {
     public static final int PAGE_SIZE = 20, MAX_PAGE = 500, MIN_LEN = 2, MAX_LEN = 100;
     public static final int INTERACTIONS_PAGE_MAX = 10_000;
+    public static final int SUGGEST_LIMIT = 10, EXCLUDE_MAX = 20;
     private final ProductQueryPort port;
     private final ProductDetailPort details;
     private final ProductInteractionsPort interactions;
-    public ProductQueryService(ProductQueryPort port, ProductDetailPort details, ProductInteractionsPort interactions) {
+    private final SuggestPort suggestions;
+    public ProductQueryService(ProductQueryPort port, ProductDetailPort details, ProductInteractionsPort interactions,
+                               SuggestPort suggestions) {
         this.port = port;
         this.details = details;
         this.interactions = interactions;
+        this.suggestions = suggestions;
     }
 
     public Flux<Product> search(String q, int page, Scope scope) {
@@ -68,6 +75,16 @@ public class ProductQueryService {
     public static HiddenRecord.Product stub(Product p, LatestItem item) {
         String status = item != null && item.removed() ? HiddenRecord.REMOVED : HiddenRecord.NOT_REVIEWED;
         return new HiddenRecord.Product(p.conceptId(), p.tradeName(), status, item == null ? null : item.batchId());
+    }
+
+    /** §7.4 P16. Unapproved rows match on trade name and DAR only and carry no clinical data. */
+    public Flux<SuggestRow> suggest(String q, List<String> exclude) {
+        String query = q == null ? "" : q.strip();
+        int len = query.codePointCount(0, query.length());
+        if (len < MIN_LEN || len > MAX_LEN) return Flux.error(new InvalidQueryException("q", "q must be 2-100 characters"));
+        List<String> ids = exclude == null ? List.of() : exclude.stream().filter(s -> s != null && !s.isBlank()).distinct().toList();
+        if (ids.size() > EXCLUDE_MAX) return Flux.error(new InvalidQueryException("exclude", "exclude holds at most 20 ids"));
+        return suggestions.suggest(query.toLowerCase(Locale.ROOT), ids, SUGGEST_LIMIT);
     }
 
     public Flux<LoadedProduct> loaded(Scope scope) { return port.loaded(scope == Scope.PUBLIC); }

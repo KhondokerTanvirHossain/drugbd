@@ -1,8 +1,10 @@
 package com.niramoy.bddrug.adapter.persistence;
 import com.niramoy.bddrug.application.port.NameIndexPort;
 import com.niramoy.bddrug.application.port.SearchPort;
+import com.niramoy.bddrug.application.port.SuggestPort;
 import com.niramoy.bddrug.domain.DdinterCode;
 import com.niramoy.bddrug.domain.SearchResult;
+import com.niramoy.bddrug.domain.SuggestRow;
 import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
@@ -15,7 +17,7 @@ import java.util.*;
  * Also the spelling index's names (§7.4 "Suggestion"): public trade names and public substances' names, never a stub's.
  */
 @Component
-public class R2dbcSearchAdapter implements SearchPort, NameIndexPort {
+public class R2dbcSearchAdapter implements SearchPort, NameIndexPort, SuggestPort {
     /** Java " ESCAPE '\\'" is the SQL text ESCAPE '\', as in R2dbcProductAdapter (standard_conforming_strings on). */
     static final String ESC = " ESCAPE '\\'";
     /** Public substances with their public product count (§7.4: "a substance is public only when at least one public product carries it"). */
@@ -158,5 +160,48 @@ public class R2dbcSearchAdapter implements SearchPort, NameIndexPort {
             .bind("p", R2dbcProductAdapter.likePattern(term)).bind("prefix", prefix(term)).bind("limit", limit).bind("offset", offset)
             .map(r -> new SearchResult.StubHit(r.get("concept_id", String.class), r.get("trade_name", String.class), "not_reviewed"))
             .all();
+    }
+
+    @Override public Flux<SuggestRow> suggest(String term, List<String> exclude, int limit) {
+        String[] ex = exclude.toArray(String[]::new);
+        String p = R2dbcProductAdapter.likePattern(term), pre = prefix(term);
+        Flux<Object[]> approved = db.sql("WITH " + ReviewSql.LATEST_PUBLIC +
+                " SELECT bp.concept_id, bp.trade_name, bp.dosage_form, cd.display_name," +
+                " (lower(bp.trade_name) LIKE :p" + ESC + " OR lower(bp.dar_number) LIKE :prefix" + ESC + ") AS direct," +
+                " lower(bp.trade_name) LIKE :prefix" + ESC + " AS starts," +
+                " (SELECT n.name || chr(1) || s.preferred_name FROM curated.brand_product_ingredient bpi" +
+                "  JOIN curated.substance_code x ON x.system = 'ICD11_XM' AND x.code = bpi.xm_code" +
+                "  JOIN curated.substance s ON s.bds_id = x.bds_id" +
+                "  CROSS JOIN LATERAL (SELECT sn.name FROM curated.substance_name sn WHERE sn.bds_id = s.bds_id" +
+                "    UNION SELECT s.preferred_name) n" +
+                "  WHERE bpi.concept_id = bp.concept_id AND lower(n.name) LIKE :p" + ESC +
+                "  ORDER BY (lower(n.name) = lower(s.preferred_name)) DESC, n.name LIMIT 1) AS via" +
+                " FROM curated.brand_product bp JOIN latest l ON l.concept_id = bp.concept_id AND l.pub" +
+                " LEFT JOIN curated.clinical_drug cd ON cd.bdc_id = bp.bdc_id" +
+                " WHERE NOT (bp.concept_id = ANY(:ex)) AND " + PRODUCT_MATCH +
+                " ORDER BY starts DESC, lower(bp.trade_name), bp.concept_id LIMIT :limit")
+            .bind("p", p).bind("prefix", pre).bind("ex", ex).bind("limit", limit)
+            .map(r -> {
+                String via = Boolean.TRUE.equals(r.get("direct", Boolean.class)) ? null : r.get("via", String.class);
+                String[] v = via == null ? null : via.split("\u0001", 2);
+                return new Object[]{Boolean.TRUE.equals(r.get("starts", Boolean.class)), 0,
+                    new SuggestRow(r.get("concept_id", String.class), r.get("trade_name", String.class), r.get("dosage_form", String.class),
+                        "approved", r.get("display_name", String.class), v == null ? null : new SuggestRow.Matched(v[0], v[1]))};
+            }).all();
+        Flux<Object[]> hidden = db.sql("WITH " + ReviewSql.LATEST_PUBLIC +
+                " SELECT bp.concept_id, bp.trade_name, bp.dosage_form, lower(bp.trade_name) LIKE :prefix" + ESC + " AS starts" +
+                " FROM curated.brand_product bp LEFT JOIN latest l ON l.concept_id = bp.concept_id" +
+                " WHERE NOT coalesce(l.pub, false) AND NOT (bp.concept_id = ANY(:ex))" +
+                " AND (lower(bp.trade_name) LIKE :p" + ESC + " OR lower(bp.dar_number) LIKE :prefix" + ESC + ")" +
+                " ORDER BY starts DESC, lower(bp.trade_name), bp.concept_id LIMIT :limit")
+            .bind("p", p).bind("prefix", pre).bind("ex", ex).bind("limit", limit)
+            .map(r -> new Object[]{Boolean.TRUE.equals(r.get("starts", Boolean.class)), 1,
+                new SuggestRow(r.get("concept_id", String.class), r.get("trade_name", String.class), r.get("dosage_form", String.class),
+                    "not_reviewed", null, null)})
+            .all();
+        return Flux.concat(approved, hidden).collectList().flatMapMany(rows -> Flux.fromStream(rows.stream()
+            .sorted(Comparator.comparing((Object[] o) -> !(Boolean) o[0]).thenComparingInt(o -> (Integer) o[1])
+                .thenComparing(o -> ((SuggestRow) o[2]).tradeName().toLowerCase(Locale.ROOT)))
+            .limit(limit).map(o -> (SuggestRow) o[2])));
     }
 }

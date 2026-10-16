@@ -52,27 +52,27 @@ class ProductQueryServiceTest {
     }
 
     @Test void rejectsTooShortQuery() {
-        StepVerifier.create(new ProductQueryService(new FakePort(), DETAILS, c -> Mono.empty()).search(" a ", 0, Scope.PUBLIC))
+        StepVerifier.create(new ProductQueryService(new FakePort(), DETAILS, c -> Mono.empty(), (t, e, l) -> Flux.empty()).search(" a ", 0, Scope.PUBLIC))
             .expectError(InvalidQueryException.class).verify();
     }
     @Test void rejectsTooLongQuery() {
-        StepVerifier.create(new ProductQueryService(new FakePort(), DETAILS, c -> Mono.empty()).search("x".repeat(101), 0, Scope.PUBLIC))
+        StepVerifier.create(new ProductQueryService(new FakePort(), DETAILS, c -> Mono.empty(), (t, e, l) -> Flux.empty()).search("x".repeat(101), 0, Scope.PUBLIC))
             .expectError(InvalidQueryException.class).verify();
     }
     @Test void rejectsPageOutOfRange() {
-        StepVerifier.create(new ProductQueryService(new FakePort(), DETAILS, c -> Mono.empty()).search("napa", 501, Scope.PUBLIC))
+        StepVerifier.create(new ProductQueryService(new FakePort(), DETAILS, c -> Mono.empty(), (t, e, l) -> Flux.empty()).search("napa", 501, Scope.PUBLIC))
             .expectError(InvalidQueryException.class).verify();
-        StepVerifier.create(new ProductQueryService(new FakePort(), DETAILS, c -> Mono.empty()).search("napa", -1, Scope.PUBLIC))
+        StepVerifier.create(new ProductQueryService(new FakePort(), DETAILS, c -> Mono.empty(), (t, e, l) -> Flux.empty()).search("napa", -1, Scope.PUBLIC))
             .expectError(InvalidQueryException.class).verify();
     }
     @Test void trimsLowercasesAndPagesBy20() {
         FakePort port = new FakePort();
-        StepVerifier.create(new ProductQueryService(port, DETAILS, c -> Mono.empty()).search("  NaPa ", 2, Scope.PUBLIC)).verifyComplete();
+        StepVerifier.create(new ProductQueryService(port, DETAILS, c -> Mono.empty(), (t, e, l) -> Flux.empty()).search("  NaPa ", 2, Scope.PUBLIC)).verifyComplete();
         assertThat(port.calls.get(0)).containsExactly("napa", 20, 40, true);
     }
     @Test void scopeDecidesWhetherOnlyApprovedProductsAreSearchedAndListed() {
         FakePort port = new FakePort();
-        ProductQueryService service = new ProductQueryService(port, DETAILS, c -> Mono.empty());
+        ProductQueryService service = new ProductQueryService(port, DETAILS, c -> Mono.empty(), (t, e, l) -> Flux.empty());
         StepVerifier.create(service.search("napa", 0, Scope.ALL)).verifyComplete();
         StepVerifier.create(service.loaded(Scope.PUBLIC)).verifyComplete();
         StepVerifier.create(service.loaded(Scope.ALL)).verifyComplete();
@@ -81,7 +81,7 @@ class ProductQueryServiceTest {
         assertThat(port.calls.get(2)).containsExactly("loaded", false);
     }
     @Test void publicDetailIsTheSection74StubForEveryNonPublicState() {
-        ProductQueryService service = new ProductQueryService(new FakePort(), DETAILS, c -> Mono.empty());
+        ProductQueryService service = new ProductQueryService(new FakePort(), DETAILS, c -> Mono.empty(), (t, e, l) -> Flux.empty());
         StepVerifier.create(service.get("PEND", Scope.PUBLIC))
             .assertNext(v -> assertThat(v).isEqualTo(new HiddenRecord.Product("PEND", "Trade PEND", "not_reviewed", "B-2"))).verifyComplete();
         // an issue is never named in public: the stub says not_reviewed (§7.4: "no product response names issue")
@@ -94,7 +94,7 @@ class ProductQueryServiceTest {
     }
 
     @Test void approvedAndScopeAllDetailsAreNotStubs() {
-        ProductQueryService service = new ProductQueryService(new FakePort(), DETAILS, c -> Mono.empty());
+        ProductQueryService service = new ProductQueryService(new FakePort(), DETAILS, c -> Mono.empty(), (t, e, l) -> Flux.empty());
         StepVerifier.create(service.get("OK", Scope.PUBLIC)).assertNext(v -> assertThat(v).isInstanceOf(PublicProduct.class)).verifyComplete();
         StepVerifier.create(service.get("PEND", Scope.ALL)).assertNext(v -> assertThat(v).isInstanceOf(Product.class)).verifyComplete();
         StepVerifier.create(service.get("none", Scope.PUBLIC)).verifyComplete();
@@ -105,5 +105,22 @@ class ProductQueryServiceTest {
             .containsExactly("conceptId", "tradeName", "status", "batchId");
         assertThat(java.util.Arrays.stream(HiddenRecord.Substance.class.getRecordComponents()).map(c -> c.getName()))
             .containsExactly("bdsId", "preferredName");
+    }
+
+    @Test void suggestStripsLowerCasesAndDropsBlankAndRepeatedExcludes() {
+        List<Object[]> calls = new ArrayList<>();
+        ProductQueryService service = new ProductQueryService(new FakePort(), DETAILS, c -> Mono.empty(),
+            (t, e, l) -> { calls.add(new Object[]{t, e, l}); return Flux.empty(); });
+        StepVerifier.create(service.suggest("  NaPa ", java.util.Arrays.asList("A", "", null, "A", "B"))).verifyComplete();
+        assertThat(calls.get(0)).containsExactly("napa", List.of("A", "B"), 10);
+        StepVerifier.create(service.suggest("napa", null)).verifyComplete();
+        assertThat(calls.get(1)).containsExactly("napa", List.of(), 10);
+        List<String> twenty = java.util.stream.IntStream.range(0, 20).mapToObj(i -> "X" + i).toList();
+        StepVerifier.create(service.suggest("napa", twenty)).verifyComplete();
+        StepVerifier.create(service.suggest("napa", java.util.stream.Stream.concat(twenty.stream(), java.util.stream.Stream.of("X20")).toList()))
+            .expectErrorSatisfies(e -> assertThat(((InvalidQueryException) e).field()).isEqualTo("exclude")).verify();
+        StepVerifier.create(service.suggest(" \u0995 ", List.of()))
+            .expectErrorSatisfies(e -> assertThat(((InvalidQueryException) e).field()).isEqualTo("q")).verify();
+        assertThat(calls).hasSize(3);
     }
 }
