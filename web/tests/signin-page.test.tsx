@@ -102,7 +102,7 @@ describe("/signin card and welcome states (§6.2, Board P section 2)", () => {
   it("a pharmacist's welcome: badge, batch heading, the three steps with the undo window, the desk button", async () => {
     getSession.mockResolvedValue({ email: "pharm@example.org", name: "Farhana Islam", role: "pharmacist" });
     const html = await render();
-    expect(html).toContain('<span class="role-badge">Pharmacist</span>');
+    expect(html).toContain('<span class="role-badge"><span class="ico shield" aria-hidden="true"></span>Pharmacist</span>');
     expect(html).toContain("Signed in as Farhana Islam");
     expect(html).toContain("You&#x27;re a pharmacist reviewer for batch 0001-pilot");
     expect(html).toContain("10 records are waiting. Each shows <span class=\"rv rv--pending\">Not yet reviewed by a pharmacist</span> until a pharmacist approves it.");
@@ -119,11 +119,12 @@ describe("/signin card and welcome states (§6.2, Board P section 2)", () => {
     expect(eng).toContain("You&#x27;re a engineer reviewer for batch 0001-pilot");
     expect(eng).toContain("Your check is recorded but does not publish. A pharmacist approves each record.");
     expect(eng).not.toContain("Your approval publishes the record.");
-    expect(eng).toContain('<span class="role-badge">Engineer</span>');
+    expect(eng).toContain('<span class="role-badge"><span class="ico shield" aria-hidden="true"></span>Engineer</span>');
     expect(eng).toContain("Signed in as Eng");
     expect(eng).not.toContain("eng@example.org");
     getSession.mockResolvedValue({ email: "senior@example.org", name: "Senior", role: "senior" });
     const sen = await render();
+    expect(sen).toContain('<span class="role-badge"><span class="ico shield" aria-hidden="true"></span>Senior pharmacist</span>');
     expect(sen).toContain("You&#x27;re a senior pharmacist reviewer for batch 0001-pilot");
     expect(sen).toContain("Your approval publishes the record.");
     expect(sen).toContain("Senior review shows every interaction pair between the medicines we hold, from all batches.");

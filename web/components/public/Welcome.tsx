@@ -33,7 +33,7 @@ export default function Welcome({ session, batch, undo }: { session: Session; ba
   const id = batch?.id ?? "";
   return (
     <div className={styles.state}>
-      <p className={styles.row}><span className="role-badge">{ROLE_LABEL[session.role]}</span><span className={styles.who}>{fill(SIGNIN_CARD.signedInAs, { name })}</span></p>
+      <p className={styles.row}><span className="role-badge"><span className={`ico ${styles.shield}`} aria-hidden="true" />{ROLE_LABEL[session.role]}</span><span className={styles.who}>{fill(SIGNIN_CARD.signedInAs, { name })}</span></p>
       {batch && <h2 className={styles.h2}>{senior ? fill(PUBLIC_NEW.welcome.welcomeSeniorHeading, { id }) : fill(SIGNIN_CARD.reviewerHeading, { role: session.role, id })}</h2>}
       <ol className={styles.next}>
         {batch && <li><span>{fillNodes(SIGNIN_CARD.stepWaiting, { n: batch.waiting, pill: <ReviewStatus status="pending" /> })}</span></li>}
