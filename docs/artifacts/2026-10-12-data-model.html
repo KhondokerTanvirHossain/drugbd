@@ -130,7 +130,7 @@ a { color: var(--accent); }
 
   <section class="stack">
     <div class="stack col">
-      <h2>Three schemas, 23 tables</h2>
+      <h2>Three schemas, 24 tables</h2>
       <p>Data moves one way. Source responses are stored verbatim in <span class="chip raw">raw</span>. They are interpreted into the drug master and interaction knowledge in <span class="chip curated">curated</span>. Every pipeline run, review decision and flag is recorded in <span class="chip ops">ops</span>, and the public site only shows curated records whose ops review is approved.</p>
     </div>
     <div class="schemas">
@@ -443,7 +443,7 @@ erDiagram
     timestamptz extracted_at PK "the stamp it records"
     uuid run_id "one per ETL invocation"
     text reason "run | rerun | shared_change"
-    jsonb payload "brand, clinical drug, ingredients, stages"
+    jsonb payload "v2: brand, clinical drug, ingredients with coverage, stages, carried_from"
     timestamptz created_at
   }
   audit_event {
@@ -455,7 +455,7 @@ erDiagram
     text target_type
     text target_id
     text outcome
-    uuid request_id "unique for event = decision"
+    uuid request_id "unique per event, for decision and for pair_decision"
   }
   pair_review {
     bigint id PK
@@ -498,6 +498,7 @@ erDiagram
       <div class="rule"><h3>Each pair stored once</h3><p><code>ddinter_pair</code> requires <code>ddinter_a &lt; ddinter_b</code>, so A–B and B–A cannot both exist.</p><span class="where">CHECK (ddinter_a &lt; ddinter_b)</span></div>
       <div class="rule"><h3>Review history cannot be deleted</h3><p><code>review_decision</code> references <code>batch_item</code> with ON DELETE NO ACTION, so a reviewed record cannot be removed. Decisions are only ever inserted.</p><span class="where">review_decision → batch_item (NO ACTION)</span></div>
       <div class="rule"><h3>Snapshots and the audit trail are append-only</h3><p>Triggers reject UPDATE, DELETE and TRUNCATE on <code>item_snapshot</code> and <code>audit_event</code>. A batch item with a snapshot cannot be deleted, so an item that leaves the batch file is kept and marked “removed from batch file”.</p><span class="where">ops.reject_change() triggers</span></div>
+      <div class="rule"><h3>A re-run re-opens only what an approval covers</h3><p>The pipeline's <code>settle()</code> compares each record's approval view (brand fields, clinical drug and, per ingredient, substance, strength, codes, chosen DDInter entries and coverage) with the view in its snapshot. Only a changed view stamps the record <code>pending</code>; DDInter pairs, texts and entry names never re-open it. A new item of a product approved in another batch with the same view carries that approval (<code>carried_from</code> in its snapshot). <code>settle()</code> locks <code>batch_item</code> rows before the <code>batch</code> row, the same order as the API's decisions.</p><span class="where">load/batches.py settle · snapshots.approval_view</span></div>
       <div class="rule"><h3>Pair reviews are append-only and keep what they reviewed</h3><p>A senior pharmacist's pair decision stores the pair's content and its hash, so the API can tell when DDInter changed a reviewed pair. Triggers reject UPDATE, DELETE and TRUNCATE on <code>pair_review</code>.</p><span class="where">pair_review, ops.reject_change() triggers</span></div>
       <div class="rule"><h3>Confidence and enums are checked</h3><p>Confidence must be 0–1. Code systems, severities, stages, review states and roles are restricted by CHECK constraints.</p><span class="where">CHECK constraints</span></div>
     </div>
@@ -573,7 +574,7 @@ erDiagram
       <li><b>Substance identity.</b> One substance per ICD-11 XM code works when DGDA’s mapping is right. Should a pharmacist be able to merge two substances if DGDA ever splits one ingredient across two codes?</li>
       <li><b>Interactions at substance level.</b> Interactions attach to the substance (and route), not to strength or brand. That is standard for checkers, but confirm it is acceptable clinically.</li>
       <li><b>Same substance twice in one product.</b> <code>clinical_drug_ingredient</code> allows a substance only once per clinical drug. If a product lists the same base substance twice (two salts), the pipeline warns and creates no clinical drug.</li>
-      <li><b>Approval granularity.</b> Approval is per record (brand). An approved record can be re-opened by shared substance changes made in another batch. That is intentional, but it means more re-review as batches grow.</li>
+      <li><b>Approval granularity.</b> Approval is per record (brand). An approved record goes back to review only when its approval view changes, which a shared substance change made in another batch can do. DDInter pair and text updates never re-open it, and a product approved in one batch carries its approval to a new batch when its view is unchanged. Check that this re-review load stays acceptable as batches grow.</li>
       <li><b>Personal data.</b> Reviewer and reporter emails are stored in <code>ops</code> only and never served publicly. Decide how long they should be kept.</li>
     </ol>
   </section>

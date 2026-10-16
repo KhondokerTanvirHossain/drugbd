@@ -21,8 +21,9 @@ import java.util.UUID;
 
 /**
  * Review decisions. {@code ops.review_decision} and {@code ops.audit_event} are append-only: rows are inserted, never
- * updated or deleted. Lock order is batch_item, then batch, the same as the pipeline's {@code reopen_review}, so the two
- * serialize instead of deadlocking; two sends of one requestId serialize on the item lock, so step 1 answers the second.
+ * updated or deleted. Lock order is batch_item, then batch, the same as the pipeline's {@code settle()} (which locks its
+ * target items before it recomputes any batch row), so the two serialize instead of deadlocking; two sends of one
+ * requestId serialize on the item lock, so step 1 answers the second.
  */
 @Component
 public class R2dbcReviewAdapter implements ReviewPort {

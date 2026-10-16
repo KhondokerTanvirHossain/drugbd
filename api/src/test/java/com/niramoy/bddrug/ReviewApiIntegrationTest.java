@@ -224,7 +224,7 @@ class ReviewApiIntegrationTest {
         web.get().uri("/v1/products/N-1").exchange().expectStatus().isOk()
             .expectBody().jsonPath("$.data.hidden").doesNotExist().jsonPath("$.data.tradeName").isEqualTo("Napa");
 
-        // what bddrug_etl.load.batches.reopen_review does when the record is re-run
+        // what bddrug_etl.load.batches.settle does when a re-run changed the record's approval view (§8.3.1)
         exec(pg, """
             UPDATE ops.batch_item SET review = 'pending', extracted_at = clock_timestamp()
              WHERE batch_id = 'R-rerun' AND concept_id = 'N-1';
@@ -548,7 +548,7 @@ class ReviewApiIntegrationTest {
         approval.put("expectedLastDecisionId", s.lastDecisionId());
         approval.put("requestId", UUID.randomUUID().toString());
         decideRaw("R-back", "W-1", approval).expectStatus().isCreated();
-        // what bddrug_etl.load.batches.reopen_review does when the record is re-run
+        // what bddrug_etl.load.batches.settle does when a re-run changed the record's approval view (§8.3.1)
         exec(pg, """
             UPDATE ops.batch_item SET review = 'pending', extracted_at = clock_timestamp()
              WHERE batch_id = 'R-back' AND concept_id = 'W-1';
