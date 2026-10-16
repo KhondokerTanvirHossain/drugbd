@@ -87,7 +87,7 @@ class SeniorReviewScaleIntegrationTest {
     private void assertWithinBudget(String uri) {
         Latency.P95s p95 = Latency.p95Samples(() -> get(uri).returnResult());
         System.out.println("GET " + uri + ": " + p95);
-        assertThat(p95.best()).as("best of %d p95 samples of 20 GET %s: %s", Latency.SAMPLES, uri, p95).isLessThan(300L);
+        assertThat(p95.best()).as("best of %d p95 samples of 20 GET %s: %s", Latency.SAMPLES, uri, p95).isLessThan(Latency.boundMs());
     }
 
     @Test void theSeedIsRegisterSized() {

@@ -32,6 +32,7 @@ val scaleTest by tasks.registering(Test::class) {
     useJUnitPlatform()
     include(scaleTests)
     maxParallelForks = 1
+    testLogging { events("passed", "failed"); showStandardStreams = true; exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }
     shouldRunAfter(tasks.test)
     outputs.upToDateWhen { false }
     // `./gradlew test --tests X` runs only X; run a scale test alone with `./gradlew scaleTest --tests X`.

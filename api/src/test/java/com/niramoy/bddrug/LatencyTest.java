@@ -58,4 +58,12 @@ class LatencyTest {
     @Test void theSamplesPrintInOrderForTheAssertionMessage() {
         assertThat(new Latency.P95s(List.of(410L, 160L, 330L)).toString()).isEqualTo("p95 samples [410, 160, 330] ms, best 160 ms");
     }
+
+    @Test void theBudgetIsThreeHundredMillisecondsOffCiAndAThousandMillisecondGuardOnCi() {
+        assertThat(Latency.BUDGET_MS).isEqualTo(300L);
+        assertThat(Latency.CI_GUARD_MS).isEqualTo(1000L);
+        String ci = System.getenv("CI");
+        boolean onCi = ci != null && !ci.isBlank() && !ci.equalsIgnoreCase("false");
+        assertThat(Latency.boundMs()).isEqualTo(onCi ? 1000L : 300L);
+    }
 }

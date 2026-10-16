@@ -62,6 +62,6 @@ class StatsScaleIntegrationTest {
         assertThat(first.length).isLessThan(1_000_000);
         Latency.P95s p95 = Latency.p95Samples(() -> web.get().uri("/v1/stats").exchange().expectStatus().isOk().expectBody().returnResult());
         assertThat(p95.best()).as("best of %d p95 samples of 20 calls, each after %d untimed warm-ups: %s",
-            Latency.SAMPLES, Latency.WARM_UPS, p95).isLessThan(300L);
+            Latency.SAMPLES, Latency.WARM_UPS, p95).isLessThan(Latency.boundMs());
     }
 }
