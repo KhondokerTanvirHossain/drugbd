@@ -37,7 +37,7 @@ function AllBrands({ p }: { p: { brands: InteractionPair["brands"]; brandCount: 
   );
 }
 
-const isUnclassifiedNoText = (p: InteractionPair) => severityOf(p.severity) === "unknown" && !p.interaction && !p.management;
+const isUnclassifiedNoText = (p: InteractionPair) => severityOf(p.severity) === "unknown" && pairText(p) === null;
 
 /** §6.7.3 item 4 line for one partner brand (no_route, not_run, unmapped). */
 function otherLine(n: InteractionNotChecked, brand: string): string {
@@ -63,10 +63,14 @@ export default function OtherApproved({ data, ix, conceptId, subject }:
   const noData = data.notChecked.filter((n) => n.reason === "no_data");
   const others = data.notChecked.filter((n) => n.reason !== "no_data");
   const empty = data.totalPartners === 0;
+  const last = Math.max(0, Math.ceil(data.totalPartners / 20) - 1);
+  const past = !empty && ix > last;   // an edited or stale ?ix= past the end: back to the last real page (Review Focus 5)
+  const prev = past ? last : ix - 1;
+  const more = !past && (ix + 1) * 20 < data.totalPartners;
   return (
     <div className={styles["s-psec"]}>
       <h3 id="with-other" className={styles.h3}>{N.heading}</h3>
-      {empty && ix === 0 && <p>{fill(N.empty, { substance: subject })}</p>}
+      {empty && <p>{fill(N.empty, { substance: subject })}</p>}
       {texted.map((p, i) => (
         <Fragment key={`${p.ddinterA}|${p.ddinterB}`}>
           <PublicPairCard id={`oa-${ix}-${i}`} severity={p.severity} heading="h4" names={`${p.substance.name} + ${p.partnerSubstance.name}`}
@@ -89,10 +93,10 @@ export default function OtherApproved({ data, ix, conceptId, subject }:
             k: n.brandCount, brands: brandsWord(n.brandCount) })}</p>} />
       ))}
       {others.map((n) => n.brands.map((b) => <p key={`${n.partnerSubstance.name}|${n.reason}|${b.conceptId}`}>{otherLine(n, b.tradeName)}</p>))}
-      {(ix > 0 || (ix + 1) * 20 < data.totalPartners) && (
+      {!empty && (ix > 0 || more) && (
         <p className={styles.pager}>
-          {ix > 0 && <a href={href(ix - 1)}>{N.previous}</a>}
-          {(ix + 1) * 20 < data.totalPartners && <a href={href(ix + 1)}>{N.more}</a>}
+          {ix > 0 && <a href={href(prev)}>{N.previous}</a>}
+          {more && <a href={href(ix + 1)}>{N.more}</a>}
         </p>
       )}
     </div>

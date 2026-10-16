@@ -7,16 +7,18 @@ import pc from "@/components/ui/PairCard.module.css";
 import { FROM_DDINTER, NO_MANAGEMENT, UNKNOWN_PAIR_LINE } from "@/lib/copy";
 import type { PublicPairReview, Source } from "@/lib/public-types";
 import { CHECK } from "@/lib/public-copy";
+import { ddinterText } from "@/lib/ddinter-text";
 import { severityOf } from "@/lib/severity";
 import styles from "./pair.module.css";
 
 export const TRUNCATE_AT = 200;
 export type PairText = { kind: "management" | "interaction"; body: string } | null;
 
-/** Management first, otherwise the interaction description (§5.6.2, §6.7.3). */
+/** Management first, otherwise the interaction description (§5.6.2, §6.7.3). DDInter placeholders count as no text (§3.6). */
 export function pairText(p: { management: string | null; interaction: string | null }): PairText {
-  if (p.management) return { kind: "management", body: p.management };
-  if (p.interaction) return { kind: "interaction", body: p.interaction };
+  const m = ddinterText(p.management), i = ddinterText(p.interaction);
+  if (m) return { kind: "management", body: m };
+  if (i) return { kind: "interaction", body: i };
   return null;
 }
 
@@ -38,9 +40,12 @@ export default function PublicPairCard({ id, severity, names, meta, review, text
     </div>
   );
   const long = text !== null && text.body.length > TRUNCATE_AT;
-  const kindLabel = text?.kind === "management"
-    ? (long ? CHECK.managementTruncated : CHECK.managementFull)
-    : (long ? CHECK.interactionTruncated : CHECK.interactionFull);
+  const [truncated, full] = text?.kind === "management"
+    ? [CHECK.managementTruncated, CHECK.managementFull]
+    : [CHECK.interactionTruncated, CHECK.interactionFull];
+  // The text is server-rendered open (no JS: unclamped), so a long card carries both wordings; PairCard.module.css shows
+  // "truncated" only while the Expander has clamped it.
+  const kindLabel = long ? <><span className={pc.whenClosed}>{truncated}</span><span className={pc.whenOpen}>{full}</span></> : full;
   return (
     <article className="pair">
       <div className="pair-head"><Severity level={severity} /><H className="pair-names">{names}</H></div>

@@ -213,4 +213,30 @@ describe("approved product (§6.5 item 6)", () => {
     getProductInteractions.mockResolvedValue({ ok: false, status: 503 });
     expect(await renderProduct()).not.toContain("With other approved medicines");
   });
+
+  it("a page past the end: the empty line at any ix when there are no partners; otherwise Previous to the last real page", async () => {
+    getProductInteractions.mockResolvedValue({ ok: true, data: { ...NAPA_PAIRS, page: 3, totalPartners: 0, partners: [], notChecked: [] } });
+    const none = await renderProduct(NAPA.conceptId, { ix: "3" });
+    expect(none).toContain("No other approved medicine has an interaction with Acetaminophen listed in DDInter 2.0 yet.");
+    expect(none).not.toContain("Previous interactions");
+    expect(none).not.toContain("More interactions");
+    getProductInteractions.mockResolvedValue({ ok: true, data: { ...NAPA_PAIRS, page: 10000, totalPartners: 45, partners: [], notChecked: [] } });
+    const past = await renderProduct(NAPA.conceptId, { ix: "10000" });
+    expect(past).toContain('href="/products/186-0030-006--napa?ix=2#with-other">Previous interactions</a>');
+    expect(past).not.toContain("?ix=9999");
+    expect(past).not.toContain("More interactions");
+    expect(past).not.toContain("No other approved medicine has an interaction");
+  });
+
+  it("placeholder text from DDInter is never printed on a partner card; unknown severity with only placeholders joins the panel", async () => {
+    const [warf, amlo, asa] = NAPA_PAIRS.partners;
+    getProductInteractions.mockResolvedValue({ ok: true, data: { ...NAPA_PAIRS, partners: [
+      { ...warf, management: "None", interaction: "Raises levels." }, { ...amlo, management: "None", interaction: "-" }, asa] } });
+    const html = await renderProduct();
+    expect(html).toContain("DDInter 2.0 gives no management text for this pair.");
+    expect(html).toContain("Raises levels.");
+    expect(html).not.toMatch(/>None</);
+    expect(html).not.toMatch(/>-</);
+    expect(html).toContain("Acetaminophen with Amlodipine (pair not yet reviewed by a senior pharmacist) and Acetylsalicylic acid (pair reviewed by a senior pharmacist on 15/10/2026).");
+  });
 });

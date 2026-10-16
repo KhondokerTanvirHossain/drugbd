@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import PublicPairCard from "@/components/public/PublicPairCard";
+import PublicPairCard, { pairText } from "@/components/public/PublicPairCard";
 
 const reviewed = { state: "reviewed" as const, reviewedAt: "2026-10-16T05:20:00Z" };
 const notReviewed = { state: "not_reviewed" as const, reviewedAt: null };
@@ -19,6 +19,22 @@ describe("PublicPairCard (§6.5, §6.7.3, P1C D53)", () => {
     expect(card()).toContain("Management, full text from DDInter 2.0.");
     const long = card({ text: { kind: "management", body: "x".repeat(201) } });
     expect(long).toContain("Management, truncated. Full text from DDInter 2.0.");
+    // Without JS (or after Show full text) the text is unclamped, so the footer must also carry the "full text" wording.
+    expect(long).toMatch(/<span class="[^"]*whenClosed[^"]*">Management, truncated\. Full text from DDInter 2\.0\.<\/span>/);
+    expect(long).toMatch(/<span class="[^"]*whenOpen[^"]*">Management, full text from DDInter 2\.0\.<\/span>/);
+    const longInter = card({ text: { kind: "interaction", body: "y".repeat(201) } });
+    expect(longInter).toMatch(/<span class="[^"]*whenClosed[^"]*">Interaction description, truncated\. Full text from DDInter 2\.0\.<\/span>/);
+    expect(longInter).toMatch(/<span class="[^"]*whenOpen[^"]*">Interaction description, full text from DDInter 2\.0\.<\/span>/);
+    expect(card()).not.toContain("whenOpen");
+  });
+  it("DDInter placeholders are never printed: a 'None' management falls back to NO_MANAGEMENT plus the interaction text (§3.6)", () => {
+    const text = pairText({ management: "None", interaction: "Raises levels." });
+    expect(text).toEqual({ kind: "interaction", body: "Raises levels." });
+    const html = card({ text });
+    expect(html).toContain("DDInter 2.0 gives no management text for this pair.");
+    expect(html).toContain("Raises levels.");
+    expect(html).not.toMatch(/>None</);
+    expect(pairText({ management: " - ", interaction: "n/a" })).toBeNull();
   });
   it("interaction only, no text, and unknown severity with no text", () => {
     const inter = card({ text: { kind: "interaction", body: "Raises levels." } });
