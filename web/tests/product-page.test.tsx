@@ -10,6 +10,11 @@ vi.mock("@/lib/session", () => ({ getSession: () => getSession() }));
 vi.mock("next/headers", () => ({ headers: async () => new Headers({ "x-nonce": "n1", "x-pathname": "/products/gone" }) }));
 const notFound = vi.fn(() => { throw new Error("NEXT_NOT_FOUND"); });
 vi.mock("next/navigation", () => ({ notFound: () => notFound() }));
+const turnstileProps: Record<string, unknown>[] = [];
+vi.mock("@/components/TurnstileField", async (importOriginal) => {
+  const Real = (await importOriginal<typeof import("@/components/TurnstileField")>()).default;
+  return { default: (p: Parameters<typeof Real>[0]) => { turnstileProps.push(p); return <Real {...p} />; } };
+});
 import ProductPage from "@/app/products/[id]/page";
 import ProductNotFound from "@/app/products/[id]/not-found";
 
@@ -332,6 +337,14 @@ describe("approved product (§6.5 item 7 and the aside)", () => {
     expect(html).toContain(">Send report</button>");
     expect(html).toContain("Thank you. Your flag was sent to the reviewers.");
     expect(html).not.toContain("reader@example.org");
+  });
+
+  it("Report a problem's bot check is always the compact widget: it sits in the 300 px aside (§10.4; final review finding 4)", async () => {
+    getSession.mockResolvedValue({ email: "reader@example.org", role: "user" });
+    turnstileProps.length = 0;
+    await renderProduct(NAPA.conceptId, { flag: "invalid" });
+    expect(turnstileProps).toHaveLength(1);
+    expect(turnstileProps[0]).toMatchObject({ action: "flag", size: "compact" });
   });
 
   it("Report a problem adds no live region (§10.2): a failed outcome and the disabled-verification notice are plain text", async () => {

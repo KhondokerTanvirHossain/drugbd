@@ -84,6 +84,24 @@ test("reflow at 320 CSS px: no horizontal page scroll on any public page (§10.4
   }
 });
 
+/*
+ * Final review finding 4: the signed-in write forms carry Turnstile, whose normal widget is 300 px wide. The fake draws
+ * the real sizes, so a normal widget on /partners or in the product page's report form scrolls a 320 px page sideways.
+ */
+test("reflow at 320 CSS px: the signed-in forms with their bot check, /partners and the open report form (§10.4)", async ({ browser }) => {
+  const reader = await browser.newContext({ baseURL: BASE_URL, viewport: { width: 320, height: 640 } });
+  await signInAs(reader, "user", "E2E Reader");
+  const page = await reader.newPage();
+  await installTurnstileFake(page, "pass");
+  for (const [path, form] of [["/partners", "#request form"], [`/products/${P.napa}?flag=invalid`, "#flag form"]] as const) {
+    await page.goto(path);
+    await expect(page.locator(`${form} input[name="cf-turnstile-response"]`), path).toHaveValue(/.+/, { timeout: 20_000 });
+    expect(await noHorizontalScroll(page), path).toBeLessThanOrEqual(320);
+    await expect(page.locator(`${form} [data-fake-turnstile]`), path).toHaveAttribute("data-fake-turnstile", "compact");
+  }
+  await reader.close();
+});
+
 test("1280×800 at 400% zoom (320×200 CSS px): tabbing through the product page, the public bar never covers the focused element (§10.4, WCAG 2.4.11)", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 200 });
   await page.goto(`/products/${P.napa}`);

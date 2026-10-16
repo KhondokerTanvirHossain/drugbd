@@ -58,7 +58,7 @@ export default async function PartnersPage({ searchParams }: { searchParams: Pro
             <Field id="p-use" label={P.use} help={`${P.useHelp} ${NO_PHI_HELP}`}
               control={<textarea className="textarea" name="use" required minLength={USE_MIN} maxLength={USE_MAX} rows={5} />} />
             <Field id="p-volume" label={P.volume} control={<select className="input" name="volume" required>{PARTNER_VOLUMES.map((v) => <option key={v}>{v}</option>)}</select>} />
-            {siteKey ? <TurnstileField siteKey={siteKey} action="partner" nonce={await cspNonce()} /> : <p>{TURNSTILE_OFF}</p>}
+            {siteKey ? <TurnstileField siteKey={siteKey} action="partner" nonce={await cspNonce()} size="auto" /> : <p>{TURNSTILE_OFF}</p>}
             <Button variant="primary" type="submit">{LANDING.requestAccess}</Button>
           </form>
         )}

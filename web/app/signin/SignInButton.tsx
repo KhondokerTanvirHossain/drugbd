@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Auth } from "firebase/auth";
 import TurnstileField from "@/components/TurnstileField";
+import { NARROW_MEDIA } from "@/lib/narrow";
 import Banner from "@/components/ui/Banner";
 import Button from "@/components/ui/Button";
 import { SIGN_IN, SIGN_IN_STATES } from "@/lib/copy";
@@ -16,8 +17,8 @@ export type FirebaseWebConfig = { apiKey: string; authDomain: string; projectId:
 /** sessionStorage flag set before signInWithRedirect; Clear-Site-Data on sign-out removes it with everything else. */
 export const REDIRECT_FLAG = "intellidrugs-signin-redirect";
 const WELCOME = "/signin?welcome=1";
-/** §10.4: at 440 px and below the card leaves under 300 px for Turnstile, so the widget goes compact (150 px). */
-const NARROW = "(max-width: 440px)";
+/** §10.4: at 440 px and below the card leaves under 300 px for Turnstile, so the widget goes compact (lib/narrow.ts). */
+const NARROW = NARROW_MEDIA;
 
 type Status = "idle" | "loading" | "captcha" | "cancelled" | "blocked" | "failed" | "rejected" | "rate_limited";
 /** The 401 codes of POST /api/session (Task 19) and their §1.7 bodies; anything else reads as "request failed". */

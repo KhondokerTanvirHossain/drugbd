@@ -125,6 +125,34 @@ describe("TurnstileField island (§4.2)", () => {
     expect(api.render.mock.calls[1][1]).toMatchObject({ size: "compact", action: "signin" });
   });
 
+  // Final review finding 4: the signed-in public forms (/partners, the product page's report form) reflow at 320 px.
+  it("size auto: compact at 440 px and below from the first render, normal above, and it follows the media query (§10.4)", async () => {
+    let listener: ((e: { matches: boolean }) => void) | null = null;
+    const mq = { matches: true, addEventListener: vi.fn((_: string, f: typeof listener) => { listener = f; }), removeEventListener: vi.fn() };
+    const matchMedia = vi.fn(() => mq);
+    vi.stubGlobal("matchMedia", matchMedia);
+    try {
+      render(<TurnstileField siteKey="k" action="partner" size="auto" />);
+      await waitFor(() => expect(api.render).toHaveBeenCalledTimes(1));
+      expect(matchMedia).toHaveBeenCalledWith("(max-width: 440px)");
+      expect(opts()).toMatchObject({ size: "compact", action: "partner" });
+      act(() => listener?.({ matches: false }));
+      await waitFor(() => expect(api.render).toHaveBeenCalledTimes(2));
+      expect(api.render.mock.calls[1][1]).not.toHaveProperty("size");
+      cleanup();
+      expect(mq.removeEventListener).toHaveBeenCalled();
+    } finally { vi.unstubAllGlobals(); }
+  });
+
+  it("size auto without matchMedia is the normal widget", async () => {
+    vi.stubGlobal("matchMedia", undefined);
+    try {
+      render(<TurnstileField siteKey="k" action="flag" size="auto" />);
+      await waitFor(() => expect(api.render).toHaveBeenCalledTimes(1));
+      expect(opts()).not.toHaveProperty("size");
+    } finally { vi.unstubAllGlobals(); }
+  });
+
   it("passes interaction-only appearance and auto refresh, can hide its status, and reuses a script already on the page", async () => {
     render(<TurnstileField siteKey="k" action="decision" appearance="interaction-only" refreshExpired="auto" hideStatus />);
     await waitFor(() => expect(api.render).toHaveBeenCalled());

@@ -42,7 +42,7 @@ export default function ReportProblem({ conceptId, session, outcome, siteKey, no
             <Field id="report-message" label={PUBLIC_NEW.productPage.reportLabel}
               control={<textarea className="textarea" name="message" required minLength={FLAG_MESSAGE_MIN} maxLength={FLAG_MESSAGE_MAX} rows={4} />}
               help={`${PUBLIC_NEW.productPage.reportHelp} ${NO_PHI_HELP}`} />
-            {siteKey ? <TurnstileField siteKey={siteKey} action="flag" nonce={nonce} /> : <p>{TURNSTILE_OFF}</p>}
+            {siteKey ? <TurnstileField siteKey={siteKey} action="flag" nonce={nonce} size="compact" /> : <p>{TURNSTILE_OFF}</p>}
             <Button variant="primary" type="submit">{DESK.sendReport}</Button>
           </form>
         ) : (

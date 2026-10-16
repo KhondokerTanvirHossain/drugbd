@@ -9,6 +9,11 @@ vi.mock("@/lib/turnstile", async (importOriginal) => ({ ...(await importOriginal
   verifyTurnstile: (...a: unknown[]) => verifyTurnstile(...a) }));
 vi.mock("next/headers", () => ({ headers: async () => new Headers({ "x-nonce": "n1", "x-request-id": "11111111-1111-4111-8111-111111111111" }) }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+const turnstileProps: Record<string, unknown>[] = [];
+vi.mock("@/components/TurnstileField", async (importOriginal) => {
+  const Real = (await importOriginal<typeof import("@/components/TurnstileField")>()).default;
+  return { default: (p: Parameters<typeof Real>[0]) => { turnstileProps.push(p); return <Real {...p} />; } };
+});
 import PartnersPage from "@/app/partners/page";
 import { createLimits } from "@/lib/limits";
 import { submitPartnerRequest } from "@/lib/actions-core";
@@ -37,6 +42,13 @@ describe("/partners (§6.9)", () => {
     expect(html).toContain(">Request partner access</button>");
     // A native POST: the 303 to ?partner=<code>#request keeps its fragment with JavaScript too (form-post-routes.test.ts).
     expect(html).toContain('<form class="form" action="/partners/request" method="post">');
+  });
+
+  it("the bot check asks for the compact widget on narrow screens (size auto, §10.4 reflow at 320 px; final review finding 4)", async () => {
+    turnstileProps.length = 0;
+    await render();
+    expect(turnstileProps).toHaveLength(1);
+    expect(turnstileProps[0]).toMatchObject({ action: "partner", size: "auto" });
   });
 
   it("signed out: the sign-in line and link, no form", async () => {
