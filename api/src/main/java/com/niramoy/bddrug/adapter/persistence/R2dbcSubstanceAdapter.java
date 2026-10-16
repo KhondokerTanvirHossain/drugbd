@@ -2,9 +2,11 @@ package com.niramoy.bddrug.adapter.persistence;
 import com.niramoy.bddrug.application.port.SubstanceQueryPort;
 import com.niramoy.bddrug.domain.DdinterCode;
 import com.niramoy.bddrug.domain.IngredientSummary;
+import com.niramoy.bddrug.domain.PublicPairReviews;
 import com.niramoy.bddrug.domain.SourceLinks;
 import com.niramoy.bddrug.domain.Substance;
 import com.niramoy.bddrug.domain.SubstanceCode;
+import com.niramoy.bddrug.domain.SubstanceInteractions;
 import com.niramoy.bddrug.domain.SubstanceName;
 import io.r2dbc.spi.Readable;
 import org.springframework.r2dbc.core.DatabaseClient;
@@ -39,9 +41,11 @@ public class R2dbcSubstanceAdapter implements SubstanceQueryPort {
     private final DatabaseClient db;
     /** The per-entry count rule (IngredientSummaryReader.entries); a stateless reader over the same client. */
     private final IngredientSummaryReader entryReader;
-    public R2dbcSubstanceAdapter(DatabaseClient db) {
+    private final PairReviewReader pairReviews;
+    public R2dbcSubstanceAdapter(DatabaseClient db, PairReviewReader pairReviews) {
         this.db = db;
         this.entryReader = new IngredientSummaryReader(db);
+        this.pairReviews = pairReviews;
     }
 
     @Override public Mono<Substance> find(String bdsId, boolean approvedOnly) {
@@ -54,6 +58,66 @@ public class R2dbcSubstanceAdapter implements SubstanceQueryPort {
                     a -> a)
                 .map(a -> new Substance(s[0], s[1], cast(a[0]), cast(a[1]), (Substance.Coverage) a[2], cast(a[3]), cast(a[4]),
                     cast(a[5]), cast(a[6]), cast(a[7]), cast(a[8]))));
+    }
+
+    @Override public Mono<String> preferredName(String bdsId) {
+        return db.sql("SELECT preferred_name FROM curated.substance WHERE bds_id = :id").bind("id", bdsId)
+            .map(r -> r.get("preferred_name", String.class)).one();
+    }
+
+    @Override public Mono<Boolean> isPublic(String bdsId) {
+        return db.sql("WITH " + ReviewSql.LATEST_PUBLIC + ", " + PUBLIC_SUBSTANCES + " SELECT EXISTS (SELECT 1 FROM pubsub WHERE bds_id = :id) AS pub")
+            .bind("id", bdsId).map(r -> Boolean.TRUE.equals(r.get("pub", Boolean.class))).one();
+    }
+
+    private record PairRow(String partnerName, String partnerBdsId, String ddinterA, String ddinterB, String routeScope, String severity,
+                           List<String> actions, String interactionId, String interaction, String management) {}
+
+    @Override public Mono<InteractionsPage> interactionsPage(String bdsId, String severity, int limit, int offset, boolean publicOnly) {
+        String partner = publicOnly
+            ? "(SELECT min(c.bds_id) FROM curated.substance_code c JOIN pubsub ps ON ps.bds_id = c.bds_id WHERE c.system = 'DDINTER' AND c.code = s.partner_id)"
+            : "(SELECT min(c.bds_id) FROM curated.substance_code c WHERE c.system = 'DDINTER' AND c.code = s.partner_id)";
+        String sides = "WITH " + ReviewSql.LATEST_PUBLIC + ", " + PUBLIC_SUBSTANCES + ", " + MINE_CTE + """
+            , sides AS (
+              SELECT p.ddinter_a, p.ddinter_b, p.ddinter_b AS partner_id, p.partner_name_b AS partner_name, p.severity, p.actions,
+                     p.interaction_id, m.route_scope
+              FROM mine m JOIN curated.ddinter_pair p ON p.ddinter_a = m.code
+              UNION ALL
+              SELECT p.ddinter_a, p.ddinter_b, p.ddinter_a, p.partner_name_a, p.severity, p.actions, p.interaction_id, m.route_scope
+              FROM mine m JOIN curated.ddinter_pair p ON p.ddinter_b = m.code)
+            """;
+        String where = " WHERE (CAST(:sev AS text) IS NULL OR s.severity = :sev) ";
+        DatabaseClient.GenericExecuteSpec count = db.sql(sides + "SELECT count(*) AS n FROM sides s" + where).bind("id", bdsId);
+        count = severity == null ? count.bindNull("sev", String.class) : count.bind("sev", severity);
+        DatabaseClient.GenericExecuteSpec page = db.sql(sides + """
+                SELECT s.ddinter_a, s.ddinter_b, s.partner_name, s.severity, s.actions, s.interaction_id, s.route_scope,
+                       t.interaction, t.management,\s""" + partner + " AS partner_bds_id " +
+                "FROM sides s LEFT JOIN curated.ddinter_interaction_text t ON t.interaction_id = s.interaction_id" + where +
+                "ORDER BY " + SEVERITY_RANK.formatted("s.severity") + ", lower(s.partner_name), s.partner_name, s.route_scope, s.partner_id " +
+                "LIMIT :limit OFFSET :offset")
+            .bind("id", bdsId).bind("limit", limit).bind("offset", offset);
+        page = severity == null ? page.bindNull("sev", String.class) : page.bind("sev", severity);
+        Mono<Integer> total = count.map(r -> r.get("n", Long.class).intValue()).one();
+        Mono<List<PairRow>> rows = page.map(r -> new PairRow(r.get("partner_name", String.class), r.get("partner_bds_id", String.class),
+                r.get("ddinter_a", String.class), r.get("ddinter_b", String.class), r.get("route_scope", String.class),
+                r.get("severity", String.class), list(r, "actions"), r.get("interaction_id", String.class),
+                r.get("interaction", String.class), r.get("management", String.class)))
+            .all().collectList();
+        return Mono.zip(total, entries(bdsId), rows).flatMap(t -> {
+            // §7.4: a pair review is served only for pairs between public products. Under public scope a pair whose partner
+            // substance is not public (partnerBdsId null) is not even read, and reads not_reviewed with no date.
+            List<PublicPairReviews.Pair> pairs = t.getT3().stream().filter(p -> !publicOnly || p.partnerBdsId() != null)
+                .map(p -> new PublicPairReviews.Pair(p.ddinterA(), p.ddinterB(), p.severity(), p.actions(), p.interaction(),
+                    p.management()))
+                .toList();
+            return pairReviews.forCodes(PublicPairReviews.codes(pairs), null).map(d -> PublicPairReviews.of(pairs, d))
+                .map(rv -> new InteractionsPage(t.getT1(), t.getT2(), t.getT3().stream().map(p -> new SubstanceInteractions.Item(
+                    p.partnerName(), p.partnerBdsId(), p.ddinterA(), p.ddinterB(), p.routeScope(), p.severity(), p.actions(),
+                    p.interaction(), p.management(),
+                    publicOnly && p.partnerBdsId() == null ? PublicPairReviews.NONE
+                        : rv.getOrDefault(p.ddinterA() + "|" + p.ddinterB(), PublicPairReviews.NONE),
+                    SourceLinks.pair(p.interactionId()).map(SourceLinks.Source::url).orElse(null))).toList()));
+        });
     }
 
     @SuppressWarnings("unchecked")
