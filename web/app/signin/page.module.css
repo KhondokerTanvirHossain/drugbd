@@ -1,2 +1,23 @@
-.page { display: flex; flex-direction: column; gap: var(--s4); max-width: 480px; }
-.sub { color: var(--fg-2); }
+.stage { display: flex; justify-content: center; padding: clamp(16px, 3vw, 32px); }
+.card { width: 100%; max-width: 400px; background: var(--surface); border-radius: var(--r-win); box-shadow: var(--shadow-2); padding: 30px 26px 22px; display: flex; flex-direction: column; gap: 18px; }
+.brand { display: flex; align-items: center; gap: 10px; }
+.h1 { font: 600 24px/1.15 var(--font-ui); letter-spacing: -.022em; }
+.sub { color: var(--fg-2); font-size: 14.5px; margin-top: 6px; }
+.invite { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 10px; padding: 14px; border-radius: 12px; box-shadow: inset 0 0 0 1px var(--line-strong); font-size: 13.5px; color: var(--fg-2); }
+.invite :global(.ico) { --ico: var(--i-info); color: var(--accent); margin-top: 2px; }
+.invite b { color: var(--fg); font-weight: 600; }
+.privacy { font-size: 12.5px; color: var(--fg-2); }
+.state { display: flex; flex-direction: column; gap: 12px; }
+.h2 { font: 600 16px/1.3 var(--font-ui); letter-spacing: -.01em; }
+.state p { font-size: 13.5px; color: var(--fg-2); }
+.row { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; }
+.who { font-size: 13px; color: var(--fg-2); }
+.shield { --ico: var(--i-shield); width: 13px; height: 13px; }
+.next { display: flex; flex-direction: column; gap: 8px; counter-reset: nx; }
+.next li { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; font-size: 13.5px; color: var(--fg); }
+.next li::before { counter-increment: nx; content: counter(nx); width: 20px; height: 20px; border-radius: 6px; display: grid; place-items: center; font: 600 11.5px/1 var(--font-ui); color: var(--accent); box-shadow: inset 0 0 0 1.5px var(--accent-line); }
+.acct { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.acct :global(.avatar) { width: 36px; height: 36px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font: 600 13px/1 var(--font-ui); flex: none; }
+.acctTxt { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 13px; color: var(--fg-2); overflow-wrap: anywhere; }
+.acctTxt b { color: var(--fg); font-weight: 600; font-size: 14px; }
+@media (max-width: 440px) { .card { padding: 24px 18px 18px; } }

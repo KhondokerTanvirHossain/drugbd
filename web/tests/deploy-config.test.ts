@@ -59,4 +59,15 @@ describe("CI-only compose override (§11.4)", () => {
     expect(yml).toContain("npx playwright test");
     expect(yml).toContain("npx lhci autorun");
   });
+  it("e2e renders the landing lookup card with the production hero product (D26)", () => {
+    const ci = repo("deploy/docker-compose.ci.yml");
+    expect(ci.slice(ci.indexOf("\n  web:"), ci.indexOf("\n  seed:"))).toContain("HERO_CONCEPT_ID: 186-0030-006--napa\n");
+  });
+  it("the e2e job approves the pilot outside the seed, then runs the public Lighthouse budget last (§1.4 S5)", () => {
+    const yml = repo(".github/workflows/ci.yml");
+    const approve = yml.indexOf("< web/e2e/lhci-public.sql"), run = yml.indexOf("--config=./lighthouserc.public.json");
+    expect(approve).toBeGreaterThan(yml.indexOf("npx playwright test"));
+    expect(approve).toBeGreaterThan(yml.indexOf("--config=./lighthouserc.learn.json"));
+    expect(run).toBeGreaterThan(approve);
+  });
 });

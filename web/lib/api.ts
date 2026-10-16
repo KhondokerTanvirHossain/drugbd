@@ -1,4 +1,6 @@
 import "server-only";
+import type { CheckResult as PublicCheckResult, ClinicalDrugView, ProductInteractions, ProductStub, PublicProduct, PublicSubstance,
+  SearchResult as PublicSearchResult, SeverityFilter, SubstanceInteractions, SubstanceStub, SuggestRow } from "./public-types";
 import type {
   DeskOutcome, FilterKey, FlagItem, FlagPage, ItemsPage, ReviewBatchSummary, ReviewDiff, ReviewItem, ReviewerRole, VersionRow,
 } from "./review-types";
@@ -17,23 +19,12 @@ import { parseStats, type SiteStats } from "./stats";
 
 export type ReviewStatus = "pending" | "ok" | "issue";
 
-export type Ingredient = { xmCode: string; name: string };
 /** A DDInter entry chosen for the product's route; routeAssumed = the general entry stands in for the route. */
 export type DdinterRef = { ddinterId: string; name: string | null; routeScope: string; routeAssumed: boolean };
 export type ClinicalIngredient = {
   bdsId: string; name: string; strengthValue: number | null; strengthUnit: string | null;
   perValue: number | null; perUnit: string | null; ddinter: DdinterRef[];
 };
-export type ClinicalDrug = { bdcId: string; displayName: string; doseForm: string; route: string; ingredients: ClinicalIngredient[] };
-export type Product = {
-  conceptId: string; darNumber: string; tradeName: string; company: string; dosageForm: string;
-  genericContentRaw: string; qualityFlag: string | null; ingredients: Ingredient[];
-  parseStatus: "parsed" | "partial" | "failed" | null; parseNote: string | null; clinicalDrug: ClinicalDrug | null;
-};
-/** What the API returns under public scope for a record no pharmacist has approved: no data fields. */
-export type HiddenProduct = { conceptId: string; tradeName?: string; reviewStatus: "pending" | "issue"; hidden: true };
-export type HiddenSubstance = { bdsId: string; preferredName?: string; reviewStatus?: string; hidden: true };
-export type SearchResult = { items: Product[]; error: string | null };
 
 export function isHidden(x: unknown): x is { hidden: true } {
   return typeof x === "object" && x !== null && (x as { hidden?: unknown }).hidden === true;
@@ -49,42 +40,10 @@ function internalToken(): string | null {
   return token.length >= MIN_TOKEN_LENGTH ? token : null;
 }
 
+const enc = encodeURIComponent;
+
 const read = (url: string, headers: Record<string, string> = {}) =>
   fetch(url, { headers, cache: "no-store", signal: AbortSignal.timeout(5000) });
-
-export async function searchProducts(q: string, page: number): Promise<SearchResult> {
-  const term = q.trim();
-  if (term.length < 2) return { items: [], error: null };
-  const params = new URLSearchParams({ q: term, page: String(page), scope: "public" });
-  let res: Response;
-  try {
-    res = await read(`${base()}/v1/products?${params}`);
-  } catch {
-    return { items: [], error: "Search is temporarily unavailable. Please try again." };
-  }
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) return { items: [], error: body?.errors?.[0]?.message ?? "Search failed" };
-  if (!Array.isArray(body?.data)) return { items: [], error: "Search failed" };
-  return { items: body.data, error: null };
-}
-
-export async function getProduct(id: string): Promise<Product | HiddenProduct | null> {
-  const res = await read(`${base()}/v1/products/${encodeURIComponent(id)}?scope=public`);
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error(`API error ${res.status}`);
-  return (await res.json()).data as Product | HiddenProduct;
-}
-
-export type LoadedProduct = { conceptId: string; tradeName: string; dosageForm: string };
-
-/** The light product list for the checker's picker (approved products only), sorted by trade name. */
-export async function listLoadedProducts(): Promise<LoadedProduct[]> {
-  const res = await read(`${base()}/v1/products/loaded?scope=public`);
-  if (!res.ok) throw new Error(`API error ${res.status}`);
-  const data = (await res.json())?.data;
-  if (!Array.isArray(data)) throw new Error("API error: no product list");
-  return data as LoadedProduct[];
-}
 
 /**
  * GET /v1/stats (§7.4): public, never with the token. Throws on any failure or malformed body, so a Learn chapter
@@ -98,6 +57,81 @@ export async function getStats(): Promise<SiteStats> {
   return stats;
 }
 
+// ---- Public reads (§7.4). scope=public always (§2.2), never the token. ----
+
+export type Read<T> = { ok: true; data: T } | { ok: false; status: number };
+
+async function publicRead<T>(path: string, params: URLSearchParams = new URLSearchParams()): Promise<Read<T>> {
+  params.set("scope", "public");
+  let res: Response;
+  try {
+    res = await read(`${base()}${path}?${params}`);
+  } catch {
+    return { ok: false, status: 0 };
+  }
+  if (!res.ok) return { ok: false, status: res.status };
+  const body = await res.json().catch(() => null);
+  if (!body || body.data === undefined || body.data === null) return { ok: false, status: 502 };
+  return { ok: true, data: body.data as T };
+}
+
+/** A §7.4 stub (product or substance): it carries hidden: true and nothing else of the record. */
+export function isStub(x: unknown): x is ProductStub | SubstanceStub {
+  return isHidden(x);
+}
+
+export const searchMedicines = (q: string, page: number) =>
+  publicRead<PublicSearchResult>("/v1/search", new URLSearchParams({ q, page: String(page) }));
+export const getPublicProduct = (id: string) => publicRead<PublicProduct | ProductStub>(`/v1/products/${enc(id)}`);
+export const getProductInteractions = (id: string, page: number) =>
+  publicRead<ProductInteractions | ProductStub>(`/v1/products/${enc(id)}/interactions`, new URLSearchParams({ page: String(page) }));
+export const getClinicalDrug = (bdcId: string) => publicRead<ClinicalDrugView>(`/v1/clinical-drugs/${enc(bdcId)}`);
+export const getPublicSubstance = (bdsId: string) => publicRead<PublicSubstance | SubstanceStub>(`/v1/substances/${enc(bdsId)}`);
+export function getSubstanceInteractions(bdsId: string, severity: SeverityFilter | null, page: number) {
+  const params = new URLSearchParams();
+  if (severity) params.set("severity", severity);
+  params.set("page", String(page));
+  return publicRead<SubstanceInteractions | SubstanceStub>(`/v1/substances/${enc(bdsId)}/interactions`, params);
+}
+export function suggestProducts(q: string, exclude: string[]) {
+  const params = new URLSearchParams({ q });
+  for (const id of exclude) params.append("exclude", id);
+  return publicRead<SuggestRow[]>("/v1/products/suggest", params);
+}
+
+export type CheckRead = { ok: true; data: PublicCheckResult } | { ok: false; status: number; unknownId: string | null };
+const CHECK_LISTS = ["products", "alerts", "noInteraction", "notChecked", "duplicates", "noData", "notReviewed"] as const;
+const NOT_FOUND = /^Product not found: (.+)$/;
+
+/** POST /v1/interactions/check (§7.4). A 404 names the unknown id (the API's own message), so the page drops it (§6.7.3). */
+export async function checkPublic(ids: string[]): Promise<CheckRead> {
+  let res: Response;
+  try {
+    res = await fetch(`${base()}/v1/interactions/check?scope=public`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ conceptIds: ids }),
+      cache: "no-store", signal: AbortSignal.timeout(5000),
+    });
+  } catch {
+    return { ok: false, status: 0, unknownId: null };
+  }
+  const body = await res.json().catch(() => null);
+  if (!res.ok) {
+    const m = res.status === 404 ? NOT_FOUND.exec(String(body?.errors?.[0]?.message ?? "")) : null;
+    return { ok: false, status: res.status, unknownId: m && ids.includes(m[1]) ? m[1] : null };
+  }
+  const d = body?.data;
+  if (!d || typeof d.summary !== "object" || !CHECK_LISTS.every((k) => Array.isArray(d[k]))) return { ok: false, status: 502, unknownId: null };
+  return { ok: true, data: d as PublicCheckResult };
+}
+
+/**
+ * §6.9 (D17): a partner access request is a flag on (other, partner-access); the API writes the partner_request audit row.
+ * It goes through createFlag, the one flag write path (Ruling F17).
+ */
+export async function requestPartnerAccess(message: string, reporterEmail: string, requestId: string): Promise<WriteResult<unknown>> {
+  return createFlag({ targetType: "other", targetId: "partner-access", message, reporterEmail, requestId });
+}
+
 /** Batch evidence shows unreviewed records: reviewers only (A1). These reads carry the token and fail without one. */
 async function reviewerRead(path: string, headers: Record<string, string> = {}): Promise<Response> {
   const token = internalToken();
@@ -106,8 +140,6 @@ async function reviewerRead(path: string, headers: Record<string, string> = {}):
 }
 
 // ---- Reviewer reads (spec §7.3). Every one needs the token; an unknown batch, record or snapshot is null. ----
-
-const enc = encodeURIComponent;
 
 async function reviewData<T>(path: string, headers: Record<string, string> = {}): Promise<T | null> {
   const res = await reviewerRead(path, headers);
@@ -249,61 +281,6 @@ export async function listFlagPage(kind: keyof typeof FLAG_FILTERS, page: number
   };
 }
 
-export type Substance = {
-  bdsId: string; preferredName: string;
-  names: { name: string; nameType: string; source: string }[];
-  codes: { system: string; code: string; routeScope: string; source: string; method: string; confidence: number }[];
-  coverage: { coverage: "full" | "none"; note: string };
-  products: { conceptId: string; tradeName: string; company: string }[];
-  interactions: { partnerName: string; partnerBdsId: string | null; severity: string; actions: string[];
-    interactionId: string | null; routeScope: string }[];
-  diseases: { diseaseName: string; severity: string; text: string | null; refs: string[]; interactionId: string;
-    routeScope: string }[];
-  foods: { food: string; severity: string; mechanism: string | null; description: string | null; management: string | null;
-    refs: string[]; interactionId: string; routeScope: string }[];
-};
-
-export async function getSubstance(id: string): Promise<Substance | HiddenSubstance | null> {
-  const res = await read(`${base()}/v1/substances/${encodeURIComponent(id)}?scope=public`);
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error(`API error ${res.status}`);
-  return (await res.json()).data as Substance | HiddenSubstance;
-}
-
-export type AlertSide = { conceptId: string; bdsId: string; name: string };
-export type Alert = {
-  severity: string; a: AlertSide; b: AlertSide; actions: string[]; interaction: string | null;
-  management: string | null; routeAssumed: boolean; source: string;
-};
-export type CheckResult = {
-  products: { conceptId: string; tradeName: string; substances: { bdsId: string | null; name: string; coverage: string }[] }[];
-  alerts: Alert[];
-  duplicates: { bdsId: string; name: string; conceptIds: string[] }[];
-  /** Substances the checker has no interaction data for: never to be read as "no interactions". */
-  noData: { conceptId: string; bdsId: string | null; name: string }[];
-  /** Products left out because no pharmacist has approved them yet: never to be read as "no interactions". */
-  notReviewed: { conceptId: string }[];
-};
-export type CheckOutcome = { result: CheckResult | null; error: string | null };
-
-export async function checkInteractions(conceptIds: string[]): Promise<CheckOutcome> {
-  let res: Response;
-  try {
-    res = await fetch(`${base()}/v1/interactions/check?scope=public`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ conceptIds }),
-      cache: "no-store", signal: AbortSignal.timeout(5000),
-    });
-  } catch {
-    return { result: null, error: "The interaction checker is temporarily unavailable. Please try again." };
-  }
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) return { result: null, error: body?.errors?.[0]?.message ?? "Interaction check failed" };
-  const d = body?.data;
-  if (!d || !["products", "alerts", "duplicates", "noData", "notReviewed"].every((k) => Array.isArray(d[k])))
-    return { result: null, error: "Interaction check failed" };
-  return { result: d as CheckResult, error: null };
-}
-
 // ---- Writes: every one carries the internal token; the web server makes them only from checked server actions. ----
 
 export type WriteResult<T> = { ok: true; data: T } | { ok: false; status: number; error: string; field: string | null };
@@ -334,7 +311,7 @@ export type DecisionRequest = {
   /** A UUID rendered with the form and reused on every resend, so a retry is answered once (§7.2 step 1). */
   requestId: string;
 };
-export type FlagTarget = "product" | "substance" | "check";
+export type FlagTarget = "product" | "substance" | "check" | "other";
 export type FlagRequest = { targetType: FlagTarget; targetId: string; message: string; reporterEmail: string; requestId?: string };
 
 export async function createFlag(f: FlagRequest): Promise<WriteResult<unknown>> {

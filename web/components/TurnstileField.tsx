@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import BotCheck, { type BotCheckState } from "@/components/ui/BotCheck";
+import { NARROW_MEDIA } from "@/lib/narrow";
 import type { TurnstileAction } from "@/lib/turnstile-actions";
 import styles from "./TurnstileField.module.css";
 
@@ -14,6 +15,7 @@ declare global {
 }
 
 const SCRIPT = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+const narrowNow = () => typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia(NARROW_MEDIA).matches;
 let loading: Promise<TurnstileApi> | null = null;
 let loadingScript: HTMLScriptElement | null = null;
 
@@ -50,19 +52,35 @@ export type TurnstileFieldProps = {
   onToken?: (token: string | null) => void; onError?: () => void;
   /** §5.8.5: the desk uses "interaction-only" and refresh-expired "auto"; the desk shows its own BotCheck (hideStatus). */
   appearance?: "always" | "interaction-only"; refreshExpired?: "auto" | "manual"; hideStatus?: boolean;
+  /**
+   * §10.4: "compact" (150 px wide) where the 300 px widget would scroll the page sideways at 320 px. "auto" is compact
+   * at NARROW_MEDIA and normal above it, following the media query (the signed-in public forms).
+   */
+  size?: "normal" | "compact" | "auto";
 };
 
 /**
  * Island (§4.2): explicit Turnstile render, reset and status. Turnstile puts the `cf-turnstile-response` field into
  * the enclosing form; `onToken` hands the same token to a fetch-based caller (sign-in).
  */
-export default function TurnstileField({ siteKey, action, nonce, resetKey = 0, onToken, onError, appearance, refreshExpired, hideStatus }: TurnstileFieldProps) {
+export default function TurnstileField({ siteKey, action, nonce, resetKey = 0, onToken, onError, appearance, refreshExpired, hideStatus, size }: TurnstileFieldProps) {
   const box = useRef<HTMLDivElement>(null);
   const widget = useRef<string | null>(null);
   const callbacks = useRef({ onToken, onError });
   callbacks.current = { onToken, onError };
   const [state, setState] = useState<BotCheckState>("checking");
   const [loadAttempt, setLoadAttempt] = useState(0);
+  // The initial read keeps a phone from rendering the normal widget only to remove it.
+  const [narrow, setNarrow] = useState(() => size === "auto" && narrowNow());
+  useEffect(() => {
+    if (size !== "auto" || typeof window.matchMedia !== "function") return;
+    const mq = window.matchMedia(NARROW_MEDIA);
+    setNarrow(mq.matches);
+    const onChange = (e: { matches: boolean }) => setNarrow(e.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, [size]);
+  const widgetSize = size === "auto" ? (narrow ? "compact" : undefined) : size;
 
   useEffect(() => {
     let cancelled = false;
@@ -74,6 +92,7 @@ export default function TurnstileField({ siteKey, action, nonce, resetKey = 0, o
         "response-field-name": "cf-turnstile-response",
         ...(appearance ? { appearance } : {}),
         ...(refreshExpired ? { "refresh-expired": refreshExpired } : {}),
+        ...(widgetSize ? { size: widgetSize } : {}),
         callback: (token: string) => { setState("passed"); callbacks.current.onToken?.(token); },
         "error-callback": () => { setState("failed"); callbacks.current.onToken?.(null); callbacks.current.onError?.(); },
         "expired-callback": () => { setState("checking"); callbacks.current.onToken?.(null); },
@@ -88,7 +107,7 @@ export default function TurnstileField({ siteKey, action, nonce, resetKey = 0, o
       if (widget.current && window.turnstile) window.turnstile.remove(widget.current);
       widget.current = null;
     };
-  }, [siteKey, action, nonce, appearance, refreshExpired, loadAttempt]);
+  }, [siteKey, action, nonce, appearance, refreshExpired, widgetSize, loadAttempt]);
 
   useEffect(() => {
     if (resetKey === 0) return;

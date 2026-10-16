@@ -1,0 +1,55 @@
+{
+  "ci": {
+    "collect": {
+      "url": ["http://localhost:3000/", "http://localhost:3000/search?q=paracetamol", "http://localhost:3000/products/186-0030-006--napa",
+        "http://localhost:3000/substances/BDS-000001",
+        "http://localhost:3000/check?ids=185-0138-012--g-warfarin&ids=076-0028-006--aspirin&ids=127-0263-018--domperidone"],
+      "numberOfRuns": 3,
+      "settings": { "blockedUrlPatterns": ["https://challenges.cloudflare.com/*"] }
+    },
+    "assert": {
+      "assertMatrix": [
+        {
+          "matchingUrlPattern": "^http://localhost:3000/$",
+          "assertions": {
+            "categories:accessibility": ["error", { "minScore": 1, "aggregationMethod": "median" }],
+            "categories:performance": ["warn", { "minScore": 0.9, "aggregationMethod": "median" }],
+            "server-response-time": ["error", { "maxNumericValue": 600, "aggregationMethod": "median" }],
+            "resource-summary:document:size": ["error", { "maxNumericValue": 30720, "aggregationMethod": "median" }],
+            "resource-summary:script:size": ["error", { "maxNumericValue": 133120, "aggregationMethod": "median" }],
+            "resource-summary:stylesheet:size": ["error", { "maxNumericValue": 20480, "aggregationMethod": "median" }],
+            "resource-summary:font:size": ["error", { "maxNumericValue": 92160, "aggregationMethod": "median" }],
+            "largest-contentful-paint": ["error", { "maxNumericValue": 2800, "aggregationMethod": "median" }]
+          }
+        },
+        {
+          "matchingUrlPattern": "^http://localhost:3000/(search|products|substances)",
+          "assertions": {
+            "categories:accessibility": ["error", { "minScore": 1, "aggregationMethod": "median" }],
+            "categories:performance": ["warn", { "minScore": 0.9, "aggregationMethod": "median" }],
+            "server-response-time": ["error", { "maxNumericValue": 600, "aggregationMethod": "median" }],
+            "resource-summary:document:size": ["error", { "maxNumericValue": 51200, "aggregationMethod": "median" }],
+            "resource-summary:script:size": ["error", { "maxNumericValue": 133120, "aggregationMethod": "median" }],
+            "resource-summary:stylesheet:size": ["error", { "maxNumericValue": 20480, "aggregationMethod": "median" }],
+            "resource-summary:font:size": ["error", { "maxNumericValue": 92160, "aggregationMethod": "median" }],
+            "largest-contentful-paint": ["error", { "maxNumericValue": 2800, "aggregationMethod": "median" }]
+          }
+        },
+        {
+          "matchingUrlPattern": "^http://localhost:3000/check",
+          "assertions": {
+            "categories:accessibility": ["error", { "minScore": 1, "aggregationMethod": "median" }],
+            "categories:performance": ["warn", { "minScore": 0.9, "aggregationMethod": "median" }],
+            "server-response-time": ["error", { "maxNumericValue": 600, "aggregationMethod": "median" }],
+            "resource-summary:document:size": ["error", { "maxNumericValue": 51200, "aggregationMethod": "median" }],
+            "resource-summary:script:size": ["error", { "maxNumericValue": 148480, "aggregationMethod": "median" }],
+            "resource-summary:stylesheet:size": ["error", { "maxNumericValue": 20480, "aggregationMethod": "median" }],
+            "resource-summary:font:size": ["error", { "maxNumericValue": 92160, "aggregationMethod": "median" }],
+            "largest-contentful-paint": ["error", { "maxNumericValue": 2800, "aggregationMethod": "median" }]
+          }
+        }
+      ]
+    },
+    "upload": { "target": "filesystem", "outputDir": ".lighthouseci-public" }
+  }
+}

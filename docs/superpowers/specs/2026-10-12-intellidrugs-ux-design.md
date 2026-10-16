@@ -210,6 +210,7 @@ The boards do not cover the states below. Their copy is defined in the section n
 | *(P1C)* Dismiss issue: control, panel, consequence sentence, hints, 409 outcomes, the not-saved and unconfirmed failure banners (report channel), announcements, history entries and the dismissal "No longer counts" suffix | §5.6.5, §5.7, §5.8.2, §5.8.4, §5.10a |
 | *(P1C)* Source links: link labels, "fetched on {date}", the ICD-11 search link, the evidence drawer's "Sources" section, the product page's "Source" column | §5.6.3, §5.6.6, §6.5 |
 | *(P1C)* Product page "With other approved medicines" (cross-batch, grouped by partner substance) and its paging | §6.5 |
+| *(P2)* Public page could not load (`app/error.tsx`) | §4.2 |
 
 ---
 
@@ -447,6 +448,8 @@ A build check, `scripts/check-client-islands.mjs` (run in `postbuild` next to th
 | SeniorDesk *(P1C)* | `components/review/senior/SeniorDesk.tsx` plus `components/review/senior/*` | Keyboard model of the senior pages (J, K, M, R, ?, Esc), pair decisions with Turnstile and `requestId`, the pair-issue note drafts, row-level 409 banners, live region | role, page kind (`queue` or `substance`), the visible pair order with each pair's `{ddinterA, ddinterB, version}`, desk settings (single-key shortcuts). No clinical text and no emails in props; the rows are server-rendered. |
 
 *(P1C)* ReviewDesk's `role` prop also takes `senior` (§5.7, §5.10a).
+
+*(P2, final review)* **Public error page (`app/error.tsx`, Decision).** `/search`, `/products/[id]` and `/substances/[id]` throw on an API 5xx or timeout. The root boundary renders inside the root layout (skip link, header, `<main>`; on a Learn chapter it brings the skip link and `<main>` itself): a crit `Banner` whose title is the page's `<h1>`, title "Couldn't load this page.", body "Nothing was changed. Check your connection and try again.", button "Try again" (`reset()`). It owns the page's one polite live region and announces the title (§10.2). Its strings live in `lib/page-error-copy.ts`, which `NEW_COPY` re-exports, so the boundary that loads with every route does not ship `lib/copy.ts` (§10.6).
 
 ### 4.3 What data may reach the browser
 
@@ -2453,9 +2456,9 @@ These come from `tokens.css`:
 
 | Page | HTML | JS (all, incl. Next runtime) | CSS | Fonts | LCP (Slow 4G, mobile) |
 |---|---|---|---|---|---|
-| `/` | ≤ 30 KB | ≤ 130 KB | ≤ 20 KB | ≤ 90 KB (Onest var + Plex Mono 400) | ≤ 2.5 s |
-| `/search`, `/products/[id]`, `/substances/[id]` | ≤ 50 KB | ≤ 130 KB | ≤ 20 KB | same | ≤ 2.5 s |
-| `/check` | ≤ 50 KB | ≤ 145 KB | ≤ 20 KB | same | ≤ 2.5 s |
+| `/` | ≤ 30 KB | ≤ 130 KB | ≤ 20 KB | ≤ 90 KB (Onest var + Plex Mono 400) | ≤ 2.8 s (Decision, product owner 16/10/2026: Lighthouse's simulated LCP counts the self-hosted font downloads although `font-display: optional` never delays real visitors' text) |
+| `/search`, `/products/[id]`, `/substances/[id]` | ≤ 50 KB | ≤ 130 KB | ≤ 20 KB | same | ≤ 2.8 s (same Decision) |
+| `/check` | ≤ 50 KB | ≤ 145 KB | ≤ 20 KB | same | ≤ 2.8 s (same Decision) |
 | `/learn/[chapter]` | ≤ 60 KB | ≤ 140 KB | ≤ 25 KB | same | ≤ 2.8 s (Decision, product owner 16/10/2026: Lighthouse's simulated LCP counts the self-hosted font downloads although `font-display: optional` never delays real visitors' text) |
 | `/review/[b]/[c]` (laptop, broadband) | ≤ 80 KB | ≤ 200 KB | ≤ 25 KB | same | ≤ 1.5 s; J/K to next record painted ≤ 300 ms with prefetch |
 | *(P1C)* `/review/pairs`, `/review/substances/[id]` (laptop, broadband; 50 pairs per page) | ≤ 120 KB | ≤ 180 KB | ≤ 25 KB | same | ≤ 1.5 s |

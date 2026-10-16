@@ -17,6 +17,8 @@ export function nextWithSecurityHeaders(request: NextRequest, rewriteTo?: string
   headers.set("x-request-id", crypto.randomUUID());
   // The root layout leaves the public chrome out on /review/* (it cannot read the path otherwise).
   headers.set("x-pathname", request.nextUrl.pathname);
+  // The public header's search field shows the query on /search (§6.1). Read by the root layout; never logged.
+  headers.set("x-search", request.nextUrl.search);
   headers.delete("x-nonce");
   headers.delete("content-security-policy");
   // Match the way the rewrite does: case-insensitive (caseSensitiveRoutes is false) and `:path*` allows zero segments.

@@ -14,6 +14,9 @@ describe("redirects from the current routes (§2.3)", () => {
     ["/batches/0001-pilot?review=stale", "/review/0001-pilot"],
     ["/flags", "/review/flags"],
     ["/flags?resolve=resolved", "/review/flags"],
+    ["/?q=napa", "/search?q=napa"],
+    ["/?q=napa&page=2", "/search?q=napa&page=2"],
+    ["/?q=a%20b&page=1&utm=x", "/search?q=a+b&page=1"],
   ])("%s → %s", (from, to) => expect(legacyRedirect(u(from))).toBe(to));
 
   it.each(["/", "/batchesx", "/batches/a/b", "/flagsx", "/review", "/products/x"])("%s is not redirected", (p) => {

@@ -1,0 +1,47 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+
+// §10.4 / §11.4: no two-dimensional scrolling and no clipped text at 320 CSS px. Below 980 px the aside is
+// 288 px wide at a 320 px viewport, and "Check {brand} with other medicines" is longer than that for any
+// trade name of about 11 characters or more; .btn is nowrap + overflow:hidden, so the aside's primary link
+// must be allowed to wrap.
+const css = readFileSync(join(__dirname, "..", "components/public/product.module.css"), "utf8");
+
+describe("product.module.css reflows the aside's primary link at 320 px (§10.4, WCAG 1.4.10)", () => {
+  it(".s-aside > .btn wraps, centres and breaks a long word", () => {
+    const m = css.match(/^\.s-aside > :global\(\.btn\)\s*\{([^}]*)\}/m);
+    expect(m, ".s-aside > :global(.btn) rule").not.toBeNull();
+    const body = m![1];
+    expect(body).toMatch(/white-space:\s*normal/);
+    expect(body).toMatch(/text-align:\s*center/);
+    expect(body).toMatch(/line-height:\s*1\.3/);
+    expect(body).toMatch(/padding-block:\s*8px/);
+    expect(body).toMatch(/overflow-wrap:\s*anywhere/);
+  });
+});
+
+// The product and substance pages put the trade/preferred name in .h1 (28 px title1). At 320 px .single
+// leaves 256 px, and a single long word (Phenoxymethylpenicillin ~310 px, Carboxymethylcellulose ~306 px)
+// would otherwise scroll the page sideways.
+describe("product.module.css .h1 reflows at 320 px (§10.4, WCAG 1.4.10)", () => {
+  it(".h1 can shrink inside its flex parent and break inside a long name", () => {
+    const m = css.match(/^\.h1\s*\{([^}]*)\}/m);
+    expect(m, ".h1 rule").not.toBeNull();
+    const body = m![1];
+    expect(body).toMatch(/overflow-wrap:\s*anywhere/);
+    expect(body).toMatch(/min-width:\s*0/);
+  });
+});
+
+// The codes table scrolls in its own labelled region (.s-tw, §10.4). SourceLink's sr-only "(opens in a new tab)" is
+// position: absolute; with an unpositioned region its containing block lies outside the region, so the overflow:auto
+// never clips it and the spans in the last column widened the product and substance pages to 684 px at 320 CSS px.
+describe("product.module.css .s-tw contains its absolutely positioned descendants (§10.4, WCAG 1.4.10)", () => {
+  it(".s-tw is the containing block of the table's sr-only text", () => {
+    const m = css.match(/^\.s-tw\s*\{([^}]*)\}/m);
+    expect(m, ".s-tw rule").not.toBeNull();
+    expect(m![1]).toMatch(/position:\s*relative/);
+    expect(m![1]).toMatch(/overflow-x:\s*auto/);
+  });
+});

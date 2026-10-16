@@ -39,9 +39,16 @@ export function isLearnMiss(pathname: string): boolean {
 
 const BATCH = /^\/batches\/([^/]+)\/?$/;
 
-/** §2.3 (308): /batches → /review, /batches/{id}[?item={c}] → /review/{id}[/{c}] (outcome query dropped), /flags → /review/flags. */
+/** §2.3 (308): /?q= → /search, /batches → /review, /batches/{id}[?item={c}] → /review/{id}[/{c}] (outcome query dropped), /flags → /review/flags. */
 export function legacyRedirect(url: URL): string | null {
   const path = url.pathname;
+  // §2.3: /?q=X&page=N → /search?q=X&page=N (308); only q and page are carried.
+  if (path === "/" && url.searchParams.has("q")) {
+    const out = new URLSearchParams({ q: url.searchParams.get("q") ?? "" });
+    const page = url.searchParams.get("page");
+    if (page !== null) out.set("page", page);
+    return `/search?${out}`;
+  }
   if (path === "/batches" || path === "/batches/") return "/review";
   if (path === "/flags" || path === "/flags/") return "/review/flags";
   const m = BATCH.exec(path);

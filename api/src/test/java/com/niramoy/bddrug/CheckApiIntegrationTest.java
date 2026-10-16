@@ -1,5 +1,6 @@
 package com.niramoy.bddrug;
 
+import com.niramoy.bddrug.domain.PublicPairReviews;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,6 +17,8 @@ import java.sql.DriverManager;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.IntStream;
+
+import static com.niramoy.bddrug.TestSupport.exec;
 
 @Testcontainers
 @SpringBootTest
@@ -202,7 +205,7 @@ class CheckApiIntegrationTest {
             .jsonPath("$.data.noData[1].bdsId").doesNotExist()
             .jsonPath("$.data.noData[1].name").isEqualTo("Newmol")
             .jsonPath("$.data.products[1].substances[0].name").isEqualTo("Newmol")
-            .jsonPath("$.data.products[1].substances[0].coverage").isEqualTo("none");
+            .jsonPath("$.data.products[1].substances[0].coverage").isEqualTo("not_run");
     }
 
     private void expectInvalid(WebTestClient.ResponseSpec spec) {
@@ -272,5 +275,82 @@ class CheckApiIntegrationTest {
             .jsonPath("$.data.alerts[0].severity").isEqualTo("moderate")
             .jsonPath("$.data.alerts[0].routeAssumed").isEqualTo(false)
             .jsonPath("$.data.noData.length()").isEqualTo(0);
+    }
+
+    // §11.3: eye drops + warfarin: no alert, chloramphenicol not in noData, the chosen entry is DDInter352, the pair is in noInteraction
+    @Test void eyeDropsPlusWarfarinIsCheckedAgainstDDInter352WithNoAlert() {
+        check("C-EYE", "W-1").expectStatus().isOk().expectBody()
+            .jsonPath("$.data.alerts.length()").isEqualTo(0)
+            .jsonPath("$.data.noData.length()").isEqualTo(0)
+            .jsonPath("$.data.products[0].route").isEqualTo("ophthalmic")
+            .jsonPath("$.data.products[0].substances[0].ddinter[0].ddinterId").isEqualTo("DDInter352")
+            .jsonPath("$.data.products[0].substances[0].ddinter[0].name").isEqualTo("Chloramphenicol (ophthalmic)")
+            .jsonPath("$.data.products[0].substances[0].ddinter[0].routeAssumed").isEqualTo(false)
+            .jsonPath("$.data.noInteraction.length()").isEqualTo(1)
+            .jsonPath("$.data.noInteraction[0].ddinterA").isEqualTo("DDInter352")
+            .jsonPath("$.data.summary.checkedPairs").isEqualTo(1)
+            .jsonPath("$.data.summary.alertPairs").isEqualTo(0)
+            .jsonPath("$.data.summary.noInteractionPairs").isEqualTo(1);
+    }
+
+    @Test void capsulePlusWarfarinIsOneModerateAlertWithItsInteractionId() {
+        check("C-CAP", "W-1").expectStatus().isOk().expectBody()
+            .jsonPath("$.data.alerts.length()").isEqualTo(1)
+            .jsonPath("$.data.alerts[0].severity").isEqualTo("moderate")
+            .jsonPath("$.data.alerts[0].ddinterA").isEqualTo("DDInter1951")
+            .jsonPath("$.data.alerts[0].ddinterB").isEqualTo("DDInter351")
+            .jsonPath("$.data.alerts[0].interactionId").isEqualTo("IA-2")
+            .jsonPath("$.data.alerts[0].a.tradeName").isEqualTo("Chloramex")
+            .jsonPath("$.data.alerts[0].a.routeScope").isEqualTo("systemic")
+            .jsonPath("$.data.alerts[0].pairReview.state").isEqualTo("not_reviewed");
+    }
+
+    @Test void reasonsAndCounts() {
+        // D-1 Domperidone: coverage none; X-NOSUB: no substance; A-NOBDC: no clinical drug, route assumed systemic
+        check("W-1", "D-1", "X-NOSUB").expectStatus().isOk().expectBody()
+            .jsonPath("$.data.notChecked[?(@.b.conceptId == 'D-1' && @.a.conceptId == 'W-1')].reason").isEqualTo("no_data")
+            .jsonPath("$.data.notChecked[?(@.b.conceptId == 'X-NOSUB' && @.a.conceptId == 'W-1')].reason").isEqualTo("unmapped")
+            .jsonPath("$.data.summary.medicines").isEqualTo(3)
+            .jsonPath("$.data.summary.totalPairs").isEqualTo(3)
+            .jsonPath("$.data.summary.notCheckedPairs").isEqualTo(3);
+        check("W-1", "W-2").expectStatus().isOk().expectBody()
+            .jsonPath("$.data.duplicates.length()").isEqualTo(1)
+            .jsonPath("$.data.summary.totalPairs").isEqualTo(0);
+    }
+
+    @Test void aSubstanceWithNoCoverageRowIsNotRunNeverNoData() throws Exception {
+        exec(pg, """
+            INSERT INTO curated.substance (bds_id, preferred_name) VALUES ('BDS-000120','Notrunol') ON CONFLICT DO NOTHING;
+            INSERT INTO curated.substance_code (bds_id, system, code, route_scope, source, method, confidence)
+              VALUES ('BDS-000120','ICD11_XM','XM9NRN','any','dgda-ocl','xm',1.0) ON CONFLICT DO NOTHING;
+            INSERT INTO curated.brand_product (concept_id, dar_number, trade_name, company, dosage_form, generic_content_raw, parse_status)
+              VALUES ('NR-1','120','Notrun','Test Pharma','Tablet','Notrunol 5 mg','parsed') ON CONFLICT DO NOTHING;
+            INSERT INTO curated.brand_product_ingredient (concept_id, xm_code, ingredient_name) VALUES ('NR-1','XM9NRN','Notrunol')
+              ON CONFLICT DO NOTHING;
+            """);
+        check("W-1", "NR-1").expectStatus().isOk().expectBody()
+            .jsonPath("$.data.notChecked[0].reason").isEqualTo("not_run")
+            .jsonPath("$.data.notChecked[0].side").isEqualTo("b");
+    }
+
+    @Test void publicScopeListsNotReviewedByNameAndTheAlertCarriesItsPublicReview() throws Exception {
+        exec(pg, """
+            INSERT INTO ops.batch (batch_id, item_count, run_at) VALUES ('K-1', 3, now()) ON CONFLICT DO NOTHING;
+            INSERT INTO ops.batch_item (batch_id, source, concept_id, review, extracted_at) VALUES
+             ('K-1','DGDA-Drugs','W-1','ok', now()), ('K-1','DGDA-Drugs','A-1','ok', now()), ('K-1','DGDA-Drugs','D-1','pending', now())
+             ON CONFLICT DO NOTHING;
+            INSERT INTO ops.pair_review (ddinter_a, ddinter_b, decision, note, content_hash, content, reviewer_email, reviewer_role, decided_at)
+              VALUES ('DDInter1951','DDInter20','reviewed','','%s','{}','senior@example.org','senior','2026-10-16T05:20:00Z');
+            """.formatted(new PublicPairReviews.Pair("DDInter1951", "DDInter20", "major", List.of("Monitor", "Avoid"),
+                "Aspirin may increase the anticoagulant effect of warfarin and the risk of bleeding.",
+                "Avoid the combination unless the benefit outweighs the bleeding risk; monitor INR.").hash()));
+        web.post().uri("/v1/interactions/check").contentType(MediaType.APPLICATION_JSON)
+            .bodyValue(Map.of("conceptIds", List.of("W-1", "A-1", "D-1"))).exchange().expectStatus().isOk().expectBody()
+            .jsonPath("$.data.notReviewed[0].conceptId").isEqualTo("D-1")
+            .jsonPath("$.data.notReviewed[0].tradeName").isEqualTo("Motigut")
+            .jsonPath("$.data.summary.medicines").isEqualTo(3)
+            .jsonPath("$.data.summary.notReviewed").isEqualTo(1)
+            .jsonPath("$.data.alerts[0].pairReview.state").isEqualTo("reviewed")
+            .jsonPath("$.data.alerts[0].pairReview.reviewedAt").isEqualTo("2026-10-16T05:20:00Z");
     }
 }

@@ -1,7 +1,8 @@
 package com.niramoy.bddrug;
 
 import com.niramoy.bddrug.domain.DdinterText;
-import com.niramoy.bddrug.domain.InteractionAlert;
+import com.niramoy.bddrug.domain.CheckResult;
+import com.niramoy.bddrug.domain.PublicPairReviews;
 import com.niramoy.bddrug.domain.Substance;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullSource;
@@ -30,11 +31,13 @@ class DdinterTextTest {
     }
 
     @Test void anAlertNeverCarriesAPlaceholder() {
-        var side = new InteractionAlert.Side("W-1", "BDS-000001", "Warfarin");
-        var alert = new InteractionAlert("unknown", side, side, List.of(), "None", " - ", false, "DDInter 2.0");
+        var side = new CheckResult.Side("W-1", "Warin", "BDS-000001", "Warfarin", "systemic");
+        var alert = new CheckResult.Alert("unknown", side, side, List.of(), "None", " - ", false, "DDInter1951", "DDInter20", null,
+            "DDInter 2.0", PublicPairReviews.NONE);
         assertThat(alert.interaction()).isNull();
         assertThat(alert.management()).isNull();
-        var real = new InteractionAlert("major", side, side, List.of(), "Bleeding risk.", "Avoid.", false, "DDInter 2.0");
+        var real = new CheckResult.Alert("major", side, side, List.of(), "Bleeding risk.", "Avoid.", false, "DDInter1951", "DDInter20",
+            null, "DDInter 2.0", PublicPairReviews.NONE);
         assertThat(real.interaction()).isEqualTo("Bleeding risk.");
         assertThat(real.management()).isEqualTo("Avoid.");
     }

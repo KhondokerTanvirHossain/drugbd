@@ -22,4 +22,14 @@ public class SubstanceController {
         return substances.get(bdsId, auth.scope(scope, token)).map(ApiResponse::ok)
             .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Substance not found")));
     }
+
+    /** §7.4 P9. Under public scope a substance that is not public is the stub, never items or counts. */
+    @GetMapping("/{bdsId}/interactions")
+    public Mono<ApiResponse<Object>> interactions(@PathVariable String bdsId, @RequestParam(required = false) String severity,
+                                                  @RequestParam(defaultValue = "0") int page,
+                                                  @RequestParam(defaultValue = "20") int size,
+                                                  @RequestParam(required = false) String scope,
+                                                  @RequestHeader(value = InternalAuth.HEADER, required = false) String token) {
+        return substances.interactions(bdsId, severity, page, size, auth.scope(scope, token)).map(ApiResponse::ok);
+    }
 }

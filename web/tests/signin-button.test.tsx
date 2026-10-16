@@ -17,9 +17,9 @@ vi.mock("firebase/app", () => ({ getApps: () => [], initializeApp: () => ({ name
 vi.mock("firebase/auth", () => fb);
 vi.mock("@/app/signin/navigate", () => ({ navigate }));
 vi.mock("@/components/TurnstileField", () => ({
-  default: ({ onToken, onError, resetKey = 0, action }:
-      { onToken?: (t: string | null) => void; onError?: () => void; resetKey?: number; action: string }) => (
-    <div data-testid="turnstile" data-reset={resetKey} data-action={action}>
+  default: ({ onToken, onError, resetKey = 0, action, size }:
+      { onToken?: (t: string | null) => void; onError?: () => void; resetKey?: number; action: string; size?: string }) => (
+    <div data-testid="turnstile" data-reset={resetKey} data-action={action} data-size={size}>
       <button type="button" onClick={() => onToken?.(`ts-${resetKey}`)}>pass bot check</button>
       <button type="button" onClick={() => { onToken?.(null); onError?.(); }}>fail bot check</button>
     </div>),
@@ -90,6 +90,47 @@ describe("SignInButton island (§6.2)", () => {
     expect(await screen.findByText("Finish signing in in the Google window. This page updates when you're done.")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Opening Google" }).getAttribute("aria-busy")).toBe("true");
     await act(async () => finish(user("id-1")));
+  });
+
+  it("Board P's Google button: .gbtn with Google's glyph, the spinner while loading, and the Cloudflare Turnstile row", async () => {
+    let finish!: (v: unknown) => void;
+    fb.signInWithPopup.mockReturnValue(new Promise((r) => { finish = r; }));
+    renderButton();
+    expect(google().className).toBe("gbtn");
+    expect(google().querySelector('svg[aria-hidden="true"]')).toBeTruthy();
+    expect(screen.getByText("Cloudflare Turnstile").className).toBe("turnBy");
+    expect(screen.getByTestId("turnstile").parentElement!.className).toBe("turn");
+    passBotCheck();
+    fireEvent.click(google());
+    const busy = await screen.findByRole("button", { name: "Opening Google" });
+    expect(busy.className).toBe("gbtn");
+    expect(busy.querySelector(".btn-spinner")).toBeTruthy();
+    expect(busy.querySelector("svg")).toBeNull();
+    await act(async () => finish(user("id-1")));
+  });
+
+  it("asks Turnstile for its compact widget at 440 px and below, and follows the media query as it changes (§10.4)", () => {
+    const listeners: ((e: { matches: boolean }) => void)[] = [];
+    const mq = { matches: true, media: "(max-width: 440px)",
+      addEventListener: vi.fn((_: string, l: (e: { matches: boolean }) => void) => listeners.push(l)),
+      removeEventListener: vi.fn() };
+    const matchMedia = vi.fn(() => mq);
+    vi.stubGlobal("matchMedia", matchMedia);
+    const { unmount } = renderButton();
+    expect(matchMedia).toHaveBeenCalledWith("(max-width: 440px)");
+    expect(screen.getByTestId("turnstile").dataset.size).toBe("compact");
+    act(() => { mq.matches = false; for (const l of listeners) l({ matches: false }); });
+    expect(screen.getByTestId("turnstile").dataset.size).toBeUndefined();
+    act(() => { for (const l of listeners) l({ matches: true }); });
+    expect(screen.getByTestId("turnstile").dataset.size).toBe("compact");
+    unmount();
+    expect(mq.removeEventListener).toHaveBeenCalledWith("change", listeners[0]);
+  });
+
+  it("keeps Turnstile's normal widget above 440 px", () => {
+    vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })));
+    renderButton();
+    expect(screen.getByTestId("turnstile").dataset.size).toBeUndefined();
   });
 
   it("bot check failed: the crit banner and Retry check, which asks for a fresh token", async () => {

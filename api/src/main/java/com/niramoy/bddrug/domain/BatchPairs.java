@@ -8,7 +8,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -67,16 +66,34 @@ public final class BatchPairs {
     public static final List<String> REASON_ORDER = List.of("no_data", "unmapped", "not_run", "no_route");
     private static final List<String> SEVERITY_ORDER = List.of("major", "moderate", "minor");
 
-    private record Use(List<String> chosen, String reason) {}
+    record Use(List<String> chosen, String reason) {}
+
+    /**
+     * §6.7.2 rule 1, the one copy the desk (§5.6.2) and the public checker both call: why a substance cannot be checked,
+     * or null when it can. {@code choiceOrNull} is RouteRule's choice for a mapped substance with full coverage (null when
+     * it chose nothing or was not asked). A chosen entry without a stored full pair list was never read in full: not_run (D41).
+     */
+    public static String reason(String bdsId, String coverage, RouteRule.Choice choiceOrNull, Set<String> complete) {
+        if (bdsId == null) return "unmapped";
+        if ("none".equals(coverage)) return "no_data";
+        if (!"full".equals(coverage)) return "not_run";
+        if (choiceOrNull == null) return "no_route";
+        return choiceOrNull.codes().stream().allMatch(c -> complete.contains(c.code())) ? null : "not_run";
+    }
+
+    /**
+     * §6.7.2: the side whose reason a not-checked pair shows. True when {@code mine} applies: the other side is usable, or
+     * both are unusable and mine comes first in REASON_ORDER (this side on a tie).
+     */
+    public static boolean reasonOnThisSide(String mine, String theirs) {
+        return theirs == null || (mine != null && REASON_ORDER.indexOf(mine) <= REASON_ORDER.indexOf(theirs));
+    }
 
     static Use use(Substance s, String route, Set<String> complete) {
-        if (s.bdsId() == null) return new Use(List.of(), "unmapped");
-        if ("none".equals(s.coverage())) return new Use(List.of(), "no_data");
-        if (!"full".equals(s.coverage())) return new Use(List.of(), "not_run");
-        Optional<RouteRule.Choice> choice = RouteRule.choose(s.codes(), route);
-        if (choice.isEmpty()) return new Use(List.of(), "no_route");
-        List<String> ids = choice.get().codes().stream().map(DdinterCode::code).toList();
-        return complete.containsAll(ids) ? new Use(ids, null) : new Use(List.of(), "not_run");
+        RouteRule.Choice choice = s.bdsId() != null && "full".equals(s.coverage())
+            ? RouteRule.choose(s.codes(), route).orElse(null) : null;
+        String reason = reason(s.bdsId(), s.coverage(), choice, complete);
+        return reason == null ? new Use(choice.codes().stream().map(DdinterCode::code).toList(), null) : new Use(List.of(), reason);
     }
 
     private static String key(String a, String b) { return a.compareTo(b) < 0 ? a + "|" + b : b + "|" + a; }
@@ -104,8 +121,7 @@ public final class BatchPairs {
                         }
                     continue;
                 }
-                boolean thisSide = ut.reason() == null || (us.reason() != null
-                    && REASON_ORDER.indexOf(us.reason()) <= REASON_ORDER.indexOf(ut.reason()));
+                boolean thisSide = reasonOnThisSide(us.reason(), ut.reason());
                 v.notChecked(s, t, thisSide ? us.reason() : ut.reason(), thisSide, thisSide ? me.route() : partnerRoute);
             }
     }

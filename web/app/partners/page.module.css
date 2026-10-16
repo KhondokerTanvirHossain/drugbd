@@ -1,0 +1,11 @@
+.page { max-width: 860px; margin: 0 auto; padding: 32px 40px 48px; display: flex; flex-direction: column; gap: 32px; }
+.h1 { font: var(--t-title1); letter-spacing: var(--tr-title1); }
+.h2 { font: var(--t-title2); letter-spacing: var(--tr-title2); }
+.sub { color: var(--fg-2); font-size: 16px; margin-top: 12px; max-width: 62ch; }
+.ticks { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+.ticks li { display: grid; grid-template-columns: 6px minmax(0, 1fr); gap: 12px; font-size: 14.5px; color: var(--fg-2); }
+.ticks li::before { content: ""; width: 6px; height: 6px; margin-top: 9px; background: var(--accent); }
+.ticks b { color: var(--fg); font-weight: 600; }
+.card { padding: 22px; border-radius: var(--r-panel); box-shadow: inset 0 0 0 1px var(--line-strong); display: flex; flex-direction: column; gap: 14px; }
+.form { display: flex; flex-direction: column; gap: 14px; }
+@media (max-width: 720px) { .page { padding: 24px 16px 40px; } }

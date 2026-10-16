@@ -10,3 +10,8 @@ export function ddinterText(value: string | null | undefined): string | null {
   const text = (value ?? "").trim();
   return PLACEHOLDERS.has(text.toLowerCase()) ? null : text;
 }
+
+/** "Chloramphenicol (ophthalmic)" already names its route; the "checked against" statement adds the route once (§5.6.4, §6.7.3 item 7). */
+export function entryBaseName(name: string | null, id: string, route: string): string {
+  return (name ?? id).replace(new RegExp(` \\(${route.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\)$`), "");
+}
