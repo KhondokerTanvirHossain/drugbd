@@ -1,0 +1,12 @@
+# 0004-popular-b: the next 10 generics in the frozen popularity queue (batches/queue/2026-10-17-dgda-popularity.tsv),
+# one brand each (the queue's first brand of the generic with DGDA ingredient codes). PO approved 5 batches of 10 on 17/10/2026.
+002-0643-046--gaba-p              # Pregabalin 75 mg capsule - generic #21 (296 brands), queue position 7889
+002-0309-044--odmon               # Montelukast 5 mg tablet - generic #22 (280 brands), queue position 8185
+002-0407-023--levoking            # Levofloxacin 250 mg tablet - generic #24 (252 brands), queue position 8738
+002-0742-064--recox-60            # Etoricoxib 60 mg tablet - generic #26 (226 brands), queue position 9220
+002-0463-067--protonil            # Pantoprazole 20 mg tablet - generic #27 (223 brands), queue position 9446
+005-0974-023--cerox-cv-125        # Cefuroxime + Clavulanic Acid 125 mg + 31.25 mg tablet - generic #28 (209 brands), queue position 9669
+002-0413-023--trucef              # Cefpodoxime 100 mg tablet - generic #29 (208 brands), queue position 9878
+002-0074-023--erythrox            # Erythromycin 250 mg tablet - generic #30 (199 brands), queue position 10086
+002-0138-021--tiramin             # Cetirizine Dihydrochloride 10 mg tablet - generic #31 (196 brands), queue position 10285
+002-0485-046--denixil             # Clonazepam .5 mg tablet - generic #32 (196 brands), queue position 10481

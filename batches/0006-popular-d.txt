@@ -1,0 +1,12 @@
+# 0006-popular-d: the next 10 generics in the frozen popularity queue (batches/queue/2026-10-17-dgda-popularity.tsv),
+# one brand each (the queue's first brand of the generic with DGDA ingredient codes). PO approved 5 batches of 10 on 17/10/2026.
+002-0700-022--bisoren             # Bisoprolol Hemifumarate 2.5 mg tablet - generic #45 (148 brands), queue position 12767
+002-0751-064--xenapro-plus-375    # Esomeprazole + Naproxen 20 mg + 375 mg tablet - generic #46 (148 brands), queue position 12915
+002-0369-015--glicron             # Gliclazide 30 mg tablet - generic #47 (148 brands), queue position 13063
+002-0231-062--calcin              # Calcium Carbonate 1250 mg tablet - generic #48 (145 brands), queue position 13211
+002-0428-011--algin               # Tiemonium Methylsulphate 50 mg tablet - generic #49 (145 brands), queue position 13356
+002-0662-031--recof               # Ambroxol 15 mg/5 ml syrup - generic #50 (143 brands), queue position 13501
+002-0781-044--pulmino             # Doxophylline 400 mg tablet - generic #51 (143 brands), queue position 13644
+002-0337-015--mepid               # Glimepiride 1 mg tablet - generic #52 (142 brands), queue position 13787
+002-0680-070--maxolax             # Baclofen 5 mg tablet - generic #54 (136 brands), queue position 14069
+001-0161-006--panadol             # Caffeine + Paracetamol 65 mg + 500 mg tablet - generic #55 (136 brands), queue position 14205

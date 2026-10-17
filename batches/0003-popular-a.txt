@@ -1,0 +1,12 @@
+# 0003-popular-a: the next 10 generics in the frozen popularity queue (batches/queue/2026-10-17-dgda-popularity.tsv),
+# one brand each (the queue's first brand of the generic with DGDA ingredient codes). PO approved 5 batches of 10 on 17/10/2026.
+001-0094-023--amoxil              # Amoxicillin 250 mg capsule - generic #1 (511 brands), queue position 1
+001-0131-023--kefdrin             # Cephradine 500 mg capsule - generic #2 (510 brands), queue position 512
+002-0222-023--zithrin             # Azithromycin 500 mg tablet - generic #10 (397 brands), queue position 4207
+001-0150-023--zinnat              # Cefuroxime 250 mg tablet - generic #11 (393 brands), queue position 4605 (4604, 001--023--zinacef, skipped: its DAR number has no middle segment)
+001-0163-067--norain-20           # Omeprazole 20 mg capsule - generic #12 (370 brands), queue position 4997
+002-0398-023--flustar             # Flucloxacillin 250 mg capsule - generic #13 (346 brands), queue position 5367
+002-0319-064--rolac               # Ketorolac Tromethamine 10 mg tablet - generic #16 (314 brands), queue position 6375
+001-0159-062--caldivit            # Calcium + Vitamin D3 500 mg + 200 IU tablet - generic #17 (305 brands), queue position 6689
+002-0373-021--fenadin             # Fexofenadine Hydrochloride 30 mg tablet - generic #18 (300 brands), queue position 6994
+001-0144-020--fluvin              # Fluconazole 50 mg tablet - generic #19 (299 brands), queue position 7294

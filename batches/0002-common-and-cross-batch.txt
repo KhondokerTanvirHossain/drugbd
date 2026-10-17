@@ -1,0 +1,12 @@
+# 0002-common-and-cross-batch: 10 of the most-registered DGDA generics, chosen to test new routes, forms,
+# combinations and pairs with the pilot across batches. PO approved 5 batches of 10 on 17/10/2026.
+143-0079-023--aprocin       # Ciprofloxacin 500 mg tablet - #1 generic (558 brands); pairs with pilot Warfarin
+186-0221-023--arixon        # Ceftriaxone 1 g IV injection - #2 (545); first injection/IV route
+335-0169-067--ascetor       # Esomeprazole 20 mg capsule - #6 (466); salt (magnesium) handling
+321-0045-027--amodis        # Metronidazole 400 mg tablet - #8 (438); classic Major pair with pilot Warfarin
+012-0272-071--clofenac      # Diclofenac sodium 1% gel - #9 (413); first topical route, % strength
+002-0158-023--bactipront    # Co-trimoxazole 800+160 mg tablet - #13 (360); 2-ingredient combo, DGDA flag shared_dar, Warfarin pair
+186-0039-078--aristovit     # Vitamin B complex (4 ingredients) - #15 (326); multi-ingredient, likely "No DDInter data"
+186-0149-044--azmasol       # Salbutamol 100 mcg/metered inhalation - #28 (211); first inhalation route, per-dose strength
+321-0168-061--anzitor       # Atorvastatin 10 mg tablet - #35 (195); Major pair with pilot Clarith (cross-batch)
+143-0130-023--afix          # Cefixime 100 mg/5 ml powder for suspension - #7 (464); first liquid, mg/5 ml strength
