@@ -175,3 +175,56 @@ def test_trailing_third_ingredient_not_dropped():
     assert p.status == "partial"
     assert [i.name for i in p.ingredients] == ["Paracetamol", "Caffeine", "Codeine"]
     assert all(i.strength_value is None for i in p.ingredients)
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        # Bangladesh registrations write grams as "gm" (6,463 products in the 17/10/2026 register).
+        ("Ceftriaxone 1 gm", ("Ceftriaxone", D(1), "g", None, None)),
+        ("Diclofenac Sodium 1 gm/100 gm", ("Diclofenac Sodium", D(1), "g", D(100), "g")),
+        # Leading-decimal strengths (1,002 products).
+        ("Clonazepam .5 mg", ("Clonazepam", D("0.5"), "mg", None, None)),
+        ("Clobetasol Propionate .05 gm/100 gm", ("Clobetasol Propionate", D("0.05"), "g", D(100), "g")),
+        ("Drug 1.5 mg", ("Drug", D("1.5"), "mg", None, None)),
+        # Lac (lakh) is exactly 100,000; MIU is exactly 1,000,000 IU.
+        ("Benzathine Penicillin 6 Lac Unit/vial", ("Benzathine Penicillin", D(600000), "unit", D(1), "vial")),
+        ("Benzathine Penicillin 12 Lac Units/vial", ("Benzathine Penicillin", D(1200000), "units", D(1), "vial")),
+        ("Spiramycine 3 MIU", ("Spiramycine", D(3000000), "iu", None, None)),
+        ("Spiramycine 1.5 MIU", ("Spiramycine", D(1500000), "iu", None, None)),
+        ("Adsorbed Tetanus Vaccine 5 LF/.5 ml", ("Adsorbed Tetanus Vaccine", D(5), "lf", D("0.5"), "ml")),
+        # Per-dose wording of inhalers and sprays is one actuation.
+        ("Salbutamol 100 mcg/Metered Inhalation", ("Salbutamol", D(100), "mcg", D(1), "actuation")),
+        ("Salbutamol 100 mcg/Spray", ("Salbutamol", D(100), "mcg", D(1), "actuation")),
+        ("Budesonide 200 mcg/Puff", ("Budesonide", D(200), "mcg", D(1), "actuation")),
+        ("Feed Additive 10 gm/kg", ("Feed Additive", D(10), "g", D(1), "kg")),
+        ("Electrolyte 30.5 gm/Litres", ("Electrolyte", D("30.5"), "g", D(1), "l")),
+    ],
+)
+def test_bangladesh_units_and_per_dose_wording(raw, expected):
+    p = parse_generic_content(raw)
+    assert p.status == "parsed", p.note
+    i = p.ingredients[0]
+    assert (i.name, i.strength_value, i.strength_unit, i.per_value, i.per_unit) == expected
+    assert i.raw_text.startswith(expected[0])
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        # A trailing "per" belongs to every strength of the combination, not only the last one.
+        ("Cetrimide + Chlorhexidine Gluconate 3 gm + 300 mg/100 ml",
+         [("Cetrimide", D(3), "g", D(100), "ml"), ("Chlorhexidine Gluconate", D(300), "mg", D(100), "ml")]),
+        ("Amoxicillin 125 mg + Clavulanic Acid 31.25 mg/5 ml",
+         [("Amoxicillin", D(125), "mg", D(5), "ml"), ("Clavulanic Acid", D("31.25"), "mg", D(5), "ml")]),
+        ("Fluticasone Propionate + Salmeterol 125 mcg + 25 mcg/Metered Inhalation",
+         [("Fluticasone Propionate", D(125), "mcg", D(1), "actuation"), ("Salmeterol", D(25), "mcg", D(1), "actuation")]),
+        # Without a trailing per nothing is invented.
+        ("Amoxicillin + Clavulanic Acid 500 mg + 125 mg",
+         [("Amoxicillin", D(500), "mg", None, None), ("Clavulanic Acid", D(125), "mg", None, None)]),
+    ],
+)
+def test_trailing_per_applies_to_every_strength_of_a_combination(raw, expected):
+    p = parse_generic_content(raw)
+    assert p.status == "parsed", p.note
+    assert [(i.name, i.strength_value, i.strength_unit, i.per_value, i.per_unit) for i in p.ingredients] == expected
