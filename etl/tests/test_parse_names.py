@@ -59,3 +59,30 @@ def test_route(form, route):
 )
 def test_strip_salt_keeps_cation_names(name):
     assert strip_salt(name) == name
+
+
+@pytest.mark.parametrize(
+    "form,route",
+    [
+        # Inhaled forms are not "systemic": their DDInter entry is assumed (flagged) unless DDInter has an inhaled one.
+        ("Aerosol Inhalation", "inhalation"), ("Inhalation Capsule", "inhalation"), ("Nebuliser Solution", "inhalation"),
+        ("Inhalation Aerosol", "inhalation"), ("Dry Powder Inhaler", "inhalation"), ("Inhaler", "inhalation"),
+        ("Inhalation Solution", "inhalation"), ("Resperitory Solution", "inhalation"), ("Respirator Solution", "inhalation"),
+        ("Gas", "inhalation"),
+        ("Topical Solution", "topical"), ("Hand Rub", "topical"), ("Shampoo", "topical"), ("Scalp Lotion", "topical"),
+        ("Dusting Powder", "topical"), ("Skin Paint", "topical"),
+        ("Suppository", "rectal"), ("Rectal Enema", "rectal"),
+        ("Vaginal Tablet", "vaginal"), ("Vaginal Pessary", "vaginal"), ("Vaginal Cream", "vaginal"),
+        ("Mouth Wash", "oromucosal"), ("Gargle & Mouth Wash", "oromucosal"), ("Oral Gel", "oromucosal"),
+        ("Oral Paste", "oromucosal"),
+        # Forms that do not say where they go are not guessed as systemic.
+        ("Spray", "unspecified"), ("Emulsion", "unspecified"), ("Dialysis Solution", "unspecified"),
+        ("Irrigation Solution", "unspecified"),
+        # Site words still win, and ordinary oral and injected forms stay systemic.
+        ("Eye Gel", "ophthalmic"), ("Eye, Ear & Nasal Drops", "ophthalmic"), ("Nasal Spray", "nasal"),
+        ("Oral Solution", "systemic"), ("Soft Gelatin Capsule", "systemic"), ("IV/IM Injection", "systemic"),
+        ("Paediatric Drops", "systemic"), ("Powder For Suspension", "systemic"), ("Bolus", "systemic"),
+    ],
+)
+def test_route_for_every_register_form(form, route):
+    assert route_for_dosage_form(form) == route

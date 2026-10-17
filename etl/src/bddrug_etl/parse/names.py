@@ -45,6 +45,19 @@ def route_for_dosage_form(dosage_form: str) -> str:
         return "otic"
     if re.search(r"\bnasal\b", form):
         return "nasal"
-    if re.search(r"\b(cream|ointment|gel|lotion)\b", form):
+    # Not swallowed or injected: these never read as "systemic". With no DDInter entry for the route, the DDInter
+    # stage falls back to the general entry and flags it as assumed, so a reviewer sees it (§8.1 item 3).
+    if re.search(r"\binhal|\bnebuli|\bresp[ie]r|\bgas\b", form):
+        return "inhalation"
+    if re.search(r"\bvagin|\bpessar", form):
+        return "vaginal"
+    if re.search(r"\bsuppositor|\brectal\b|\benema\b", form):
+        return "rectal"
+    if re.search(r"\bmouth ?wash|\bgargle|\boral (gel|paste)\b|\blozenge", form):
+        return "oromucosal"
+    if re.search(r"\b(cream|ointment|gel|lotion|shampoo|hand rub|topical|dusting powder|paint)\b", form):
         return "topical"
+    # Forms that do not say where they go are not guessed: the general DDInter entry is then flagged as assumed.
+    if form in ("spray", "emulsion") or re.search(r"\b(dialysis|irrigation)\b", form):
+        return "unspecified"
     return "systemic"
