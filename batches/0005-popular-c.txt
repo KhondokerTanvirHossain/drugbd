@@ -1,0 +1,12 @@
+# 0005-popular-c: the next 10 generics in the frozen popularity queue (batches/queue/2026-10-17-dgda-popularity.tsv),
+# one brand each (the queue's first brand of the generic with DGDA ingredient codes). PO approved 5 batches of 10 on 17/10/2026.
+002-0512-062--mazic               # Zinc 20 mg tablet - generic #34 (195 brands), queue position 10872
+001-0143-008--monoben             # Albendazole 400 mg tablet - generic #35 (187 brands), queue position 11067
+002-0446-064--xenapro             # Naproxen 250 mg tablet - generic #36 (184 brands), queue position 11254
+002-0655-018--emeren              # Ondansetron 4 mg/5 ml syrup - generic #37 (184 brands), queue position 11438
+001-0005-021--piriton             # Chlorpheniramine Maleate 4 mg tablet - generic #38 (177 brands), queue position 11622
+002-0722-061--rolip               # Rosuvastatin 10 mg tablet - generic #39 (168 brands), queue position 11799
+002-0600-078--vita-d3-injection   # Cholecalciferol (Vit. D3) 5 mg/ml injection - generic #40 (165 brands), queue position 11967
+001-0168-078--berin               # Cyanocobalamin + Pyridoxine Hydrochloride + Vitamin B1 200 mcg + 200 mg + 100 mg tablet - generic #41 (165 brands), queue position 12132
+002-0435-064--ceclofen            # Aceclofenac 100 mg tablet - generic #42 (162 brands), queue position 12297
+002-0293-022--ostan               # Losartan Potassium 50 mg tablet - generic #43 (159 brands), queue position 12459
