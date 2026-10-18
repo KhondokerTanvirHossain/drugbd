@@ -2,7 +2,7 @@ import { initials } from "@/lib/account";
 import { buttonClass } from "@/components/ui/Button";
 import Kbd from "@/components/ui/Kbd";
 import ReviewStatus from "@/components/ui/ReviewStatus";
-import { PUBLIC_NEW, fill } from "@/lib/copy";
+import { PUBLIC_NEW, QA_COPY, fill } from "@/lib/copy";
 import { SIGNIN_CARD } from "@/lib/public-copy";
 import { DESK, fillNodes } from "@/lib/review-copy";
 import { ROLE_LABEL } from "@/lib/reviewers";
@@ -26,6 +26,22 @@ export default function Welcome({ session, batch, undo }: { session: Session; ba
         <h2 className={styles.h2}>{SIGNIN_CARD.readerHeading}</h2>
         <p>{SIGNIN_CARD.readerBody}</p>
         <div className={styles.row}><a className={buttonClass("primary", "sm")} href="/search">{DESK.searchMedicines}</a><SignOut /></div>
+      </div>
+    );
+  }
+  if (session.role === "qa") {
+    // §6.2 (QA portal): a QA account reads through QA tools; it has no batch and no desk.
+    const q = QA_COPY.role;
+    return (
+      <div className={styles.state}>
+        <p className={styles.row}><span className="role-badge"><span className={`ico ${styles.shield}`} aria-hidden="true" />{ROLE_LABEL.qa}</span><span className={styles.who}>{fill(SIGNIN_CARD.signedInAs, { name })}</span></p>
+        <h2 className={styles.h2}>{q.welcomeHeading}</h2>
+        <ol className={styles.next}>
+          <li><span>{q.welcomeStepKey}</span></li>
+          <li><span>{q.welcomeStepConnect}</span></li>
+          <li><span>{q.welcomeStepNoReview}</span></li>
+        </ol>
+        <div className={styles.row}><a className={buttonClass("primary")} href="/review/qa">{q.openQaTools}</a></div>
       </div>
     );
   }

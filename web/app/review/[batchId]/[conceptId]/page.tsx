@@ -25,6 +25,7 @@ import { DESK } from "@/lib/review-copy";
 import type { ItemRow } from "@/lib/review-types";
 import { isReviewer } from "@/lib/reviewers";
 import { getSession } from "@/lib/session";
+import { qaAccountView } from "@/components/review/QaAccount";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +40,8 @@ export default async function RecordPage({ params, searchParams }: {
   const pane = firstParam(sp.pane) === "list" ? "list" : null;
   // Before any API call: on a client navigation only this segment renders, so the layouts' gates do not run (§2.3, G3).
   const session = await getSession();
+  // §5.12 (QA portal, D66): a qa session gets the QA account view here too, before any read.
+  if (session?.role === "qa") return qaAccountView(session);
   if (!session || !isReviewer(session)) notFound();
   const filtered = show !== "all" || q !== "";
   const [visible, everything, item] = await Promise.all([

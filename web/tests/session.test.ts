@@ -142,3 +142,20 @@ describe("a senior session (§5.13: ROLES includes senior, or it decodes to null
     expect(await verifySessionToken(token)).toMatchObject({ role: "user" });
   });
 });
+
+describe("a qa session (§5.13, QA portal: ROLES includes qa, or it decodes to null)", () => {
+  it("decodes to role qa while REVIEWERS lists the email as qa", async () => {
+    vi.stubEnv("REVIEWERS", "q@example.org:qa");
+    const token = await createSessionCookie({ email: "q@example.org", name: "Q", role: "qa" });
+    expect(await verifySessionToken(token)).toMatchObject({ email: "q@example.org", role: "qa" });
+  });
+  it("falls back to user when the list drops the email or gives it another role, and a qa token never rises", async () => {
+    const token = await createSessionCookie({ email: "q@example.org", name: "Q", role: "qa" });
+    vi.stubEnv("REVIEWERS", "q@example.org:pharmacist");
+    expect(await verifySessionToken(token)).toMatchObject({ role: "user" });
+    vi.stubEnv("REVIEWERS", "");
+    expect(await verifySessionToken(token)).toMatchObject({ role: "user" });
+    vi.stubEnv("REVIEWERS", "q@example.org:engineer");
+    expect(await verifySessionToken(token)).toMatchObject({ role: "user" });
+  });
+});

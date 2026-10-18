@@ -26,6 +26,7 @@ import { getSession } from "@/lib/session";
 import { SEVERITIES } from "@/lib/severity";
 import { THEME_COOKIE, parseTheme } from "@/lib/theme";
 import { turnstileSiteKey } from "@/lib/turnstile";
+import { qaAccountView } from "@/components/review/QaAccount";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +49,8 @@ export default async function SubstancePage({ params, searchParams }: {
   params: Promise<{ bdsId: string }>; searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const session = await getSession();
+  // §5.12 (QA portal, D66): app/review/layout.tsx admits qa and cannot see the path, so each review page answers qa itself.
+  if (session?.role === "qa") return qaAccountView(session);
   if (!session || !isReviewer(session)) return null;
   const store = await cookies();
   const theme = parseTheme(store.get(THEME_COOKIE)?.value), keys = parseKeys(store.get(KEYS_COOKIE)?.value);

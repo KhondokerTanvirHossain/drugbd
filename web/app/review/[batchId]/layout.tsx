@@ -13,6 +13,7 @@ import { isReviewer } from "@/lib/reviewers";
 import { getSession } from "@/lib/session";
 import { THEME_COOKIE, parseTheme } from "@/lib/theme";
 import { turnstileSiteKey } from "@/lib/turnstile";
+import { qaAccountView } from "@/components/review/QaAccount";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +24,9 @@ export const dynamic = "force-dynamic";
 export default async function BatchLayout({ children, params }: { children: ReactNode; params: Promise<{ batchId: string }> }) {
   const { batchId } = await params;
   const session = await getSession();
-  if (!session || !isReviewer(session)) return null;   // app/review/layout.tsx has already answered these
+  // §5.12 (QA portal, D66): app/review/layout.tsx admits qa and cannot see the path, so each review page answers qa itself.
+  if (session?.role === "qa") return qaAccountView(session);
+  if (!session || !isReviewer(session)) return null;   // app/review/layout.tsx has already answered the rest
   const batches = await listReviewBatches();
   const batch = batches.find((b) => b.batchId === batchId);
   if (!batch) notFound();

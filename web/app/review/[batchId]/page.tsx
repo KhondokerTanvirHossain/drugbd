@@ -6,6 +6,7 @@ import { getReviewItems } from "@/lib/api";
 import { firstParam } from "@/lib/params";
 import { isReviewer } from "@/lib/reviewers";
 import { getSession } from "@/lib/session";
+import { qaAccountView } from "@/components/review/QaAccount";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,8 @@ export default async function BatchPage({ params, searchParams }:
   const q = firstParam(sp.q);
   // The page checks the role itself: on a client navigation only this segment renders, so no layout gate runs (§2.3).
   const session = await getSession();
+  // §5.12 (QA portal, D66): a qa session gets the QA account view here too, before any read.
+  if (session?.role === "qa") return qaAccountView(session);
   if (!session || !isReviewer(session)) notFound();
   const page = await getReviewItems(batchId, { show, q });
   if (!page) notFound();

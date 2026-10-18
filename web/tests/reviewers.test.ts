@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ROLES, ROLE_LABEL, actsAsPharmacist, isReviewer, parseReviewers, roleFor } from "../lib/reviewers";
+import { ROLES, ROLE_LABEL, actsAsPharmacist, canUseQa, isReviewer, parseReviewers, roleFor } from "../lib/reviewers";
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -65,7 +65,7 @@ describe("isReviewer", () => {
 describe("the senior pharmacist role (§5.13, P1C)", () => {
   it("parses as a role, in any case, and is in ROLES with its label", () => {
     expect([...parseReviewers("s@x.org:Senior,p@x.org:pharmacist").entries()]).toEqual([["s@x.org", "senior"], ["p@x.org", "pharmacist"]]);
-    expect(ROLES).toEqual(["pharmacist", "engineer", "senior", "user"]);
+    expect(ROLES).toEqual(["pharmacist", "engineer", "senior", "qa", "user"]);
     expect(ROLE_LABEL.senior).toBe("Senior pharmacist");
     expect(roleFor("s@x.org", "s@x.org:senior")).toBe("senior");
   });
@@ -77,5 +77,26 @@ describe("the senior pharmacist role (§5.13, P1C)", () => {
     expect(actsAsPharmacist("senior")).toBe(true);
     expect(actsAsPharmacist("pharmacist")).toBe(true);
     for (const r of ["engineer", "user", null, undefined]) expect(actsAsPharmacist(r)).toBe(false);
+  });
+});
+
+describe("the qa role (§5.13, QA portal, D66)", () => {
+  it("parses as a role, in any case, is in ROLES and has the label QA", () => {
+    expect([...parseReviewers("q@x.org:qa,Q2@x.org: QA ,p@x.org:pharmacist").entries()])
+      .toEqual([["q@x.org", "qa"], ["q2@x.org", "qa"], ["p@x.org", "pharmacist"]]);
+    expect(ROLES).toContain("qa");
+    expect(ROLE_LABEL.qa).toBe("QA");
+    expect(roleFor("Q@X.org", "q@x.org:qa")).toBe("qa");
+  });
+  it("a qa account is not a reviewer and does not act as a pharmacist", () => {
+    expect(isReviewer({ role: "qa" })).toBe(false);
+    expect(actsAsPharmacist("qa")).toBe(false);
+  });
+  it("canUseQa is the one test for QA tools: qa, engineer and senior only", () => {
+    for (const r of ["qa", "engineer", "senior"]) expect(canUseQa(r)).toBe(true);
+    for (const r of ["pharmacist", "user", "QA", "", null, undefined]) expect(canUseQa(r)).toBe(false);
+  });
+  it("other tokens near qa are still skipped", () => {
+    expect(parseReviewers("a@x.org:qa-team,b@x.org:quality,c@x.org:qa:x").size).toBe(0);
   });
 });

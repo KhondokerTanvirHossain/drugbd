@@ -17,6 +17,7 @@ import { getSession } from "@/lib/session";
 import { THEME_COOKIE, parseTheme } from "@/lib/theme";
 import { turnstileSiteKey } from "@/lib/turnstile";
 import styles from "../review.module.css";
+import { qaAccountView } from "@/components/review/QaAccount";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +34,9 @@ const pageNo = (v: string) => (/^\d{1,5}$/.test(v) && Number(v) <= 10000 ? Numbe
 /** §5.16: problem reports and partner access requests, 50 per section, Resolve through one form and one bot check. */
 export default async function FlagsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const session = await getSession();
-  if (!session || !isReviewer(session)) return null;   // app/review/layout.tsx has already answered these
+  // §5.12 (QA portal, D66): app/review/layout.tsx admits qa and cannot see the path, so each review page answers qa itself.
+  if (session?.role === "qa") return qaAccountView(session);
+  if (!session || !isReviewer(session)) return null;   // app/review/layout.tsx has already answered the rest
   const sp = await searchParams;
   const paging: FlagPaging = { rp: pageNo(firstParam(sp.rp)), pp: pageNo(firstParam(sp.pp)) };
   const t = DESK_NEW.reviewLists;

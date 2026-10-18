@@ -18,7 +18,9 @@ export const dynamic = "force-dynamic";
 /** §5.16 batch list; with exactly one batch in review, the desk opens straight away (§2.1). */
 export default async function ReviewHome() {
   const session = await getSession();
-  if (!session || !isReviewer(session)) return null;   // app/review/layout.tsx has already answered these
+  // §2.1 (QA portal, D66): a qa account sees only the QA section.
+  if (session?.role === "qa") redirect("/review/qa");
+  if (!session || !isReviewer(session)) return null;   // app/review/layout.tsx has already answered the rest
   const batches = await listReviewBatches();
   const inReview = batches.filter((b) => b.status === "in_review");
   if (inReview.length === 1) redirect(batchHref(inReview[0].batchId));

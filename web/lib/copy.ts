@@ -115,6 +115,11 @@ export const NEW_COPY_ROWS = {
   productOtherApproved: "Product page \"With other approved medicines\" (cross-batch, grouped by partner substance) and its paging",
   // P2 final review finding 3 (the spec's "*(P2)* " marker removed, as for P1C)
   pageError: "Public page could not load (`app/error.tsx`)",
+  // QA portal (the spec's "*(QA portal)* " marker removed, as for P1C)
+  qaRole: "QA role: role badge \"QA\", welcome state, invite role, the \"QA tools\" account-menu item and toolbar link",
+  qaAccount: "QA account on a review page",
+  qaPage: "QA tools page: heading, \"Connect your AI\", \"API\" and \"Rules\" sections, copy buttons and their announcements, the pharmacist banner",
+  qaKeys: "QA keys: create form, name rules and errors, the one-time key panel, the key list and statuses, revoke confirmation and outcomes, limit, bot-check, sign-in and network failures, load error, no-JavaScript line, announcements",
 } as const;
 export type NewCopyState = (typeof NEW_COPY_ROWS)[keyof typeof NEW_COPY_ROWS];
 
@@ -273,7 +278,26 @@ const SOURCE_LINKS = {
   who: "WHO ATC/DDD Index",
 } as const;
 
-/** Strings per §1.7 state. Empty records are filled by the plan that builds that state (P1B, P2, P3). */
+// ---- QA portal §1.7 rows (§5.1, §5.12, §5.13, §6.2). Each object is the NEW_COPY entry for its row; QA_COPY is the typed view. ----
+const QA_ROLE = {
+  badge: "QA",
+  qaTools: "QA tools",
+  welcomeHeading: "You have QA access",
+  welcomeStepKey: "Create a key on the QA tools page. It is shown once, so copy it then.",
+  welcomeStepConnect: "Connect Claude Code, Cursor or a script with the key. What it reads may not be reviewed yet, and it can't change anything.",
+  welcomeStepNoReview: "QA accounts don't review records. Reviewing needs a reviewer invite.",
+  openQaTools: "Open QA tools",
+  invite: "Role: QA. You read IntelliDrugs data for quality checks through QA tools: your own keys, the MCP server and the QA API. You can't review or publish records. Sign in at drugdb.eliooo.org with this Google account.",
+} as const;
+
+/** §5.12 "QA account on a review page": a qa session on any /review/* page except /review and /review/qa (D66). */
+const QA_ACCOUNT = {
+  title: "Your account has QA access, not reviewer access.",
+  body: "QA accounts read data through QA tools. Reviewing records needs a reviewer invite.",
+  openQaTools: QA_ROLE.openQaTools,
+} as const;
+
+/** Strings per §1.7 state. Empty records are filled by the plan that builds that state (P1B, P2, P3; the QA portal page). */
 export const NEW_COPY: Record<NewCopyState, Record<string, string>> = {
   [NEW_COPY_ROWS.decisionUnconfirmed]: {
     bannerTitle: "Couldn't confirm your decision.",
@@ -499,6 +523,11 @@ export const NEW_COPY: Record<NewCopyState, Record<string, string>> = {
   },
   // Defined in lib/page-error-copy.ts so the root error boundary does not ship this module to every page (§10.6).
   [NEW_COPY_ROWS.pageError]: PAGE_ERROR,
+  [NEW_COPY_ROWS.qaRole]: QA_ROLE,
+  [NEW_COPY_ROWS.qaAccount]: QA_ACCOUNT,
+  // Filled by the QA portal's /review/qa task (§5.18).
+  [NEW_COPY_ROWS.qaPage]: {},
+  [NEW_COPY_ROWS.qaKeys]: {},
 };
 /** Typed shortcut for the sign-in row. */
 export const SIGN_IN_STATES = NEW_COPY[NEW_COPY_ROWS.signIn] as {
@@ -547,6 +576,9 @@ export const DESK_NEW = {
 export const P1C_COPY = {
   senior: SENIOR_ROLE, review: SENIOR_REVIEW, pair: PAIR_LINES, other: OTHER_MEDICINES, dismiss: DISMISS, sources: SOURCE_LINKS,
 } as const;
+
+/** Typed views of the QA portal rows (§1.7), so modules never index NEW_COPY by row text. */
+export const QA_COPY = { role: QA_ROLE, account: QA_ACCOUNT } as const;
 
 /** Learn (§6.8): the date suffix after a snapshot-only value, and the footer's batch line. */
 export const LEARN_NEW = NEW_COPY[NEW_COPY_ROWS.learnSnapshotDate] as Record<"asStored", string>;

@@ -10,12 +10,15 @@ import { DEFAULT_PAIR_QUERY, parseSubstancesQuery, substanceHref, substancesHref
 import { SENIOR_PAGE_SIZE } from "@/lib/senior-types";
 import { getSession } from "@/lib/session";
 import { THEME_COOKIE, parseTheme } from "@/lib/theme";
+import { qaAccountView } from "@/components/review/QaAccount";
 
 export const dynamic = "force-dynamic";
 
 /** §5.17.3: every substance carried by a medicine we hold, from all batches, by pairs to review. Seniors only. */
 export default async function SubstancesPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const session = await getSession();
+  // §5.12 (QA portal, D66): app/review/layout.tsx admits qa and cannot see the path, so each review page answers qa itself.
+  if (session?.role === "qa") return qaAccountView(session);
   if (!session || !isReviewer(session)) return null;
   const store = await cookies();
   const theme = parseTheme(store.get(THEME_COOKIE)?.value), keys = parseKeys(store.get(KEYS_COOKIE)?.value);
