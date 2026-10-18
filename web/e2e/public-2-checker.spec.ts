@@ -38,7 +38,35 @@ test("keyboard: add three medicines, each announced; the summary sentence; Major
   await expect(page.locator(".nodata-block.hatch")).toHaveCount(1);
   // The legend (Board P, §6.7.3 item 8) repeats the sentence; this one is the block's own.
   await expect(page.locator(".nodata-block.hatch").getByText("No interaction data in DDInter for this substance. This does not mean it is safe to combine.")).toBeVisible();
-  await expect(page.getByText("From DDInter 2.0").first()).toBeVisible();
+  await expect(page.getByText("From DDInter 2.0", { exact: true }).first()).toBeVisible();
+});
+
+test("the alert card shows management, then DDInter's interaction description, each behind its own Expander (§6.7.3, D64)", async ({ page }) => {
+  await page.goto(`/check?ids=${P.warfarin}&ids=${P.aspirin}`);
+  const card = page.locator("article.pair", { has: page.getByRole("heading", { level: 4, name: "G Warfarin + Aspirin" }) });
+  const management = card.locator('p.pair-text[id$="-text"]'), description = card.locator('p.pair-text[id$="-desc"]');
+  // the seed's DDInter texts for DDInter1951 + DDInter20, both over 200 characters
+  await expect(description).toContainText("Aspirin, even in small doses, may increase the risk of bleeding");
+  await expect(management).toContainText("should generally be avoided unless the potential benefit outweighs the risk");
+  expect((await management.boundingBox())!.y).toBeLessThan((await description.boundingBox())!.y);
+  await expect(card).not.toContainText("DDInter 2.0 gives no management text for this pair.");
+  await expect(card.getByText("From DDInter 2.0", { exact: true })).toBeVisible();
+
+  const buttons = card.getByRole("button", { name: "Show full text" });
+  await expect(buttons).toHaveCount(2);
+  const [mgButton, descButton] = [buttons.nth(0), buttons.nth(1)];
+  await expect(mgButton).toHaveAttribute("aria-controls", (await management.getAttribute("id"))!);
+  await expect(descButton).toHaveAttribute("aria-controls", (await description.getAttribute("id"))!);
+  await expect(mgButton).toHaveAccessibleDescription("Management, truncated. Full text from DDInter 2.0.");
+  await expect(descButton).toHaveAccessibleDescription("Interaction description, truncated. Full text from DDInter 2.0.");
+
+  // with the management text clamped, the description opens and its own label reads "full text"
+  await descButton.click();
+  await expect(card.getByText("Interaction description, full text from DDInter 2.0.", { exact: true })).toBeVisible();
+  await expect(card.getByText("Interaction description, truncated. Full text from DDInter 2.0.", { exact: true })).toBeHidden();
+  await expect(card.getByText("Management, truncated. Full text from DDInter 2.0.", { exact: true })).toBeVisible();
+  await expect(card.getByText("Management, full text from DDInter 2.0.", { exact: true })).toBeHidden();
+  await expect(card.getByRole("button", { name: "Show less" })).toHaveCount(1);
 });
 
 test("remove and Clear all: announced, and focus lands on the field, never on <body> (§6.7.1, §10.2)", async ({ page }) => {
@@ -99,6 +127,12 @@ test("without JavaScript: Find lists matches, Add and Remove work by GET, and th
   await page.getByRole("button", { name: /^Aspirin/ }).click();
   await expect(page).toHaveURL(new RegExp(`ids=${P.warfarin}.*ids=${P.aspirin}`));
   await expect(page.getByRole("heading", { level: 2, name: "2 medicines · 1 of 1 pair checked · 1 with an interaction listed" })).toBeVisible();
+  // no Expander without JavaScript: both DDInter texts render in full, each label reading "full text" (§4.4, §6.7.3)
+  await expect(page.getByRole("button", { name: "Show full text" })).toHaveCount(0);
+  await expect(page.getByText("Management, full text from DDInter 2.0.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Interaction description, full text from DDInter 2.0.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Management, truncated. Full text from DDInter 2.0.", { exact: true })).toBeHidden();
+  await expect(page.getByText("Interaction description, truncated. Full text from DDInter 2.0.", { exact: true })).toBeHidden();
   await page.getByRole("button", { name: "Remove Aspirin" }).click();
   await expect(selected(page)).toHaveCount(1);
   await expect(page.getByRole("heading", { level: 2, name: "Add at least 2 medicines to check them against each other." })).toBeVisible();
