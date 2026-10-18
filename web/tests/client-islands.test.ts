@@ -51,10 +51,20 @@ describe("client-island allowlist (§4.2)", () => {
   });
 
   it("P1C: SeniorDesk plus components/review/senior/* (§4.2)", () => {
-    expect(ISLAND_DIRS).toEqual(["components/review/desk/", "components/review/senior/"]);
+    expect(ISLAND_DIRS).toEqual(["components/review/desk/", "components/review/senior/", "components/qa/"]);
     expect(checkIslands(fixture({ "components/review/senior/SeniorDesk.tsx": '"use client";\nexport default 1;\n' }))).toEqual([]);
     expect(checkIslands(fixture({ "components/review/senior/X.tsx": '"use client";\nimport "@/lib/api";\n' })))
       .toEqual(["components/review/senior/X.tsx: imports @/lib/api"]);
+  });
+
+  it("QA portal: QaKeys and CopyButton plus components/qa/* (§4.2); they may not import server code either", () => {
+    expect(checkIslands(fixture({ "components/qa/QaKeys.tsx": '"use client";\nexport default 1;\n',
+      "components/qa/CopyButton.tsx": '"use client";\nexport default 1;\n' }))).toEqual([]);
+    expect(checkIslands(fixture({ "components/qa/QaKeys.tsx": '"use client";\nimport "@/lib/session";\n' })))
+      .toEqual(["components/qa/QaKeys.tsx: imports @/lib/session"]);
+    expect(checkIslands(fixture({ "components/qa/X.tsx": '"use client";\nimport { k } from "@/lib/qa-key-core";\n',
+      "lib/qa-key-core.ts": 'import "server-only";\nexport const k = 1;\n' })))
+      .toEqual(["components/qa/X.tsx: imports server-only module @/lib/qa-key-core"]);
   });
 
   it("fails an island that imports @/lib/api, @/lib/session, server-only or next/headers", () => {
