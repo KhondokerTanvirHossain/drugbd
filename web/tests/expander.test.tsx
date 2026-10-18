@@ -27,6 +27,15 @@ describe("Expander island (§4.2)", () => {
     expect(screen.getByRole("button", { name: "Show less" })).toBeTruthy();
   });
 
+  it("describedBy sets aria-describedby, for two Expanders in one card (§4.2, §6.7.3); absent, there is none", async () => {
+    render(<><p id="t" className="pair-text open">Long text</p><span id="k">Management, truncated.</span>
+      <Expander targetId="t" label="public" describedBy="k" /></>);
+    expect((await screen.findByRole("button", { name: "Show full text" })).getAttribute("aria-describedby")).toBe("k");
+    cleanup();
+    render(<Fixture label="public" />);
+    expect((await screen.findByRole("button", { name: "Show full text" })).hasAttribute("aria-describedby")).toBe(false);
+  });
+
   it("renders nothing on the server", () => {
     expect(renderToStaticMarkup(<Expander targetId="t" label="public" />)).toBe("");
   });
