@@ -10,7 +10,7 @@ const METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"];
 export const STATIC_ROUTES: readonly string[] = ["/", "/search", "/check", "/check/suggest", "/signin", "/signout",
   "/api/session", "/healthz", "/robots.txt", "/icon.svg", "/batches", "/flags", "/review", "/review/flags",
   "/review/pairs", "/review/substances", "/review/qa", "/partners", "/partners/request", "/flag", "/privacy",
-  "/api/qa/v1/batches", "/api/qa/v1/records"];
+  "/api/qa/v1/batches", "/api/qa/v1/records", "/api/qa/mcp"];
 /** Dynamic routes: the pattern and the template logged for it, most specific first. P1B and P2 add theirs. */
 export const DYNAMIC_ROUTES: readonly (readonly [RegExp, string])[] = [
   [/^\/api\/qa\/v1\/batches\/[^/]+\/records\/[^/]+$/, "/api/qa/v1/batches/[batchId]/records/[conceptId]"],
