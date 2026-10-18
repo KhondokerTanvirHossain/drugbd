@@ -127,7 +127,7 @@ To invite a new pharmacist or engineer (the email template and the exact host st
 
 To read and answer partner access requests (the read-only reply-address query), follow [`docs/runbooks/partner-requests.md`](docs/runbooks/partner-requests.md).
 
-The read-only QA API (`/api/qa/v1/*`, spec §7.9) ships disabled. To create, hand over, rotate or revoke a QA key (only its SHA-256 hash goes into `QA_API_KEYS` in the host `.env`), follow [`docs/runbooks/qa-api-keys.md`](docs/runbooks/qa-api-keys.md).
+The read-only QA API (`/api/qa/v1/*`, spec §7.9) ships disabled. To create, hand over, rotate or revoke a QA key (only its SHA-256 hash goes into `QA_API_KEYS` in the host `.env`), follow [`docs/runbooks/qa-api-keys.md`](docs/runbooks/qa-api-keys.md). A key holder reads it through the read-only QA MCP server in [`tools/qa-mcp/`](tools/qa-mcp/README.md) (`npm ci && npm run build && node dist/index.js`).
 
 A removed reviewer loses review rights on their next request. A reviewer whose role changed signs out and in again. Rotating `SESSION_SECRET` signs everyone out (`docker-compose up -d --no-deps web`). Rotating `INTERNAL_API_TOKEN` needs both services: `docker-compose up -d --no-deps api web`.
 
