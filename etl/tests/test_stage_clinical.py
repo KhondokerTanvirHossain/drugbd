@@ -246,3 +246,19 @@ def test_not_found_uniform_evidence(conn):
     [r] = build_clinical_drugs(conn, ["no-such-product"])
     assert r.status == "fail" and r.note == "product not found"
     assert r.evidence == {"raw": None, "parse_status": None, "parsed": [], "aligned": [], "bdc_id": None, "signature": None}
+
+
+def test_align_never_pairs_an_elemental_name_with_a_salt_substance():
+    """'Zinc 20 mg' is elemental zinc; a zinc-sulphate substance would store zinc sulphate 20 mg, a wrong value."""
+    from decimal import Decimal
+    from bddrug_etl.parse.content import ParsedIngredient
+    from bddrug_etl.stages.clinical import _align
+    zinc = ParsedIngredient("Zinc", Decimal(20), "mg", None, None, "Zinc 20 mg")
+    salt = [{"bds_id": "BDS-9", "preferred": "Zinc sulphate monohydrate", "keys": {"zinc sulphate monohydrate"}}]
+    assert [m for _, _, m in _align((zinc,), salt)] == ["unaligned"]
+    same = [{"bds_id": "BDS-8", "preferred": "Zinc", "keys": {"zinc"}}]
+    assert [(b, m) for _, b, m in _align((zinc,), same)] == [("BDS-8", "name")]
+    # A non-element single ingredient still aligns by the one-ingredient rule (Paracetamol / Acetaminophen).
+    pcm = ParsedIngredient("Paracetamol", Decimal(500), "mg", None, None, "Paracetamol 500 mg")
+    apap = [{"bds_id": "BDS-1", "preferred": "Acetaminophen", "keys": {"acetaminophen"}}]
+    assert [(b, m) for _, b, m in _align((pcm,), apap)] == [("BDS-1", "single")]

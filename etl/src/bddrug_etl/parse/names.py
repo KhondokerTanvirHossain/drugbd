@@ -20,9 +20,24 @@ _BARE_CATIONS = frozenset(
 _PUNCT_EDGE = re.compile(r"^[^\w]+|[^\w]+$")
 
 
+# Vitamin names that are exactly one molecule. Ambiguous ones (A, E, B3, plain D: several molecules or esters) are
+# deliberately absent, so they never align by synonym.
+_SYNONYMS = {
+    "vitamin d3": "cholecalciferol", "vitamin d2": "ergocalciferol", "vitamin b1": "thiamine",
+    "vitamin b2": "riboflavin", "vitamin b6": "pyridoxine", "vitamin b12": "cyanocobalamin",
+    "vitamin c": "ascorbic acid", "vitamin k1": "phytomenadione",
+}
+
+
 def normalize_name(name: str) -> str:
     text = _PUNCT_EDGE.sub("", " ".join(name.casefold().split()))
-    return " ".join(_SPELLING.get(w, w) for w in text.split())
+    text = " ".join(_SPELLING.get(w, w) for w in text.split())
+    return _SYNONYMS.get(text, text)
+
+
+def is_bare_element(name: str) -> bool:
+    """'Zinc', 'Calcium', 'Iron': an elemental amount, never the same strength as a salt of it."""
+    return normalize_name(name) in _BARE_CATIONS
 
 
 def strip_salt(name: str) -> str:
