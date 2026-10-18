@@ -213,4 +213,52 @@ class AuditApiIntegrationTest {
         // the longest label (32 characters) with the longest route fits
         post(internal(web), qa("qa_route", "a" + "_".repeat(30) + "z/records")).expectStatus().isCreated();
     }
+
+    // ---- QA portal (§7.10.7): the qa role, DB key labels and the mcp route; the key events are the API's own
+
+    @Test void aQaSignInIs201WithRoleQa() throws Exception {
+        String rid = UUID.randomUUID().toString();
+        Map<String, Object> body = event("sign_in", "ok", rid);
+        body.put("actorEmail", "qa.member@example.org");
+        body.put("actorRole", "qa");
+        post(internal(web), body).expectStatus().isCreated();
+        assertThat(text(pg, "SELECT actor_role FROM ops.audit_event WHERE request_id = '" + rid + "'")).isEqualTo("qa");
+        Map<String, Object> denied = event("decision_denied", "forbidden", UUID.randomUUID().toString());
+        denied.put("actorEmail", "qa.member@example.org");
+        denied.put("actorRole", "qa");
+        denied.put("targetType", "batch_item");
+        denied.put("targetId", "0001-pilot/186-0030-006--napa");
+        post(internal(web), denied).expectStatus().isCreated();
+    }
+
+    @Test void qaReadTakesADbKeyLabelAndTheMcpRoute() throws Exception {
+        for (String target : List.of("key.12/record", "mcp", "key.12/mcp", "tanvir-qa/mcp", "key.1/batches", "key.123456789012345678/pairs")) {
+            String rid = UUID.randomUUID().toString();
+            Map<String, Object> body = qa("qa_route", target);
+            body.put("requestId", rid);
+            post(internal(web), body).expectStatus().isCreated();
+            assertThat(text(pg, "SELECT target_id FROM ops.audit_event WHERE request_id = '" + rid + "'")).isEqualTo(target);
+        }
+    }
+
+    @Test void aDbKeyLabelIsKeyDotAPositiveIdOnly() throws Exception {
+        long before = rows();
+        for (String bad : List.of("key.0/record", "key.x/record", "tanvir.qa/batches", "key./record", "key.01/record",
+                "key.1234567890123456789/record", "key.12", "key.12/mcp/x", "KEY.12/record", "key-12.3/record"))
+            expectInvalid(qa("qa_route", bad), "targetId");
+        assertThat(rows()).isEqualTo(before);
+    }
+
+    @Test void theKeyEventsAreNotTheWebsToPost() throws Exception {
+        long before = rows();
+        for (String e : List.of("qa_key_created", "qa_key_revoked")) {
+            Map<String, Object> body = event(e, "ok", UUID.randomUUID().toString());
+            body.put("actorEmail", "qa.member@example.org");
+            body.put("actorRole", "qa");
+            body.put("targetType", "qa_key");
+            body.put("targetId", "12");
+            expectInvalid(body, "event");
+        }
+        assertThat(rows()).isEqualTo(before);
+    }
 }
