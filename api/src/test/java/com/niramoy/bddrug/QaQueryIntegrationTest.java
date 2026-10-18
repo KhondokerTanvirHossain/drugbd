@@ -1,5 +1,8 @@
 package com.niramoy.bddrug;
 
+import com.niramoy.bddrug.application.port.QaQueryPort;
+import com.niramoy.bddrug.application.port.QaQueryPort.Key;
+import com.niramoy.bddrug.domain.ReviewDecision;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -17,6 +20,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import static com.niramoy.bddrug.TestSupport.*;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 /**
  * Spec §7.9.5 (§11.3 QaQueryIntegrationTest): GET /v1/qa/batches/{b}/items and GET /v1/qa/records, token only, read-only.
@@ -39,6 +43,11 @@ class QaQueryIntegrationTest {
      * and no ddinter result; W-1 route_assumed as the string "true" and a non-array parsed; X-NOSUB XM code with no
      * substance, three failed stages; "gone" removed from the batch file (it would match every filter). QA-2: W-2, a
      * substances warn. QA-P: 120 records, each with a dgda warn (paging). QA-EMPTY: no items.
+     * <p>Run stamp and batch scoping of displayStatus (each with a clinical fail, so stage_fail finds them): in QA-1,
+     * Y-ENG-RERUN and Y-PH-RERUN were re-run after an engineer ok and a pharmacist ok, both decided before extracted_at,
+     * so neither counts. Z-CARRY and Z-FLAG are in QA-1 and QA-2 with different decisions in each: Z-CARRY approved in
+     * QA-2 and re-run in QA-1 with no decision there; Z-FLAG engineer checked in QA-2 and flagged as an issue in QA-1.
+     * Read across batches, either would show another batch's status (back_in_review in QA-1, pending in QA-2).
      */
     @BeforeAll static void seed() throws Exception {
         PilotSeed.migrateAndSeed(pg);
@@ -51,7 +60,7 @@ class QaQueryIntegrationTest {
             INSERT INTO curated.brand_product_ingredient (concept_id, xm_code, ingredient_name) VALUES ('T-NR','XM9TST','Testmol');
 
             INSERT INTO ops.batch (batch_id, status, item_count, run_at) VALUES
-             ('QA-1','in_review',9,'2026-10-11T21:27:17Z'), ('QA-2','approved',1,'2026-10-10T08:00:00Z'),
+             ('QA-1','in_review',13,'2026-10-11T21:27:17Z'), ('QA-2','approved',3,'2026-10-10T08:00:00Z'),
              ('QA-P','in_review',120,'2026-10-09T08:00:00Z'), ('QA-EMPTY','in_review',0,'2026-10-08T08:00:00Z');
             INSERT INTO ops.batch_item (batch_id, source, concept_id, review, note, extracted_at) VALUES
              ('QA-1','DGDA-Drugs','A-1','ok',NULL,'2026-10-12T09:00:00Z'),
@@ -63,7 +72,13 @@ class QaQueryIntegrationTest {
              ('QA-1','DGDA-Drugs','W-1','pending',NULL,'2026-10-12T09:00:00Z'),
              ('QA-1','DGDA-Drugs','X-NOSUB','pending',NULL,'2026-10-12T09:00:00Z'),
              ('QA-1','DGDA-Drugs','gone','issue','removed from batch file','2026-10-11T21:30:00Z'),
-             ('QA-2','DGDA-Drugs','W-2','ok',NULL,'2026-10-10T08:05:00Z');
+             ('QA-1','DGDA-Drugs','Y-ENG-RERUN','pending',NULL,'2026-10-12T09:00:00Z'),
+             ('QA-1','DGDA-Drugs','Y-PH-RERUN','pending',NULL,'2026-10-12T09:00:00Z'),
+             ('QA-1','DGDA-Drugs','Z-CARRY','pending',NULL,'2026-10-12T09:00:00Z'),
+             ('QA-1','DGDA-Drugs','Z-FLAG','issue',NULL,'2026-10-12T09:00:00Z'),
+             ('QA-2','DGDA-Drugs','W-2','ok',NULL,'2026-10-10T08:05:00Z'),
+             ('QA-2','DGDA-Drugs','Z-CARRY','ok',NULL,'2026-10-10T08:05:00Z'),
+             ('QA-2','DGDA-Drugs','Z-FLAG','pending',NULL,'2026-10-10T08:05:00Z');
             INSERT INTO ops.batch_item (batch_id, source, concept_id, review, note, extracted_at)
               SELECT 'QA-P', 'DGDA-Drugs', 'P-' || lpad(i::text, 3, '0'), 'pending', NULL, '2026-10-09T08:05:00Z' FROM generate_series(1, 120) i;
             INSERT INTO ops.review_decision (batch_id, concept_id, decision, note, reviewer_email, reviewer_role, decided_at) VALUES
@@ -71,7 +86,12 @@ class QaQueryIntegrationTest {
              ('QA-1','D-1','issue','SENTINEL-NOTE route should be otic','sentinel.reviewer@example.org','engineer','2026-10-12T10:05:00Z'),
              ('QA-1','N-1','ok','SENTINEL-NOTE route should be otic','sentinel.reviewer@example.org','engineer','2026-10-12T10:10:00Z'),
              ('QA-1','gone','issue','SENTINEL-NOTE route should be otic','sentinel.reviewer@example.org','pharmacist','2026-10-11T22:00:00Z'),
-             ('QA-2','W-2','ok','SENTINEL-NOTE route should be otic','sentinel.reviewer@example.org','pharmacist','2026-10-10T09:00:00Z');
+             ('QA-2','W-2','ok','SENTINEL-NOTE route should be otic','sentinel.reviewer@example.org','pharmacist','2026-10-10T09:00:00Z'),
+             ('QA-1','Y-ENG-RERUN','ok','SENTINEL-NOTE route should be otic','sentinel.reviewer@example.org','engineer','2026-10-12T08:00:00Z'),
+             ('QA-1','Y-PH-RERUN','ok','SENTINEL-NOTE route should be otic','sentinel.reviewer@example.org','pharmacist','2026-10-12T08:00:00Z'),
+             ('QA-2','Z-CARRY','ok','SENTINEL-NOTE route should be otic','sentinel.reviewer@example.org','pharmacist','2026-10-10T09:10:00Z'),
+             ('QA-2','Z-FLAG','ok','SENTINEL-NOTE route should be otic','sentinel.reviewer@example.org','engineer','2026-10-10T09:20:00Z'),
+             ('QA-1','Z-FLAG','issue','SENTINEL-NOTE route should be otic','sentinel.reviewer@example.org','pharmacist','2026-10-12T10:20:00Z');
 
             INSERT INTO ops.stage_result (batch_id, concept_id, stage, status, note, evidence)
             SELECT bi.batch_id, bi.concept_id, s.stage, 'ok', '', '{}'::jsonb FROM ops.batch_item bi
@@ -101,11 +121,14 @@ class QaQueryIntegrationTest {
              ('QA-2','W-2','dgda','ok','','{}'),
              ('QA-2','W-2','substances','warn','name only: Warfarin Sodium','{}');
             INSERT INTO ops.stage_result (batch_id, concept_id, stage, status, note, evidence)
+              SELECT batch_id, concept_id, 'clinical', 'fail', 'no clinical drug', '{}' FROM ops.batch_item WHERE concept_id LIKE 'Y-%' OR concept_id LIKE 'Z-%';
+            INSERT INTO ops.stage_result (batch_id, concept_id, stage, status, note, evidence)
               SELECT 'QA-P', concept_id, 'dgda', 'warn', 'paging', '{}' FROM ops.batch_item WHERE batch_id = 'QA-P';
             """);
     }
 
     @Autowired WebTestClient web;
+    @Autowired QaQueryPort port;
 
     private WebTestClient.BodyContentSpec ok(String uri) {
         return internal(web).get().uri(uri).exchange().expectStatus().isOk().expectBody();
@@ -136,11 +159,12 @@ class QaQueryIntegrationTest {
             .jsonPath("$.data.batchId").isEqualTo("QA-1")
             .jsonPath("$.data.status").isEqualTo("in_review")
             .jsonPath("$.data.runAt").isEqualTo("2026-10-11T21:27:17Z")
-            .jsonPath("$.data.itemCount").isEqualTo(8)
-            .jsonPath("$.data.items[*].conceptId").isEqualTo(List.of("A-1", "A-NOBDC", "C-EYE", "D-1", "N-1", "T-NR", "W-1", "X-NOSUB"))
+            .jsonPath("$.data.itemCount").isEqualTo(12)
+            .jsonPath("$.data.items[*].conceptId").isEqualTo(List.of("A-1", "A-NOBDC", "C-EYE", "D-1", "N-1", "T-NR", "W-1", "X-NOSUB",
+                "Y-ENG-RERUN", "Y-PH-RERUN", "Z-CARRY", "Z-FLAG"))
             .jsonPath("$.data.items[0].tradeName").isEqualTo("Ecosprin")
             .jsonPath("$.data.items[*].displayStatus").isEqualTo(List.of("approved", "pending", "pending", "issue", "engineer_checked",
-                "pending", "pending", "pending"))
+                "pending", "pending", "pending", "pending", "back_in_review", "pending", "issue"))
             .jsonPath("$.data.items[0].stages[*].stage").isEqualTo(List.of("dgda", "substances", "clinical", "ddinter"))
             // X-NOSUB's stage rows were inserted out of order; the note is the stored note, whole
             .jsonPath("$.data.items[7].stages[*].stage").isEqualTo(List.of("dgda", "substances", "clinical", "ddinter"))
@@ -177,7 +201,7 @@ class QaQueryIntegrationTest {
         "no_ddinter_data | D-1",                   // coverage none; T-NR's not_run never matches (D33)
         "unaligned       | A-NOBDC X-NOSUB",       // an aligned[] entry with a null bds_id; an XM code with no substance
         "stage_warn      | A-NOBDC D-1 N-1",
-        "stage_fail      | X-NOSUB",
+        "stage_fail      | X-NOSUB Y-ENG-RERUN Y-PH-RERUN Z-CARRY Z-FLAG",
     })
     void eachFilterMatchesItsRecordsOnlyAndNeverARemovedItem(String filter, String expected) {
         ok("/v1/qa/records?batch=QA-1&filter=" + filter)
@@ -206,6 +230,64 @@ class QaQueryIntegrationTest {
             .jsonPath("$.data.items[1].conceptId").isEqualTo("T-NR")
             .jsonPath("$.data.items[1].stages.ddinter").isEmpty()
             .jsonPath("$.data.items[1].stages.clinical").isEqualTo("ok");
+    }
+
+    /** A decision made before the item's latest run (extracted_at) no longer counts, in both endpoints. */
+    @Test void aDecisionBeforeTheRunStampNoLongerCounts() {
+        ok("/v1/qa/batches/QA-1/items")
+            .jsonPath("$.data.items[8].conceptId").isEqualTo("Y-ENG-RERUN")
+            .jsonPath("$.data.items[8].displayStatus").isEqualTo("pending")            // not engineer_checked
+            .jsonPath("$.data.items[9].conceptId").isEqualTo("Y-PH-RERUN")
+            .jsonPath("$.data.items[9].displayStatus").isEqualTo("back_in_review");    // the old approval, not a counted one
+        ok("/v1/qa/records?batch=QA-1&filter=stage_fail")
+            .jsonPath("$.data.items[1].conceptId").isEqualTo("Y-ENG-RERUN")
+            .jsonPath("$.data.items[1].displayStatus").isEqualTo("pending")
+            .jsonPath("$.data.items[2].conceptId").isEqualTo("Y-PH-RERUN")
+            .jsonPath("$.data.items[2].displayStatus").isEqualTo("back_in_review");
+    }
+
+    /** A concept in two batches takes each batch's own decisions, never the other's, in both endpoints. */
+    @Test void aConceptInTwoBatchesShowsEachBatchsOwnStatus() {
+        ok("/v1/qa/batches/QA-1/items")
+            .jsonPath("$.data.items[10].conceptId").isEqualTo("Z-CARRY")
+            .jsonPath("$.data.items[10].displayStatus").isEqualTo("pending")           // not QA-2's approval as back_in_review
+            .jsonPath("$.data.items[11].conceptId").isEqualTo("Z-FLAG")
+            .jsonPath("$.data.items[11].displayStatus").isEqualTo("issue");
+        ok("/v1/qa/batches/QA-2/items")
+            .jsonPath("$.data.items[*].conceptId").isEqualTo(List.of("W-2", "Z-CARRY", "Z-FLAG"))
+            .jsonPath("$.data.items[*].displayStatus").isEqualTo(List.of("approved", "approved", "engineer_checked")); // not QA-1's issue
+        // no batch filter: both batches' rows on one page, so one decisions query serves both
+        ok("/v1/qa/records?filter=stage_fail")
+            .jsonPath("$.data.total").isEqualTo(7)
+            .jsonPath("$.data.items[*].batchId").isEqualTo(List.of("QA-1", "QA-1", "QA-1", "QA-1", "QA-1", "QA-2", "QA-2"))
+            .jsonPath("$.data.items[*].conceptId").isEqualTo(List.of("X-NOSUB", "Y-ENG-RERUN", "Y-PH-RERUN", "Z-CARRY", "Z-FLAG",
+                "Z-CARRY", "Z-FLAG"))
+            .jsonPath("$.data.items[*].displayStatus").isEqualTo(List.of("pending", "pending", "back_in_review", "pending", "issue",
+                "approved", "engineer_checked"));
+        ok("/v1/qa/records?filter=stage_fail&batch=QA-2")
+            .jsonPath("$.data.items[*].conceptId").isEqualTo(List.of("Z-CARRY", "Z-FLAG"))
+            .jsonPath("$.data.items[*].displayStatus").isEqualTo(List.of("approved", "engineer_checked"));
+    }
+
+    /**
+     * Below the API: each item's decisions are its own batch's, each once. A decisions join on concept_id alone is invisible
+     * in displayStatus (the rows keep d.batch_id, and a repeated decision changes no status), so it is checked here.
+     */
+    @Test void theDecisionQueriesReadEachItemsOwnBatchOnly() {
+        var qa2 = port.batchDecisions("QA-2").block();
+        assertThat(qa2).containsOnlyKeys("W-2", "Z-CARRY", "Z-FLAG");
+        assertThat(qa2.get("Z-FLAG")).extracting(ReviewDecision::decision, ReviewDecision::reviewerRole)
+            .containsExactly(tuple("ok", "engineer"));
+        var qa1 = port.batchDecisions("QA-1").block();
+        assertThat(qa1).doesNotContainKey("Z-CARRY");
+        assertThat(qa1.get("Z-FLAG")).extracting(ReviewDecision::decision).containsExactly("issue");
+        Key flag1 = new Key("QA-1", "Z-FLAG"), flag2 = new Key("QA-2", "Z-FLAG"), carry1 = new Key("QA-1", "Z-CARRY");
+        var byKey = port.decisions(List.of(flag1, flag2, carry1)).block();
+        assertThat(byKey).containsOnlyKeys(flag1, flag2);
+        assertThat(byKey.get(flag1)).extracting(ReviewDecision::decision).containsExactly("issue");
+        assertThat(byKey.get(flag2)).extracting(ReviewDecision::decision).containsExactly("ok");
+        // neither personal field is read
+        assertThat(byKey.get(flag1)).allSatisfy(d -> assertThat(d.reviewerEmail()).isNull()).allSatisfy(d -> assertThat(d.note()).isNull());
     }
 
     @Test void withoutABatchEveryBatchIsSearchedInBatchThenConceptOrder() {
