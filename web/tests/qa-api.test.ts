@@ -26,8 +26,8 @@ describe("QA_API_KEYS parsing (§7.9.1)", () => {
     expect(p.keys[0].digest.toString("hex")).toBe(sha(KEY_A));
   });
 
-  it("unset or empty disables the QA API with no log line", () => {
-    for (const raw of [undefined, "", "   "]) expect(parseQaKeys(raw)).toEqual({ ok: false, invalidEntry: null });
+  it("unset or empty means no env keys, with no log line (QA portal, D68: the API is not disabled)", () => {
+    for (const raw of [undefined, "", "   "]) expect(parseQaKeys(raw)).toEqual({ ok: true, keys: [] });
   });
 
   it.each([
@@ -50,20 +50,20 @@ describe("QA_API_KEYS parsing (§7.9.1)", () => {
   it("an invalid value logs one line, once, with the entry index only (never the value)", () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     vi.stubEnv("QA_API_KEYS", `${ENTRY_A},Bad:${sha(KEY_B)}`);
-    expect(qaKeys()).toBeNull();
-    expect(qaKeys()).toBeNull();
+    expect(qaKeys()).toEqual([]);   // fail closed: not even the valid first entry
+    expect(qaKeys()).toEqual([]);
     expect(error.mock.calls).toEqual([["QA_API_KEYS invalid: entry 2"]]);
     expect(JSON.stringify(error.mock.calls)).not.toContain(sha(KEY_B));
   });
 
-  it("follows the environment: a corrected value enables the API without a restart of the module", () => {
+  it("follows the environment: a corrected value enables the env keys without a restart of the module", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     vi.stubEnv("QA_API_KEYS", "nonsense");
-    expect(qaKeys()).toBeNull();
+    expect(qaKeys()).toEqual([]);
     vi.stubEnv("QA_API_KEYS", ENTRY_A);
-    expect(qaKeys()?.map((k) => k.label)).toEqual(["checker"]);
+    expect(qaKeys().map((k) => k.label)).toEqual(["checker"]);
     vi.stubEnv("QA_API_KEYS", "");
-    expect(qaKeys()).toBeNull();
+    expect(qaKeys()).toEqual([]);
   });
 });
 

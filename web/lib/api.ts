@@ -240,6 +240,57 @@ export const qaPath = {
   pairs: (bdsId: string, page: number) => `/v1/review/substances/${enc(bdsId)}?${new URLSearchParams({ pairs: "all", page: String(page), size: "50" })}`,
 };
 
+// ---- QA keys (spec §7.10.3, §7.10.5): self-service keys. The API stores only each key's SHA-256 hash; the web never stores a
+// key. Only verifyQaKey returns an email (the owner's, for the role check of §7.10.4); it is never logged or forwarded. ----
+
+export type QaKeyStatus = "active" | "expired" | "revoked";
+/** One of the viewer's own keys, as the QA tools page lists it: never an email, never a hash. */
+export type QaKeyRow = {
+  id: number; name: string; createdAt: string; expiresAt: string; lastUsedAt: string | null; revokedAt: string | null; status: QaKeyStatus;
+};
+export type QaKeyOwnerRole = "qa" | "engineer" | "senior";
+export type QaKeyCreate = { ownerEmail: string; ownerRole: QaKeyOwnerRole; name: string; keyHash: string; requestId: string };
+export type QaKeyRevoke = { ownerEmail: string; ownerRole: QaKeyOwnerRole; requestId: string };
+
+/** POST /v1/qa-keys: the session's email and role and the new key's hash (never the key). 409 activeKeys / createdToday / keyHash. */
+export async function createQaKey(c: QaKeyCreate): Promise<WriteResult<QaKeyRow>> {
+  return write<QaKeyRow>("/v1/qa-keys", c);
+}
+
+/** POST /v1/qa-keys/{id}/revoke: the owner's key only (404 id otherwise); 409 status when already revoked. */
+export async function revokeQaKey(id: number, r: QaKeyRevoke): Promise<WriteResult<QaKeyRow>> {
+  return write<QaKeyRow>(`/v1/qa-keys/${enc(String(id))}/revoke`, r);
+}
+
+/** GET /v1/qa-keys: the viewer's own keys, newest first, at most 50. Throws when the read fails (the page's load error). */
+export async function listQaKeys(viewerEmail: string): Promise<QaKeyRow[]> {
+  const res = await reviewerRead("/v1/qa-keys", { "X-Viewer-Email": viewerEmail });
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  const keys = (await res.json().catch(() => null))?.data?.keys;
+  if (!Array.isArray(keys)) throw new Error("API error: malformed QA key list");
+  return keys as QaKeyRow[];
+}
+
+export type QaKeyVerify = { ok: true; keyId: number; ownerEmail: string } | { ok: false; status: number };
+
+/**
+ * POST /v1/qa-keys/verify { keyHash }: an active key's id and owner. Never throws. 404 is an unknown, revoked or expired key;
+ * a network failure is status 0, and a 2xx whose body is not { keyId, ownerEmail } is 502 (malformed).
+ */
+export async function verifyQaKey(keyHash: string): Promise<QaKeyVerify> {
+  const r = await write<unknown>("/v1/qa-keys/verify", { keyHash });
+  if (!r.ok) return { ok: false, status: r.status };
+  const d = r.data as { keyId?: unknown; ownerEmail?: unknown } | null | undefined;
+  if (!d || typeof d.keyId !== "number" || !Number.isSafeInteger(d.keyId) || d.keyId < 1
+      || typeof d.ownerEmail !== "string" || !d.ownerEmail.includes("@")) return { ok: false, status: 502 };
+  return { ok: true, keyId: d.keyId, ownerEmail: d.ownerEmail };
+}
+
+/** POST /v1/qa-keys/{id}/used: last_used_at at most once a minute (the API guards it too). Never throws; the caller never awaits it. */
+export async function touchQaKey(id: number): Promise<boolean> {
+  return (await write<unknown>(`/v1/qa-keys/${enc(String(id))}/used`, {})).ok;
+}
+
 // ---- Senior review (spec §7.7): unreviewed data from every batch; the pages call these for a senior session only. ----
 
 function seniorParams(q: Partial<PairQuery>, size = SENIOR_PAGE_SIZE): URLSearchParams {

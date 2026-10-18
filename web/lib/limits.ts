@@ -20,6 +20,8 @@ export function createLimits(now: () => number = Date.now, overrides: { anonymou
     qa: createWindowLimiter({ limit: 60, windowMs: 60_000, now }),
     /** Throttled qa_read rows (§7.9.6): 1 per minute per (route, hashed IP) for 401s and per label for 429s; 10,000 keys (LRU). */
     qaDeniedAudit: createWindowLimiter({ limit: 1, windowMs: 60_000, now, maxKeys: 10_000 }),
+    /** QA portal (§7.10.4): a DB key's last-used touch, 1 per minute per key id (the API guards the same minute); 10,000 keys (LRU). */
+    qaKeyTouch: createWindowLimiter({ limit: 1, windowMs: 60_000, now, maxKeys: 10_000 }),
   };
 }
 export type Limits = ReturnType<typeof createLimits>;

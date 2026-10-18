@@ -1,18 +1,20 @@
 import "server-only";
 import { createHash, timingSafeEqual } from "node:crypto";
-import type { QaUpstream } from "./api";
+import { touchQaKey, verifyQaKey, type QaUpstream } from "./api";
 import { recordAudit } from "./audit";
 import { LIMITS, allowQaRateLimitedAudit, allowQaUnauthorizedAudit } from "./limits";
 import { MalformedBody } from "./qa-map";
 import { clientIp } from "./rate-limit";
 import { withRequestLog } from "./request-log";
+import { canUseQa, roleFor } from "./reviewers";
 
 /*
- * The read-only QA API (spec §7.9): keys, Bearer auth, the per-key limit, the platform envelope, the qa_read audit row and
- * the one handler every /api/qa/v1/* route uses. Order (§7.9.1): disabled (404) → auth (401) → rate limit (429) → input
- * validation (400) → internal API read → map → audit → answer. Never 500. Cookies, sessions and any X-Internal-Token the
- * caller sends are never read: only a Bearer QA key authorises a QA call. Nothing here logs a key, a hash, a label, an id
- * or a query value; the request line is withRequestLog's (route template only).
+ * The read-only QA API (spec §7.9, §7.10.4): keys, Bearer auth, the per-key limit, the platform envelope, the qa_read audit row
+ * and the one handler every /api/qa/v1/* route uses. Order (§7.9.1 as amended by the QA portal): auth (401; env keys, then
+ * DB keys) → rate limit (429) → input validation (400) → internal API read → map → audit → answer. There is no disabled
+ * state: with no key at all every route is 401. Never 500. Cookies, sessions and any X-Internal-Token the caller sends are
+ * never read: only a Bearer QA key authorises a QA call. Nothing here logs a key, a hash, a label, an email, an id or a
+ * query value; the request line is withRequestLog's (route template only).
  */
 
 // ---- keys (QA_API_KEYS = "label:sha256hex[,label:sha256hex…]")
@@ -24,11 +26,12 @@ const LABEL = /^[a-z0-9][a-z0-9_-]{0,31}$/;
 const HASH = /^[0-9a-f]{64}$/;
 
 /**
- * Parses QA_API_KEYS. Unset or blank: disabled (invalidEntry null). A bad label or hash, an empty entry, or a duplicate label
- * or hash fails closed, naming the first bad entry (1-based). Entries are trimmed; nothing inside an entry is.
+ * Parses QA_API_KEYS. Unset or blank: no env keys (QA portal, D68: DB keys may still authenticate). A bad label or hash, an
+ * empty entry, or a duplicate label or hash fails closed, naming the first bad entry (1-based): the env source then
+ * authenticates nothing. Entries are trimmed; nothing inside an entry is.
  */
 export function parseQaKeys(raw: string | undefined): ParsedKeys {
-  if (raw === undefined || raw.trim() === "") return { ok: false, invalidEntry: null };
+  if (raw === undefined || raw.trim() === "") return { ok: true, keys: [] };
   const keys: QaKey[] = [];
   const labels = new Set<string>(), hashes = new Set<string>();
   const entries = raw.split(",");
@@ -44,14 +47,15 @@ export function parseQaKeys(raw: string | undefined): ParsedKeys {
   return { ok: true, keys };
 }
 
-let cached: { raw: string | undefined; keys: QaKey[] | null } | null = null;
+let cached: { raw: string | undefined; keys: QaKey[] } | null = null;
 const reported = new Set<string>();
 
 /**
- * The configured keys, or null when the QA API is disabled (unset, blank or invalid: every /api/qa path is then 404). Read
- * from the environment on every call and parsed once per value. An invalid value logs one line, once: the entry index only.
+ * The env keys: none when QA_API_KEYS is unset or blank, and none (fail closed: not even the valid entries) when it is
+ * invalid. Read from the environment on every call and parsed once per value. An invalid value logs one line, once: the
+ * entry index only. A malformed env never stops DB keys (§7.9.1 as amended, D68).
  */
-export function qaKeys(): QaKey[] | null {
+export function qaKeys(): QaKey[] {
   const raw = process.env.QA_API_KEYS;
   if (cached !== null && cached.raw === raw) return cached.keys;
   const parsed = parseQaKeys(raw);
@@ -59,7 +63,7 @@ export function qaKeys(): QaKey[] | null {
     reported.add(raw);
     console.error(`QA_API_KEYS invalid: entry ${parsed.invalidEntry}`);
   }
-  cached = { raw, keys: parsed.ok ? parsed.keys : null };
+  cached = { raw, keys: parsed.ok ? parsed.keys : [] };
   return cached.keys;
 }
 
@@ -70,14 +74,8 @@ export const qaKeysForTests = { reset: () => { cached = null; reported.clear(); 
 /** "Bearer <key>": the scheme in any case, one space, 32–256 characters of the token set (§7.9.1). */
 const BEARER = /^Bearer ([A-Za-z0-9._~+/=-]{32,256})$/i;
 
-/**
- * The label of the key the header carries, or null. The presented key's SHA-256 digest is compared with every configured
- * digest by timingSafeEqual, with no early exit, so the time taken never says which entry (if any) matched.
- */
-export function authenticate(header: string | null, keys: readonly QaKey[]): string | null {
-  const m = header === null ? null : BEARER.exec(header);
-  if (!m) return null;
-  const digest = createHash("sha256").update(m[1], "utf8").digest();
+/** The SHA-256 digest is compared with every env digest by timingSafeEqual, with no early exit. */
+function envLabel(digest: Buffer, keys: readonly QaKey[]): string | null {
   let label: string | null = null;
   for (const k of keys) {
     const same = timingSafeEqual(digest, k.digest);
@@ -86,9 +84,53 @@ export function authenticate(header: string | null, keys: readonly QaKey[]): str
   return label;
 }
 
+/**
+ * The env label of the key the header carries, or null. The presented key's SHA-256 digest is compared with every configured
+ * digest by timingSafeEqual, with no early exit, so the time taken never says which entry (if any) matched.
+ */
+export function authenticate(header: string | null, keys: readonly QaKey[]): string | null {
+  const m = header === null ? null : BEARER.exec(header);
+  if (!m) return null;
+  return envLabel(createHash("sha256").update(m[1], "utf8").digest(), keys);
+}
+
+/** A self-service DB key (§7.10.2): "idqa_" + 43 base64url characters (32 random bytes). */
+export const DB_KEY = /^idqa_[A-Za-z0-9_-]{43}$/;
+
+export type QaAuth = { ok: true; label: string } | { ok: false; status: 401 | 502 };
+
+/** The last-used touch (§7.10.4): at most once a minute per key, never awaited; a failure is ignored. */
+function touch(keyId: number): void {
+  if (!LIMITS.qaKeyTouch.allow(String(keyId))) return;
+  void touchQaKey(keyId).catch(() => false);
+}
+
+/**
+ * §7.10.4 (D68), for the QA API and the hosted MCP alike: the Bearer form (else 401); the env keys, every one compared in
+ * constant time; then, only when no env key matched and the key has the DB form, POST /v1/qa-keys/verify with its SHA-256
+ * hex. A verified key authenticates as `key.{id}` only while its owner's current REVIEWERS role passes canUseQa, read on
+ * every request and never cached. An unknown, revoked or expired key, and an owner without QA access, are the same 401; a
+ * verify call that fails is 502. The owner's email is used for the role check only: never logged, returned or stored.
+ */
+export async function authenticateQa(header: string | null): Promise<QaAuth> {
+  const m = header === null ? null : BEARER.exec(header);
+  if (!m) return { ok: false, status: 401 };
+  const digest = createHash("sha256").update(m[1], "utf8").digest();
+  const env = envLabel(digest, qaKeys());
+  if (env !== null) return { ok: true, label: env };
+  if (!DB_KEY.test(m[1])) return { ok: false, status: 401 };
+  const v = await verifyQaKey(digest.toString("hex"));
+  if (!v.ok) return { ok: false, status: v.status === 404 ? 401 : 502 };
+  if (!canUseQa(roleFor(v.ownerEmail))) return { ok: false, status: 401 };
+  touch(v.keyId);
+  return { ok: true, label: `key.${v.keyId}` };
+}
+
 // ---- envelope and headers
 
 export type QaRoute = "batches" | "batch" | "record" | "records" | "pairs";
+/** A qa_read route name: a QA API route, or `mcp` for a hosted MCP request refused before any tool ran (§7.10.6). */
+export type QaAuditRoute = QaRoute | "mcp";
 export type QaCode = "INVALID_QUERY" | "UNAUTHORIZED" | "NOT_FOUND" | "RATE_LIMITED" | "UNAVAILABLE";
 const ERRORS: Record<QaCode, { status: number; message: string }> = {
   INVALID_QUERY: { status: 400, message: "Invalid query" },
@@ -202,7 +244,7 @@ export function fromUpstream(u: QaUpstream, idFields: readonly string[], map: (d
 // ---- audit (§7.9.6)
 
 /** One qa_read row: no actor; target `{label}/{route}`, or `{route}` unauthenticated; never a key, hash, id or query value. */
-async function audit(route: QaRoute, label: string | null, outcome: string, requestId: string): Promise<boolean> {
+export async function auditQa(route: QaAuditRoute, label: string | null, outcome: string, requestId: string): Promise<boolean> {
   try {
     return await recordAudit({ event: "qa_read", targetType: "qa_route", targetId: label === null ? route : `${label}/${route}`,
       outcome, requestId });
@@ -222,15 +264,19 @@ export function qaHandler(route: QaRoute, template: string, run: (url: URL) => P
   return withRequestLog(template, async (request: Request): Promise<Response> => {
     const rid = requestIdOf(request);
     try {
-      const keys = qaKeys();
-      if (keys === null) return fail(rid, "NOT_FOUND");
-      const label = authenticate(request.headers.get("authorization"), keys);
-      if (label === null) {
-        if (allowQaUnauthorizedAudit(route, clientIp(request.headers), LIMITS)) await audit(route, null, "unauthorized", rid);
+      const auth = await authenticateQa(request.headers.get("authorization"));
+      if (!auth.ok && auth.status === 502) {
+        // The key could not be checked (§7.10.4): best effort, unauthenticated, like any other non-200 row.
+        await auditQa(route, null, "unavailable", rid);
+        return fail(rid, "UNAVAILABLE");
+      }
+      if (!auth.ok) {
+        if (allowQaUnauthorizedAudit(route, clientIp(request.headers), LIMITS)) await auditQa(route, null, "unauthorized", rid);
         return fail(rid, "UNAUTHORIZED", null, { "WWW-Authenticate": "Bearer" });
       }
+      const label = auth.label;
       if (!LIMITS.qa.allow(label)) {
-        if (allowQaRateLimitedAudit(label, LIMITS)) await audit(route, label, "rate_limited", rid);
+        if (allowQaRateLimitedAudit(label, LIMITS)) await auditQa(route, label, "rate_limited", rid);
         return fail(rid, "RATE_LIMITED", null, { "Retry-After": "60" });
       }
       let outcome: QaOutcome;
@@ -240,10 +286,10 @@ export function qaHandler(route: QaRoute, template: string, run: (url: URL) => P
         outcome = UNAVAILABLE;
       }
       if (outcome.ok) {
-        if (!(await audit(route, label, "ok", rid))) return fail(rid, "UNAVAILABLE");
+        if (!(await auditQa(route, label, "ok", rid))) return fail(rid, "UNAVAILABLE");
         return ok(rid, outcome.data);
       }
-      await audit(route, label, outcome.code.toLowerCase(), rid);
+      await auditQa(route, label, outcome.code.toLowerCase(), rid);
       return fail(rid, outcome.code, outcome.field);
     } catch {
       return fail(rid, "UNAVAILABLE");
@@ -251,7 +297,7 @@ export function qaHandler(route: QaRoute, template: string, run: (url: URL) => P
   });
 }
 
-/** `/api/qa` and every unknown QA path (§7.9): the 404 envelope, enabled or not, with no auth check and no audit row. */
+/** `/api/qa` and every unknown QA path (§7.9): the 404 envelope, with no auth check and no audit row. */
 export function qaNotFound(template: string): (request: Request) => Promise<Response> {
   return withRequestLog(template, async (request: Request) => fail(requestIdOf(request), "NOT_FOUND"));
 }
