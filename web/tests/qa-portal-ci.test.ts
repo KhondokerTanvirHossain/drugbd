@@ -7,9 +7,12 @@ const root = join(__dirname, "..", "..");
 const read = (p: string) => readFileSync(join(root, p), "utf8");
 
 describe("QA portal in CI (§10.6, §11.4)", () => {
-  it("the e2e stack lists a qa account on REVIEWERS, and the e2e sessions can sign in as it", () => {
-    expect(read("deploy/docker-compose.ci.yml")).toMatch(/REVIEWERS: [^\n]*\bqa@e2e\.test:qa\b/);
+  it("the e2e stack lists two qa accounts on REVIEWERS, and the e2e sessions can sign in as them", () => {
+    const reviewers = read("deploy/docker-compose.ci.yml").match(/REVIEWERS: ([^\n]*)/)?.[1].split(",") ?? [];
+    expect(reviewers).toContain("qa@e2e.test:qa");
+    expect(reviewers).toContain("qa-empty@e2e.test:qa");   // the empty key list's account (§11.4 axe)
     expect(read("web/e2e/session.ts")).toContain('qa: "qa@e2e.test"');
+    expect(read("web/e2e/session.ts")).toContain('E2E_QA_EMPTY = "qa-empty@e2e.test"');
   });
 
   it("Lighthouse checks /review/qa against the §10.6 row, signed in as the e2e QA account, after the 50-key seed", () => {

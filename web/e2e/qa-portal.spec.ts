@@ -1,15 +1,16 @@
 import AxeBuilder from "@axe-core/playwright";
 import { createHash, randomBytes } from "node:crypto";
 import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
-import { insertQaKey, revokeQaKeysOf } from "./db";
+import { insertQaKey, qaKeyLastUsed, revokeQaKeysOf } from "./db";
 import { PILOT_IDS } from "./review-helpers";
-import { BASE_URL, E2E_EMAILS, signInAs } from "./session";
+import { BASE_URL, E2E_EMAILS, E2E_QA_EMPTY, signInAs } from "./session";
 import { installTurnstileFake } from "./turnstile-fake";
 
 /*
  * §11.4 QA flow (QA portal, D66, D67): the qa role sees only the QA section; an engineer creates a key on /review/qa, sees it
- * once, uses it against the QA API, revokes it, and it stops working; the 5-active cap; a pharmacist's page and DB key. The
- * hosted MCP steps belong to the hosted MCP task.
+ * once, uses it against the QA API, revokes it, and it stops working; a senior creates one too, and a sixth active key is
+ * refused (by the API, then by the page); a pharmacist's page, menu and DB key. The hosted MCP steps belong to the hosted
+ * MCP task.
  */
 
 const KEY = /^idqa_[A-Za-z0-9_-]{43}$/;
@@ -113,12 +114,36 @@ test("an engineer creates a key, sees it once, uses it, revokes it, and it stops
   expect((await page.request.get("/api/qa/v1/batches", { headers: bearer(key) })).status()).toBe(401);
 });
 
-test("the 5-active cap: Create key is aria-disabled and a press sends nothing (§5.18, §7.10.2)", async ({ context, page }) => {
+test("a senior creates a key from the account menu; a sixth active key is refused by the API, then by the page (§5.18, §7.10.2)", async ({ context, page }) => {
   revokeQaKeysOf(E2E_EMAILS.senior);
-  for (let i = 1; i <= 5; i++) insertQaKey(E2E_EMAILS.senior, `Seeded ${i}`, sha256(newKey()));
+  for (let i = 1; i <= 3; i++) insertQaKey(E2E_EMAILS.senior, `Seeded ${i}`, sha256(newKey()));
   await installTurnstileFake(page, "pass");
   await signInAs(context, "senior", "Sabina Rahman");
-  await page.goto("/review/qa");
+  await page.goto("/review/pairs");
+  await page.locator("header details summary").click();
+  await page.locator("details").getByRole("link", { name: "QA tools" }).click();
+  await expect(page).toHaveURL(/\/review\/qa$/);
+
+  // A senior can create a key (the fourth active one).
+  const key = await createKey(page, "Senior laptop");
+  await page.getByRole("button", { name: "I've saved it" }).click();
+  await expect(cell(page, "Senior laptop", 4)).toHaveText("Active");
+  expect((await page.request.get("/api/qa/v1/batches", { headers: bearer(key) })).status()).toBe(200);
+
+  // A fifth key appears behind the page's back (another tab): the page still counts four, so the press reaches the API,
+  // whose creation transaction refuses the sixth active key. No key is shown.
+  insertQaKey(E2E_EMAILS.senior, "Other tab", sha256(newKey()));
+  await page.getByLabel("Key name").fill("Sixth");
+  await expect(page.getByText("Bot check passed")).toBeVisible();
+  await page.getByRole("button", { name: "Create key" }).click();
+  await expect(page.getByText("You already have 5 active keys.", { exact: true })).toBeVisible();
+  await expect(page.getByText("No key was created. Revoke one, then create another.")).toBeVisible();
+  await expect(live(page)).toContainText("You already have 5 active keys.");
+  await expect(page.locator("#qa-new-key")).toHaveCount(0);
+  await expect(page.getByLabel("Key name")).toHaveValue("Sixth");
+
+  // With five active keys listed, Create key is aria-disabled and a press sends nothing.
+  await page.reload();
   const create = page.getByRole("button", { name: "Create key" });
   await expect(create).toHaveAttribute("aria-disabled", "true");
   await expect(page.getByText("You have 5 active keys. Revoke one to create another.")).toBeVisible();
@@ -133,15 +158,22 @@ test("the 5-active cap: Create key is aria-disabled and a press sends nothing (�
 
 test("a pharmacist: the info banner and no key read; a key row owned by a pharmacist is 401 (§5.18, §7.10.4)", async ({ context, page }) => {
   const key = newKey();
-  insertQaKey(E2E_EMAILS.pharmacist, "Pharmacist key", sha256(key));
-  expect((await page.request.get("/api/qa/v1/batches", { headers: bearer(key) })).status()).toBe(401);
+  const id = insertQaKey(E2E_EMAILS.pharmacist, "Pharmacist key", sha256(key));
+  const res401 = await page.request.get("/api/qa/v1/batches", { headers: bearer(key) });
+  expect(res401.status()).toBe(401);
+  expect(await res401.text()).not.toContain(E2E_EMAILS.pharmacist);
+  expect(qaKeyLastUsed(id)).toBe("");   // a key that does not authenticate is never touched (§7.10.4)
   await signInAs(context, "pharmacist", "Farhana Islam");
   const res = await page.goto("/review/qa");
   expect(res?.status()).toBe(200);
   await expect(page.getByRole("heading", { level: 1, name: "QA tools are for QA team members, engineers and senior pharmacists." })).toBeVisible();
   await expect(page.getByRole("link", { name: "Open the review desk" })).toHaveAttribute("href", "/review");
   await expect(page.getByText("Your keys")).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "QA tools" })).toHaveCount(0);
+  // No "QA tools" anywhere: not in the toolbar and not in the (closed or open) account menu.
+  await expect(page.locator('a[href="/review/qa"]')).toHaveCount(0);
+  await page.locator("header details summary").click();
+  await expect(page.locator("details").getByRole("link", { name: "Review desk" })).toBeVisible();
+  await expect(page.locator('a[href="/review/qa"]')).toHaveCount(0);
   revokeQaKeysOf(E2E_EMAILS.pharmacist);
 });
 
@@ -167,22 +199,40 @@ async function axe(page: Page, state: string): Promise<void> {
 type Look = { name: string; theme: "light" | "dark"; forced: boolean };
 const LOOKS: Look[] = [{ name: "light", theme: "light", forced: false }, { name: "dark", theme: "dark", forced: false },
   { name: "forced colours", theme: "light", forced: true }];
-async function contextFor(browser: Browser, look: Look, role: "engineer" | "pharmacist" | "qa"): Promise<BrowserContext> {
+async function contextFor(browser: Browser, look: Look, role: "engineer" | "pharmacist" | "qa", email?: string): Promise<BrowserContext> {
   const context = await browser.newContext({ baseURL: BASE_URL, colorScheme: look.theme, forcedColors: look.forced ? "active" : "none" });
   await context.addCookies([{ name: "intellidrugs-theme", value: look.theme, url: BASE_URL }]);
-  await signInAs(context, role);
+  await signInAs(context, role, "E2E Reviewer", email);
   return context;
 }
 
 for (const look of LOOKS) {
   test(`axe (${look.name}): /review/qa states, the pharmacist banner and the QA account view`, async ({ browser }) => {
-    // A qa account makes the keys here (the engineer's budget of 10 a day is the flow test's).
+    // The empty list: the second qa account never owns a key.
+    const empty = await contextFor(browser, look, "qa", E2E_QA_EMPTY);
+    const p0 = await empty.newPage();
+    await installTurnstileFake(p0, "pass");
+    await p0.goto("/review/qa");
+    await expect(p0.getByText("You have no keys yet.")).toBeVisible();
+    await axe(p0, "empty list");
+    await empty.close();
+
+    // A qa account makes the keys here (the engineer's budget of 10 a day is the flow test's). Its list holds a key of
+    // every status: an active and an expired seeded row, and a revoked one.
+    insertQaKey(E2E_EMAILS.qa, `Axe active ${look.name}`, sha256(newKey()));
+    insertQaKey(E2E_EMAILS.qa, `Axe expired ${look.name}`, sha256(newKey()), { ageHours: 2161 });
+    insertQaKey(E2E_EMAILS.qa, `Axe revoked ${look.name}`, sha256(newKey()), { revoked: true });
     const eng = await contextFor(browser, look, "qa");
     const page = await eng.newPage();
     await installTurnstileFake(page, "pass");
     await page.goto("/review/qa");
     await expect(page.getByText("Bot check passed")).toBeVisible();
-    await axe(page, "list");
+    await expect(cell(page, `Axe active ${look.name}`, 4)).toHaveText("Active");
+    await expect(cell(page, `Axe expired ${look.name}`, 4)).toHaveText("Expired");
+    await expect(cell(page, `Axe revoked ${look.name}`, 4)).toHaveText("Revoked");
+    await expect(keyRow(page, `Axe expired ${look.name}`).getByRole("button")).toHaveCount(0);   // Revoke on active rows only
+    await expect(keyRow(page, `Axe revoked ${look.name}`).getByRole("button")).toHaveCount(0);
+    await axe(page, "list with every status");
     const name = `Axe ${look.name}`;
     await createKey(page, name);
     await axe(page, "new-key panel");
@@ -191,6 +241,7 @@ for (const look of LOOKS) {
     await axe(page, "revoke confirmation");
     await page.getByRole("button", { name: "Revoke key", exact: true }).click();
     await expect(cell(page, name, 4)).toHaveText("Revoked");
+    revokeQaKeysOf(E2E_EMAILS.qa);
     await eng.close();
 
     const failing = await contextFor(browser, look, "engineer");
