@@ -122,7 +122,7 @@ a { color: var(--accent); }
     <p class="lede">How the Bangladesh drug knowledge base is stored in PostgreSQL. It covers the brand, clinical drug and substance levels, the crosswalk codes, the DDInter interaction mirror, and the evidence and review tables behind the approval gate.</p>
     <div class="meta">
       <span>Schema as of 12 Oct 2026</span>
-      <span>Migrations V1–V7 (V7, db-schema-v1.2, goes live with the P1C release)</span>
+      <span>Migrations V1–V8 (V8, db-schema-v1.3, adds the qa_read audit event)</span>
       <span>PostgreSQL 16</span>
       <span>Row counts: live pilot (10 medicines)</span>
     </div>
@@ -449,7 +449,7 @@ erDiagram
   audit_event {
     bigint id PK
     timestamptz at
-    text event "sign_in decision pair_decision senior_open ..."
+    text event "sign_in decision pair_decision senior_open qa_read ..."
     text actor_email "never public"
     text actor_role "pharmacist | engineer | senior | user"
     text target_type
@@ -550,7 +550,7 @@ erDiagram
           <tr><td class="t">review_decision</td><td class="mono">id</td><td>Append-only OK / issue decisions with reviewer role and time.</td><td class="n">0</td></tr>
           <tr><td class="t">flag</td><td class="mono">id</td><td>Problems reported by signed-in users, open or resolved.</td><td class="n">0</td></tr>
           <tr><td class="t">item_snapshot</td><td class="mono">batch_id, concept_id, extracted_at</td><td>The record as each pipeline stamp left it, grouped by run. Append-only.</td><td class="n">0</td></tr>
-          <tr><td class="t">audit_event</td><td class="mono">id</td><td>Who did what and when: sign-ins, decisions, rejections, flags. Append-only.</td><td class="n">0</td></tr>
+          <tr><td class="t">audit_event</td><td class="mono">id</td><td>Who did what and when: sign-ins, decisions, rejections, flags, QA API reads. Append-only.</td><td class="n">0</td></tr>
           <tr><td class="t">pair_review</td><td class="mono">id</td><td>Senior pharmacists' pair decisions (reviewed or issue) with the content reviewed. Append-only.</td><td class="n">0</td></tr>
         </tbody>
       </table>

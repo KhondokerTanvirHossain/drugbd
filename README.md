@@ -151,6 +151,6 @@ build. Never set `INTELLIDRUGS_E2E` on the host.
 
 ## Database changes
 
-The schema is **locked** (`db-schema-v1.2`, migrations V1–V7). Never edit an applied migration. To change the
+The schema is **locked** (`db-schema-v1.3`, migrations V1–V8). Never edit an applied migration. To change the
 schema, add a new `db/migrations/V<next>__<what>.sql` and its checksum line in `db/migrations.lock` in the same
 reviewed PR. CI (`schema-lock`) enforces this. See [docs/design/database.md](docs/design/database.md).

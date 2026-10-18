@@ -1,4 +1,4 @@
-# Database schema lock — db-schema-v1.2 (V1-V5 approved by the product owner on 2026-10-12; V6 added by the IntelliDrugs P0 plan; V7 by the P1C plan).
+# Database schema lock — db-schema-v1.3 (V1-V5 approved by the product owner on 2026-10-12; V6 added by the IntelliDrugs P0 plan; V7 by the P1C plan; V8 by the QA plan).
 # sha256  file. Applied migrations are immutable. A schema change = new V<n>__name.sql + its line here, in one reviewed PR.
 c4a6d7133689b7fd5898a6f83559f098a659001478de0979684c69f8cbfabf80  V1__init.sql
 786ac9fd3aa2680ef221c4e35d60cec22e9b00c18f06d29a771e8952e0c39a90  V2__batches.sql
@@ -7,3 +7,4 @@ c4a6d7133689b7fd5898a6f83559f098a659001478de0979684c69f8cbfabf80  V1__init.sql
 ed481c6134c22571c472d664186945b6ea4ccbf0055bb13103810c38102d69c2  V5__ddinter_text_nullable.sql
 a3e9ab7dc47e643002ed2e1fc09a69c97818ff41ae01af970fd549eb765ac7fd  V6__item_snapshot_and_audit.sql
 6f8aae64481337d46af94dfb6ccf7829edefa939a66386b9ee8948d199c1ed7d  V7__senior_review.sql
+a56d9f949b960cbc7927ec6b99dfa7c81644dc9828369d4391b072fc8551e374  V8__qa_read_audit.sql
