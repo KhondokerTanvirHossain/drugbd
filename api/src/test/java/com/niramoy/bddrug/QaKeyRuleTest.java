@@ -48,9 +48,14 @@ class QaKeyRuleTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"", "   ", " 　", "tab\tinside", "nul\u0000", "del\u007F", "c1\u0085x", "c1\u009Fx", "esc\u001Bx",
-        "line inside", "para inside", "\u001Cfile-separator-led"})
+        "\u001Cfile-separator-led"})
     void emptyNamesAndNamesWithControlCharactersAreRefused(String raw) {
         assertThat(QaKeyRule.name(raw)).isNull();
+    }
+
+    @Test void lineAndParagraphSeparatorsAreTrimmedAtTheEndsAndKeptInside() {
+        // JavaScript's trim() removes them at the ends; inside a name they are not control characters (§7.10.2)
+        assertThat(QaKeyRule.name("\u2028a\u2029b\u2029")).isEqualTo("a\u2029b");
     }
 
     @Test void aNullNameIsRefused() {

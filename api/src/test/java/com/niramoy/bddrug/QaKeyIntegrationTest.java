@@ -164,6 +164,8 @@ class QaKeyIntegrationTest {
             .expectBody().jsonPath("$.data.name").isEqualTo("ল্যাপটপ");
         create(internal(web), createBody(email, "senior", "n".repeat(40), hash())).expectStatus().isCreated();
         create(internal(web), createBody(email, "engineer", "x", hash())).expectStatus().isCreated();
+        // a separator inside a name is not a control character for the API or for V9's [[:cntrl:]] check (never a 500)
+        create(internal(web), createBody(owner("sep"), "qa", "a\u2029b \u00A0c", hash())).expectStatus().isCreated();
     }
 
     private void expectInvalid(WebTestClient.ResponseSpec res, String field) {
@@ -185,7 +187,7 @@ class QaKeyIntegrationTest {
             b.put("ownerRole", bad);
             expectInvalid(create(internal(web), b), "ownerRole");
         }
-        for (Object bad : new Object[]{null, "", "   ", "n".repeat(41), "tab\tname", "line break", "c1\u0085x"}) {
+        for (Object bad : new Object[]{null, "", "   ", "n".repeat(41), "tab\tname", "c1\u0085x", "del\u007Fx"}) {
             Map<String, Object> b = createBody(email, "qa", "CI laptop", hash());
             b.put("name", bad);
             expectInvalid(create(internal(web), b), "name");

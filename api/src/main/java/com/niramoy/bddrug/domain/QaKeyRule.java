@@ -36,12 +36,11 @@ public final class QaKeyRule {
     }
 
     /**
-     * A control character a name may not hold: C0 (U+0000–U+001F), DEL and C1 (U+007F–U+009F), and the line and paragraph
-     * separators U+2028 and U+2029, which PostgreSQL's {@code [[:cntrl:]]} (V9's name check) also counts as control characters
-     * in a UTF-8 locale, so the API refuses them as a 400 before the database would.
+     * A control character a name may not hold (§7.10.2): C0 (U+0000–U+001F), DEL and C1 (U+007F–U+009F), the characters
+     * PostgreSQL's {@code [[:cntrl:]]} (V9's name check) matches, so the API refuses them as a 400 before the database would.
      */
     static boolean isControl(int c) {
-        return c <= 0x1F || (c >= 0x7F && c <= 0x9F) || c == 0x2028 || c == 0x2029;
+        return c <= 0x1F || (c >= 0x7F && c <= 0x9F);
     }
 
     /** The name trimmed of white space, or null when it is empty, longer than 40 code points, or holds a control character. */
