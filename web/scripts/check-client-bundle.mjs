@@ -6,7 +6,7 @@ import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /** Server-only secrets: their names must never appear in a client chunk (that would mean code reading them shipped). */
-export const SECRET_ENV_NAMES = ["INTERNAL_API_TOKEN", "SESSION_SECRET", "TURNSTILE_SECRET_KEY"];
+export const SECRET_ENV_NAMES = ["INTERNAL_API_TOKEN", "SESSION_SECRET", "TURNSTILE_SECRET_KEY", "QA_API_KEYS"];
 /** Token values used by the tests; a client chunk holding one means test or server code leaked into the bundle. */
 export const TEST_TOKEN_VALUES = ["test-internal-token-0123456789abcdef"];
 const MIN_VALUE_LENGTH = 16;   // shorter values are not secrets worth matching and would match by chance

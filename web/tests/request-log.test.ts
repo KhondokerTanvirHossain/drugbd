@@ -15,6 +15,12 @@ describe("routeTemplate", () => {
     ["/review/substances/BDS-000003", "/review/substances/[bdsId]"],
     ["/review/flags", "/review/flags"], ["/__/auth/handler", "/__/auth/[...path]"], ["/", "/"], ["/api/session", "/api/session"],
     ["/partners", "/partners"], ["/partners/request", "/partners/request"], ["/flag", "/flag"], ["/privacy", "/privacy"],
+    // QA (§7.9): the middleware's own 429 lines name the QA route template, never an id or a query value
+    ["/api/qa/v1/batches", "/api/qa/v1/batches"], ["/api/qa/v1/batches/0001-pilot", "/api/qa/v1/batches/[batchId]"],
+    ["/api/qa/v1/batches/0001-pilot/records/186-0030-006--napa", "/api/qa/v1/batches/[batchId]/records/[conceptId]"],
+    ["/api/qa/v1/records?filter=stage_warn&batch=0001-pilot", "/api/qa/v1/records"],
+    ["/api/qa/v1/substances/BDS-000003/pairs", "/api/qa/v1/substances/[bdsId]/pairs"],
+    ["/api/qa", "/api/qa/[[...rest]]"], ["/api/qa/v2/someone@example.org", "/api/qa/[[...rest]]"],
   ])("%s is logged as %s", (path, template) => {
     expect(routeTemplate(path)).toBe(template);
   });
@@ -26,6 +32,7 @@ describe("routeTemplate", () => {
 
   it("never echoes an unknown path", () => {
     expect(routeTemplate("/someone@example.org/x")).toBe(UNMATCHED_ROUTE);
+    expect(routeTemplate("/api/qax")).toBe(UNMATCHED_ROUTE);
   });
 });
 

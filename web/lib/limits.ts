@@ -16,6 +16,10 @@ export function createLimits(now: () => number = Date.now, overrides: { anonymou
     partner: createWindowLimiter({ limit: 3, windowMs: 86_400_000, now }),
     /** decision_denied audit rows (§5.15, §7.6): 1 per minute per (actor, outcome); at most 10,000 keys (LRU). */
     deniedAudit: createWindowLimiter({ limit: 1, windowMs: 60_000, now, maxKeys: 10_000 }),
+    /** QA API (§7.9.1): 60 requests per minute per key label, sliding; every authenticated request counts. */
+    qa: createWindowLimiter({ limit: 60, windowMs: 60_000, now }),
+    /** Throttled qa_read rows (§7.9.6): 1 per minute per (route, hashed IP) for 401s and per label for 429s; 10,000 keys (LRU). */
+    qaDeniedAudit: createWindowLimiter({ limit: 1, windowMs: 60_000, now, maxKeys: 10_000 }),
   };
 }
 export type Limits = ReturnType<typeof createLimits>;
@@ -36,6 +40,22 @@ export function allowAccountAction(kind: AccountAction, email: string, limits: L
  * only; the caller's answer never changes. Every decision_denied writer (the legacy review action, P1B's desk) uses it.
  */
 export function allowDeniedAudit(outcome: string, email: string | null, ip: string, limits: Limits = LIMITS): boolean {
-  const actor = email ? `a:${accountKey(email)}` : `i:${createHash("sha256").update(ip).digest("hex")}`;
+  const actor = email ? `a:${accountKey(email)}` : `i:${ipHash(ip)}`;
   return limits.deniedAudit.allow(`${outcome}:${actor}`);
+}
+
+const ipHash = (ip: string) => createHash("sha256").update(ip).digest("hex");
+
+/**
+ * True when one more `unauthorized` qa_read row may be written now for this QA route and client (and counts it): one per
+ * minute per (route, IP), the IP hashed with SHA-256 in memory and never stored or logged (§7.9.6). A spent window skips
+ * the audit write only; the 401 is answered either way.
+ */
+export function allowQaUnauthorizedAudit(route: string, ip: string, limits: Limits = LIMITS): boolean {
+  return limits.qaDeniedAudit.allow(`unauthorized:${route}:${ipHash(ip)}`);
+}
+
+/** True when one more `rate_limited` qa_read row may be written now for this key label (one per minute, §7.9.6). */
+export function allowQaRateLimitedAudit(label: string, limits: Limits = LIMITS): boolean {
+  return limits.qaDeniedAudit.allow(`rate_limited:${label}`);
 }

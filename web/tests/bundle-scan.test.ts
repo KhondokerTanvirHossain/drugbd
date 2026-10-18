@@ -16,7 +16,7 @@ const tree = (files: Record<string, string>) => {
 describe("client bundle scan (runs after every next build)", () => {
   it("looks for the secret env names, their current values and the test token values", () => {
     const needles: string[] = needlesFrom({ INTERNAL_API_TOKEN: "prod-token-value-0123456789abcdef0123", SESSION_SECRET: "" });
-    expect(needles).toEqual(expect.arrayContaining(["INTERNAL_API_TOKEN", "SESSION_SECRET", "TURNSTILE_SECRET_KEY",
+    expect(needles).toEqual(expect.arrayContaining(["INTERNAL_API_TOKEN", "SESSION_SECRET", "TURNSTILE_SECRET_KEY", "QA_API_KEYS",
       "prod-token-value-0123456789abcdef0123", ...TEST_TOKEN_VALUES]));
     expect(needles).not.toContain("");
     expect(TEST_TOKEN_VALUES).toContain("test-internal-token-0123456789abcdef");
