@@ -2,6 +2,9 @@
 .shell { min-height: 100dvh; display: flex; flex-direction: column; background: var(--canvas); color: var(--fg); }
 .toolbar { position: sticky; top: 0; z-index: 2; }
 .toolbarRight { margin-left: auto; display: flex; align-items: center; gap: var(--s3); }
+/* §5.1 (QA portal): the plain "QA tools" link; current on /review/qa. At least 24 px tall (§10.4). */
+.toolbarLink { min-height: 24px; display: inline-flex; align-items: center; font-size: 13px; white-space: nowrap; }
+.toolbarLink[aria-current="page"] { color: var(--fg); font-weight: 600; text-decoration: none; }
 /* The link around <Wordmark size={17} sub="Review" />: the size comes from Wordmark's own class (P1A: 13 | 16 | 17 | 19 | 20 | 28). */
 .wordmark { color: var(--fg); text-decoration: none; min-height: 24px; display: inline-flex; align-items: center; }
 .page { width: 100%; max-width: 860px; margin: 0 auto; padding: var(--s6) var(--s4) var(--s7); display: flex; flex-direction: column; gap: var(--s5); }

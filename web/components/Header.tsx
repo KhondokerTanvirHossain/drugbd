@@ -2,10 +2,10 @@ import AccountMenu from "@/components/AccountMenu";
 import ThemeSwitch from "@/components/ThemeSwitch";
 import { buttonClass } from "@/components/ui/Button";
 import Wordmark from "@/components/ui/Wordmark";
-import { DESK_NEW, P1C_COPY } from "@/lib/copy";
+import { DESK_NEW, P1C_COPY, QA_COPY } from "@/lib/copy";
 import { NAV } from "@/lib/public-copy";
 import { DESK } from "@/lib/review-copy";
-import { ROLE_LABEL, isReviewer } from "@/lib/reviewers";
+import { ROLE_LABEL, canUseQa, isReviewer } from "@/lib/reviewers";
 import type { Session } from "@/lib/session";
 import type { Theme } from "@/lib/theme";
 import styles from "./Header.module.css";
@@ -91,9 +91,11 @@ export default function Header({ session, theme, batchId = null, path = "/", q =
                 <p><span className="role-badge">{ROLE_LABEL[session.role]}</span>
                   {batchId && <> {DESK.batchPrefix} <span className="mono">{batchId}</span></>}</p>
               )}
+              {session.role === "qa" && <p><span className="role-badge">{ROLE_LABEL.qa}</span></p>}
               {reviewer && <a href="/review">{DESK.reviewDesk}</a>}
               {reviewer && <a href="/review/flags">{DESK_NEW.reviewLists.flagsLink}</a>}
               {reviewer && session.role === "senior" && <a href="/review/pairs">{P1C_COPY.senior.seniorReview}</a>}
+              {canUseQa(session.role) && <a href="/review/qa">{QA_COPY.role.qaTools}</a>}
               <ThemeSwitch value={theme} />
               <form method="post" action="/signout"><button type="submit" className={buttonClass("plain", "sm")}>Sign out</button></form>
             </div>
