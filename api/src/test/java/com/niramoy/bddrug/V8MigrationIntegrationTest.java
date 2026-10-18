@@ -12,7 +12,10 @@ import static com.niramoy.bddrug.TestSupport.*;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/** Spec §7.9.6 (D63): V8 widens audit_event_event_check with qa_read and nothing else (db-schema-v1.3). */
+/**
+ * Spec §7.9.6 (D63): V8 widens audit_event_event_check with qa_read and nothing else (db-schema-v1.3). The schema is migrated
+ * to V8 only: V9 (§7.10.2) widens the same checks again, and V9MigrationIntegrationTest covers that.
+ */
 @Testcontainers
 class V8MigrationIntegrationTest {
     @Container static PostgreSQLContainer<?> pg = new PostgreSQLContainer<>("postgres:16");
@@ -21,7 +24,7 @@ class V8MigrationIntegrationTest {
     static final String EVENTS = "sign_in,sign_in_denied,sign_out,review_open,evidence_open,decision,decision_rejected,decision_denied," +
         "flag_created,flag_resolved,partner_request,pair_decision,pair_decision_rejected,senior_open,qa_read";
 
-    @BeforeAll static void seed() throws Exception { PilotSeed.migrateAndSeed(pg); }
+    @BeforeAll static void seed() throws Exception { PilotSeed.migrateAndSeed(pg, "8"); }
 
     private static String row(String event, String role, String targetType, String targetId, String outcome, String rid) {
         return "INSERT INTO ops.audit_event (event, actor_email, actor_role, target_type, target_id, outcome, request_id) VALUES ('" +
