@@ -42,6 +42,8 @@ export const ENDPOINTS: Endpoint[] = [
   { method: "GET", path: "/v1/review/substances?q=&page=", what: "Senior review: substances with their pair counts across all batches", access: ["Reviewer"] },
   { method: "GET", path: "/v1/review/substances/{bdsId}", what: "Senior review: one substance's pairs across all batches", access: ["Reviewer"] },
   { method: "POST", path: "/v1/review/pairs/{a}/{b}/decisions", what: "Records a senior's pair decision. A changed pair or a newer review gets 409.", access: ["Token"] },
+  { method: "GET", path: "/v1/qa/batches/{b}/items", what: "For the read-only QA API: a batch's records with each stage's status and note. Internal token only.", access: ["Token"] },
+  { method: "GET", path: "/v1/qa/records?filter=&stage=&batch=&page=", what: "For the read-only QA API: records matching a problem filter, 100 a page. Internal token only.", access: ["Token"] },
   { method: "POST", path: "/v1/flags", what: "Creates a problem report", access: ["Token"] },
   { method: "GET", path: "/v1/flags?status=", what: "Open or resolved problem reports", access: ["Token"] },
   { method: "POST", path: "/v1/flags/{id}/resolve", what: "Marks a report resolved", access: ["Token"] },

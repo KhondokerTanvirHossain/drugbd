@@ -75,3 +75,31 @@ describe("partner-requests runbook (§2.2, §6.9)", () => {
     expect(readFileSync(repo("README.md"), "utf8")).toContain("docs/runbooks/partner-requests.md");
   });
 });
+
+describe("QA API keys runbook (§7.9.1, §12.4)", () => {
+  const path = repo("docs/runbooks/qa-api-keys.md");
+
+  it("makes a key with openssl, hashes it with printf (never echo), and stores only the hash", () => {
+    expect(existsSync(path)).toBe(true);
+    const md = readFileSync(path, "utf8");
+    expect(md).toContain("KEY=$(openssl rand -hex 32)");
+    expect(md).toContain("printf %s \"$KEY\" | shasum -a 256");
+    expect(md).toContain("printf %s \"$KEY\" | sha256sum");
+    expect(md).not.toMatch(/echo\s+"?\$KEY/);
+    expect(md).toContain("label:sha256hex");
+  });
+
+  it("recreates the web container only, rotates by adding before removing, and holds no key, hash or email", () => {
+    const md = readFileSync(path, "utf8");
+    expect(md).toContain("cd ~/drugdb/deploy && docker-compose up -d --no-deps web");
+    expect(md).not.toMatch(/up -d web\b/);
+    expect(md).toMatch(/## Rotate a key\n\nAdd the new key before removing the old one/);
+    expect(md).toContain("## Revoke a key");
+    expect(md).not.toMatch(/\b[0-9a-f]{64}\b/);
+    expect(md).not.toMatch(/[A-Za-z0-9._%+-]+@(?!example\.com\b)[A-Za-z0-9.-]+\.[a-z]{2,}/);
+  });
+
+  it("the README links to it", () => {
+    expect(readFileSync(repo("README.md"), "utf8")).toContain("docs/runbooks/qa-api-keys.md");
+  });
+});

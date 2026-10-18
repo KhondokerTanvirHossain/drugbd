@@ -8,8 +8,11 @@ const LABELS = {
   public: { closed: "Show full text", open: "Show less" },
 } as const;
 
-/** Island (§4.2): line-clamp toggle for server-rendered DDInter text. Renders nothing until hydrated. */
-export default function Expander({ targetId, label }: { targetId: string; label: "reviewer" | "public" }) {
+/**
+ * Island (§4.2): line-clamp toggle for server-rendered DDInter text. Renders nothing until hydrated. `describedBy` is the
+ * id of the text's kind label, for a card holding two Expanders (§6.7.3), so the two buttons are told apart.
+ */
+export default function Expander({ targetId, label, describedBy }: { targetId: string; label: "reviewer" | "public"; describedBy?: string }) {
   const [ready, setReady] = useState(false);
   const [open, setOpen] = useState(false);
 
@@ -27,7 +30,8 @@ export default function Expander({ targetId, label }: { targetId: string; label:
     setOpen(next);
   };
   return (
-    <button type="button" className="btn btn--plain btn--sm" aria-controls={targetId} aria-expanded={open} onClick={toggle}>
+    <button type="button" className="btn btn--plain btn--sm" aria-controls={targetId} aria-describedby={describedBy}
+      aria-expanded={open} onClick={toggle}>
       {open ? LABELS[label].open : LABELS[label].closed}
     </button>
   );

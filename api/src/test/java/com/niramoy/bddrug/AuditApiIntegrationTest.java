@@ -166,4 +166,51 @@ class AuditApiIntegrationTest {
         post(internal(web), body).expectStatus().isBadRequest().expectBody().jsonPath("$.errors[0].field").isEqualTo("targetType");
         assertThat(rows()).isEqualTo(before);
     }
+
+    // ---- QA (§7.9.6): qa_read with target type qa_route, no actor
+
+    @Test void qaReadWithItsQaRouteTargetIs201AndCarriesNoActor() throws Exception {
+        for (String[] t : new String[][]{{"qa-checker/record", "ok"}, {"qa-checker/records", "invalid_query"}, {"batches", "unauthorized"},
+                {"qa_2/pairs", "rate_limited"}, {"qa-checker/batch", "not_found"}, {"qa-checker/batches", "unavailable"}}) {
+            String rid = UUID.randomUUID().toString();
+            Map<String, Object> body = event("qa_read", t[1], rid);
+            body.put("targetType", "qa_route");
+            body.put("targetId", t[0]);
+            post(internal(web), body).expectStatus().isCreated();
+            assertThat(text(pg, "SELECT event || '|' || coalesce(actor_email, '-') || '|' || coalesce(actor_role, '-') || '|' || " +
+                "target_type || '|' || target_id || '|' || outcome FROM ops.audit_event WHERE request_id = '" + rid + "'"))
+                .isEqualTo("qa_read|-|-|qa_route|" + t[0] + "|" + t[1]);
+        }
+    }
+
+    private static Map<String, Object> qa(String targetType, String targetId) {
+        Map<String, Object> b = event("qa_read", "ok", UUID.randomUUID().toString());
+        b.put("targetType", targetType);
+        b.put("targetId", targetId);
+        return b;
+    }
+
+    @Test void aQaReadTargetIsALabelAndARouteNameOnlyAndNeverHasAnActor() throws Exception {
+        long before = rows();
+        expectInvalid(qa("qa_key", "qa-checker/record"), "targetType");
+        expectInvalid(qa(null, null), "targetType");
+        // a path id, a query value, a key or its hash, an unknown route, a bad label: never a qa_route target
+        for (String bad : List.of("qa-checker/batches/0001-pilot", "qa-checker/record/N-1", "qa-checker/records?filter=x", "qa-checker/unknown",
+                "Qa-Checker/record", "_qa/record", "q".repeat(33) + "/record", "a".repeat(64), "qa checker/record", "record/qa-checker"))
+            expectInvalid(qa("qa_route", bad), "targetId");
+        expectInvalid(qa("qa_route", null), "targetId");
+        Map<String, Object> b = qa("qa_route", "qa-checker/record");
+        b.put("actorEmail", "pharm.reviewer@example.org");
+        expectInvalid(b, "actorEmail");
+        b = qa("qa_route", "qa-checker/record");
+        b.put("actorRole", "user");
+        expectInvalid(b, "actorRole");
+        b = event("senior_open", "shown", UUID.randomUUID().toString());
+        b.put("targetType", "qa_route");
+        b.put("targetId", "records");
+        expectInvalid(b, "targetType");
+        assertThat(rows()).isEqualTo(before);
+        // the longest label (32 characters) with the longest route fits
+        post(internal(web), qa("qa_route", "a" + "_".repeat(30) + "z/records")).expectStatus().isCreated();
+    }
 }

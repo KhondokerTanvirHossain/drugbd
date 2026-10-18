@@ -202,6 +202,44 @@ export async function getReviewDiff(batchId: string, conceptId: string, from: st
   return reviewData<ReviewDiff>(`/v1/review/batches/${enc(batchId)}/items/${enc(conceptId)}/diff?${new URLSearchParams({ from })}`);
 }
 
+// ---- QA API reads (spec §7.9): the key-gated /api/qa/v1/* handlers, server-side only, never with X-Viewer-Email. ----
+
+/** The internal API's answer to a QA read: its `data`, or its status and first error field (status 0: unreachable or no token). */
+export type QaUpstream = { ok: true; data: unknown } | { ok: false; status: number; field: string | null };
+
+/**
+ * One token-gated read for the QA API. Never throws. A 2xx whose body is not the platform envelope with `data` is status
+ * 502 (malformed). The caller has already validated and encoded every id in `path` (§7.9.2).
+ */
+export async function qaUpstream(path: string): Promise<QaUpstream> {
+  const token = internalToken();
+  if (!token) return { ok: false, status: 0, field: null };
+  let res: Response;
+  try {
+    res = await read(`${base()}${path}`, { [TOKEN_HEADER]: token });
+  } catch {
+    return { ok: false, status: 0, field: null };
+  }
+  const body = await res.json().catch(() => null);
+  if (!res.ok) {
+    const field = body?.errors?.[0]?.field;
+    return { ok: false, status: res.status, field: typeof field === "string" ? field : null };
+  }
+  if (!body || typeof body !== "object" || body.success !== true || body.data === undefined || body.data === null) {
+    return { ok: false, status: 502, field: null };
+  }
+  return { ok: true, data: body.data };
+}
+
+export const qaPath = {
+  batches: () => "/v1/review/batches",
+  batch: (batchId: string) => `/v1/qa/batches/${enc(batchId)}/items`,
+  record: (batchId: string, conceptId: string) => `/v1/review/batches/${enc(batchId)}/items/${enc(conceptId)}`,
+  records: (params: URLSearchParams) => `/v1/qa/records?${params}`,
+  /** The senior substance read with every pair (§7.7), one QA page of 50. */
+  pairs: (bdsId: string, page: number) => `/v1/review/substances/${enc(bdsId)}?${new URLSearchParams({ pairs: "all", page: String(page), size: "50" })}`,
+};
+
 // ---- Senior review (spec §7.7): unreviewed data from every batch; the pages call these for a senior session only. ----
 
 function seniorParams(q: Partial<PairQuery>, size = SENIOR_PAGE_SIZE): URLSearchParams {

@@ -36,6 +36,14 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: "22"}
       - run: cd web && npm ci && API_URL=http://api:8080 npm test && npm run build
+  # The QA MCP server (spec §7.9.8): its own package, outside web/'s build and checks.
+  qa-mcp:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: "22"}
+      - run: cd tools/qa-mcp && npm ci && npm run build && npm test
   images:
     runs-on: ubuntu-24.04
     steps:

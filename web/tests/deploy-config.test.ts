@@ -23,6 +23,13 @@ describe("deploy configuration (§12.4)", () => {
     expect(env).toMatch(/^SITE_HOST=drugdb\.eliooo\.org$/m);
     expect(env).toMatch(/^HERO_CONCEPT_ID=186-0030-006--napa$/m);
   });
+  it("QA: passes QA_API_KEYS to the web container only, empty by default, so the QA API ships disabled (§12.4)", () => {
+    expect(webService()).toContain("QA_API_KEYS: ${QA_API_KEYS:-}\n");
+    const compose = repo("deploy/docker-compose.yml");
+    expect(compose.split("QA_API_KEYS").length - 1).toBe(2);   // the web service's one line: name and interpolation
+    expect(repo("deploy/.env.example")).toMatch(/^QA_API_KEYS=$/m);
+    expect(repo("deploy/.env.example")).toContain('printf %s "$KEY" | sha256sum');
+  });
   it("the web image checks /healthz every 30 s", () => {
     expect(repo("web/Dockerfile")).toContain("HEALTHCHECK --interval=30s CMD wget -qO- http://127.0.0.1:3000/healthz || exit 1");
   });

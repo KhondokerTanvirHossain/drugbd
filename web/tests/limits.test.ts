@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allowAccountAction, allowDeniedAudit, createLimits } from "@/lib/limits";
+import { allowAccountAction, allowDeniedAudit, allowQaRateLimitedAudit, allowQaUnauthorizedAudit, createLimits } from "@/lib/limits";
 
 const burst = (allow: (k: string) => boolean, n: number) => Array.from({ length: n }, () => allow("k"));
 
@@ -69,5 +69,28 @@ describe("§9.3 limits", () => {
     const l = createLimits(() => 0);
     expect(burst((k) => l.accountDaily.allow(k), 5001).filter(Boolean)).toHaveLength(5000);
     expect(burst((k) => l.anonymousDaily.allow(k), 50_001).filter(Boolean)).toHaveLength(50_000);
+  });
+  it("QA (§7.9.1): 60 requests per minute per key label, sliding", () => {
+    let now = 0;
+    const l = createLimits(() => now);
+    expect(burst((k) => l.qa.allow(k), 61).filter(Boolean)).toHaveLength(60);
+    expect(l.qa.allow("other-label")).toBe(true);
+    now = 59_999;
+    expect(l.qa.allow("k")).toBe(false);
+    now = 60_000;
+    expect(l.qa.allow("k")).toBe(true);
+  });
+  it("QA audit throttles (§7.9.6): 401 rows 1/min per (route, IP), 429 rows 1/min per label; the IP is held hashed", () => {
+    let now = 0;
+    const l = createLimits(() => now);
+    expect(burst(() => allowQaUnauthorizedAudit("records", "203.0.113.9", l), 3).filter(Boolean)).toHaveLength(1);
+    expect(allowQaUnauthorizedAudit("batches", "203.0.113.9", l)).toBe(true);      // another route
+    expect(allowQaUnauthorizedAudit("records", "198.51.100.1", l)).toBe(true);     // another IP
+    expect(burst(() => allowQaRateLimitedAudit("checker", l), 3).filter(Boolean)).toHaveLength(1);
+    expect(allowQaRateLimitedAudit("nightly", l)).toBe(true);
+    for (const k of l.qaDeniedAudit.keys()) expect(k).not.toContain("203.0.113.9");
+    now = 60_000;
+    expect(allowQaUnauthorizedAudit("records", "203.0.113.9", l)).toBe(true);
+    expect(allowQaRateLimitedAudit("checker", l)).toBe(true);
   });
 });

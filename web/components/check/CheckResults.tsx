@@ -43,12 +43,13 @@ function routeLine(result: CheckResult, side: Side): ReactNode {
     : fillNodes(N.routeAssumedPairNoRoute, { brand: p.tradeName, id: <Mono id={c.ddinterId} /> })}</p>;
 }
 
+/** §6.7.3 item 1: the checker's alert card; with management text, DDInter's interaction description follows it (QA, D64). */
 function AlertCard({ a, i, result }: { a: CheckAlert; i: number; result: CheckResult }) {
   const known = a.severity === "major" || a.severity === "moderate" || a.severity === "minor";
   return (
     <PublicPairCard id={`chk-${i}`} severity={a.severity} heading="h4" names={`${a.a.tradeName} + ${a.b.tradeName}`} reviewFirst
       meta={known ? fill(CHECK.metaAction, { a: a.a.name, b: a.b.name, actions: a.actions.join(", ") }) : `${a.a.name} + ${a.b.name}`}
-      review={a.pairReview} text={pairText(a)} extra={<>{routeLine(result, a.a)}{routeLine(result, a.b)}</>}
+      review={a.pairReview} text={pairText(a)} description={a.interaction} extra={<>{routeLine(result, a.a)}{routeLine(result, a.b)}</>}
       source={fillNodes(PRODUCT.sourceLine, { a: <Mono id={a.ddinterA} />, b: <Mono id={a.ddinterB} /> })} />
   );
 }

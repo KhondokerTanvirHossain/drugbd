@@ -59,6 +59,8 @@ services:
       SITE_HOST: ${SITE_HOST}
       # Landing page hero product (§6.1).
       HERO_CONCEPT_ID: ${HERO_CONCEPT_ID:-}
+      # Read-only QA API keys (§7.9): label:sha256hex pairs, hashes only. Empty = the QA API is disabled (404).
+      QA_API_KEYS: ${QA_API_KEYS:-}
     depends_on: [api]
     mem_limit: 256m
     # Every 429 the middleware ends writes a log line, so anyone over the limit sets the log growth rate.

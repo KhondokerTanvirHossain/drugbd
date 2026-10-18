@@ -17,8 +17,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class PublicStatusGuardTest {
     static final Path DIR = Path.of("src/main/java/com/niramoy/bddrug/adapter/persistence");
+    /** QA (§7.9.5): R2dbcQaQueryAdapter serves the token-only /v1/qa/* reads of unreviewed data, never a public status. */
     static final Set<String> REVIEWER_ONLY = Set.of("R2dbcReviewAdapter.java", "R2dbcReviewQueryAdapter.java", "R2dbcBatchAdapter.java",
-        "R2dbcSeniorReviewAdapter.java", "R2dbcFlagAdapter.java", "R2dbcAuditAdapter.java", "ReviewSql.java", "PairReviewReader.java");
+        "R2dbcSeniorReviewAdapter.java", "R2dbcFlagAdapter.java", "R2dbcAuditAdapter.java", "ReviewSql.java", "PairReviewReader.java",
+        "R2dbcQaQueryAdapter.java");
 
     static boolean readsStatusWithoutTheRule(String source) {
         return source.contains("batch_item") && !source.contains("ReviewSql.statusOf(") && !source.contains("ReviewSql.LATEST_PUBLIC");
