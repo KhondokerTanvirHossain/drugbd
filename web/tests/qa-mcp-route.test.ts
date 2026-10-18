@@ -213,10 +213,13 @@ describe("the §7.10.6 checks, in order", () => {
   });
 
   it("6: an Accept that does not allow application/json is 406; absent, application/*, */* pass", async () => {
-    for (const accept of ["text/event-stream", "text/html", "application/xml", "application/json;q=0"]) {
+    // The most specific range that covers application/json decides (RFC 9110 §12.5.1): an explicit q=0 is a refusal.
+    for (const accept of ["text/event-stream", "text/html", "application/xml", "application/json;q=0",
+      "application/json;q=0, */*", "*/*, application/json; q=0", "application/*;q=0, */*", "application/json;q=0, application/*"]) {
       await expectRpcError(await send(rpc("ping"), { headers: { accept } }), 406, -32000, "Not acceptable");
     }
-    for (const accept of [null, "application/*", "*/*", "text/html, */*;q=0.1", "application/json"]) {
+    for (const accept of [null, "application/*", "*/*", "text/html, */*;q=0.1", "application/json",
+      "*/*;q=0, application/json", "application/*;q=0, application/json;q=0.5", "Application/JSON;Q=1"]) {
       await result(await send(rpc("ping"), { headers: { accept } }));
     }
   });

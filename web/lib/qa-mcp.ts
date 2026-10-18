@@ -43,15 +43,25 @@ function isJsonContentType(value: string | null): boolean {
   return value !== null && value.split(";", 1)[0].trim().toLowerCase() === "application/json";
 }
 
-/** Step 6: absent, or one media range that covers application/json (application/json, application/*, *\/*) with q > 0. */
+/** The ranges that cover application/json, most specific first (RFC 9110 §12.5.1). */
+const JSON_RANGES = ["application/json", "application/*", "*/*"] as const;
+
+/**
+ * Step 6: absent, or the most specific media range that covers application/json (application/json, then application/*,
+ * then *\/*) has q > 0, so "application/json;q=0, *\/*" refuses JSON. A malformed q is 0.
+ */
 function acceptsJson(value: string | null): boolean {
   if (value === null) return true;
-  return value.split(",").some((range) => {
+  const quality = new Map<string, number>();
+  for (const range of value.split(",")) {
     const [type, ...params] = range.split(";").map((p) => p.trim().toLowerCase());
-    if (type !== "application/json" && type !== "application/*" && type !== "*/*") return false;
+    if (!(JSON_RANGES as readonly string[]).includes(type)) continue;
     const q = params.find((p) => p.startsWith("q="));
-    return q === undefined || Number(q.slice(2)) > 0;
-  });
+    const n = q === undefined ? 1 : Number(q.slice(2));
+    quality.set(type, Math.max(quality.get(type) ?? 0, Number.isFinite(n) ? n : 0));
+  }
+  const decisive = JSON_RANGES.find((r) => quality.has(r));
+  return decisive !== undefined && quality.get(decisive)! > 0;
 }
 
 /** Step 7: the body's bytes, or null once more than MCP_MAX_BODY have arrived (the rest is never read). */
