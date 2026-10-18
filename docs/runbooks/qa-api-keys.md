@@ -30,7 +30,7 @@ printf %s "$KEY" | shasum -a 256 | cut -d' ' -f1    # macOS; on Linux: printf %s
 
 `printf %s` matters: `echo` would hash a trailing newline too, and the key would never match. The second command prints the hash that goes into `.env`.
 
-Hand the key to its holder once, through a channel that does not keep it (a password manager share, or read it out). Never commit it, never paste it into an issue, a PR, a chat channel or a log, and never put it in a config file under version control. The holder sets it as `INTELLIDRUGS_QA_KEY` for the QA MCP server (`tools/qa-mcp/README.md`). Then `unset KEY` and close the terminal.
+Hand the key to its holder once, through a channel that does not keep it (a password manager share, or read it out). Never commit it, never paste it into an issue, a PR, a chat channel or a log, and never put it in a config file under version control. The holder sets it as `INTELLIDRUGS_QA_KEY` for the QA MCP server, hosted at `https://drugdb.eliooo.org/api/qa/mcp` or local (`tools/qa-mcp/README.md`). Then `unset KEY` and close the terminal.
 
 ## Add it on the host
 
