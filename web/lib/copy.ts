@@ -297,6 +297,123 @@ const QA_ACCOUNT = {
   openQaTools: QA_ROLE.openQaTools,
 } as const;
 
+/**
+ * §5.18 "QA tools page": the heading, "Connect your AI", "API" and "Rules", the copy buttons and their announcements, and the
+ * pharmacist banner ("Example" is SHARED_WORDS.example, "Open the review desk" DESK.openDesk). Snippets, paths, filter names and the curl example are code, not copy (§1.7); `{t1}`…`{t5}`, `{path}`,
+ * `{filter}` and the like are filled with mono code by the page.
+ */
+const QA_PAGE = {
+  heading: QA_ROLE.qaTools,
+  sub: "Read IntelliDrugs data for quality checks from your AI assistant or a script. Everything here is read-only.",
+  connectHeading: "Connect your AI",
+  connectLead: "The QA MCP server runs on this site. Add it to your AI client with this address, and send one of your keys as a Bearer token.",
+  mcpAddressLabel: "MCP server address",
+  copyAddress: "Copy address",
+  claudeCodeHeading: "Claude Code",
+  copyCommand: "Copy command",
+  claudeCodeHelp: "Set INTELLIDRUGS_QA_KEY to your key first. Claude Code saves the header in your own settings. Never add it with --scope project, which writes the key into the project's files.",
+  cursorHeading: "Cursor and other clients",
+  copyConfiguration: "Copy configuration",
+  cursorHelp: "Replace YOUR_KEY with your key. Keep this file out of version control.",
+  oauthHeading: "claude.ai and ChatGPT",
+  oauthBody: "Their connectors sign in with OAuth, which IntelliDrugs does not offer. Use Claude Code, Cursor or another client that can send an Authorization header.",
+  toolsLine: "The server has five read-only tools: {t1}, {t2}, {t3}, {t4} and {t5}. A local version that runs on your computer is in {path}.",
+  apiHeading: "API",
+  apiLead: "The same data over HTTPS, for scripts. Send your key in the Authorization header. Each key may make 60 requests a minute, shared with the MCP server.",
+  apiBaseLabel: "API base address",
+  endpointsCaption: "QA API endpoints",
+  colRequest: "Request",
+  colReturns: "Returns",
+  returnsBatches: "Every batch, with its status and counts.",
+  returnsBatch: "One batch's current records, with each pipeline stage's result.",
+  returnsRecord: "One record in full: DGDA source, extraction, codes with source links, stages, pairs and decision history.",
+  returnsRecords: "Records with a problem, 100 a page. Optional: stage (with stage_warn only), batch and page.",
+  returnsPairs: "One substance's DDInter pairs, 50 a page. Optional: page.",
+  filtersHeading: "Problem filters",
+  filterStrengthMissing: "A parsed ingredient has no strength.",
+  filterParsePartial: "The generic content was parsed only in part.",
+  filterRouteAssumed: "The pipeline assumed the DDInter route.",
+  filterNoDdinterData: "A substance has DDInter coverage \"none\". This never means a combination is safe.",
+  filterUnaligned: "An ingredient has no substance.",
+  filterStageWarn: "A pipeline stage warns. Add stage to name one: dgda, substances, clinical or ddinter.",
+  filterStageFail: "A pipeline stage failed.",
+  copyExample: "Copy example",
+  envelopeLine: "Every answer uses the same envelope: success, data, message, errors and metadata. Quote metadata.requestId with each finding, so the team can find the exact read.",
+  rulesHeading: "Rules",
+  rulesLead: "Every answer from the MCP server starts with these rules. Follow them in every report.",
+  rulesKeys: "Use only your own keys. Never paste a key into a chat, a ticket or a file under version control. If a key may have leaked, revoke it at once.",
+  copied: "Copied.",
+  copyFailed: "Couldn't copy. The text is selected; press Ctrl C (Cmd C on Mac) to copy it.",
+  pharmacistTitle: "QA tools are for QA team members, engineers and senior pharmacists.",
+  pharmacistBody: "Your account reviews batches. Ask the IntelliDrugs team if you need QA access.",
+} as const;
+
+/**
+ * §5.18 "QA keys": the create form, the name rule, the one-time key panel, the list and statuses, the revoke confirmation,
+ * every create and revoke outcome, the load error, the no-JavaScript line and the announcements. Words other modules print
+ * already are not repeated here (P1A's retyping guard): the "Name", "Status" and "Actions" headers and "Reload" are
+ * SHARED_WORDS, "Retry check" and "Open the review desk" are DESK's (lib/review-copy.ts), and "Sign in" is NAV.signIn.
+ */
+const QA_KEYS = {
+  heading: "Your keys",
+  lead: "A key lets a client read QA data on your behalf. It expires 90 days after you create it, and you can revoke it at any time. You can have up to 5 active keys.",
+  nameLabel: "Key name",
+  nameCounter: "{n} of 40",
+  nameHelp: "1–40 characters, for example the laptop or tool that will use it.",
+  nameError: "Name the key with 1–40 characters.",
+  create: "Create key",
+  creating: "Creating",
+  activeLimitHelp: "You have 5 active keys. Revoke one to create another.",
+  noScript: "Creating and revoking keys needs JavaScript for the bot check.",
+  panelHeading: "Copy your new key now",
+  panelBody: "This is the only time it is shown. IntelliDrugs keeps only a fingerprint of it and can't show it again.",
+  panelLabel: "Key {name}",
+  copyKey: "Copy key",
+  saved: "I've saved it",
+  createdAnnounce: "Key {name} created. Copy it now; it is shown only once.",
+  activeLimitTitle: "You already have 5 active keys.",
+  activeLimitBody: "No key was created. Revoke one, then create another.",
+  dailyLimitTitle: "You've created 10 keys in the last 24 hours.",
+  dailyLimitBody: "No key was created. Try again tomorrow.",
+  captchaTitle: "We couldn't confirm you're a person.",
+  captchaCreateBody: "No key was created. Retry the check, then try again.",
+  captchaRevokeBody: "No key was revoked. Retry the check, then try again.",
+  forbiddenTitle: "Your account no longer has QA access.",
+  forbiddenCreateBody: "No key was created. Ask the IntelliDrugs team if you need QA access.",
+  forbiddenRevokeBody: "No key was revoked. Ask the IntelliDrugs team if you need QA access.",
+  unauthenticatedTitle: "Your sign-in expired.",
+  unauthenticatedCreateBody: "No key was created. Sign in again to continue.",
+  unauthenticatedRevokeBody: "No key was revoked. Sign in again to continue.",
+  createFailedTitle: "Couldn't create the key.",
+  createFailedBody: "If a new key appears in your list, revoke it: it can't be shown again. Check your connection and try again.",
+  tryAgain: "Try again",
+  listLabel: "Your QA keys",
+  colCreated: "Created",
+  colExpires: "Expires",
+  colLastUsed: "Last used",
+  never: "Never",
+  statusActive: "Active",
+  statusExpired: "Expired",
+  statusRevoked: "Revoked",
+  revoke: "Revoke",
+  revokeSr: " key {name}",
+  empty: "You have no keys yet.",
+  confirm: "Revoke {name}? Clients using it stop working at once.",
+  revokeKey: "Revoke key",
+  revoking: "Revoking",
+  cancel: "Cancel",
+  revokedAnnounce: "Key {name} revoked.",
+  alreadyRevoked: "Key {name} was already revoked.",
+  notFoundTitle: "That key isn't in your list any more.",
+  notFoundBody: "Nothing was changed. Reload the page.",
+  rateLimitedTitle: "Too many changes to your keys.",
+  rateLimitedBody: "Nothing was changed. Wait a few minutes and try again.",
+  revokeFailedTitle: "Couldn't revoke the key.",
+  revokeFailedBody: "It still works. Check your connection and try again.",
+  loadErrorTitle: "Couldn't load your keys.",
+  loadErrorBody: "Nothing was changed. Check your connection and try again.",
+} as const;
+
 /** Strings per §1.7 state. Empty records are filled by the plan that builds that state (P1B, P2, P3; the QA portal page). */
 export const NEW_COPY: Record<NewCopyState, Record<string, string>> = {
   [NEW_COPY_ROWS.decisionUnconfirmed]: {
@@ -525,9 +642,8 @@ export const NEW_COPY: Record<NewCopyState, Record<string, string>> = {
   [NEW_COPY_ROWS.pageError]: PAGE_ERROR,
   [NEW_COPY_ROWS.qaRole]: QA_ROLE,
   [NEW_COPY_ROWS.qaAccount]: QA_ACCOUNT,
-  // Filled by the QA portal's /review/qa task (§5.18).
-  [NEW_COPY_ROWS.qaPage]: {},
-  [NEW_COPY_ROWS.qaKeys]: {},
+  [NEW_COPY_ROWS.qaPage]: QA_PAGE,
+  [NEW_COPY_ROWS.qaKeys]: QA_KEYS,
 };
 /** Typed shortcut for the sign-in row. */
 export const SIGN_IN_STATES = NEW_COPY[NEW_COPY_ROWS.signIn] as {
@@ -578,7 +694,7 @@ export const P1C_COPY = {
 } as const;
 
 /** Typed views of the QA portal rows (§1.7), so modules never index NEW_COPY by row text. */
-export const QA_COPY = { role: QA_ROLE, account: QA_ACCOUNT } as const;
+export const QA_COPY = { role: QA_ROLE, account: QA_ACCOUNT, page: QA_PAGE, keys: QA_KEYS } as const;
 
 /** Learn (§6.8): the date suffix after a snapshot-only value, and the footer's batch line. */
 export const LEARN_NEW = NEW_COPY[NEW_COPY_ROWS.learnSnapshotDate] as Record<"asStored", string>;
