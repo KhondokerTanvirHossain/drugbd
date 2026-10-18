@@ -164,6 +164,7 @@ class QaQueryIntegrationTest {
         internal(web).get().uri(b -> b.path("/v1/qa/batches/{b}/items").build("QA 1")).exchange().expectStatus().isBadRequest()
             .expectBody().jsonPath("$.errors[0].field").isEqualTo("batchId");
         invalid("/v1/qa/batches/QA-1/items?page=1", "page");
+        invalid("/v1/qa/batches/" + "x".repeat(101) + "/items?page=1", "batchId");
     }
 
     // ---- GET /v1/qa/records

@@ -66,8 +66,9 @@ public class QaQueryService {
 
     public Mono<QaViews.BatchItems> batchItems(String batchId, Map<String, List<String>> query) {
         return Mono.fromCallable(() -> {
+                String b = batchId(batchId, "batchId");   // the path id first, then the query, as the web QA handlers check them
                 onlyOnce(query, Set.of());
-                return batchId(batchId, "batchId");
+                return b;
             })
             .flatMap(b -> port.batch(b).switchIfEmpty(Mono.error(() -> new NotFoundException("batchId", "Batch not found"))))
             .flatMap(batch -> Mono.zip(port.batchItems(batch.batchId()), port.batchDecisions(batch.batchId())).map(t -> {
