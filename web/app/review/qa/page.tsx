@@ -123,12 +123,9 @@ export default async function QaToolsPage() {
 
       <section className={styles.section} aria-labelledby={KEYS_HEADING_ID}>
         <h2 id={KEYS_HEADING_ID} tabIndex={-1}>{K.heading}</h2>
-        {keys === null ? (
-          <Banner tone="crit" title={K.loadErrorTitle} body={K.loadErrorBody}
-            action={<a className={buttonClass("tonal", "sm")} href="/review/qa">{K.tryAgain}</a>} />
-        ) : (
-          <QaKeys keys={keys} siteKey={siteKey} nonce={siteKey ? await cspNonce() : undefined} />
-        )}
+        {/* Always the island, even when the read failed (keys null, the island draws the load error): the refresh after a
+            create must never unmount it, or the one-time key panel would be lost. */}
+        <QaKeys keys={keys} siteKey={siteKey} nonce={siteKey ? await cspNonce() : undefined} />
       </section>
 
       <section className={styles.section} aria-labelledby="api">

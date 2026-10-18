@@ -141,6 +141,8 @@ describe("/review/qa for qa, engineer and senior (§5.18)", () => {
     expect(html).toContain('<div class="banner banner--crit"><p class="banner-title">Couldn&#x27;t load your keys.</p>');
     expect(html).toContain("Nothing was changed. Check your connection and try again.");
     expect(html).toContain('<a class="btn btn--tonal btn--sm" href="/review/qa">Try again</a>');
+    // The QaKeys island draws it, so the refresh after a create never unmounts the island and its one-time panel.
+    expect(html).toContain('<div class="keys"><div class="banner banner--crit"><p class="banner-title">Couldn&#x27;t load your keys.</p>');
     const main = html.slice(html.indexOf("<main"));
     expect(main).not.toContain("<form");   // the account menu's own forms aside
     expect(main).not.toContain("Create key");

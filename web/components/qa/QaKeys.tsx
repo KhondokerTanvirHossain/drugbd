@@ -24,7 +24,8 @@ const CREATE_ID = "qa-key-create";
 const TOKEN_WAIT_MS = 10_000;
 const SIGN_IN = signInHref("/review/qa");
 
-export type QaKeysProps = { keys: QaKeyView[]; siteKey: string | null; nonce?: string };
+/** `keys` is null when the page's list read failed: the island draws the load error in place of the form and the list. */
+export type QaKeysProps = { keys: QaKeyView[] | null; siteKey: string | null; nonce?: string };
 
 const STATUS_WORD: Record<QaKeyStatus, string> = { active: K.statusActive, expired: K.statusExpired, revoked: K.statusRevoked };
 type Outcome = { tone: BannerTone; title: string; body: string; action?: "retry" | "signIn" | "tryAgain" | "reload" };
@@ -61,7 +62,9 @@ const confirmButtonId = (id: number) => `qa-revoke-confirm-${id}`;
  * one shared Turnstile token (action qakey); the one-time key panel (focus, copy, "I've saved it", a beforeunload guard while
  * it is open); the inline revoke confirmation; field errors, outcome banners and announcements through the page's live
  * region. Props carry the viewer's own keys without any email or hash. The new key is never a prop: it arrives once in the
- * create action's result and lives only in this state until "I've saved it" or the page unloads.
+ * create action's result and lives only in this state until "I've saved it" or the page unloads. The page renders the island
+ * even when its key-list read fails (keys null), so the refresh that follows a create (revalidatePath) never unmounts it: an
+ * open one-time panel and its beforeunload guard survive a failed list read.
  */
 export default function QaKeys({ keys, siteKey, nonce }: QaKeysProps) {
   const [ready, setReady] = useState(false);
@@ -88,7 +91,7 @@ export default function QaKeys({ keys, siteKey, nonce }: QaKeysProps) {
   const rows = useMemo(() => {
     const seen = new Set<number>();
     const out: QaKeyView[] = [];
-    for (const r of [...added, ...keys]) {
+    for (const r of [...added, ...(keys ?? [])]) {
       if (seen.has(r.id)) continue;
       seen.add(r.id);
       out.push(changed[r.id] ?? r);
@@ -270,9 +273,13 @@ export default function QaKeys({ keys, siteKey, nonce }: QaKeysProps) {
   }
 
   const help = atLimit ? <>{K.nameHelp} {K.activeLimitHelp}</> : K.nameHelp;
+  // keys null: the load error in place of the lead, the form and the list. The panel keeps its slot either way, so a refresh
+  // that swaps one for the other never remounts it (focus inside it stays put).
+  const failed = keys === null;
   return (
     <div className={styles.keys}>
-      <p>{K.lead}</p>
+      {failed ? <Banner tone="crit" title={K.loadErrorTitle} body={K.loadErrorBody}
+        action={<a className={buttonClass("tonal", "sm")} href="/review/qa">{K.tryAgain}</a>} /> : <p>{K.lead}</p>}
       {panel && (
         <section className={styles.panel} aria-labelledby={PANEL_HEADING_ID}>
           <h3 id={PANEL_HEADING_ID} tabIndex={-1}>{K.panelHeading}</h3>
@@ -285,73 +292,75 @@ export default function QaKeys({ keys, siteKey, nonce }: QaKeysProps) {
           </div>
         </section>
       )}
-      {createOutcome && <Banner tone={createOutcome.tone} title={createOutcome.title} body={createOutcome.body}
-        action={action(createOutcome, "create")} />}
-      <form className={styles.form} onSubmit={onSubmit} noValidate>
-        <Field id={NAME_ID} label={K.nameLabel} help={help} error={nameError ? K.nameError : undefined}
-          counter={fill(K.nameCounter, { n: nameLength(name) })}
-          control={<input className="input" name="name" type="text" maxLength={40} autoComplete="off" value={name}
-            onChange={(e) => { setName(e.target.value); if (nameError) setNameError(false); }} />} />
-        {siteKey && <TurnstileField siteKey={siteKey} action="qakey" nonce={nonce} size="auto" resetKey={resetKey}
-          onToken={onToken} onError={onWidgetError} />}
-        <div className={styles.row}>
-          <Button id={CREATE_ID} type="submit" variant="primary" busy={creating} busyLabel={K.creating} hidden={!ready}
-            aria-disabled={atLimit ? "true" : undefined}>{K.create}</Button>
-        </div>
-        <noscript><p>{K.noScript}</p></noscript>
-      </form>
-      {revokeOutcome && <Banner tone={revokeOutcome.tone} title={revokeOutcome.title} body={revokeOutcome.body}
-        action={action(revokeOutcome, "revoke")} />}
-      {statusLine && <p className={styles.statusLine}>{statusLine}</p>}
-      {rows.length === 0 ? <p>{K.empty}</p> : (
-        <div className={styles.scroll} role="region" aria-label={K.listLabel} tabIndex={0}>
-          <table className={styles.table}>
-            <caption className="sr-only">{K.listLabel}</caption>
-            <thead>
-              <tr>
-                <th scope="col">{SHARED_WORDS.name}</th>
-                <th scope="col">{K.colCreated}</th>
-                <th scope="col">{K.colExpires}</th>
-                <th scope="col">{K.colLastUsed}</th>
-                <th scope="col">{SHARED_WORDS.status}</th>
-                <th scope="col"><span className="sr-only">{SHARED_WORDS.actions}</span></th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.id}>
-                  <td className={styles.name}>{r.name}</td>
-                  <td>{fmtDhaka(r.createdAt)}</td>
-                  <td>{fmtDhaka(r.expiresAt)}</td>
-                  <td>{r.lastUsedAt ? fmtDhaka(r.lastUsedAt) : K.never}</td>
-                  <td>{STATUS_WORD[r.status]}</td>
-                  <td className={styles.actionCell}>
-                    {r.status === "active" && (confirmFor === r.id ? (
-                      <div className={styles.confirm} onKeyDown={(e: KeyboardEvent) => {
-                        if (e.key === "Escape") { e.preventDefault(); closeConfirm(r.id); }
-                      }}>
-                        <p>{fill(K.confirm, { name: r.name })}</p>
-                        <div className={styles.row}>
-                          <Button id={confirmButtonId(r.id)} variant="destructive" size="sm" busy={revoking === r.id}
-                            busyLabel={K.revoking}
-                            onKeyDown={(e) => { if (e.key === "Enter" && e.repeat) e.preventDefault(); }}
-                            onClick={() => void revoke(r)}>{K.revokeKey}</Button>
-                          <Button variant="plain" size="sm" onClick={() => closeConfirm(r.id)}>{K.cancel}</Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <Button id={revokeButtonId(r.id)} variant="destructive" size="sm" hidden={!ready}
-                        onClick={() => openConfirm(r.id)}>
-                        {K.revoke}<span className="sr-only">{fill(K.revokeSr, { name: r.name })}</span>
-                      </Button>
-                    ))}
-                  </td>
+      {!failed && <>
+        {createOutcome && <Banner tone={createOutcome.tone} title={createOutcome.title} body={createOutcome.body}
+          action={action(createOutcome, "create")} />}
+        <form className={styles.form} onSubmit={onSubmit} noValidate>
+          <Field id={NAME_ID} label={K.nameLabel} help={help} error={nameError ? K.nameError : undefined}
+            counter={fill(K.nameCounter, { n: nameLength(name) })}
+            control={<input className="input" name="name" type="text" maxLength={40} autoComplete="off" value={name}
+              onChange={(e) => { setName(e.target.value); if (nameError) setNameError(false); }} />} />
+          {siteKey && <TurnstileField siteKey={siteKey} action="qakey" nonce={nonce} size="auto" resetKey={resetKey}
+            onToken={onToken} onError={onWidgetError} />}
+          <div className={styles.row}>
+            <Button id={CREATE_ID} type="submit" variant="primary" busy={creating} busyLabel={K.creating} hidden={!ready}
+              aria-disabled={atLimit ? "true" : undefined}>{K.create}</Button>
+          </div>
+          <noscript><p>{K.noScript}</p></noscript>
+        </form>
+        {revokeOutcome && <Banner tone={revokeOutcome.tone} title={revokeOutcome.title} body={revokeOutcome.body}
+          action={action(revokeOutcome, "revoke")} />}
+        {statusLine && <p className={styles.statusLine}>{statusLine}</p>}
+        {rows.length === 0 ? <p>{K.empty}</p> : (
+          <div className={styles.scroll} role="region" aria-label={K.listLabel} tabIndex={0}>
+            <table className={styles.table}>
+              <caption className="sr-only">{K.listLabel}</caption>
+              <thead>
+                <tr>
+                  <th scope="col">{SHARED_WORDS.name}</th>
+                  <th scope="col">{K.colCreated}</th>
+                  <th scope="col">{K.colExpires}</th>
+                  <th scope="col">{K.colLastUsed}</th>
+                  <th scope="col">{SHARED_WORDS.status}</th>
+                  <th scope="col"><span className="sr-only">{SHARED_WORDS.actions}</span></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.id}>
+                    <td className={styles.name}>{r.name}</td>
+                    <td>{fmtDhaka(r.createdAt)}</td>
+                    <td>{fmtDhaka(r.expiresAt)}</td>
+                    <td>{r.lastUsedAt ? fmtDhaka(r.lastUsedAt) : K.never}</td>
+                    <td>{STATUS_WORD[r.status]}</td>
+                    <td className={styles.actionCell}>
+                      {r.status === "active" && (confirmFor === r.id ? (
+                        <div className={styles.confirm} onKeyDown={(e: KeyboardEvent) => {
+                          if (e.key === "Escape") { e.preventDefault(); closeConfirm(r.id); }
+                        }}>
+                          <p>{fill(K.confirm, { name: r.name })}</p>
+                          <div className={styles.row}>
+                            <Button id={confirmButtonId(r.id)} variant="destructive" size="sm" busy={revoking === r.id}
+                              busyLabel={K.revoking}
+                              onKeyDown={(e) => { if (e.key === "Enter" && e.repeat) e.preventDefault(); }}
+                              onClick={() => void revoke(r)}>{K.revokeKey}</Button>
+                            <Button variant="plain" size="sm" onClick={() => closeConfirm(r.id)}>{K.cancel}</Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <Button id={revokeButtonId(r.id)} variant="destructive" size="sm" hidden={!ready}
+                          onClick={() => openConfirm(r.id)}>
+                          {K.revoke}<span className="sr-only">{fill(K.revokeSr, { name: r.name })}</span>
+                        </Button>
+                      ))}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </>}
     </div>
   );
 }

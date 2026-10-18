@@ -189,6 +189,18 @@ test("320 px: no horizontal page scroll with the key panel open (§10.4)", async
   await revokeKey(page, "Phone");
 });
 
+for (const role of ["engineer", "senior"] as const) {
+  test(`320 px: the toolbar's "QA tools" link, badge and avatar fit for ${role} (§5.18, §10.4)`, async ({ context, page }) => {
+    await page.setViewportSize({ width: 320, height: 720 });
+    await signInAs(context, role);
+    for (const path of ["/review/qa", "/review/flags", "/review"]) {
+      await page.goto(path);
+      await expect(page.locator("header").getByRole("link", { name: "QA tools" })).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth), `${role} ${path}`).toBeLessThanOrEqual(320);
+    }
+  });
+}
+
 // ---- axe (§11.4): the QA page's states and the QA account view, in light, dark and forced colours.
 const WCAG = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 async function axe(page: Page, state: string): Promise<void> {

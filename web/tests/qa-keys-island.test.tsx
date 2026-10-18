@@ -148,6 +148,43 @@ describe("create (§5.18, §7.10.5)", () => {
     expect(unloadNow()).toBe(false);
   });
 
+  it("the refresh after created fails to read the list: the island stays mounted and the one-time panel stays open", async () => {
+    const tree = (keys: QaKeyView[] | null) => <>
+      <div id={QA_LIVE_ID} role="status" className="sr-only" />
+      <h2 id="keys" tabIndex={-1}>Your keys</h2>
+      <QaKeys keys={keys} siteKey="1x00000000000000000000AA" nonce="n0nce" />
+    </>;
+    const r = await mount();
+    await createNamed("New laptop");
+    expect(document.getElementById("qa-new-key")!.textContent).toBe(KEY);
+    r.rerender(tree(null));   // revalidatePath re-rendered the page and listQaKeys threw
+    await settle();
+    expect(document.getElementById("qa-new-key")!.textContent).toBe(KEY);
+    expect(screen.getByRole("heading", { level: 3, name: "Copy your new key now" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Copy key" })).toBeTruthy();
+    const unload = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(true);   // the guard is still armed
+    expect(screen.getByText("Couldn't load your keys.")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Try again" }).getAttribute("href")).toBe("/review/qa");
+    expect(document.querySelector("form")).toBeNull();
+    expect(screen.queryByRole("table")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "I've saved it" }));
+    await settle();
+    expect(document.body.innerHTML).not.toContain(KEY);
+    expect(document.activeElement).toBe(document.getElementById("keys"));
+  });
+
+  it("keys null (the list read failed): the crit load-error banner with Try again, and no form, list or bot check", () => {
+    const html = renderToStaticMarkup(<QaKeys keys={null} siteKey="1x00000000000000000000AA" />);
+    expect(html).toContain('<div class="banner banner--crit"><p class="banner-title">Couldn&#x27;t load your keys.</p>');
+    expect(html).toContain("Nothing was changed. Check your connection and try again.");
+    expect(html).toContain('<a class="btn btn--tonal btn--sm" href="/review/qa">Try again</a>');
+    expect(html).not.toContain("<form");
+    expect(html).not.toContain("<table");
+    expect(html).not.toContain("data-turnstile");
+  });
+
   it.each([["empty", ""], ["blank", "   "], ["41 characters", "x".repeat(41)], ["a control character", "a\u0007b"]])(
     "a bad name (%s): the field error, aria-invalid, focus on the field, nothing sent", async (_n, name) => {
       await mount();
