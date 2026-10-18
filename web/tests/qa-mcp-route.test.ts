@@ -189,9 +189,11 @@ describe("the §7.10.6 checks, in order", () => {
     await expectRpcError(await send(rpc("tools/list"), { key: DB_KEY }), 401, -32001, "Unauthorized");
   });
 
-  it("4: every authenticated MCP request counts once, shared with the QA API; the 61st is 429 with Retry-After: 60", async () => {
+  it("4: every authenticated MCP request counts once (415, 406 and parse errors too), shared with the QA API; the 61st is 429 with Retry-After: 60", async () => {
     for (let i = 0; i < 20; i++) await send(rpc("ping"));
-    for (let i = 0; i < 20; i++) await send("{", {});                                 // parse errors count too
+    for (let i = 0; i < 10; i++) await send("{", {});                                 // parse errors count too
+    for (let i = 0; i < 5; i++) expect((await send(rpc("ping"), { headers: { "content-type": "text/plain" } })).status).toBe(415);
+    for (let i = 0; i < 5; i++) expect((await send(rpc("ping"), { headers: { accept: "text/html" } })).status).toBe(406);
     for (let i = 0; i < 20; i++) expect((await batchesGET(new Request("http://localhost/api/qa/v1/batches",
       { headers: { authorization: `Bearer ${KEY}`, "x-request-id": RID } }))).status).toBe(200);
     audits = [];
@@ -203,6 +205,44 @@ describe("the §7.10.6 checks, in order", () => {
       outcome: "rate_limited", requestId: RID }]);
     clock.now += 60_000;
     await result(await send(rpc("ping")));
+  });
+
+  /** A body far over 64 KiB that counts its pulls; highWaterMark 0, so nothing is pulled until the handler reads. */
+  function countedStream() {
+    const chunk = new TextEncoder().encode("x".repeat(16_384));
+    const counter = { pulls: 0 };
+    const stream = new ReadableStream<Uint8Array>({ pull(c) { if (counter.pulls++ < 10) c.enqueue(chunk); else c.close(); } },
+      { highWaterMark: 0 });
+    return { stream, counter };
+  }
+
+  it("3 before 5–7: with no key, a bad Content-Type, a bad Accept or an oversized body is still 401, and no body is read", async () => {
+    for (const headers of [{ "content-type": "text/plain" }, { "content-type": null }, { accept: "text/html" },
+      { "content-type": "text/plain", accept: "text/html" }]) {
+      const res = await send(rpc("ping"), { key: null, headers });
+      expect(res.headers.get("www-authenticate")).toBe("Bearer");
+      await expectRpcError(res, 401, -32001, "Unauthorized");
+    }
+    for (const key of [null, "u".repeat(40)]) {
+      const { stream, counter } = countedStream();
+      await expectRpcError(await send(stream, { key, headers: { "content-type": "text/plain", accept: "text/html" } }),
+        401, -32001, "Unauthorized");
+      expect(counter.pulls).toBe(0);
+    }
+    expect(audits.map((a) => a.outcome)).toEqual(["unauthorized"]);
+    expect(reads).toEqual([]);
+  });
+
+  it("4 before 5–7: a key already at its limit gets 429 for a bad Content-Type, a bad Accept or an oversized body", async () => {
+    for (let i = 0; i < 60; i++) await send(rpc("ping"));
+    for (const headers of [{ "content-type": "text/plain" }, { "content-type": null }, { accept: "text/html" }]) {
+      const res = await send(rpc("ping"), { headers });
+      expect(res.headers.get("retry-after")).toBe("60");
+      await expectRpcError(res, 429, -32003, "Too many requests");
+    }
+    const { stream, counter } = countedStream();
+    await expectRpcError(await send(stream), 429, -32003, "Too many requests");
+    expect(counter.pulls).toBe(0);
   });
 
   it("5: a Content-Type other than application/json is 415; parameters are allowed", async () => {
