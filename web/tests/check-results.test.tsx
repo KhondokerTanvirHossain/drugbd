@@ -45,6 +45,26 @@ describe("checker results (§6.7.3)", () => {
     expect(html).toContain("DDInter 2.0 lists this pair with action &quot;unknown&quot; and no text. It is not treated as low risk.");
   });
 
+  it("1. (QA, D64) management, then DDInter's interaction description in its own block; the unknown card is unchanged", () => {
+    expect(html).toContain('<p class="pair-text open" id="chk-0-text">Avoid unless needed.</p>');
+    expect(html).toContain('<p class="pair-text open" id="chk-0-desc">Bleeding risk.</p>');
+    expect(html).toContain('<span id="chk-0-desc-kind">Interaction description, full text from DDInter 2.0.</span>');
+    expect(html.indexOf("Avoid unless needed.")).toBeLessThan(html.indexOf("Bleeding risk."));
+    expect(html.indexOf("Bleeding risk.")).toBeLessThan(html.indexOf("Route assumed: Aspirin"));
+    expect(html).not.toContain("DDInter 2.0 gives no management text for this pair.");
+    expect(html).not.toContain('id="chk-1-desc"');
+    // a DDInter placeholder description keeps today's management-only card
+    const none = renderToStaticMarkup(<CheckResults result={{ ...RESULT, alerts: [{ ...RESULT.alerts[0], interaction: "None" }] }} />);
+    expect(none).toContain('<p class="pair-text open" id="chk-0-text">Avoid unless needed.</p><p class="pair-source">Management, full text from DDInter 2.0.</p>');
+    expect(none).not.toContain("chk-0-desc");
+    expect(none).not.toContain("textBlock");
+    // interaction only: today's card, the description printed once, under NO_MANAGEMENT
+    const inter = renderToStaticMarkup(<CheckResults result={{ ...RESULT, alerts: [{ ...RESULT.alerts[0], management: " - " }] }} />);
+    expect(inter).toContain('<p class="pair-source">DDInter 2.0 gives no management text for this pair.</p><p class="pair-text open" id="chk-0-text">Bleeding risk.</p>');
+    expect(inter.split("Bleeding risk.")).toHaveLength(2);
+    expect(inter).not.toContain("textBlock");
+  });
+
   it("the route-assumed line names the brand with no route", () => {
     expect(html).toContain('Route assumed: Aspirin has no route on record, so the systemic entry <span class="mono">DDInter20</span> was used.');
   });
