@@ -79,6 +79,8 @@ export default function QaKeys({ keys, siteKey, nonce }: QaKeysProps) {
   const [resetKey, setResetKey] = useState(0);
   const token = useRef<string | null>(null);
   const waiters = useRef<((t: string | null) => void)[]>([]);
+  /** The widget reported an error: no token is coming until Retry check resets it, so a send is captcha at once. */
+  const widgetFailed = useRef(false);
 
   useEffect(() => setReady(true), []);
 
@@ -108,15 +110,17 @@ export default function QaKeys({ keys, siteKey, nonce }: QaKeysProps) {
   // ---- the one shared Turnstile token: single use, at most 10 s to get a fresh one
   function onToken(t: string | null) {
     if (t === null) { token.current = null; return; }
+    widgetFailed.current = false;
     const w = waiters.current.shift();
     if (w) w(t); else token.current = t;
   }
   function onWidgetError() {
     token.current = null;
+    widgetFailed.current = true;
     for (const w of waiters.current.splice(0)) w(null);
   }
   function takeToken(): Promise<string | null> {
-    if (!siteKey) return Promise.resolve(null);
+    if (!siteKey || widgetFailed.current) return Promise.resolve(null);
     const held = token.current;
     token.current = null;
     if (held) return Promise.resolve(held);
@@ -241,6 +245,7 @@ export default function QaKeys({ keys, siteKey, nonce }: QaKeysProps) {
     setCreateOutcome(null);
     setRevokeOutcome(null);
     token.current = null;
+    widgetFailed.current = false;
     spent();
     focusId(control);
   }

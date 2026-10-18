@@ -20,8 +20,9 @@
   font: 400 12.5px/1.5 var(--font-mono); color: var(--fg); white-space: pre-wrap; overflow-wrap: anywhere; min-width: 0; }
 .row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); }
 
-/* Tables: the endpoints and the key list. */
-.scroll { overflow-x: auto; border-radius: var(--r-panel); box-shadow: inset 0 0 0 1px var(--line-strong); background: var(--canvas); }
+/* Tables: the endpoints and the key list. position: relative contains the sr-only header and caption, which are absolutely
+   positioned and would otherwise widen the page past the scroll region at 320 px. */
+.scroll { position: relative; overflow-x: auto; border-radius: var(--r-panel); box-shadow: inset 0 0 0 1px var(--line-strong); background: var(--canvas); }
 .scroll:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .table { width: 100%; font-size: 13.5px; }
 .table th, .table td { padding: var(--s2) var(--s3); text-align: left; vertical-align: top; border-top: 1px solid var(--line); }
