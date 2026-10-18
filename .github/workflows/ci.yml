@@ -72,6 +72,8 @@ jobs:
       - run: cd web && npx lhci autorun
       - run: cd web && npx lhci autorun --config=./lighthouserc.review.json
       - run: cd web && npx lhci autorun --config=./lighthouserc.senior.json
+      - run: $COMPOSE exec -T db psql -v ON_ERROR_STOP=1 -U "$DB_USER" -d bddrug < web/e2e/lhci-qa.sql
+      - run: cd web && npx lhci autorun --config=./lighthouserc.qa.json
       - run: cd web && npx lhci autorun --config=./lighthouserc.learn.json
       - run: $COMPOSE exec -T db psql -v ON_ERROR_STOP=1 -U "$DB_USER" -d bddrug < web/e2e/lhci-public.sql
       - run: cd web && npx lhci autorun --config=./lighthouserc.public.json

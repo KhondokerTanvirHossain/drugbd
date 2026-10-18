@@ -70,3 +70,19 @@ export const pairReviews = (a: string, b: string): number =>
 export const auditOutcomes = (event: string, targetId: string): string =>
   sql(`SELECT coalesce(string_agg(outcome || '|' || actor_role, ',' ORDER BY id), '') FROM ops.audit_event
        WHERE event = ${lit(event)} AND target_id = ${lit(targetId)}`);
+
+/**
+ * QA portal (§7.10.2): a key row for `owner` as the API stores it, its SHA-256 hash only, created now and expiring 2160 hours
+ * later (V9 checks both). Returns the row id. The test keeps the key; the database never sees it.
+ */
+export const insertQaKey = (owner: string, name: string, keyHash: string): number =>
+  Number(sql(`INSERT INTO ops.qa_key (key_hash, owner_email, name, expires_at)
+              VALUES (${lit(keyHash)}, ${lit(owner)}, ${lit(name)}, now() + interval '2160 hours') RETURNING id`));
+
+/** Revokes every active key of `owner` (V9 lets revoked_at be set once; rows are never deleted). */
+export const revokeQaKeysOf = (owner: string): void => {
+  sql(`UPDATE ops.qa_key SET revoked_at = now() WHERE owner_email = ${lit(owner)} AND revoked_at IS NULL`);
+};
+
+/** A key's last_used_at, or "" when it was never used. */
+export const qaKeyLastUsed = (id: number): string => sql(`SELECT coalesce(last_used_at::text, '') FROM ops.qa_key WHERE id = ${Number(id)}`);

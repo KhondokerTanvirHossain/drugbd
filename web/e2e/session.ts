@@ -4,7 +4,8 @@ import { encryptSession, sessionCookieName } from "../lib/session-crypto";
 /** Must equal SESSION_SECRET in deploy/docker-compose.ci.yml. There is no Google in e2e: the test mints the cookie. */
 export const E2E_SECRET = process.env.E2E_SESSION_SECRET ?? "e2e-session-secret-0123456789abcdef0123456789";
 export const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
-export const E2E_EMAILS = { pharmacist: "pharm@e2e.test", engineer: "eng@e2e.test", senior: "senior@e2e.test", user: "reader@e2e.test" } as const;
+export const E2E_EMAILS = { pharmacist: "pharm@e2e.test", engineer: "eng@e2e.test", senior: "senior@e2e.test", qa: "qa@e2e.test",
+  user: "reader@e2e.test" } as const;
 
 /**
  * Mints the production session cookie (§9.6, §11.4). A `__Host-` cookie must be Secure, Path=/ and carry no Domain.
