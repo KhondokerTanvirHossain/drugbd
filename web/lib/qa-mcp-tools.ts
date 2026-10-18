@@ -26,8 +26,19 @@ const BDS_ID_SOURCE = "^BDS-[0-9]{6}$";
 const CONCEPT_ID_MAX = 200;
 const NO_CONTROL_SOURCE = "^[^\\u0000-\\u001F\\u007F]*$";
 const PAGE_MAX = 999;
-const FILTERS = ["strength_missing", "parse_partial", "route_assumed", "no_ddinter_data", "unaligned", "stage_warn", "stage_fail"];
-const STAGES = ["dgda", "substances", "clinical", "ddinter"];
+const FILTERS = ["strength_missing", "parse_partial", "route_assumed", "no_ddinter_data", "unaligned", "stage_warn", "stage_fail"] as const;
+const STAGES = ["dgda", "substances", "clinical", "ddinter"] as const;
+
+/**
+ * One QA read (§7.10.5), the shape lib/qa-query.ts runs: what a QA API URL or a hosted MCP tool call addresses. Defined here
+ * so this module stays dependency-free; lib/qa-query.ts re-exports it.
+ */
+export type QaInput =
+  | { route: "batches" }
+  | { route: "batch"; batchId: string }
+  | { route: "record"; batchId: string; conceptId: string }
+  | { route: "records"; filter: string; stage?: string; batch?: string; page: number }
+  | { route: "pairs"; bdsId: string; page: number };
 
 type JsonSchema = { type: "object"; properties: Record<string, Record<string, unknown>>; required?: string[];
   additionalProperties: false };

@@ -1,15 +1,15 @@
 import "server-only";
 import { createHash, timingSafeEqual } from "node:crypto";
-import { touchQaKey, verifyQaKey, type QaUpstream } from "./api";
-import { recordAudit } from "./audit";
+import { touchQaKey, verifyQaKey } from "./api";
 import { LIMITS, allowQaRateLimitedAudit, allowQaUnauthorizedAudit } from "./limits";
-import { MalformedBody } from "./qa-map";
+import { answerOutcome, answerQa, auditQa, failAnswer, invalid, type QaAnswer, type QaCode, type QaInput, type QaRefusal,
+  type QaRoute } from "./qa-query";
 import { clientIp } from "./rate-limit";
 import { withRequestLog } from "./request-log";
 import { canUseQa, roleFor } from "./reviewers";
 
 /*
- * The read-only QA API (spec §7.9, §7.10.4): keys, Bearer auth, the per-key limit, the platform envelope, the qa_read audit row
+ * The read-only QA API (spec §7.9, §7.10.4): keys, Bearer auth, the per-key limit, the QA headers, URL parsing
  * and the one handler every /api/qa/v1/* route uses. Order (§7.9.1 as amended by the QA portal): auth (401; env keys, then
  * DB keys) → rate limit (429) → input validation (400) → internal API read → map → audit → answer. There is no disabled
  * state: with no key at all every route is 401. Never 500. Cookies, sessions and any X-Internal-Token the caller sends are
@@ -128,56 +128,34 @@ export async function authenticateQa(header: string | null): Promise<QaAuth> {
 
 // ---- envelope and headers
 
-export type QaRoute = "batches" | "batch" | "record" | "records" | "pairs";
-/** A qa_read route name: a QA API route, or `mcp` for a hosted MCP request refused before any tool ran (§7.10.6). */
-export type QaAuditRoute = QaRoute | "mcp";
-export type QaCode = "INVALID_QUERY" | "UNAUTHORIZED" | "NOT_FOUND" | "RATE_LIMITED" | "UNAVAILABLE";
-const ERRORS: Record<QaCode, { status: number; message: string }> = {
-  INVALID_QUERY: { status: 400, message: "Invalid query" },
-  UNAUTHORIZED: { status: 401, message: "Unauthorized" },
-  NOT_FOUND: { status: 404, message: "Not found" },
-  RATE_LIMITED: { status: 429, message: "Too many requests" },
-  UNAVAILABLE: { status: 502, message: "Unavailable" },
-};
+export { BATCH_ID, BDS_ID, QA_FILTERS, QA_STAGES, auditQa, fromUpstream, invalid } from "./qa-query";
+export type { QaAuditRoute, QaCode, QaInput, QaOutcome, QaRoute } from "./qa-query";
+
 /** On every QA response, errors included (§7.9.1). No Access-Control-* header, ever. */
 export const QA_HEADERS: Readonly<Record<string, string>> = {
   "Cache-Control": "private, no-store", "X-Robots-Tag": "noindex, nofollow", "Content-Type": "application/json",
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-/** The middleware's x-request-id (§9.4): the envelope's requestId and the qa_read row's request_id. */
-function requestIdOf(request: Request): string {
+/** The middleware's x-request-id (§9.4): the envelope's requestId and the qa_read row's request_id; a fresh UUID otherwise. */
+export function requestIdOf(request: Request): string {
   const id = request.headers.get("x-request-id");
   return id && UUID.test(id) ? id : crypto.randomUUID();
 }
 
-function json(status: number, body: unknown, extra: Record<string, string> = {}): Response {
-  return new Response(JSON.stringify(body), { status, headers: { ...QA_HEADERS, ...extra } });
+function respond(a: QaAnswer, extra: Record<string, string> = {}): Response {
+  return new Response(JSON.stringify(a.body), { status: a.status, headers: { ...QA_HEADERS, ...extra } });
 }
 
-const metadata = (requestId: string) => ({ timestamp: new Date().toISOString(), requestId });
+const fail = (requestId: string, code: QaCode, field: string | null = null, extra: Record<string, string> = {}) =>
+  respond(failAnswer(requestId, code, field), extra);
 
-function ok(requestId: string, data: unknown): Response {
-  return json(200, { success: true, data, message: "OK", errors: [], metadata: metadata(requestId) });
-}
+// ---- URL parsing (§7.9.2)
 
-function fail(requestId: string, code: QaCode, field: string | null = null, extra: Record<string, string> = {}): Response {
-  const { status, message } = ERRORS[code];
-  return json(status, { success: false, data: null, message, errors: [{ field, code, message }], metadata: metadata(requestId) }, extra);
-}
-
-// ---- input validation (§7.9.2)
-
-export const BATCH_ID = /^[A-Za-z0-9._-]{1,100}$/;
-export const BDS_ID = /^BDS-[0-9]{6}$/;
 const PAGE = /^[0-9]{1,3}$/;
-export const QA_FILTERS = ["strength_missing", "parse_partial", "route_assumed", "no_ddinter_data", "unaligned", "stage_warn", "stage_fail"] as const;
-export const QA_STAGES = ["dgda", "substances", "clinical", "ddinter"] as const;
 
-/** What a route's run step returns: the mapped data, or a 400, 404 or 502 with its field. */
-export type QaOutcome = { ok: true; data: unknown } | { ok: false; code: "INVALID_QUERY" | "NOT_FOUND" | "UNAVAILABLE"; field: string | null };
-export const invalid = (field: string): QaOutcome => ({ ok: false, code: "INVALID_QUERY", field });
-const UNAVAILABLE: QaOutcome = { ok: false, code: "UNAVAILABLE", field: null };
+/** A route's URL as a QaInput, or the 400 (or, for a path its pattern does not match, 404) it is refused with. */
+export type QaParse = { ok: true; input: QaInput } | QaRefusal;
 
 /** A refused parameter's name is the field; capped, so an error stays small. */
 const fieldName = (name: string) => [...name].slice(0, 100).join("");
@@ -200,7 +178,7 @@ export function queryOf(url: URL, allowed: readonly string[]): { ok: true; q: Ma
  * segment). A segment that fails to decode is a 400 for its field; a path the pattern does not match is a 404.
  */
 export function pathIds(url: URL, pattern: RegExp, fields: readonly string[]):
-    { ok: true; ids: string[] } | { ok: false; outcome: QaOutcome } {
+    { ok: true; ids: string[] } | { ok: false; outcome: QaRefusal } {
   const m = pattern.exec(url.pathname);
   if (!m) return { ok: false, outcome: { ok: false, code: "NOT_FOUND", field: null } };
   const ids: string[] = [];
@@ -220,47 +198,15 @@ export function pageOf(value: string | undefined): number | null {
   return PAGE.test(value) ? Number(value) : null;
 }
 
-const API_FIELD = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
-
-/**
- * The internal API's answer as a QA outcome: data through the route's allowlist mapper (a malformed body is 502); an API 400
- * is a 400 with its field; an API 404 is a 404 when its field is one of the route's id fields (else the API is not the one
- * this web expects: 502); anything else (5xx, 401, a timeout, no token) is 502.
- */
-export function fromUpstream(u: QaUpstream, idFields: readonly string[], map: (data: unknown) => unknown): QaOutcome {
-  if (u.ok) {
-    try {
-      return { ok: true, data: map(u.data) };
-    } catch (e) {
-      if (e instanceof MalformedBody) return UNAVAILABLE;
-      throw e;
-    }
-  }
-  if (u.status === 400) return { ok: false, code: "INVALID_QUERY", field: u.field !== null && API_FIELD.test(u.field) ? u.field : null };
-  if (u.status === 404 && u.field !== null && idFields.includes(u.field)) return { ok: false, code: "NOT_FOUND", field: u.field };
-  return UNAVAILABLE;
-}
-
-// ---- audit (§7.9.6)
-
-/** One qa_read row: no actor; target `{label}/{route}`, or `{route}` unauthenticated; never a key, hash, id or query value. */
-export async function auditQa(route: QaAuditRoute, label: string | null, outcome: string, requestId: string): Promise<boolean> {
-  try {
-    return await recordAudit({ event: "qa_read", targetType: "qa_route", targetId: label === null ? route : `${label}/${route}`,
-      outcome, requestId });
-  } catch {
-    return false;
-  }
-}
-
 // ---- handlers
 
 /**
- * A QA GET handler. `run` validates the inputs, reads the internal API and maps the body; it runs only for an authenticated,
- * unthrottled request. A 200 is sent only after its qa_read row is written; if that write fails the answer is 502 with no
- * data. Every other outcome's row is best effort, and 401 and 429 rows are throttled (§7.9.6).
+ * A QA GET handler (§7.10.5): auth → rate limit → the URL as a QaInput (a refused path or query is answered through the same
+ * audit) → answerQa. `parse` runs only for an authenticated, unthrottled request. A 200 is sent only after its qa_read row is
+ * written; if that write fails the answer is 502 with no data. Every other outcome's row is best effort, and 401 and 429
+ * rows are throttled (§7.9.6).
  */
-export function qaHandler(route: QaRoute, template: string, run: (url: URL) => Promise<QaOutcome>): (request: Request) => Promise<Response> {
+export function qaHandler(route: QaRoute, template: string, parse: (url: URL) => QaParse): (request: Request) => Promise<Response> {
   return withRequestLog(template, async (request: Request): Promise<Response> => {
     const rid = requestIdOf(request);
     try {
@@ -279,18 +225,8 @@ export function qaHandler(route: QaRoute, template: string, run: (url: URL) => P
         if (allowQaRateLimitedAudit(label, LIMITS)) await auditQa(route, label, "rate_limited", rid);
         return fail(rid, "RATE_LIMITED", null, { "Retry-After": "60" });
       }
-      let outcome: QaOutcome;
-      try {
-        outcome = await run(new URL(request.url));
-      } catch {
-        outcome = UNAVAILABLE;
-      }
-      if (outcome.ok) {
-        if (!(await auditQa(route, label, "ok", rid))) return fail(rid, "UNAVAILABLE");
-        return ok(rid, outcome.data);
-      }
-      await auditQa(route, label, outcome.code.toLowerCase(), rid);
-      return fail(rid, outcome.code, outcome.field);
+      const parsed = parse(new URL(request.url));
+      return respond(parsed.ok ? await answerQa(parsed.input, label, rid) : await answerOutcome(route, label, rid, parsed));
     } catch {
       return fail(rid, "UNAVAILABLE");
     }
