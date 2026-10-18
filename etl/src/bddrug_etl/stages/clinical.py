@@ -6,7 +6,7 @@ from decimal import Decimal
 import psycopg
 
 from bddrug_etl.parse.content import ParsedIngredient, parse_generic_content
-from bddrug_etl.parse.names import normalize_name, route_for_dosage_form, strip_salt
+from bddrug_etl.parse.names import is_bare_element, normalize_name, route_for_dosage_form, strip_salt
 from bddrug_etl.stages.results import StageResult, error_note
 
 
@@ -59,14 +59,18 @@ def _substances(conn: psycopg.Connection, cid: str) -> list[dict]:
 
 
 def _align(parsed: tuple[ParsedIngredient, ...], subs: list[dict]) -> list[tuple[ParsedIngredient, str | None, str]]:
-    """Rule 1: name match. Rule 2: one ingredient and one substance. Never by position."""
+    """Rule 1: name match. Rule 2: one ingredient and one substance. Never by position.
+
+    Rule 2 never pairs an elemental name ("Zinc 20 mg") with a substance that is a salt of it ("Zinc sulphate"):
+    the registered strength is elemental, so storing it as the salt's strength would be a wrong value.
+    """
     out = []
     for p in parsed:
         key = normalize_name(strip_salt(p.name))
         hit = next((s["bds_id"] for s in subs if key in s["keys"]), None)
         if hit:
             out.append((p, hit, "name"))
-        elif len(parsed) == 1 and len(subs) == 1:
+        elif len(parsed) == 1 and len(subs) == 1 and not is_bare_element(p.name):
             out.append((p, subs[0]["bds_id"], "single"))
         else:
             out.append((p, None, "unaligned"))

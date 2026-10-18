@@ -86,3 +86,18 @@ def test_strip_salt_keeps_cation_names(name):
 )
 def test_route_for_every_register_form(form, route):
     assert route_for_dosage_form(form) == route
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        # Vitamin names that are exactly one molecule align with that molecule.
+        ("Vitamin D3", "cholecalciferol"), ("Vitamin D2", "ergocalciferol"), ("Vitamin B1", "thiamine"),
+        ("Vitamin B2", "riboflavin"), ("Vitamin B6", "pyridoxine"), ("Vitamin B12", "cyanocobalamin"),
+        ("Vitamin C", "ascorbic acid"), ("Vitamin K1", "phytomenadione"), ("vitamin  d3", "cholecalciferol"),
+        # Ambiguous vitamin names (several molecules or esters) are never mapped.
+        ("Vitamin A", "vitamin a"), ("Vitamin E", "vitamin e"), ("Vitamin B3", "vitamin b3"), ("Vitamin D", "vitamin d"),
+    ],
+)
+def test_normalize_name_vitamin_synonyms(raw, expected):
+    assert normalize_name(raw) == expected
