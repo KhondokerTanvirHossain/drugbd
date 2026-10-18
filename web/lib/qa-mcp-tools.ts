@@ -100,3 +100,99 @@ export const TOOLS: readonly ToolDef[] = [
       + "state with its changes. " + READ_ONLY_NOTE,
     { type: "object", properties: { bdsId: S.bdsId, page: S.page(50) }, required: ["bdsId"], additionalProperties: false }),
 ];
+
+// ---- the input check (§7.9.8 rules), mapping a tool call to the QaInput the hosted server runs (§7.10.6)
+
+/** Each tool's QA route: the qa_read row's route name for its calls, refusals included. */
+export const TOOL_ROUTES: Readonly<Record<string, QaInput["route"]>> = {
+  list_batches: "batches", get_batch: "batch", get_record: "record", find_records: "records", get_pairs: "pairs",
+};
+
+export type ToolCheck = { ok: true; input: QaInput } | { ok: false; field: string; route: QaInput["route"] } | { ok: false; unknownTool: true };
+type Args = Readonly<Record<string, unknown>>;
+
+const BATCH_ID = new RegExp(BATCH_ID_SOURCE);
+const BDS_ID = new RegExp(BDS_ID_SOURCE);
+const NO_CONTROL = new RegExp(NO_CONTROL_SOURCE);
+/** "." and ".." are dot segments, which URL parsers collapse; a lone surrogate cannot be percent-encoded. */
+const notDotSegment = (s: string) => s !== "." && s !== "..";
+const encodable = (s: string) => {
+  try {
+    encodeURIComponent(s);
+    return true;
+  } catch {
+    return false;
+  }
+};
+const isBatchId = (v: unknown): v is string => typeof v === "string" && BATCH_ID.test(v) && notDotSegment(v);
+const isConceptId = (v: unknown): v is string => typeof v === "string" && v.length >= 1 && v.length <= CONCEPT_ID_MAX
+  && NO_CONTROL.test(v) && notDotSegment(v) && encodable(v);
+const isBdsId = (v: unknown): v is string => typeof v === "string" && BDS_ID.test(v);
+const isPage = (v: unknown): v is number => typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= PAGE_MAX;
+const isOneOf = (list: readonly string[]) => (v: unknown): v is string => typeof v === "string" && list.includes(v);
+
+/** A refused input's name, capped, so a refusal stays small. */
+const fieldName = (name: string) => [...name].slice(0, 100).join("");
+
+/** The first input that is not one the tool takes (in argument order), or null. */
+function unknownInput(args: Args, allowed: readonly string[]): string | null {
+  for (const name of Object.keys(args)) if (!allowed.includes(name)) return fieldName(name);
+  return null;
+}
+
+type Rule = readonly [name: string, ok: (v: unknown) => boolean, required: boolean];
+/** Each named input against its rule, in order; an optional one may be absent (never null). */
+function firstBad(args: Args, rules: readonly Rule[]): string | null {
+  for (const [name, ok, required] of rules) {
+    if (!Object.hasOwn(args, name)) {
+      if (required) return name;
+      continue;
+    }
+    if (!ok(args[name])) return name;
+  }
+  return null;
+}
+
+/**
+ * A tool call's arguments as a QaInput, or the first refused input, exactly as the stdio server's toPath refuses it (an
+ * input the tool does not take first, then the tool's inputs in path-then-query order; find_records: filter, stage, batch,
+ * page, with stage only for stage_warn), or an unknown tool. tools/qa-mcp/tests/parity.test.ts pins the two together.
+ */
+export function checkToolArgs(name: string, rawArgs: Args | undefined): ToolCheck {
+  const args: Args = rawArgs ?? {};
+  const route = Object.hasOwn(TOOL_ROUTES, name) ? TOOL_ROUTES[name] : undefined;
+  if (route === undefined) return { ok: false, unknownTool: true };
+  const refuse = (field: string): ToolCheck => ({ ok: false, field, route });
+  const has = (k: string) => Object.hasOwn(args, k);
+  switch (route) {
+    case "batches": {
+      const bad = unknownInput(args, []);
+      return bad !== null ? refuse(bad) : { ok: true, input: { route } };
+    }
+    case "batch": {
+      const bad = unknownInput(args, ["batchId"]) ?? firstBad(args, [["batchId", isBatchId, true]]);
+      return bad !== null ? refuse(bad) : { ok: true, input: { route, batchId: args.batchId as string } };
+    }
+    case "record": {
+      const bad = unknownInput(args, ["batchId", "conceptId"])
+        ?? firstBad(args, [["batchId", isBatchId, true], ["conceptId", isConceptId, true]]);
+      return bad !== null ? refuse(bad)
+        : { ok: true, input: { route, batchId: args.batchId as string, conceptId: args.conceptId as string } };
+    }
+    case "records": {
+      const bad = unknownInput(args, ["filter", "stage", "batch", "page"])
+        ?? firstBad(args, [["filter", isOneOf(FILTERS), true], ["stage", isOneOf(STAGES), false]])
+        ?? (has("stage") && args.filter !== "stage_warn" ? "stage" : null)
+        ?? firstBad(args, [["batch", isBatchId, false], ["page", isPage, false]]);
+      if (bad !== null) return refuse(bad);
+      return { ok: true, input: { route, filter: args.filter as string,
+        ...(has("stage") ? { stage: args.stage as string } : {}), ...(has("batch") ? { batch: args.batch as string } : {}),
+        page: has("page") ? args.page as number : 0 } };
+    }
+    case "pairs": {
+      const bad = unknownInput(args, ["bdsId", "page"]) ?? firstBad(args, [["bdsId", isBdsId, true], ["page", isPage, false]]);
+      if (bad !== null) return refuse(bad);
+      return { ok: true, input: { route, bdsId: args.bdsId as string, page: has("page") ? args.page as number : 0 } };
+    }
+  }
+}

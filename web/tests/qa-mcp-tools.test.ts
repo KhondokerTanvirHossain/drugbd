@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PREAMBLE, SERVER_NAME, SERVER_VERSION, SUPPORTED_PROTOCOL_VERSIONS, TOOLS } from "@/lib/qa-mcp-tools";
+import { PREAMBLE, SERVER_NAME, SERVER_VERSION, SUPPORTED_PROTOCOL_VERSIONS, TOOLS, TOOL_ROUTES, checkToolArgs } from "@/lib/qa-mcp-tools";
 
 /* §7.10.6, §11.1 "MCP parity": the web side of the shared MCP text. tools/qa-mcp/tests/parity.test.ts compares it with the stdio server. */
 describe("lib/qa-mcp-tools.ts", () => {
@@ -34,5 +34,25 @@ describe("lib/qa-mcp-tools.ts", () => {
     const src = readFileSync(new URL("../lib/qa-mcp-tools.ts", import.meta.url), "utf8");
     expect(src).not.toMatch(/^\s*import\b/m);
     expect(src).not.toMatch(/\brequire\(/);
+  });
+
+  it("checkToolArgs maps each tool to its QaInput, with page 0 when absent", () => {
+    expect(checkToolArgs("list_batches", undefined)).toEqual({ ok: true, input: { route: "batches" } });
+    expect(checkToolArgs("get_batch", { batchId: "0001-pilot" })).toEqual({ ok: true, input: { route: "batch", batchId: "0001-pilot" } });
+    expect(checkToolArgs("get_record", { batchId: "0001-pilot", conceptId: "a b" }))
+      .toEqual({ ok: true, input: { route: "record", batchId: "0001-pilot", conceptId: "a b" } });
+    expect(checkToolArgs("find_records", { filter: "stage_warn", stage: "ddinter" }))
+      .toEqual({ ok: true, input: { route: "records", filter: "stage_warn", stage: "ddinter", page: 0 } });
+    expect(checkToolArgs("find_records", { filter: "unaligned", batch: "0001-pilot", page: 3 }))
+      .toEqual({ ok: true, input: { route: "records", filter: "unaligned", batch: "0001-pilot", page: 3 } });
+    expect(checkToolArgs("get_pairs", { bdsId: "BDS-000003" })).toEqual({ ok: true, input: { route: "pairs", bdsId: "BDS-000003", page: 0 } });
+  });
+
+  it("checkToolArgs names the refused input and the tool's route; an unknown tool has no route", () => {
+    expect(checkToolArgs("get_batch", { batchId: ".." })).toEqual({ ok: false, field: "batchId", route: "batch" });
+    expect(checkToolArgs("find_records", { filter: "stage_fail", stage: "dgda" })).toEqual({ ok: false, field: "stage", route: "records" });
+    expect(checkToolArgs("get_pairs", { ["x".repeat(150)]: 1 })).toEqual({ ok: false, field: "x".repeat(100), route: "pairs" });
+    expect(checkToolArgs("toString", {})).toEqual({ ok: false, unknownTool: true });
+    expect(TOOL_ROUTES).toEqual({ list_batches: "batches", get_batch: "batch", get_record: "record", find_records: "records", get_pairs: "pairs" });
   });
 });
