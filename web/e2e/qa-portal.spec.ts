@@ -176,7 +176,7 @@ test("a senior creates a key from the account menu; a sixth active key is refuse
   await expect(page.getByText("Bot check passed")).toBeVisible();
   await page.getByRole("button", { name: "Create key" }).click();
   await expect(page.getByText("You already have 5 active keys.", { exact: true })).toBeVisible();
-  await expect(page.getByText("No key was created. Revoke one, then create another.")).toBeVisible();
+  await expect(page.getByText("No key was created. Revoke one, then create another.", { exact: true })).toBeVisible();
   await expect(live(page)).toContainText("You already have 5 active keys.");
   await expect(page.locator("#qa-new-key")).toHaveCount(0);
   await expect(page.getByLabel("Key name")).toHaveValue("Sixth");
