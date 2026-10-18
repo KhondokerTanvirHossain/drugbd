@@ -1,0 +1,23 @@
+{
+  "name": "intellidrugs-qa-mcp",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Read-only stdio MCP server over the IntelliDrugs QA API (spec §7.9.8)",
+  "type": "module",
+  "bin": { "intellidrugs-qa-mcp": "dist/index.js" },
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.test.json",
+    "test": "npm run typecheck && vitest run"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.25.3",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.7",
+    "typescript": "5.7.3",
+    "vitest": "2.1.8"
+  }
+}
