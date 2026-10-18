@@ -9,8 +9,8 @@ import { installTurnstileFake } from "./turnstile-fake";
 /*
  * §11.4 QA flow (QA portal, D66, D67): the qa role sees only the QA section; an engineer creates a key on /review/qa, sees it
  * once, uses it against the QA API, revokes it, and it stops working; a senior creates one too, and a sixth active key is
- * refused (by the API, then by the page); a pharmacist's page, menu and DB key. The hosted MCP steps belong to the hosted
- * MCP task.
+ * refused (by the API, then by the page); a pharmacist's page, menu and DB key. The engineer's key also drives the hosted MCP
+ * server (§7.10.6) on the built app: initialize, tools/list and tools/call list_batches, then 401 once the key is revoked.
  */
 
 const KEY = /^idqa_[A-Za-z0-9_-]{43}$/;
@@ -19,6 +19,13 @@ const sha256 = (s: string) => createHash("sha256").update(s, "utf8").digest("hex
 const newKey = () => `idqa_${randomBytes(32).toString("base64url")}`;
 const bearer = (key: string) => ({ Authorization: `Bearer ${key}` });
 const live = (page: Page) => page.locator("#qa-live");
+const PREAMBLE_FIRST = "IntelliDrugs QA data. This is UNREVIEWED data for quality assurance only;";
+const MCP_HEADERS = { "Content-Type": "application/json", Accept: "application/json, text/event-stream" };
+/** One JSON-RPC message to the hosted MCP server, with the key and (after initialize) the negotiated protocol version. */
+const mcp = (page: Page, key: string, body: Record<string, unknown>, version?: string) => page.request.post("/api/qa/mcp", {
+  headers: { ...MCP_HEADERS, ...bearer(key), ...(version ? { "MCP-Protocol-Version": version } : {}) },
+  data: JSON.stringify({ jsonrpc: "2.0", ...body }),
+});
 /** The newest row with this name (local reruns may leave older ones). */
 const keyRow = (page: Page, name: string) => page.getByRole("region", { name: "Your QA keys" }).getByRole("row").filter({ hasText: name }).first();
 const cell = (page: Page, name: string, i: number) => keyRow(page, name).getByRole("cell").nth(i);
@@ -108,10 +115,42 @@ test("an engineer creates a key, sees it once, uses it, revokes it, and it stops
   await expect(cell(page, "CI laptop", 3)).toHaveText(/^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2} Dhaka$/);
   expect(await page.content()).not.toContain(key);
 
+  // The same key drives the hosted MCP server (§7.10.6): initialize → notifications/initialized → tools/list → tools/call.
+  const init = await mcp(page, key, { id: 1, method: "initialize",
+    params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "e2e", version: "1.0.0" } } });
+  expect(init.status()).toBe(200);
+  expect(init.headers()["mcp-session-id"]).toBeUndefined();
+  const initBody = await init.json();
+  expect(initBody.result).toMatchObject({ protocolVersion: "2025-06-18", serverInfo: { name: "intellidrugs-qa", version: "1.0.0" } });
+  expect(initBody.result.instructions.startsWith(PREAMBLE_FIRST)).toBe(true);
+  expect((await mcp(page, key, { method: "notifications/initialized" }, "2025-06-18")).status()).toBe(202);
+  const list = await mcp(page, key, { id: 2, method: "tools/list" }, "2025-06-18");
+  expect(list.status()).toBe(200);
+  expect((await list.json()).result.tools.map((t: { name: string }) => t.name))
+    .toEqual(["list_batches", "get_batch", "get_record", "find_records", "get_pairs"]);
+  const callRes = await mcp(page, key, { id: 3, method: "tools/call", params: { name: "list_batches", arguments: {} } }, "2025-06-18");
+  expect(callRes.status()).toBe(200);
+  const call = (await callRes.json()).result;
+  expect(call.isError).toBeUndefined();
+  expect(call.content[0].text.startsWith(PREAMBLE_FIRST)).toBe(true);
+  const listed = JSON.parse(call.content[1].text);
+  expect(listed.success).toBe(true);
+  expect(listed.data.batches.map((b: { batchId: string }) => b.batchId)).toContain("0001-pilot");
+  const callText = JSON.stringify(call);
+  expect(callText).not.toContain(key);
+  expect(callText).not.toContain(E2E_EMAILS.engineer);
+  // A browser origin other than the site's own is refused.
+  expect((await page.request.post("/api/qa/mcp", { headers: { ...MCP_HEADERS, ...bearer(key), Origin: "https://evil.example" },
+    data: JSON.stringify({ jsonrpc: "2.0", id: 4, method: "ping" }) })).status()).toBe(403);
+
   // Revoke: the next request with it is 401.
   await expect(page.getByText("Bot check passed")).toBeVisible();
   await revokeKey(page, "CI laptop");
   expect((await page.request.get("/api/qa/v1/batches", { headers: bearer(key) })).status()).toBe(401);
+  const revoked = await mcp(page, key, { id: 5, method: "tools/list" }, "2025-06-18");
+  expect(revoked.status()).toBe(401);
+  expect(revoked.headers()["www-authenticate"]).toBe("Bearer");
+  expect(await revoked.json()).toEqual({ jsonrpc: "2.0", id: null, error: { code: -32001, message: "Unauthorized" } });
 });
 
 test("a senior creates a key from the account menu; a sixth active key is refused by the API, then by the page (§5.18, §7.10.2)", async ({ context, page }) => {
