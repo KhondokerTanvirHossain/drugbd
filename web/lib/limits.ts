@@ -22,6 +22,10 @@ export function createLimits(now: () => number = Date.now, overrides: { anonymou
     qaDeniedAudit: createWindowLimiter({ limit: 1, windowMs: 60_000, now, maxKeys: 10_000 }),
     /** QA portal (§7.10.4): a DB key's last-used touch, 1 per minute per key id (the API guards the same minute); 10,000 keys (LRU). */
     qaKeyTouch: createWindowLimiter({ limit: 1, windowMs: 60_000, now, maxKeys: 10_000 }),
+    /** QA portal (§9.3): QA key creation, 10 per 24 hours per account (the API also caps 10 a day and 5 active, durably). */
+    qaKeyCreate: createWindowLimiter({ limit: 10, windowMs: 86_400_000, now }),
+    /** QA portal (§9.3): QA key revocation, 30 per hour per account. */
+    qaKeyRevoke: createWindowLimiter({ limit: 30, windowMs: 3_600_000, now }),
   };
 }
 export type Limits = ReturnType<typeof createLimits>;
@@ -29,7 +33,7 @@ export type Limits = ReturnType<typeof createLimits>;
 /** The process-wide limits used by the server actions (the middleware bundle holds its own instance). */
 export const LIMITS: Limits = createLimits();
 
-export type AccountAction = "decision" | "flag" | "partner";
+export type AccountAction = "decision" | "flag" | "partner" | "qaKeyCreate" | "qaKeyRevoke";
 /** True when the account may perform one more `kind` action now (and counts it). */
 export function allowAccountAction(kind: AccountAction, email: string, limits: Limits = LIMITS): boolean {
   return limits[kind].allow(accountKey(email));

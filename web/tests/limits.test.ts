@@ -105,4 +105,17 @@ describe("§9.3 limits", () => {
     for (let i = 0; i < 10_050; i++) l.qaKeyTouch.allow(String(1000 + i));
     expect(l.qaKeyTouch.size()).toBe(10_000);
   });
+  it("QA portal (§9.3): key creation 10 per 24 hours and revocation 30 per hour, per account, through allowAccountAction", () => {
+    let now = 0;
+    const l = createLimits(() => now);
+    expect(Array.from({ length: 11 }, () => allowAccountAction("qaKeyCreate", "Eng@E2E.test", l)).filter(Boolean)).toHaveLength(10);
+    expect(allowAccountAction("qaKeyCreate", "other@e2e.test", l)).toBe(true);
+    expect(Array.from({ length: 31 }, () => allowAccountAction("qaKeyRevoke", "eng@e2e.test", l)).filter(Boolean)).toHaveLength(30);
+    now = 3_600_000;
+    expect(allowAccountAction("qaKeyRevoke", "eng@e2e.test", l)).toBe(true);
+    expect(allowAccountAction("qaKeyCreate", "eng@e2e.test", l)).toBe(false);
+    now = 86_400_000;
+    expect(allowAccountAction("qaKeyCreate", "eng@e2e.test", l)).toBe(true);
+    for (const k of l.qaKeyCreate.keys()) expect(k).not.toContain("@");
+  });
 });

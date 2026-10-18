@@ -13,7 +13,7 @@ describe("routeTemplate", () => {
     ["/review/0001-pilot/N-1", "/review/[batchId]/[conceptId]"], ["/review/0001-pilot/versions", "/review/[batchId]/versions"],
     ["/review/pairs", "/review/pairs"], ["/review/substances", "/review/substances"],
     ["/review/substances/BDS-000003", "/review/substances/[bdsId]"],
-    ["/review/flags", "/review/flags"], ["/__/auth/handler", "/__/auth/[...path]"], ["/", "/"], ["/api/session", "/api/session"],
+    ["/review/flags", "/review/flags"], ["/review/qa", "/review/qa"], ["/__/auth/handler", "/__/auth/[...path]"], ["/", "/"], ["/api/session", "/api/session"],
     ["/partners", "/partners"], ["/partners/request", "/partners/request"], ["/flag", "/flag"], ["/privacy", "/privacy"],
     // QA (§7.9): the middleware's own 429 lines name the QA route template, never an id or a query value
     ["/api/qa/v1/batches", "/api/qa/v1/batches"], ["/api/qa/v1/batches/0001-pilot", "/api/qa/v1/batches/[batchId]"],
