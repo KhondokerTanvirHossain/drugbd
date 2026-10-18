@@ -8,7 +8,7 @@
 | **Approved design** | Direction A "Clinical Calm", wordmark option A ("IntelliDrugs" + cobalt full stop), approved by the user on 12/10/2026 |
 | **Visual source of truth** | `docs/artifacts/2026-10-12-intellidrugs-design-system.html`, `-reviewer.html`, `-public.html`, `-learn.html`, and `docs/design/intellidrugs/tokens.css` |
 | **Earlier approved docs** | `docs/design/2026-10-11-bd-drug-kb-design.md`, `docs/design/database.md` (schema `db-schema-v1.0` is locked) |
-| **Amendments** | P1C "Review model and source links", 15/10/2026, from the product owner's decisions of 15/10/2026 (see "Changes in P1C" below) |
+| **Amendments** | P1C "Review model and source links", 15/10/2026, from the product owner's decisions of 15/10/2026 (see "Changes in P1C" below); QA "QA API, QA MCP and checker text", 18/10/2026, from the product owner's decisions of 17–18/10/2026 (see "Changes in QA" below) |
 
 > **Changes in P1C (15/10/2026).** The product owner's decisions of 15/10/2026 (PO D1–D10) add plan P1C, "Review model and source links". It brings in the senior pharmacist role, senior review by substance and by pair across all batches, the reopen rule, cross-batch pairs on the desk, removed items never public, source links for every code, and dismissing an issue. Learn is not touched (PO D9: the chapter 6 Chloramphenicol row is fixed in the P3 branch). Sections touched:
 >
@@ -25,6 +25,17 @@
 > - §11.1–§11.4;
 > - §12.1, §12.2 (new P1C row; P2 depends on P1C), §12.3, §12.5;
 > - §13.1 (Q4–Q13), §13.2 (D18 and D25 notes, D49–D60).
+
+> **Changes in QA (18/10/2026).** The product owner's decisions of 17–18/10/2026 add plan "QA API, QA MCP and checker text": a read-only, key-gated QA API served by the web app for the PO's other project, where another LLM re-checks our data for mismatches; a stdio MCP server over it; and DDInter's interaction description on the public checker's cards. Sections touched:
+>
+> - header table; §1.7 (intro note: no new page copy);
+> - §2.1 (QA routes); §2.2 (QA key holders);
+> - §4.2 (`Expander` prop `describedBy`); §4.3 (QA routes are not browser-callable; `QA_API_KEYS` server-only);
+> - §5.15 (`qa_read`);
+> - §6.7.3 (interaction description on the checker's cards);
+> - new §7.9 (QA API and QA MCP, the `GET /v1/qa/*` internal endpoints, V8);
+> - §9.3, §9.7; §11.1–§11.3; §12.2 (new QA row, seven plans), §12.3, §12.4 (`QA_API_KEYS`);
+> - §13.2 (D18 note, D61–D65).
 
 This document is the authority the implementation plans argue from. Where it says **Decision**, the choice is made and is not open. Where a board and this spec disagree, this spec wins only in the cases listed in §1.6 (board errors found against live data or the safety rules, and board strings that the Decisions here change). Everywhere else the boards win. Any string shown in "quotes" or a code block below must be used verbatim: it is either copied from a board, or it is new copy for a state the boards do not draw, listed in §1.7. Any quoted string that no board contains is new copy whether or not §1.7 names its state: it follows §3.5, and the copy test (§11.1) checks it against the §1.7 list.
 
@@ -172,6 +183,8 @@ Corrections:
 
 The boards do not cover the states below. Their copy is defined in the section named and is verbatim like board copy. Every string follows §3.5.
 
+*(QA, 18/10/2026)* The QA plan adds **no row**. The checker's interaction-description block (§6.7.3) reuses Board P's "Interaction description, truncated. Full text from DDInter 2.0." and "Interaction description, full text from DDInter 2.0." and the Expander's "Show full text" / "Show less". The QA API's envelope messages and the QA MCP preamble (§7.9) are machine-facing strings, like the API messages quoted in §7.2 and §7.7: they are not page copy, not §1.7 rows and not in `NEW_COPY`. The preamble is pinned by the MCP's own test (§11.1).
+
 | State | Section |
 |---|---|
 | Decision sent but not confirmed (timeout, lost response, 5xx) | §5.7, §5.8.4 |
@@ -242,6 +255,7 @@ The boards do not cover the states below. Their copy is defined in the section n
 | `/review/substances/[bdsId]?pairs=&severity=&page=` | *(P1C)* Senior review by substance: brands from every batch, mappings, codes with source links, and pairs (§5.17) | server + SeniorDesk island | senior |
 | `POST /signout` | Sign out (route handler, §9.6): checks `Origin`, clears the session cookie, sends `Clear-Site-Data: "storage"`, then 303 to `/` (or to `/signin?returnTo=…` for "Use another Google account") | route handler | everyone, rate-limited |
 | `/healthz` | Liveness (route handler, `200 ok`, not rate-limited) | server | container healthcheck |
+| `GET /api/qa/v1/*` | *(QA)* Read-only QA API (route handlers, JSON, §7.9). 404 for every path while `QA_API_KEYS` is unset. | route handler | `Authorization: Bearer` QA key holders only (never a session); rate-limited |
 
 **Decision: one route per Learn chapter, not one long page.** Each chapter loads on its own, which keeps page weight down on slow connections. The chapter nav becomes links with `aria-current="page"`. The "On this page" rail lists that chapter's sections.
 
@@ -276,6 +290,8 @@ The boards do not cover the states below. Their copy is defined in the section n
 **Decision (P1C, PO D2, D49).** `senior` is a pharmacist role. Every rule in this spec that names the pharmacist also applies to the senior pharmacist: approval, the promise's consequence, the "needs review" set, Report issue, history, and access to every pharmacist route. The senior also has the senior review surfaces (§5.17) and Dismiss issue (§5.10a). Wherever this spec writes "pharmacist" for a power, read "pharmacist or senior pharmacist". Wherever it writes "pharmacist" for a label shown to reviewers, the senior's label is "senior pharmacist".
 
 **Decision: public routes always read with public scope.** `/`, `/search`, `/products/*`, `/substances/*`, `/check`, `/check/suggest`, `/partners`, `/learn/*` and `/privacy` call the API with `scope=public` whatever the session, so a reviewer sees exactly what a reader sees there. Unapproved data is readable only under `/review/*`, through the token-gated endpoints in §7.3. The current `UnreviewedBadge` and the `scopeFor(session)` switch on public pages are removed. An e2e test opens `/products/{unapprovedId}` with a pharmacist session and asserts the stub (§11.4).
+
+**Decision (QA, D61).** A QA key holder (§7.9) is a machine reader outside the table above. It reads what the desk shows for every current record, unapproved ones included (source JSON, extraction, codes with source links, stage results and evidence, pairs, pair review state, and decision history as role, time and decision), plus the senior substance read's pairs. It never receives an email, a decision note, a dismissal note, a pair-issue note, `mine`, a flag, an audit row or session data, and it writes nothing but its own `qa_read` audit rows.
 
 Stored emails ("Emails of anyone else") are never rendered by any route. The team reads them only with database access, through the runbook queries in `docs/runbooks/` (§6.9). The folder does not exist yet: `docs/runbooks/reviewer-invite.md` is a new file written in P1B and `docs/runbooks/partner-requests.md` a new file written in P2 (§12.2).
 
@@ -440,7 +456,7 @@ A build check, `scripts/check-client-islands.mjs` (run in `postbuild` next to th
 | ReviewDesk | `components/review/ReviewDesk.tsx` plus `components/review/desk/*` | Keyboard model, commit-delayed approval window, toast, drafts, drawer and sheet, live region, stale polling, Turnstile for decisions | Batch-level props only, from `app/review/[batchId]/layout.tsx`: role, batch id, counts, and the desk settings (undo window, single-key shortcuts; §5.8.1, §5.14). A layout receives neither `searchParams` nor the child `[conceptId]` param and is not re-rendered when only the query changes, so record-level data comes from the record page (below). No source JSON and no clinical text in props. |
 | DeskRecordContext | `components/review/desk/DeskRecordContext.tsx` (rendered by `app/review/[batchId]/[conceptId]/page.tsx`) | Hands record-level data to the persistent ReviewDesk through React context: a registration call on mount and on every new props | the visible row order (`conceptId`, trade name, display status, version), the open record's decision context (§5.9) and its `version`. It wraps the server-rendered detail pane as `children` and renders them, or, while the open record is stale, the subtree it holds for `viewedVersion` (§5.11). |
 | CheckerCombobox | `components/check/CheckerCombobox.tsx` | ARIA 1.2 combobox with suggestions | the current ids, `max` = 20 |
-| Expander | `components/Expander.tsx` | Line clamp toggle | the id of the server-rendered text, and `label: "reviewer" \| "public"`. Reviewer (Board R): "Full text from DDInter 2.0" / "Show less". Public and Learn (Boards P and L): "Show full text" / "Show less". Without JS the text renders unclamped. |
+| Expander | `components/Expander.tsx` | Line clamp toggle | the id of the server-rendered text, and `label: "reviewer" \| "public"`. Reviewer (Board R): "Full text from DDInter 2.0" / "Show less". Public and Learn (Boards P and L): "Show full text" / "Show less". Without JS the text renders unclamped. *(QA)* Optional `describedBy`: the id of the text's kind label, set as the button's `aria-describedby` where one card holds two Expanders (§6.7.3). |
 | AccountMenu | `components/AccountMenu.tsx` | Esc and outside-click closing for a `<details>`-based menu | none (works as plain `<details>` without JS) |
 | GlossaryFilter | `components/learn/GlossaryFilter.tsx` | Live filter with a debounced count | none (filters the server-rendered list in the DOM) |
 | LearnRail | `components/learn/LearnRail.tsx` | Scroll-spy `aria-current` on "On this page"; scrolls the current chapter into view in the narrow nav; drives chapter 8's `.seg` example switches | none |
@@ -459,7 +475,8 @@ A build check, `scripts/check-client-islands.mjs` (run in `postbuild` next to th
   - `/review/[batchId]/versions`: `conceptId`, version and display status per current item, reviewers only;
   - `/api/session`.
 - `GET /v1/products/loaded` is no longer called by any page. The checker picker uses suggestions.
-- `INTERNAL_API_TOKEN`, `SESSION_SECRET` and `TURNSTILE_SECRET_KEY` stay server-only. The existing `check-client-bundle.mjs` scan stays.
+- *(QA)* `/api/qa/v1/*` (§7.9) is not browser-callable: it is authorised only by a Bearer QA key, reads no cookie, and sends no CORS header, so no page script on any origin can use it. It is the one key-gated, server-to-server JSON surface, and its list endpoints are paged (100 records, 50 pairs).
+- `INTERNAL_API_TOKEN`, `SESSION_SECRET`, `TURNSTILE_SECRET_KEY` and *(QA)* `QA_API_KEYS` stay server-only. The existing `check-client-bundle.mjs` scan stays.
 
 ### 4.4 Progressive enhancement
 
@@ -1242,6 +1259,7 @@ These events are written to `ops.audit_event` (V6, §7.5) through `POST /v1/audi
 | `pair_decision` *(P1C)* | API, in the pair decision transaction | Every accepted pair decision (§7.7) | `ddinter_pair` `{ddinterA}/{ddinterB}`; `outcome` = `reviewed` or `issue` |
 | `pair_decision_rejected` *(P1C)* | API, in its own transaction after the pair decision fails | 409 or 400 on a pair decision. `outcome` = the code. | `ddinter_pair` |
 | `senior_open` *(P1C)* | web (SeniorDesk, via the `logSeniorOpen` server action) | A senior page is shown (it reads unreviewed data from every batch). Never on a prefetch. At most one per actor, page and 10 minutes. | `substance` `{bdsId}`, or `pair_queue` `{show}` |
+| `qa_read` *(QA)* | web, the `/api/qa/v1/*` route handlers (§7.9.6) | Every QA API call except while the QA API is disabled; `unauthorized` and `rate_limited` rows throttled. `outcome` = `ok` or the lower-cased error code. No actor email or role. | `qa_route` `{label}/{route}` (`{route}` alone when unauthenticated) |
 
 - Undo and discarded windows are **not** audit events, because nothing reached the server.
 - Audit rows hold `actor_email` (team-only, like `review_decision`), `actor_role` (*P1C*: also `senior`) and `request_id`. There are no IP addresses and no free text from forms. For `decision` and `decision_rejected`, `request_id` is the decision's `requestId` (§7.2); for other events it is the web request id, the `x-request-id` header the middleware sets on every request (§9.4).
@@ -1682,8 +1700,17 @@ For the selected products, the API removes the unapproved ones under public scop
    - *(P1C, PO D4, D53)* Directly under the head: `FROM_DDINTER` · the pair's public review state, `PAIR_REVIEWED` (with the counting review's date) or `PAIR_NOT_REVIEWED`. It is plain text, not a chip, a pill or green. Every alert is shown with its DDInter text, whatever its review state: senior review is after the fact, not a gate.
    - Known severity: meta "{substance} + {substance}. Action: {actions}", then:
      - with management: management text (truncated over 200 characters) plus "Management, truncated. Full text from DDInter 2.0." and the Expander "Show full text" / "Show less", or "Management, full text from DDInter 2.0.";
+     - *(QA, Decision, PO 17/10/2026, D64)* with management **and** an interaction description: the management block above, then the interaction-description block (below);
      - without management: "DDInter 2.0 gives no management text for this pair." plus the interaction-description block;
      - with neither: "DDInter 2.0 gives no text for this pair."
+   - **Interaction-description block** (Board P's): DDInter's interaction text, never rewritten, plus "Interaction description, truncated. Full text from DDInter 2.0." and the Expander "Show full text" / "Show less" when it is over 200 characters, or "Interaction description, full text from DDInter 2.0." Once JavaScript runs, the Expander clamps a text over 200 characters to three lines, like the management text, so a long description starts collapsed; a shorter one has no Expander and shows in full; without JavaScript every text renders in full (§4.4). *(QA)* Rules for the card that shows both texts:
+     - "No text" follows `ddinterText()` (§3.6): a DDInter placeholder counts as no text, so a pair whose description is a placeholder keeps today's management-only card;
+     - each text and its label line are wrapped in their own element, so the `PairCard.module.css` sibling rules that swap "truncated" and "full text" apply to their own text only (unwrapped, a clamped management text would hide the description's label);
+     - each Expander targets its own text id and carries `describedBy` (§4.2) pointing at its own kind label, so the two "Show full text" buttons are told apart by assistive technology;
+     - the label line `FROM_DDINTER` · review state, the meta, the route-assumed lines and the footer are unchanged;
+     - it applies to the checker's alert cards only: `PublicPairCard` takes it as an opt-in prop that `CheckResults.tsx` alone sets, and the product-page (§6.5) and substance-page (§6.6) cards keep their markup;
+     - no unapproved data (G3): the text is the `interaction` field already in `alerts[]` of the check result, computed over public products only (§7.4). No API change, no new island (Expander is on the §4.2 list), no new copy (§1.7), no announcement;
+     - budgets: `/check` stays within §10.6 (HTML ≤ 50 KB gzip on the Lighthouse checker URL, JS unchanged apart from extra Expander instances).
    - Unknown severity: meta "{substance} + {substance}", then `UNKNOWN_PAIR_LINE`.
    - Route-assumed line when either side was assumed: "Route assumed: {brand}'s route is {route} and DDInter has no {route} entry for {substance}, so the systemic entry `{id}` was used." When that product has no route: "Route assumed: {brand} has no route on record, so the systemic entry `{id}` was used."
    - Footer: "Source: DDInter 2.0, `{idA}` + `{idB}`".
@@ -2187,6 +2214,161 @@ CREATE UNIQUE INDEX audit_event_pair_decision_request_uq ON ops.audit_event (req
 - **Tests**: `AuditAppendOnlyIntegrationTest` adds `ops.pair_review`, and a V7 migration test asserts the constraint names, the widened checks, `review_decision_dismiss_by_senior`, and the new unique index.
 - **Retention (Decision)**: pair reviews are kept indefinitely, like decisions.
 
+### 7.9 QA API and QA MCP (read-only) *(QA, Decision, PO 17–18/10/2026; D61–D63, D65)*
+
+**Purpose.** A read-only, key-gated API for the product owner's other project, where another LLM re-checks our data against its sources and reports mismatches. It reads what the reviewer desk reads, unapproved records included, and writes nothing but its own audit rows. It is not the partner API (§1.3 is unchanged): no public keys, metering or releases.
+
+**Where it runs (Decision).** In the existing web app, as Next.js route handlers under `/api/qa/v1/`, because `api` is internal-only (§9.1) and the `drugdb.eliooo.org` Caddy block must not change (§12.4). The handlers call the internal API server-side with `INTERNAL_API_TOKEN`, as the reviewer pages do. No new container, port, network or Caddy change. Files: `web/app/api/qa/v1/**/route.ts`, one optional catch-all `web/app/api/qa/[[...rest]]/route.ts` (`/api/qa` and every unknown QA path answer the 404 envelope), `web/lib/qa-api.ts` (`server-only`: keys, auth, limit, envelope, audit) and `web/lib/qa-map.ts` (`server-only`: the allowlist mappers). Every handler is wrapped in `withRequestLog` (route template only).
+
+#### 7.9.1 Auth, rate limit, headers, envelope
+
+- **Keys.** New env `QA_API_KEYS` (web only) = `label:sha256hex[,label:sha256hex…]`. Entries are trimmed. `label` matches `^[a-z0-9][a-z0-9_-]{0,31}$`; the hash is the 64-character lower-case SHA-256 hex of the UTF-8 key. Only hashes are stored anywhere. A key is generated and handed to its holder once, by the runbook `docs/runbooks/qa-api-keys.md` (new: `openssl rand -hex 32`, then `printf '%s' "$KEY" | shasum -a 256`; rotate by adding the new entry before removing the old; revoke by removing the entry and recreating the `web` container only).
+- **Disabled (Decision).** `QA_API_KEYS` unset or empty: every `/api/qa/*` path answers 404 `NOT_FOUND`, exactly as an unknown path does, and writes no audit row. A malformed value (a bad label or hash, a duplicate label or hash) fails closed the same way, and the web logs one line, once, "QA_API_KEYS invalid: entry {n}" (the index only, never the value).
+- **Request auth.** Only `Authorization: Bearer <key>`: scheme case-insensitive, one space, key of 32–256 characters from `[A-Za-z0-9._~+/=-]`. The handler hashes the presented key and compares the 32-byte digest with **every** configured hash using `crypto.timingSafeEqual`, with no early exit. Missing, malformed or unknown: 401 `UNAUTHORIZED` with `WWW-Authenticate: Bearer`, no `field` and no detail (it never says which part failed). Cookies, sessions and any `X-Internal-Token` sent by the caller are ignored: a reviewer's browser session never authorises a QA call.
+- **Order.** disabled (404) → auth (401) → rate limit (429) → input validation (400) → internal API read → map → audit → answer.
+- **Rate limit.** 60 requests per minute per key label, sliding window: `qa: createWindowLimiter({ limit: 60, windowMs: 60_000 })` in `createLimits()` (`lib/limits.ts`, §9.3). Every authenticated request counts, 400s included. Over the limit: 429 `RATE_LIMITED`, `Retry-After: 60`. The middleware's per-IP limit (10/s, burst 30) still applies first, and its 429 stays the existing plain-text answer, not the envelope; QA paths start with `/api/`, so the daily page caps never count them (existing `isPage`).
+- **Methods and CORS.** GET only (Next serves HEAD through GET, and its automatic OPTIONS answer carries `Allow` only). No `Access-Control-*` header on any response.
+- **Headers** on every QA response, errors included: `Cache-Control: private, no-store`, `X-Robots-Tag: noindex, nofollow`, `Content-Type: application/json`.
+- **Envelope (Decision).** The platform `ApiResponse` shape, as the internal API and `/api/session` use it: `{ success, data, message, errors: [ { field, code, message } ], metadata: { timestamp, requestId } }`. `requestId` is the web request id (`x-request-id`, §9.4), which is also the `qa_read` row's `request_id`, so a finding can name the exact read. Codes and fixed messages: `INVALID_QUERY` "Invalid query" (400, with `field`); `UNAUTHORIZED` "Unauthorized" (401); `NOT_FOUND` "Not found" (404, with `field` when an id is unknown); `RATE_LIMITED` "Too many requests" (429); `UNAVAILABLE` "Unavailable" (502: the internal API failed, timed out or sent a malformed body, or the audit write of a 200 failed). Success: `message` "OK", `errors` empty. **Never 500**: every handler catches and maps to one of these.
+
+#### 7.9.2 Input validation (400 `INVALID_QUERY`, with the `field`)
+
+| Input | Rule | `field` |
+|---|---|---|
+| `batchId` (path), `batch` (query, optional) | `^[A-Za-z0-9._-]{1,100}$` (the `load-dgda.yml` batch-name character set; a batch id is the batch file's stem) | `batchId`, `batch` |
+| `conceptId` (path) | `isPathId` (1–200 characters, no control character; the register holds ids such as `040-090(-077--mectigen-vet-oral-solution`) | `conceptId` |
+| `bdsId` (path) | `^BDS-[0-9]{6}$` | `bdsId` |
+| `filter` (required on `/records`) | one of the seven filters in §7.9.4 | `filter` |
+| `stage` (optional) | `dgda`, `substances`, `clinical` or `ddinter`; allowed only with `filter=stage_warn` | `stage` |
+| `page` (optional, default 0) | decimal integer 0–999 | `page` |
+| a query parameter the route does not take, or a repeated one | refused | that parameter's name |
+
+A path segment that fails to decode is 400 for its field. Ids reach the internal API only through `encodeURIComponent`. The internal API validates the same rules; an API 400 is passed on as 400 with its field, an API 404 as 404 with the route's id field (`batchId`, `conceptId`, `bdsId`, or `batch` on `/records`).
+
+#### 7.9.3 Endpoints and shapes (the envelope's `data`)
+
+```
+GET /api/qa/v1/batches                                 ← GET /v1/review/batches
+→ { batches: [ { batchId, status, itemCount, approvedCount, runAt } ] }      // approvedCount = counts.approved
+
+GET /api/qa/v1/batches/{batchId}                       ← GET /v1/qa/batches/{b}/items (new, §7.9.5)
+→ { batchId, status, runAt, itemCount,
+    items: [ { conceptId, tradeName, displayStatus,
+               stages: [ { stage, status: "ok"|"warn"|"fail", note } ] } ] }  // current items, concept-id order; note = the stored
+                                                                              // note, whole; pipeline stage order; a stage with no result is absent
+
+GET /api/qa/v1/batches/{batchId}/records/{conceptId}   ← GET /v1/review/batches/{b}/items/{c}, without X-Viewer-Email
+→ QaRecord
+
+GET /api/qa/v1/records?filter=&stage=&batch=&page=     ← GET /v1/qa/records (new, §7.9.5)
+→ { filter, stage|null, batch|null, page, size: 100, total,
+    items: [ { batchId, conceptId, tradeName, displayStatus,
+               stages: { dgda, substances, clinical, ddinter } } ] }          // each "ok"|"warn"|"fail"|null; batch id, then concept id
+
+GET /api/qa/v1/substances/{bdsId}/pairs?page=          ← GET /v1/review/substances/{bdsId}?pairs=all&page=, without X-Viewer-Email
+→ { bdsId, name, page, size: 50, total,
+    pairs: [ { ddinterA, ddinterB, entry: { name, routeScope },
+               partner: { bdsId, name, entry: { name, routeScope } },        // the side that is not {bdsId} (side b when both are)
+               severity, actions, interaction, management, link: Source|null, applies,
+               review: { state: "not_reviewed"|"reviewed"|"changed"|"issue", at|null },
+               changes: [ { field, atReview, now } ] } ] }                   // changes: only when state = changed (§7.7)
+
+QaRecord = {
+  batchId, conceptId, displayStatus, review, extractedAt,
+  batch: { status, runAt, itemCount },
+  source: { json, url, link: Source },        // json = sourceJson as stored, unchanged; url = sourceUrl; link = brand.source (DGDA/OCL)
+  extraction: {
+    tradeName, company, dosageForm, darNumber, genericContentRaw, qualityFlag, parseStatus, parseNote,
+    dgdaIngredients: [ { xmCode, name } ],
+    ingredients: [ { bdsId|null, name, raw, strengthValue, strengthUnit, perValue, perUnit,
+                     names: [ { name, type, source } ],
+                     coverage: "full"|"none"|"not_run", coverageNote,
+                     codes: [ { system, code, routeScope, method, confidence, link: Source|null } ],
+                     ddinter: { chosen: [ { ddinterId, name, routeScope, routeAssumed } ],
+                                entries: [ { ddinterId, name, routeScope, counts, link: Source|null } ] } } ],
+    clinicalDrug: { bdcId, displayName, doseForm, route, signature } | null },
+  ddinterRoute: { route|null, routeAssumed },   // route = clinicalDrug.route; routeAssumed = any chosen entry assumed (RouteRule)
+  stages: [ { stage, status, notes: [ StageNote ], textMissing: [ TextMissingPair ], evidence } ],   // §7.3; evidence as stored
+  pairs: { inBatch: { totalBatchPairs, pairs: [ QaPair ], notChecked },          // §7.3 batchPairs
+           otherBatches: { batches, pairs: [ QaPair ], notChecked } },          // §7.3 otherPairs; batches = otherBatches
+  history: [ { kind, at, reason?, role?, decision?, counts?, uncountedBy?, carriedFrom? } ] }   // oldest first; no note, no mine
+
+QaPair = { ddinterA, ddinterB, nameA, nameB, substance?, partnerSubstance?, partnerBdsId?, severity, actions,
+           link: Source|null,                                  // the DDInter pair page (§5.6.6)
+           textMissing: { interaction: boolean, management: boolean },   // by ddinterText(): null or a DDInter placeholder is missing
+           review: { state, at|null },
+           partners: [ … ], partnerCount? }    // in batch: { conceptId, tradeName, index }; other batches: OtherPartner (§7.3)
+```
+
+- **Sources.** Every `link` is the API's `Source` (`SourceLinks`, §5.6.6), passed through: DGDA register (OCL), RxNav, WHO ATC/DDD, DrugBank, SNOMED CT through RxNav, "Search ICD-11 for {code}", the DDInter entry and the DDInter pair. The web never builds a source URL.
+- **Field paths a QA finding cites** are the JSON paths of these shapes, for example `extraction.ingredients[0].strengthValue`. The parsed strengths of a partial parse are at `stages[clinical].evidence.parsed`, and the ETL's route view at `stages[ddinter].evidence.route` and `.route_assumed`.
+
+#### 7.9.4 Problem filters (`/records`; current items only, `ReviewSql.CURRENT_ITEM`)
+
+| `filter` | An item matches when |
+|---|---|
+| `strength_missing` | a parsed ingredient in its clinical-stage evidence (`parsed[]`) has a null or missing `strength_value` |
+| `parse_partial` | its product's `parse_status` is `partial` |
+| `route_assumed` | its ddinter-stage evidence has `route_assumed: true`. This is the ETL's view; the record's `ddinterRoute.routeAssumed` is the API's RouteRule view, so a disagreement between the two is itself a finding |
+| `no_ddinter_data` | one of its substances has coverage `none` (`curated.interaction_coverage`). Coverage `not_run` never matches (D33) |
+| `unaligned` | a DGDA ingredient has no substance (its XM code maps to no BDS: `ingredients[].bdsId` null), or its clinical-stage evidence `aligned[]` has an entry with a null `bds_id` |
+| `stage_warn` | one of its stage results has status `warn`; with `stage`, that stage's result |
+| `stage_fail` | one of its stage results has status `fail` |
+
+#### 7.9.5 Internal API (new `QaQueryController`; token required, `auth.require`; read-only)
+
+```
+GET /v1/qa/batches/{b}/items                          → the /api/qa/v1/batches/{batchId} shape   // 404 NOT_FOUND field=batchId
+GET /v1/qa/records?filter=&stage=&batch=&page=0       → the /api/qa/v1/records shape, size 100   // 404 NOT_FOUND field=batch
+```
+
+- Hexagonal: `presentation/QaQueryController` → `application/QaQueryService` (the §7.9.2 rules as `INVALID_QUERY` with the field; `displayStatus` by `ApprovalRule.displayStatus`) → `application/port/QaQueryPort` → `adapter/persistence/R2dbcQaQueryAdapter`.
+- Set-based: a constant number of queries per request (the matching rows with their stage results, the total, and one decisions query for the page's items), never one per item. Current items through `ReviewSql.CURRENT_ITEM`. No new index.
+- `QaRecordsScaleIntegrationTest`, like `OtherPairsScaleIntegrationTest`: 40,000 items in 20 batches; every filter answers within the §10.6 API p95 (300 ms) with a constant query count. If it misses, the plan amends this section before adding an index, because an index is a schema change.
+
+#### 7.9.6 Audit
+
+- **Event `qa_read`**, written by the web through `POST /v1/audit-events` (`recordAudit`): `actorEmail` and `actorRole` null; `targetType` `qa_route`; `targetId` `{label}/{route}`, with `route` one of `batches`, `batch`, `record`, `records`, `pairs` (an unauthenticated call has no label, so `targetId` is `{route}`); `outcome` `ok` for a 200, else the lower-cased error code (`invalid_query`, `unauthorized`, `not_found`, `rate_limited`, `unavailable`); `requestId` the web request id. Never the key or its hash, and never path ids or query values (the route template only, as in logs, §5.15).
+- **A 200 is sent only after its row is written (Decision).** If the write fails, the answer is 502 `UNAVAILABLE` with no data, so no read of unreviewed data leaves without a trace. Other outcomes are written best effort: the answer stands if the write fails.
+- **Throttled rows.** `unauthorized` rows at most one per minute per (route, hashed IP), and `rate_limited` rows one per minute per label, with the `allowDeniedAudit` limiter style of `decision_denied` (§5.15; the IP is hashed in memory and never stored). A disabled API and unknown QA paths write nothing.
+- **`AuditService`**: `WEB_EVENTS` adds `qa_read`; `TARGET_TYPES` adds `qa_route`. The `TARGET_ID` and `OUTCOME` patterns are unchanged; labels and route names fit them.
+- **Schema change, needed (Decision, D63): `V8__qa_read_audit.sql`.** V7's `audit_event_event_check` refuses `qa_read`, so V8 drops it and adds it again with `qa_read` appended. Nothing else changes: `target_type` has no database check and `actor_role` stays nullable. Additive in effect; it follows the lock policy: the `db/migrations.lock` line and its header `db-schema-v1.3`, the four `database.md` headings, `docs/design/database.md` updated, tag `db-schema-v1.3`. Rollback keeps V8 (older images never write `qa_read`). `V8MigrationIntegrationTest` asserts the widened check.
+
+#### 7.9.7 Privacy rules (Decision, D62)
+
+- **An allowlist, never a pass-through.** The mappers in `lib/qa-map.ts` copy each field of §7.9.3 by name and never spread an API object, so a field the internal API adds later never reaches a QA caller.
+- **Never returned:** any email; decision, dismissal and pair-issue notes (`history[].note`, `openIssues`, `PairReview.note`, `PairView.history`); `mine`; version tokens and content hashes; `reopen`; flags, audit rows and session data; `INTERNAL_API_TOKEN`, keys and key hashes. Notes are omitted entirely: they are free text that could carry PHI (§9.7) and are shown to signed-in team members only, and a QA caller is neither. Decision history keeps role, time and decision. Stage notes and evidence are pipeline output, not reviewer text, and are returned.
+- **Read-only.** No POST, PUT, PATCH or DELETE route; the only write is the `qa_read` row.
+- **Logs** are the existing request line only (route template, method, status, duration, request id): never the `Authorization` header, the label, ids or query values.
+
+#### 7.9.8 QA MCP (`tools/qa-mcp/`)
+
+- **Package.** A small TypeScript stdio MCP server, with its own `package.json` and `package-lock.json`, exact pins `@modelcontextprotocol/sdk` 1.25.3 and `zod` 3.25.76 (dev: `typescript` 5.7.3, `vitest` 2.1.8, `@types/node` 22.10.7, as `web/`), Node 20 or newer. Run: `npm ci && npm run build && node dist/index.js`. It sits outside `web/`, so the web build, the bundle-secret scan and the island check never see it; CI runs it as its own `qa-mcp` job (`npm ci`, `npm run build`, `npm test`).
+- **Env.** `INTELLIDRUGS_QA_KEY` is required: when it is missing, the server writes "INTELLIDRUGS_QA_KEY is not set" to stderr and exits 1. `INTELLIDRUGS_QA_BASE_URL` defaults to `https://drugdb.eliooo.org`; it must be `https:`, or `http:` on `localhost` or `127.0.0.1` for local testing, with no credentials, query or fragment; otherwise the server exits 1. The key is sent only as `Authorization: Bearer …` to that origin, with `redirect: "error"` and a 30-second timeout. stdout carries the protocol only, and nothing written anywhere contains the key.
+- **Tools** map 1:1 to the endpoints, each with a JSON-schema input carrying the §7.9.2 patterns and enums (a bad input fails in the MCP, before any call) and `annotations.readOnlyHint: true`. There is no write tool.
+
+| Tool | Input | Calls |
+|---|---|---|
+| `list_batches` | `{}` | `GET /api/qa/v1/batches` |
+| `get_batch` | `{ batchId }` | `GET /api/qa/v1/batches/{batchId}` |
+| `get_record` | `{ batchId, conceptId }` | `GET /api/qa/v1/batches/{batchId}/records/{conceptId}` |
+| `find_records` | `{ filter, stage?, batch?, page? }` | `GET /api/qa/v1/records?…` |
+| `get_pairs` | `{ bdsId, page? }` | `GET /api/qa/v1/substances/{bdsId}/pairs?page=` |
+
+- **Result.** Two text content items: the fixed preamble, then the response body as JSON (`JSON.stringify(body, null, 2)`, envelope unchanged). The preamble is prepended to every result, errors included, verbatim:
+
+  ```
+  IntelliDrugs QA data. This is UNREVIEWED data for quality assurance only; a pharmacist may not have approved it.
+  Every finding must cite the exact field path and the source link it was checked against.
+  "No interaction data" never means a combination is safe.
+  Report findings; never claim that something was fixed.
+  Nothing here is clinical advice.
+  ```
+
+- **Errors.** `isError: true`, the preamble, then "QA API error {status} {code}" with the envelope's first error code (for example "QA API error 401 UNAUTHORIZED"), or "QA API error {status}" when an error body is not the envelope (the middleware's plain-text per-IP 429), "QA API error {status} invalid response" when a 200 body is not the envelope, or "QA API unreachable" on a network failure or timeout. Never the key, never request headers.
+- **README** (`tools/qa-mcp/README.md`): setup; getting a key from the PO (never committed, never in a config file under version control); the Claude Desktop `mcpServers` snippet and the Claude Code `claude mcp add` command; the five tools; and the preamble's rules.
+- **Tests** (vitest, mocked `fetch`): §11.1.
+
 ---
 
 ## 8. ETL fix: route-scoped DDInter selection
@@ -2338,6 +2520,7 @@ P0 also adds an optional `stages` input to `load-dgda.yml` (passed as `--stages`
 | Decision and report actions, per account (*P1C*: including dismissals and pair decisions, one shared budget) | 60 per minute | the action returns `rate_limited`. The desk shows the "not saved" network banner (§5.7), and a `decision_denied` audit event is written. |
 | Flags, per account | 10 per hour | flag outcome `failed` |
 | Partner requests, per account | 3 per day | flag outcome `failed` |
+| *(QA)* `/api/qa/v1/*`, per QA key label (§7.9.1) | 60 per minute, sliding window; every authenticated request counts | 429 envelope `RATE_LIMITED`, `Retry-After: 60`; a throttled `qa_read` row (§7.9.6) |
 
 - The IP is the first `X-Forwarded-For` entry, set by Caddy (existing).
 - **"Per account" keys use the session's email** (lower-cased, hashed with SHA-256 in memory, never logged), not the session id, so signing in again does not reset a limit.
@@ -2392,6 +2575,7 @@ frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'
   - stored for the team only, in `review_decision`, `flag`, `audit_event` and (*P1C*) `pair_review`;
   - never in public responses, never in logs;
   - shown only to their owner (account menu, the reader welcome state, and the "not on the reviewer list" banner).
+- *(QA)* The QA API (§7.9.7) returns no email and none of the free-text notes above. QA keys are stored only as SHA-256 hashes in `QA_API_KEYS`, and `qa_read` rows hold a key label, never a key, an email or an IP address.
 - `/privacy` states this, in the words of the sign-in card plus the audit-trail paragraph: "Each reviewer decision and sign-in is recorded with the account and time, for the team's audit trail. These records are never public." It adds: "Don't include patient names or other personal health details in notes, reports or requests. We don't ask for patient information."
 
 ### 9.8 Infrastructure identifiers (Decision)
@@ -2492,6 +2676,8 @@ These come from `tokens.css`:
 | *(P1C)* Senior keys | `senior-keys.test.tsx` | J/K move between rows; M marks the current row; Enter on "Mark reviewed" is blocked with its hint; R opens the row's panel; single-key Off disables J, K, M, R and ?. |
 | *(P1C)* Source links | `source-link.test.tsx` | `SourceLink` renders only with a URL; "fetched on" only with a stored time, in Dhaka date form; `target="_blank"`, `rel="noopener noreferrer"` and the sr-only text. |
 | Learn snapshot | `learn-snapshot.test.ts` | Counts are consistent; the 28-pair totals (§1.6 item 5) and the chapter 6 and glossary counts (§1.6 item 11); every snapshot-only value listed in §6.8 is present and dated. |
+| *(QA)* QA API | `qa-api.test.ts`, `qa-map.test.ts`, `qa-routes.test.ts` | `QA_API_KEYS` parsing: valid; unset or empty; a bad label, a bad hash, a duplicate label or hash (each disables, logging the entry index only). Disabled: 404 envelope on every QA route and the catch-all, with no API or audit call. Auth: no header, a wrong scheme, a short key and an unknown key are 401 with `WWW-Authenticate: Bearer` and no detail; a session cookie or `X-Internal-Token` alone is 401; the digest is compared with every configured hash (one `timingSafeEqual` call per entry, also when the first matches). The 61st request in a minute for one label is 429 with `Retry-After: 60`, and another label is unaffected. Every §7.9.2 bad input is 400 with its field, and only after auth; API 404 gives 404 with the route's field; API 5xx, timeout and a malformed body give 502; no path gives 500. Headers on success and on every error; no `Access-Control-*`. Audit: the `qa_read` fields per outcome; the throttled 401 and 429 rows; a 200 whose audit write fails becomes 502 with no data. Mappers: output keys equal the §7.9.3 allowlist; an API fixture with a sentinel email and a sentinel note in every place the API has one yields neither anywhere (deep scan); `textMissing` treats null and DDInter placeholders as missing; `partner` picks the side that is not the substance. |
+| *(QA)* QA MCP | `tools/qa-mcp/tests/*.test.ts` (own vitest, mocked `fetch`) | Each tool's URL, path encoding and `Authorization: Bearer` header; `redirect: "error"`; schema refusals for every §7.9.2 rule, with no call made; the preamble verbatim and first on success and on error; "QA API error {status} {code}" for 400, 401, 404, 429 and 502, "QA API error 429" for the plain-text per-IP 429, "invalid response" for a 200 whose body is not the envelope, "QA API unreachable" for a network error and a timeout; the key never appears in any result or stderr line; a missing key and each bad base URL exit 1; the tool list has exactly the five read-only tools. |
 
 ### 11.2 Component tests (server components)
 
@@ -2517,6 +2703,7 @@ These come from `tokens.css`:
 - *(P1C)* the senior pages: queue filters (both scopes) and empty states, the pair row in all four states (including "What changed in DDInter"), a non-applying pair with its plain line and no warning tone, a pair with more than 10 brands on a side ("and {n} more." and the substance link), the substance page with brands from two batches, the not-authorised banner for a pharmacist and for an engineer;
 - *(P1C)* source links on the desk (comparison table, ingredient block, pair footers, evidence "Sources") with the §5.6.6 hrefs for the pilot codes; the ICD-11 link text "Search ICD-11 for XM5DJ7";
 - *(P1C, P2)* public pair cards with `FROM_DDINTER` and `PAIR_REVIEWED` or `PAIR_NOT_REVIEWED`, never green; the product page "With other approved medicines" grouped by partner substance, with partners from two batches.
+- *(QA)* the checker alert card with management and an interaction description (§6.7.3): both texts, in that order, each in its own wrapper with its own label line; over 200 characters, each has its own Expander targeting its own text and described by its own label; a description that is a DDInter placeholder gives today's management-only card; with the management text clamped, the description's label still shows; `FROM_DDINTER` and the review state unchanged; management-only, description-only and no-text cards unchanged; the product-page and substance-page pair cards render the same markup as before.
 
 The existing 228 tests are updated where copy or routes change. None is deleted without a replacement.
 
@@ -2563,6 +2750,7 @@ The existing 228 tests are updated where copy or routes change. None is deleted 
 - *(P1C)* `PairQueueIntegrationTest`: every stored pair between held substances is queued by default (PO D3(b)): `DDInter351` pairs are present with `applies: false` while only the eye drop is held, after the applying pairs of the same severity, and absent under `pairs=applies`; order; filters and counts; `changedPairReturnsToQueue` (update a pair's text and the pair is `changed`, its public `pairReview` is `not_reviewed`, and no `batch_item` changes); decisions: 201, replay, 400 role, note and requestId, 404 for an unheld pair, 409 `contentHash`, `lastPairReviewId` and `state`; the audit rows.
 - *(P1C)* `VisibilityApiIntegrationTest` (PO D7): the approved-then-removed fixture on every endpoint of the matrix, including `POST /v1/interactions/check` (listed in `notReviewed`, never in `products` or `alerts`) and P10; public `pairReview` never shows `changed` or `issue`. `PublicStatusGuardTest` scans `adapter/persistence` and fails when a public adapter reads `batch_item.review` without `ReviewSql.statusOf` or `ReviewSql.LATEST_PUBLIC`.
 - *(P1C)* `V7MigrationIntegrationTest` (§7.8), and `AuditAppendOnlyIntegrationTest` extended to `ops.pair_review`.
+- *(QA)* `QaQueryIntegrationTest` (§7.9.5): 401 without the token; batch items with stages in pipeline order, a stage with no result absent, removed items excluded, 404 `batchId`; each filter with a matching and a non-matching fixture (coverage `not_run` never matches `no_ddinter_data`; `route_assumed` reads the ddinter-stage evidence; both `unaligned` causes); `stage` with `stage_warn` only (400 `stage` with any other filter); 400 for a bad `filter`, `batch` and `page`; 404 `batch`; paging, order and `total`. `QaRecordsScaleIntegrationTest`. `AuditApiIntegrationTest` adds `qa_read` with target type `qa_route` (201). `V8MigrationIntegrationTest` asserts the widened `audit_event_event_check`.
 
 **ETL** (`etl/tests/test_stage_ddinter.py`):
 
@@ -2666,7 +2854,7 @@ The pharmacist reviews the pilot in phase 1, on the workspace. The public site k
 
 ### 12.2 Implementation plans (Decision)
 
-This spec is **not one implementation plan**. It is split into six plans (*P1C*: five before 15/10/2026), each written, reviewed and executed on its own, in this order. Each plan cites the sections it implements and may not change a Decision here without amending this spec first.
+This spec is **not one implementation plan**. It is split into seven plans (*P1C*: five before 15/10/2026, six until the QA plan of 18/10/2026), each written, reviewed and executed on its own, in this order. Each plan cites the sections it implements and may not change a Decision here without amending this spec first.
 
 | Plan | Phase | Scope | Depends on |
 |---|---|---|---|
@@ -2676,12 +2864,13 @@ This spec is **not one implementation plan**. It is split into six plans (*P1C*:
 | **P2 Public surfaces** | 2 | §6.1–§6.7, §6.9, §7.4 (reusing `GET /v1/stats` from P3, and switching every public adapter to the one §7.4 rule), the `/?q=` redirect, `docs/runbooks/partner-requests.md` (new), and the public parts of §11. For sign-in, P2 adds only the visual card (§6.2 "Card") and the welcome states (including the P1C senior step). *(P1C)* P2 builds the P1C model: P10 across batches, grouped by partner substance (§6.5); `FROM_DDINTER` and the public pair review state on every pair card (§6.5–§6.7.3); the check result's `pairReview` rendered on the page (P1C ships the API field) and P9; source links on approved product and substance pages (§6.5). | P1A, P1C (P1B not required) |
 | **P3 Learn** | 3 | §6.8, the §1.6 Learn corrections, and the §7.4 `GET /v1/stats` row | P0, P1A, P1B; builds the §7.4 `GET /v1/stats` row |
 | **P1C Review model and source links** *(P1C)* | 1C | The senior role (§2.2; §5.13, every role gate listed there; `AuditService` in §7.5); Dismiss issue (§5.2, §5.6.5, §5.7, §5.8, §5.10a, §7.2); senior review (§5.17, §7.7, the `SeniorDesk` island, §4.2); the reopen rule (§8.1 item 4, §8.3.1: `settle`, `approval_view`, `--reopen`, batch status); the desk's cross-batch pairs, the `partnerScope` note split and the `Interactions.tsx` combination fix (§5.5.3, §5.6.1, §5.6.2, §7.3 `otherPairs`); source links on the desk (§5.5.2, §5.6.3, §5.6.6, `SourceLinks.java`); the PO D7 visibility tests (§7.4); the checker alerts' `ddinterA`, `ddinterB` and public `pairReview` (§7.4, API only); V7 and `db-schema-v1.2` (§7.8); the P1C §1.7 copy; and the P1C rows of §11. **Not in P1C**: public pages (P2 builds §6.5–§6.7 on this model) and Learn (PO D9). Learn's re-run sentences (§1.6 item 4) still describe the pre-P1C rule; they are listed for the next Learn amendment. | P0, P1A, P1B, P3; ships before P2 |
+| **QA API, QA MCP and checker text** *(QA)* | after 2 | §7.9 (the `/api/qa/v1/*` route handlers, `lib/qa-api.ts`, `lib/qa-map.ts`, `LIMITS.qa`, the `qa_read` audit event and `AuditService` changes, the `GET /v1/qa/*` internal endpoints, `tools/qa-mcp/` with its README and CI job, `docs/runbooks/qa-api-keys.md`); the §6.7.3 checker interaction-description block and the `Expander` `describedBy` prop (§4.2); `QA_API_KEYS` in `web.environment` and `deploy/.env.example` (§12.4); and the QA rows of §11. **Schema:** one change, because the audit event needs it: `V8__qa_read_audit.sql` widens `audit_event_event_check` with `qa_read` and nothing else, tag `db-schema-v1.3` (§7.9.6). A complete release: it may merge to `main` on its own (§12.3). | P2 (shipped) |
 
 P1A may ship as its own release: it changes the shared layout, security and the sign-in function, and no other surface's behaviour. P1B and P2 each ship as one release (§12.3).
 
 ### 12.3 Feature flags
 
-**Decision: no runtime feature flags.** Each phase is one release (an image tag) with its own redirects. This avoids a second code path for safety rules. Partially built surfaces are not deployed, and the branch model enforces it: every push to `main` that passes CI deploys at once (§12.4), so each plan's PRs merge into a `phase-N` integration branch (`phase-0`, `phase-1`, `phase-2`, `phase-3`), and only the phase-complete merge of that branch into `main` deploys. P0, P1A and P3 are the exceptions that may merge to `main` on their own, because each is a complete release (§12.2; P3 is the whole of phase 3). *(P1C)* P1C is the whole of phase 1C and may merge to `main` on its own, after P3. V7 runs through Flyway on deploy (§12.4), and the P1C pilot check (§8.3.1) follows the deploy.
+**Decision: no runtime feature flags.** Each phase is one release (an image tag) with its own redirects. This avoids a second code path for safety rules. Partially built surfaces are not deployed, and the branch model enforces it: every push to `main` that passes CI deploys at once (§12.4), so each plan's PRs merge into a `phase-N` integration branch (`phase-0`, `phase-1`, `phase-2`, `phase-3`), and only the phase-complete merge of that branch into `main` deploys. P0, P1A and P3 are the exceptions that may merge to `main` on their own, because each is a complete release (§12.2; P3 is the whole of phase 3). *(P1C)* P1C is the whole of phase 1C and may merge to `main` on its own, after P3. *(QA)* The QA plan is a complete release after phase 2 and may merge to `main` on its own; V8 runs through Flyway on deploy, and the QA API stays disabled until `QA_API_KEYS` is set (§12.4). V7 runs through Flyway on deploy (§12.4), and the P1C pilot check (§8.3.1) follows the deploy.
 
 ### 12.4 Deploy without touching other services
 
@@ -2690,7 +2879,7 @@ P1A may ship as its own release: it changes the shared layout, security and the 
 - **Smoke check.** The workflow's last step requests `$PUBLIC_URL/batches` with `curl -f`; it keeps passing in phase 0 (§12.1). P1A changes it to `$PUBLIC_URL/healthz`, so the `/batches` redirect (P1B) and the reviewer-only pages never fail a deploy.
 - The `medscribe`, `baymax`, `medioo` and `n8n` containers and the Caddy container are never restarted.
 - The `drugdb.eliooo.org` Caddy block is unchanged: the `/__/auth` proxy is a Next rewrite (§9.5).
-- **New env vars reach the web container only through `web.environment`.** Compose passes only the variables listed there (host `.env` values are interpolated, not inherited). P1A adds to `web.environment` in `deploy/docker-compose.yml`: `SITE_HOST: ${SITE_HOST}` and `HERO_CONCEPT_ID: ${HERO_CONCEPT_ID:-}`, and lists both in `deploy/.env.example` with `SITE_HOST=drugdb.eliooo.org` and `HERO_CONCEPT_ID=186-0030-006--napa`. `SITE_HOST` is required: `instrumentation.ts` exits when it is unset in production (a unit test in `instrumentation.test.ts` pins this), and `deploy.yml`'s pre-flight check requires it in the host `.env` so the running containers stay up. `INTELLIDRUGS_E2E` is never added here (§11.4).
+- **New env vars reach the web container only through `web.environment`.** Compose passes only the variables listed there (host `.env` values are interpolated, not inherited). P1A adds to `web.environment` in `deploy/docker-compose.yml`: `SITE_HOST: ${SITE_HOST}` and `HERO_CONCEPT_ID: ${HERO_CONCEPT_ID:-}`, and lists both in `deploy/.env.example` with `SITE_HOST=drugdb.eliooo.org` and `HERO_CONCEPT_ID=186-0030-006--napa`. `SITE_HOST` is required: `instrumentation.ts` exits when it is unset in production (a unit test in `instrumentation.test.ts` pins this), and `deploy.yml`'s pre-flight check requires it in the host `.env` so the running containers stay up. `INTELLIDRUGS_E2E` is never added here (§11.4). *(QA)* The QA plan adds `QA_API_KEYS: ${QA_API_KEYS:-}` to `web.environment` and an empty `QA_API_KEYS=` to `deploy/.env.example`, so the QA API ships disabled (404, §7.9.1). The product owner sets the hashed entries in the host `.env` after the deploy and recreates the `web` container only (`docker-compose up -d web`), following `docs/runbooks/qa-api-keys.md`; no other service is touched.
 - **Firebase auth domain (before the P1A deploy, in this order):**
   1. set the GitHub repository variable `FIREBASE_AUTH_DOMAIN=drugdb.eliooo.org` (the deploy workflow bakes it into the web image as `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`) and the same value for `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` in the host `.env`;
   2. in Google Cloud console, Credentials, the Firebase web OAuth client: add the authorized redirect URI `https://drugdb.eliooo.org/__/auth/handler` (without it, sign-in fails with `redirect_uri_mismatch`);
@@ -2750,7 +2939,7 @@ P1A may ship as its own release: it changes the shared layout, security and the 
 | D15 | A checked pair with no DDInter row = "No interaction listed in DDInter 2.0" (counted as checked, with the caveat); pairs inside one product = not checked | §6.7.2 |
 | D16 | Search stubs match on trade name and DAR only; public paging capped at 10 pages; spelling suggestion in memory (no trigram migration) | §6.3, §7.4 |
 | D17 | Partner access requests stored as flags (`other`/`partner-access`), no schema change | §6.9 |
-| D18 | V6 adds `ops.item_snapshot` and `ops.audit_event`, the decision `request_id` unique index, and append-only triggers; nothing else changes in the schema *(P1C: V7, D59, is the next and only other change)* | §7.6 |
+| D18 | V6 adds `ops.item_snapshot` and `ops.audit_event`, the decision `request_id` unique index, and append-only triggers; nothing else changes in the schema *(P1C: V7, D59, is the next change; QA: V8, D63, the one after it)* | §7.6 |
 | D19 | Global reviewer roles; invites sent by hand from a fixed template | §5.13 |
 | D20 | Encrypted session cookie (JWE) with the `__Host-` prefix; the old cookie is retired | §9.6 |
 | D21 | Nonce-based CSP without `script-src 'unsafe-inline'`; Turnstile on sign-in | §9.2, §9.4 |
@@ -2793,3 +2982,8 @@ P1A may ship as its own release: it changes the shared layout, security and the 
 | D58 | *(P1C, PO D8)* Every code links to its source page, built only by the API from a validated code, with "fetched on" where a fetch time is stored; desk for every record, public pages for approved records only; SNOMED CT through RxNav search and ICD-11 through the browser home, because neither has a working deep link by code | §5.6.6, §6.5 |
 | D59 | *(P1C)* V7 widens the decision and role checks, adds `ops.pair_review` (append-only by trigger) and the new audit events; tag `db-schema-v1.2` | §7.8 |
 | D60 | *(P1C)* Plan P1C ships after P3 and before P2; P2 builds the P1C public model, including P10 across batches grouped by partner substance (replacing D25's batch-only rule) | §6.5, §12.1, §12.2 |
+| D61 | *(QA, PO 17–18/10/2026)* A read-only QA API served by the existing web app under `/api/qa/v1/` (route handlers calling the internal API with the token; no new container, port or Caddy change); Bearer keys stored only as SHA-256 hashes in `QA_API_KEYS`, compared in constant time; unset means disabled (404 everywhere); 60 requests per minute per key; no CORS, `no-store`, `noindex` | §2.1, §2.2, §7.9.1 |
+| D62 | *(QA)* QA responses are built from a field allowlist; they never carry an email, a decision, dismissal or pair-issue note, `mine`, session data or a token; decision history is role, time and decision only | §7.9.3, §7.9.7 |
+| D63 | *(QA)* Every QA call writes a `qa_read` audit row (label, route template, outcome; never the key), with `unauthorized` and `rate_limited` rows throttled and none while the API is disabled; a 200 is sent only after its row is written; `V8` widens the event check for it, tag `db-schema-v1.3` | §5.15, §7.9.6 |
+| D64 | *(QA, PO 17/10/2026)* The public checker's alert cards show DDInter's interaction description after the management text, in its own block, clamped behind the existing Expander; checker only; no new copy, island, API field or unapproved data | §6.7.3 |
+| D65 | *(QA)* `tools/qa-mcp/`: a stdio MCP server with five read-only tools mapped 1:1 to the QA API, a fixed preamble on every result, errors with the HTTP status and never the key; outside the web build | §7.9.8 |
