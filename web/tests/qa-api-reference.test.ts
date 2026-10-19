@@ -60,6 +60,7 @@ import { DEFAULT_PROTOCOL_VERSION, MCP_MAX_BODY } from "@/lib/qa-mcp";
 import { SUPPORTED_PROTOCOL_VERSIONS, TOOLS, TOOL_ROUTES } from "@/lib/qa-mcp-tools";
 import { BATCH_ID, BDS_ID, PAGE_MAX, QA_FILTERS, QA_STAGES, type QaRoute } from "@/lib/qa-query";
 import { apiBatchItems, apiBatches, apiRecord, apiRecords, apiSubstance } from "./fixtures/qa";
+import type { StageKey } from "@/lib/review-types";
 
 const WEB = join(__dirname, "..");
 const HOST = "drugdb.example.org";
@@ -361,6 +362,115 @@ describe("(a) the examples agree with one another (§5.18 Example content)", () 
   it("the pairs example's total is the number of pairs shown, each with Warfarin as this substance", () => {
     expect(data("pairs").total).toBe(data("pairs").pairs.length);
     for (const p of data("pairs").pairs) expect(p.partner.bdsId === "BDS-000003" ? p.entry.name : p.partner.bdsId).not.toBe("BDS-000003");
+  });
+
+  it("a stage's note is always a string: an ok stage's is \"\", as the ETL stores it (ops.stage_result.note is TEXT NOT NULL)", () => {
+    expect(readFileSync(join(WEB, "..", "db/migrations/V3__pipeline.sql"), "utf8"))
+      .toMatch(/CREATE TABLE ops\.stage_result \([^;]*?\bnote TEXT NOT NULL,/);
+    expect(EXAMPLE_NULLS.batch).toEqual([]);
+    const stages = (data("batch").items as { stages: { status: string; note: unknown }[] }[]).flatMap((i) => i.stages);
+    for (const s of stages) expect(typeof s.note, JSON.stringify(s)).toBe("string");
+    for (const s of stages.filter((x) => x.status === "ok")) expect(s.note).toBe("");
+    for (const s of stages.filter((x) => x.status !== "ok")) expect(s.note).not.toBe("");
+  });
+});
+
+/*
+ * §5.18 "Example content", §7.9.3 "evidence as stored": the record example's stages[].evidence is opaque to the shape test, so
+ * its keys are pinned here to the ETL builders that write ops.stage_result.evidence. Each entry names a path in the example's
+ * evidence ("" the object itself, "x[]" the elements of array x) and the dict literal in the ETL source that builds it, found by
+ * a sequence of anchors; the dict's top-level keys must equal the example's keys there, and no other object in the example's
+ * evidence may go unpinned.
+ */
+const ETL = (f: string) => readFileSync(join(WEB, "..", "etl/src/bddrug_etl", f), "utf8");
+/** The top-level keys of the Python dict literal at the first `{` after the anchors, found in order. */
+function pyDictKeys(src: string, anchors: string[]): string[] {
+  let at = 0;
+  for (const a of anchors) {
+    const i = src.indexOf(a, at);
+    expect(i, `anchor ${a}`).toBeGreaterThanOrEqual(0);
+    at = i;
+  }
+  const open = src.indexOf("{", at);
+  const keys: string[] = [];
+  let depth = 0;
+  for (let i = open; i < src.length; i++) {
+    const c = src[i];
+    if (c === '"' || c === "'") {
+      const end = src.indexOf(c, i + 1);
+      const key = /^\s*:/.test(src.slice(end + 1)) && depth === 1;
+      if (key) keys.push(src.slice(i + 1, end));
+      i = end;
+    } else if ("{[(".includes(c)) depth++;
+    else if ("}])".includes(c) && --depth === 0) break;
+  }
+  return keys.sort();
+}
+const EVIDENCE: Record<StageKey, { path: string; file: string; anchors: string[] }[]> = {
+  dgda: [{ path: "", file: "load/batches.py", anchors: ["def _dgda_results", 'StageResult(cid, "ok", ""'] }],
+  substances: [
+    { path: "", file: "stages/substances.py", anchors: ['evidence = {"substances"'] },
+    { path: "substances[]", file: "stages/substances.py", anchors: ["def _evidence_for", "return {"] },
+  ],
+  clinical: [
+    { path: "", file: "stages/clinical.py", anchors: ["def _evidence(", "return {"] },
+    { path: "parsed[]", file: "stages/clinical.py", anchors: ["def _evidence(", '"parsed": ['] },
+    { path: "aligned[]", file: "stages/clinical.py", anchors: ["def _evidence(", '"aligned": ['] },
+  ],
+  ddinter: [
+    { path: "", file: "stages/ddinter.py", anchors: ["def _process(", "evidence = {"] },
+    { path: "mappings[]", file: "stages/ddinter.py", anchors: ["def _process(", "mappings.append({"] },
+    { path: "coverage[]", file: "stages/ddinter.py", anchors: ["def _process(", "coverage.append({"] },
+    { path: "chosen[]", file: "stages/ddinter.py", anchors: ["def _process(", "chosen.append({"] },
+  ],
+};
+/** Every object path of an evidence value, with the union of its key sets. */
+function objectKeys(v: unknown, path = "", out = new Map<string, Set<string>>()): Map<string, Set<string>> {
+  if (Array.isArray(v)) v.forEach((e) => objectKeys(e, `${path}[]`, out));
+  else if (v !== null && typeof v === "object") {
+    if (!out.has(path)) out.set(path, new Set());
+    for (const [k, x] of Object.entries(v)) { out.get(path)!.add(k); objectKeys(x, path ? `${path}.${k}` : k, out); }
+  }
+  return out;
+}
+
+describe("(a) the record example's stage evidence is what the pipeline writes (§5.18, §7.9.3)", () => {
+  const stages = EX.RECORD_BODY.stages as { stage: StageKey; evidence: unknown }[];
+
+  it.each(Object.keys(EVIDENCE) as StageKey[])("%s: every object's keys are the ETL builder's keys, and none is unpinned", (stage) => {
+    const evidence = stages.find((s) => s.stage === stage)!.evidence;
+    const keys = objectKeys(evidence);
+    for (const { path, file, anchors } of EVIDENCE[stage]) {
+      expect([...(keys.get(path) ?? [])].sort(), `${stage} ${path || "(top)"}`).toEqual(pyDictKeys(ETL(file), anchors));
+    }
+    expect([...keys.keys()].sort()).toEqual(EVIDENCE[stage].map((e) => e.path).sort());
+  });
+
+  it("the values have the ETL's types and agree with the rest of the record", () => {
+    const ev = Object.fromEntries(stages.map((s) => [s.stage, s.evidence])) as Record<StageKey, any>;
+    const r = EX.RECORD_BODY;
+    expect(ev.dgda).toEqual({ source: "DGDA-Drugs", concept_class: r.sourceJson.concept_class });
+    const ing = r.ingredients[0];
+    expect(ev.substances.substances).toEqual([expect.objectContaining({ bds_id: ing.bdsId, name: ing.name, xm: r.dgdaIngredients[0].xmCode,
+      rxcui: ing.codes.find((c) => c.system === "RXCUI")!.code })]);
+    for (const [k, system] of [["atc", "ATC"], ["drugbank", "DRUGBANK"]] as const) {
+      expect(ev.substances.substances[0][k]).toEqual(ing.codes.filter((c) => c.system === system).map((c) => c.code));
+    }
+    // clinical: strengths are strings (_str), the raw text and the clinical drug are the record's own
+    expect(ev.clinical).toMatchObject({ raw: r.brand.genericContentRaw, parse_status: r.brand.parseStatus, bdc_id: r.clinicalDrug.bdcId,
+      signature: r.clinicalDrug.signature });
+    for (const p of ev.clinical.parsed) {
+      expect(typeof p.strength_value).toBe("string");
+      expect(p.strength_value).toBe(String(ing.strengthValue));
+      expect(p.per_value === null || typeof p.per_value === "string").toBe(true);
+    }
+    expect(ev.clinical.aligned.map((a: { bds_id: string }) => a.bds_id)).toEqual([ing.bdsId]);
+    // ddinter: the route view the key fields tell QA to compare with ddinterRoute
+    const chosen = ing.ddinter.chosen[0];
+    expect(ev.ddinter).toMatchObject({ route: r.clinicalDrug.route, route_assumed: chosen.routeAssumed, pair_count: ing.ddinter.entries[0].counts.total,
+      disease_count: ing.ddinter.entries[0].diseaseCount, food_count: ing.ddinter.entries[0].foodCount,
+      chosen: [{ bds_id: ing.bdsId, ddinter_id: chosen.ddinterId, route_scope: chosen.routeScope, route_assumed: chosen.routeAssumed }] });
+    expect(ev.ddinter.text_missing).toEqual(r.stages.find((s) => s.stage === "ddinter")!.textMissing.map((t) => [t.ddinterA, t.ddinterB]));
   });
 });
 

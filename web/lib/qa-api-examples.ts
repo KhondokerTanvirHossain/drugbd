@@ -28,7 +28,7 @@ export const EXAMPLE_BDS = "BDS-000003";
 export type QaBatchItemsBody = {
   batchId: string; status: ReviewBatchSummary["status"]; runAt: string; itemCount: number;
   items: { conceptId: string; tradeName: string; displayStatus: DisplayStatus;
-           stages: { stage: StageKey; status: "ok" | "warn" | "fail"; note: string | null }[] }[];
+           stages: { stage: StageKey; status: "ok" | "warn" | "fail"; note: string }[] }[];
 };
 /** GET /v1/qa/records (§7.9.5): the internal body behind GET /api/qa/v1/records. */
 export type QaRecordsBody = {
@@ -59,13 +59,13 @@ export const BATCHES_BODY = [
 
 // ---- GET /api/qa/v1/batches/{batchId}  ←  GET /v1/qa/batches/{b}/items
 
-type Row = [conceptId: string, tradeName: string, displayStatus: DisplayStatus, ddinter: "ok" | "warn", note: string | null];
-/** The ten pilot records in concept-id order; every stage but ddinter is ok with no note. */
+type Row = [conceptId: string, tradeName: string, displayStatus: DisplayStatus, ddinter: "ok" | "warn", note: string];
+/** The ten pilot records in concept-id order; every stage but ddinter is ok, and an ok stage's note is "" as the ETL stores it. */
 const PILOT: Row[] = [
   ["071-0098-022--amlodipine-5", "Amlodipine-5", "approved", "warn", missing("DDInter14", "DDInter79")],
   ["076-0028-006--aspirin", "Aspirin", "approved", "warn", missing("DDInter14", "DDInter20")],
   ["096-0265-061--simvastatin", "Simvastatin", "pending", "warn", missing("DDInter14", "DDInter1675")],
-  ["127-0163-052--chloramphenicol", "Chloramphenicol", "approved", "ok", null],
+  ["127-0163-052--chloramphenicol", "Chloramphenicol", "approved", "ok", ""],
   ["127-0263-018--domperidone", "Domperidone", "issue", "warn", "DDInter coverage none for BDS-000010"],
   ["185-0138-012--g-warfarin", "G Warfarin", "approved", "warn", missing("DDInter1951", "DDInter79")],
   ["185-0241-015--g-metformin", "G-Metformin", "back_in_review", "warn", missing("DDInter1164", "DDInter14")],
@@ -77,9 +77,9 @@ const PILOT: Row[] = [
 export const BATCH_BODY = {
   batchId: EXAMPLE_BATCH, status: "in_review", runAt: RUN_AT, itemCount: PILOT.length,
   items: PILOT.map(([conceptId, tradeName, displayStatus, ddinter, note]) => ({ conceptId, tradeName, displayStatus, stages: [
-    { stage: "dgda" as const, status: "ok" as const, note: null },
-    { stage: "substances" as const, status: "ok" as const, note: null },
-    { stage: "clinical" as const, status: "ok" as const, note: null },
+    { stage: "dgda" as const, status: "ok" as const, note: "" },
+    { stage: "substances" as const, status: "ok" as const, note: "" },
+    { stage: "clinical" as const, status: "ok" as const, note: "" },
     { stage: "ddinter" as const, status: ddinter, note },
   ] })),
 } satisfies QaBatchItemsBody;
@@ -116,6 +116,10 @@ export const RECORD_BODY = {
         source: { url: "https://icd.who.int/browse/latest-release/mms/en", label: "Search ICD-11 for XM5DJ7", fetchedAt: FETCHED } },
       { system: "RXCUI", code: "161", routeScope: "any", method: "rxnav-exact", confidence: 1,
         source: { url: "https://mor.nlm.nih.gov/RxNav/search?searchBy=RXCUI&searchTerm=161", label: SOURCE_LABEL.rxnav, fetchedAt: FETCHED } },
+      { system: "ATC", code: "N02BE01", routeScope: "any", method: "rxnav-exact", confidence: 1,
+        source: { url: "https://atcddd.fhi.no/atc_ddd_index/?code=N02BE01&showdescription=no", label: SOURCE_LABEL.who, fetchedAt: FETCHED } },
+      { system: "DRUGBANK", code: "DB00316", routeScope: "any", method: "rxnav-exact", confidence: 1,
+        source: { url: "https://go.drugbank.com/drugs/DB00316", label: "DrugBank", fetchedAt: FETCHED } },
       { system: "DDINTER", code: "DDInter14", routeScope: "systemic", method: "drugbank", confidence: 1, source: DDINTER("DDInter14") },
     ],
     coverage: { coverage: "full", note: "DDInter DDInter14" },
@@ -125,16 +129,26 @@ export const RECORD_BODY = {
         counts: { major: 10, moderate: 85, minor: 38, unknown: 512, total: 645 }, diseaseCount: 3, foodCount: 1, source: DDINTER("DDInter14") }],
     },
   }],
+  // Each stage's evidence is the pipeline's own (ops.stage_result.evidence): the keys and value types the ETL writes
+  // (load/batches.py _dgda_results, stages/substances.py _evidence_for, stages/clinical.py _evidence, stages/ddinter.py _process).
   stages: [
-    { stage: "dgda", status: "ok", notes: [], textMissing: [], evidence: { concept_id: EXAMPLE_CONCEPT, xm_codes: ["XM5DJ7"] } },
-    { stage: "substances", status: "ok", notes: [], textMissing: [], evidence: { aligned: [{ xm_code: "XM5DJ7", bds_id: "BDS-000001" }] } },
+    { stage: "dgda", status: "ok", notes: [], textMissing: [], evidence: { source: "DGDA-Drugs", concept_class: "Drug" } },
+    { stage: "substances", status: "ok", notes: [], textMissing: [], evidence: { substances: [{ bds_id: "BDS-000001", name: "Acetaminophen",
+      xm: "XM5DJ7", rxcui: "161", atc: ["N02BE01"], drugbank: ["DB00316"], method: "rxnav-exact" }] } },
     { stage: "clinical", status: "ok", notes: [], textMissing: [],
-      evidence: { parsed: [{ bds_id: "BDS-000001", strength_value: 500, strength_unit: "mg" }], bdc_id: "BDC-000001" } },
+      evidence: { raw: "Paracetamol 500 mg", parse_status: "parsed",
+        parsed: [{ name: "Paracetamol", strength_value: "500", strength_unit: "mg", per_value: null, per_unit: null }],
+        aligned: [{ name: "Paracetamol", bds_id: "BDS-000001", method: "name" }], bdc_id: "BDC-000001",
+        signature: "tablet|systemic|BDS-000001:500mg/" } },
     { stage: "ddinter", status: "warn",
       notes: [{ kind: "text_missing", text: missing("DDInter14", "DDInter79"), ddinterId: null, route: null }],
       textMissing: [{ ddinterA: "DDInter14", nameA: "Acetaminophen", ddinterB: "DDInter79", nameB: "Amlodipine", severity: "unknown",
         inBatch: true, partnerScope: "batch" }],
-      evidence: { route: "systemic", route_assumed: false, text_missing: [["DDInter14", "DDInter79"]] } },
+      evidence: { mappings: [{ bds_id: "BDS-000001", ddinter_id: "DDInter14", name: "Acetaminophen", route_scope: "systemic",
+          method: "drugbank", confidence: 1 }],
+        coverage: [{ bds_id: "BDS-000001", coverage: "full" }], pair_count: 645, disease_count: 3, food_count: 1, text_fetch_count: 7,
+        text_missing: [["DDInter14", "DDInter79"]], route: "systemic",
+        chosen: [{ bds_id: "BDS-000001", ddinter_id: "DDInter14", route_scope: "systemic", route_assumed: false }], route_assumed: false } },
   ],
   batchPairs: {
     totalBatchPairs: 28,

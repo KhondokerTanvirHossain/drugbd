@@ -5,8 +5,8 @@ import { describe, expect, it } from "vitest";
 /*
  * /review/qa tables at 320 CSS px (§5.18, §10.4, §11.4 reflow). `overflow-wrap: anywhere` on every cell lets each cell's
  * min-content width fall to one character, so the auto table layout starves the wrapping columns (the endpoints' Returns
- * column was 68 px and off screen; key dates broke inside numbers). Ordinary cells wrap at spaces (break-word does not lower
- * min-content); only the request path may break anywhere, it wraps instead of staying on one line, and keeps at least 16ch.
+ * column was 68 px and off screen; key dates broke inside numbers). Ordinary cells wrap at spaces only (overflow-wrap:
+ * normal) and code in a cell never wraps, so a wide cell scrolls its table's region instead of breaking a word.
  */
 const css = readFileSync(join(__dirname, "..", "app/review/qa/qa.module.css"), "utf8");
 const rule = (selector: string) => {
@@ -16,21 +16,25 @@ const rule = (selector: string) => {
 };
 
 describe("qa.module.css: the two tables stay readable at 320 px", () => {
-  it("table cells wrap at spaces (break-word), never anywhere", () => {
-    expect(rule(".table td")).toMatch(/overflow-wrap:\s*break-word/);
-    expect(rule(".table td")).not.toMatch(/overflow-wrap:\s*anywhere/);
+  it("table cells wrap at spaces only (overflow-wrap: normal), never anywhere or break-word", () => {
+    // break-word let Chrome break "(^…$)," between ")" and "," once the code beside it no longer wraps; normal keeps
+    // every word whole, and a cell wider than the screen scrolls its region.
+    expect(rule(".table td")).toMatch(/overflow-wrap:\s*normal/);
+    expect(rule(".table td")).not.toMatch(/overflow-wrap:\s*(anywhere|break-word)/);
   });
 
-  it("the endpoints table's request rule and its 40em one-line rule are gone; the only nowrap rule left is the column headers", () => {
+  it("the endpoints table's request rule and its 40em one-line rule are gone; the only nowrap rules are the column headers and code in a cell", () => {
     const body = css.replace(/\/\*[\s\S]*?\*\//g, "");
     expect(body).not.toMatch(/\.request\b/);
     expect(body).not.toMatch(/min-width:\s*40em/);
     const nowrap = [...body.matchAll(/([^{}]+)\{[^{}]*white-space:\s*nowrap/g)].map((m) => m[1].trim());
-    expect(nowrap).toEqual([".table thead th"]);
+    expect(nowrap).toEqual([".table thead th", ".table .mono"]);
   });
 
-  it("mono code inside a table cell wraps at spaces too, so a long pattern never starves the other columns", () => {
-    expect(rule(".table .mono")).toMatch(/overflow-wrap:\s*break-word/);
+  it("mono code inside a table cell never breaks (a pattern split at its hyphen reads as another pattern); the table's region scrolls instead", () => {
+    expect(rule(".table .mono")).toMatch(/white-space:\s*nowrap/);
+    expect(rule(".table .mono")).not.toMatch(/overflow-wrap/);
+    expect(rule(".scroll")).toMatch(/overflow-x:\s*auto/);
   });
 });
 

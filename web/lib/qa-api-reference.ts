@@ -72,7 +72,7 @@ export type QaReference = {
  */
 export const EXAMPLE_NULLS: Readonly<Record<QaRoute, readonly string[]>> = {
   batches: [],
-  batch: ["items[].stages[].note"],   // an ok stage stores no note
+  batch: [],   // a stage's note is TEXT NOT NULL: an ok stage's is ""
   record: [
     "extraction.parseNote",   // a full parse has no note
     "extraction.ingredients[].perValue", "extraction.ingredients[].perUnit",   // 500 mg, not per a volume

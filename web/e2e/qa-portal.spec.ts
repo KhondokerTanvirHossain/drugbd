@@ -293,10 +293,13 @@ test("320 px: no horizontal page scroll with the key panel open (§10.4)", async
 
 /**
  * §5.18/§11.4 reflow: no page scroll is not enough, the tables must stay readable: no word in any table cell breaks across
- * lines ('18/10/2' / '026'). Every table sits in its own labelled region, which scrolls when a long pattern needs it.
+ * lines ('18/10/2' / '026'). Code (a pattern, a header name) never breaks at all, not even at a hyphen, since
+ * `^[A-Za-z0-9._-]{1,100}$` split at its hyphen reads as another pattern; prose may break after a hyphen ("plain-" / "text"),
+ * as text does. Every table sits in its own labelled region, which scrolls when a long pattern needs it. Regions are found by
+ * role, never by class: the production build hashes CSS-module class names.
  */
 async function expectTablesReadable(page: Page): Promise<void> {
-  const regions = page.locator("main .scroll[role=region]");
+  const regions = page.locator("main [role=region]:has(> table)");
   expect(await regions.count()).toBeGreaterThan(1);
   for (const region of await regions.all()) {
     const name = (await region.getAttribute("aria-label")) ?? "";
@@ -306,7 +309,8 @@ async function expectTablesReadable(page: Page): Promise<void> {
         if (td.querySelector("button")) continue;
         const walker = document.createTreeWalker(td, NodeFilter.SHOW_TEXT);
         for (let n = walker.nextNode(); n; n = walker.nextNode()) {
-          for (const m of (n.textContent ?? "").matchAll(/\S+/g)) {
+          const code = n.parentElement?.closest("code") !== null;
+          for (const m of (n.textContent ?? "").matchAll(code ? /\S+/g : /[^\s-]+/g)) {
             const range = document.createRange();
             range.setStart(n, m.index!);
             range.setEnd(n, m.index! + m[0].length);
@@ -325,7 +329,7 @@ test("320 px, QA API reference: every panel open, no page scroll; code scrolls i
   await page.setViewportSize({ width: 320, height: 720 });
   await signInAs(context, "qa", "Quinn QA");
   await page.goto("/review/qa");
-  const panels = page.locator("main details.endpoint");
+  const panels = page.locator("main details[id^=qa-ref-]");
   await expect(panels).toHaveCount(6);
   await expect(page.locator("#qa-ref-batches")).toHaveAttribute("open", "");
   // Keyboard: the native disclosure (no JavaScript needed).
@@ -403,7 +407,7 @@ for (const look of LOOKS) {
     await expect(keyRow(page, `Axe expired ${look.name}`).getByRole("button")).toHaveCount(0);   // Revoke on active rows only
     await expect(keyRow(page, `Axe revoked ${look.name}`).getByRole("button")).toHaveCount(0);
     await axe(page, "list with every status");
-    await page.locator("main details.endpoint").evaluateAll((all) => all.forEach((d) => { (d as HTMLDetailsElement).open = true; }));
+    await page.locator("main details[id^=qa-ref-]").evaluateAll((all) => all.forEach((d) => { (d as HTMLDetailsElement).open = true; }));
     await axe(page, "every API reference panel open");
     const name = `Axe ${look.name}`;
     await createKey(page, name);
