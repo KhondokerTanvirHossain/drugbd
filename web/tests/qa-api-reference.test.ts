@@ -1,4 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
@@ -47,6 +49,7 @@ import { GET as recordsGET } from "@/app/api/qa/v1/records/route";
 import { GET as pairsGET } from "@/app/api/qa/v1/substances/[bdsId]/pairs/route";
 import { GET as restGET } from "@/app/api/qa/[[...rest]]/route";
 import { GET as mcpGET, POST as mcpPOST } from "@/app/api/qa/mcp/route";
+import ApiReference from "@/app/review/qa/ApiReference";
 import { QA_RATE_LIMIT } from "@/lib/limits";
 import { ID_MAX } from "@/lib/public-params";
 import { qaKeysForTests } from "@/lib/qa-api";
@@ -648,6 +651,15 @@ describe("(c) no secret or person in the reference (§11.1)", () => {
     const all = JSON.stringify(UPSTREAM);
     expect(all).not.toMatch(/"mine":true/);
     expect(all).not.toContain("reviewerEmail");
+  });
+
+  it("the rendered reference's HTML: no @, DB key or 64-hex string, and every Bearer is the variable, <key>, the 401 header or the 401 advice", () => {
+    const html = renderToStaticMarkup(createElement(ApiReference, { reference: REF }));
+    expect(html).toContain("qa-ref-mcp");
+    for (const re of SECRET) expect(html, `${re}`).not.toMatch(re);
+    const rest = html.replace(/Bearer \$INTELLIDRUGS_QA_KEY(?=&quot;)/g, "").replace(/Bearer &lt;key&gt;/g, "")
+      .replace(/WWW-Authenticate: Bearer(?=<)/g, "").replace(/Authorization: Bearer and your key/g, "");
+    expect(rest).not.toContain("Bearer");
   });
 
   it("the request id is a version-4 UUID and the time is fixed", () => {

@@ -301,7 +301,7 @@ const QA_ACCOUNT = {
 
 /**
  * §5.18 "QA tools page": the heading, "Connect your AI", "API" and "Rules", the copy buttons and their announcements, and the
- * pharmacist banner ("Example" is SHARED_WORDS.example, "Open the review desk" DESK.openDesk). Snippets, paths, filter names and the curl example are code, not copy (§1.7); `{t1}`…`{t5}`, `{path}`,
+ * pharmacist banner ("Example" is SHARED_WORDS.example, "Open the review desk" DESK.openDesk). Snippets, paths and filter names are code, not copy (§1.7); `{t1}`…`{t5}`, `{path}`,
  * `{filter}` and the like are filled with mono code by the page.
  */
 const QA_PAGE = {
@@ -323,9 +323,6 @@ const QA_PAGE = {
   apiHeading: "API",
   apiLead: "The same data over HTTPS, for scripts. Send your key in the Authorization header. Each key may make 60 requests a minute, shared with the MCP server.",
   apiBaseLabel: "API base address",
-  endpointsCaption: "QA API endpoints",
-  colRequest: "Request",
-  colReturns: "Returns",
   returnsBatches: "Every batch, with its status and counts.",
   returnsBatch: "One batch's current records, with each pipeline stage's result.",
   returnsRecord: "One record in full: DGDA source, extraction, codes with source links, stages, pairs and decision history.",
@@ -561,6 +558,13 @@ const QA_REFERENCE = {
   mcpFixUnknownTool: "Use a tool name from tools/list.",
   mcpFixQaError: "See that status in the endpoint's Errors table.",
 } as const;
+/**
+ * The reference's strings are read by server code only (app/review/qa/ApiReference.tsx, lib/qa-api-reference.ts), but the
+ * islands import this module too. Next compiles `typeof window` to "object" in client bundles, so there the row is an empty
+ * object and its strings never ship in the shared copy chunk (§10.6: the reference adds no client JavaScript). Server code
+ * and the node tests get the full row; an island must never read QA_COPY.reference.
+ */
+const QA_REFERENCE_ROW = (typeof window === "undefined" ? QA_REFERENCE : {}) as typeof QA_REFERENCE;
 
 /** Strings per §1.7 state. Empty records are filled by the plan that builds that state (P1B, P2, P3; the QA portal page). */
 export const NEW_COPY: Record<NewCopyState, Record<string, string>> = {
@@ -792,7 +796,7 @@ export const NEW_COPY: Record<NewCopyState, Record<string, string>> = {
   [NEW_COPY_ROWS.qaAccount]: QA_ACCOUNT,
   [NEW_COPY_ROWS.qaPage]: QA_PAGE,
   [NEW_COPY_ROWS.qaKeys]: QA_KEYS,
-  [NEW_COPY_ROWS.qaReference]: QA_REFERENCE,
+  [NEW_COPY_ROWS.qaReference]: QA_REFERENCE_ROW,
 };
 /** Typed shortcut for the sign-in row. */
 export const SIGN_IN_STATES = NEW_COPY[NEW_COPY_ROWS.signIn] as {
@@ -843,7 +847,7 @@ export const P1C_COPY = {
 } as const;
 
 /** Typed views of the QA portal rows (§1.7), so modules never index NEW_COPY by row text. */
-export const QA_COPY = { role: QA_ROLE, account: QA_ACCOUNT, page: QA_PAGE, keys: QA_KEYS, reference: QA_REFERENCE } as const;
+export const QA_COPY = { role: QA_ROLE, account: QA_ACCOUNT, page: QA_PAGE, keys: QA_KEYS, reference: QA_REFERENCE_ROW } as const;
 
 /** Learn (§6.8): the date suffix after a snapshot-only value, and the footer's batch line. */
 export const LEARN_NEW = NEW_COPY[NEW_COPY_ROWS.learnSnapshotDate] as Record<"asStored", string>;

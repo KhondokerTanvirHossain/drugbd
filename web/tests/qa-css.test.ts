@@ -21,21 +21,53 @@ describe("qa.module.css: the two tables stay readable at 320 px", () => {
     expect(rule(".table td")).not.toMatch(/overflow-wrap:\s*anywhere/);
   });
 
-  it("the request path wraps, may break anywhere and keeps a 16ch minimum, beating the cell rule's specificity", () => {
-    const r = rule(".table .request");
-    expect(r).toMatch(/white-space:\s*normal/);
-    expect(r).toMatch(/overflow-wrap:\s*anywhere/);
-    expect(r).toMatch(/min-width:\s*16ch/);
+  it("the endpoints table's request rule and its 40em one-line rule are gone; the only nowrap rule left is the column headers", () => {
+    const body = css.replace(/\/\*[\s\S]*?\*\//g, "");
+    expect(body).not.toMatch(/\.request\b/);
+    expect(body).not.toMatch(/min-width:\s*40em/);
+    const nowrap = [...body.matchAll(/([^{}]+)\{[^{}]*white-space:\s*nowrap/g)].map((m) => m[1].trim());
+    expect(nowrap).toEqual([".table thead th"]);
   });
 
-  it("nothing in the tables is held on one line except the column headers and, from 40em up, the request path", () => {
+  it("mono code inside a table cell wraps at spaces too, so a long pattern never starves the other columns", () => {
+    expect(rule(".table .mono")).toMatch(/overflow-wrap:\s*break-word/);
+  });
+});
+
+describe("qa.module.css: the API reference (QA API reference, §5.18)", () => {
+  it("each code block scrolls in its own region: overflow auto with a max-height; the pre keeps its lines (white-space: pre)", () => {
+    expect(rule(".codeRegion")).toMatch(/overflow:\s*auto/);
+    expect(rule(".codeRegion")).toMatch(/max-height:\s*28em/);
+    expect(rule(".codeRegion")).toMatch(/min-width:\s*0/);
+    expect(rule(".codeRegion:focus-visible")).toMatch(/outline:\s*2px solid var\(--focus\)/);
+    expect(rule(".codeBlock")).toMatch(/white-space:\s*pre;/);
+  });
+
+  it("the summary keeps the native disclosure marker, is at least 24 px tall and shows focus; its path wraps anywhere", () => {
     const body = css.replace(/\/\*[\s\S]*?\*\//g, "");
-    const nowrap = [...body.matchAll(/([^{}]+)\{[^{}]*white-space:\s*nowrap/g)].map((m) => m[1].trim());
-    expect(nowrap).toEqual([".table thead th", ".table .request"]);
-    // The one-line request path lives only inside the min-width: 40em query, never at 320 px.
-    const wide = body.match(/@media\s*\(min-width:\s*40em\)\s*\{\s*\.table\s+\.request\s*\{([^}]*)\}\s*\}/);
-    expect(wide, "the 40em request rule").not.toBeNull();
-    expect(wide![1]).toMatch(/white-space:\s*nowrap/);
-    expect(body.indexOf("@media (min-width: 40em)")).toBeGreaterThan(body.indexOf(".table .request {"));
+    for (const m of body.matchAll(/\.summary(?![A-Za-z])[^{]*\{([^}]*)\}/g)) {
+      const d = /display:\s*([a-z-]+)/.exec(m[1]);
+      if (d) expect(d[1]).toBe("list-item");
+    }
+    expect(rule(".summary")).toMatch(/min-height:\s*24px/);
+    expect(rule(".summary:focus-visible")).toMatch(/outline:\s*2px solid var\(--focus\)/);
+    expect(rule(".summaryPath")).toMatch(/overflow-wrap:\s*anywhere/);
+    expect(rule(".summaryText")).toMatch(/display:\s*block/);
+  });
+
+  it("a long key-field path (extraction.ingredients[].ddinter.chosen[]) wraps inside its dt, so the page never scrolls sideways at 320 px", () => {
+    expect(rule(".filters dt")).toMatch(/overflow-wrap:\s*anywhere/);
+  });
+
+  it("every class the reference uses is defined", () => {
+    for (const c of ["endpoint", "summary", "summaryPath", "summaryText", "endpointBody", "codeHead", "codeLabel", "codeRegion", "codeBlock"]) {
+      expect(css, c).toMatch(new RegExp(`\\.${c}\\s*\\{`));
+    }
+  });
+
+  it("tokens only: no colour literal and no inline style", () => {
+    const body = css.replace(/\/\*[\s\S]*?\*\//g, "");
+    expect(body).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    expect(body).not.toMatch(/\b(rgb|rgba|hsl|hsla)\(/);
   });
 });
