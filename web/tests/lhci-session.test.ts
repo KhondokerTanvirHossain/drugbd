@@ -17,4 +17,10 @@ describe("the Lighthouse CI session (§10.6 /review budget)", () => {
     expect(await decryptSession(token, SECRET)).toMatchObject({ email: "senior@e2e.test", role: "senior" });
     expect(require("../e2e/lhci-session-senior.cjs")).toBeTypeOf("function");
   });
+
+  it("mints the e2e QA account's cookie for the /review/qa budget (QA portal)", async () => {
+    const token = await mintSession({ email: "qa@e2e.test", name: "E2E QA", role: "qa" }, SECRET);
+    expect(await decryptSession(token, SECRET)).toMatchObject({ email: "qa@e2e.test", role: "qa" });
+    expect(require("../e2e/lhci-session-qa.cjs")).toBeTypeOf("function");
+  });
 });

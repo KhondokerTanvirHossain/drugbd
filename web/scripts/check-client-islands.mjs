@@ -19,8 +19,11 @@ export const ISLANDS = [
   "app/error.tsx",
   "app/review/error.tsx",
 ];
-/** "ReviewDesk.tsx plus components/review/desk/*" and, P1C, "SeniorDesk.tsx plus components/review/senior/*" (§4.2). */
-export const ISLAND_DIRS = ["components/review/desk/", "components/review/senior/"];
+/**
+ * "ReviewDesk.tsx plus components/review/desk/*", P1C "SeniorDesk.tsx plus components/review/senior/*", and QA portal
+ * "QaKeys.tsx plus components/qa/*" with CopyButton (§4.2).
+ */
+export const ISLAND_DIRS = ["components/review/desk/", "components/review/senior/", "components/qa/"];
 export const FORBIDDEN_IMPORTS = ["@/lib/api", "@/lib/session", "server-only", "next/headers"];
 
 /** P3: Learn chapters live in content/ (§6.8); none may be an island. */

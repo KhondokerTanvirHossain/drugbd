@@ -395,6 +395,23 @@ class ReviewApiIntegrationTest {
         assertThat(decisions("R-val")).isEqualTo(2);
     }
 
+    /** §7.10.1 (D66): a qa account can never decide: ok, issue and dismiss with reviewerRole=qa are 400, one rejected row each. */
+    @Test void aQaRoleIs400ReviewerRoleAndWritesNoDecision() throws Exception {
+        long before = decisions("R-val");
+        for (Map<String, Object> b : List.of(body("ok", null, "qa.member@example.org", "qa"),
+                                             body("issue", "strength looks wrong", "qa.member@example.org", "qa"),
+                                             body("dismiss", "the report misread the register", "qa.member@example.org", "qa"))) {
+            String rid = UUID.randomUUID().toString();
+            b.put("requestId", rid);
+            decide("R-val", "W-2", b).expectStatus().isBadRequest().expectBody()
+                .jsonPath("$.errors[0].code").isEqualTo("INVALID_QUERY").jsonPath("$.errors[0].field").isEqualTo("reviewerRole");
+            assertThat(count(pg, "SELECT count(*) FROM ops.audit_event WHERE event = 'decision_rejected' AND request_id = '" + rid + "'"))
+                .isEqualTo(1);
+            assertThat(count(pg, "SELECT count(*) FROM ops.audit_event WHERE event = 'decision' AND request_id = '" + rid + "'")).isZero();
+        }
+        assertThat(decisions("R-val")).isEqualTo(before);
+    }
+
     @Test void missingExtractedAtIs400AndWritesNothing() throws Exception {
         for (Map<String, Object> b : List.of(body("ok", null, PHARMACIST, "pharmacist"),
                                              body("issue", "strength looks wrong", PHARMACIST, "pharmacist"))) {

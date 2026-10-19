@@ -16,11 +16,13 @@ import java.util.regex.Pattern;
 public class AuditService {
     /**
      * §5.15, §7.5: the web's events. pair_decision and pair_decision_rejected are the API's own (pair decision path).
-     * qa_read (§7.9.6) is written by the web's QA API route handlers, with no actor.
+     * qa_read (§7.9.6) is written by the web's QA API route handlers, with no actor. qa_key_created and qa_key_revoked
+     * (§7.10.7) are the API's own, written in the key transactions, so they are not listed here.
      */
     public static final Set<String> WEB_EVENTS =
         Set.of("sign_in", "sign_in_denied", "sign_out", "review_open", "evidence_open", "decision_denied", "senior_open", "qa_read");
-    public static final Set<String> ROLES = Set.of("pharmacist", "engineer", "senior", "user");
+    /** §7.10.7: a qa session's sign_in, sign_out and decision_denied rows carry role qa. */
+    public static final Set<String> ROLES = Set.of("pharmacist", "engineer", "senior", "qa", "user");
     /**
      * senior_open targets a substance (`BDS-…`) or the pair queue (its `show` value). ddinter_pair is written by the API only.
      * qa_read targets a qa_route, `{label}/{route}` or `{route}` (§7.9.6): a key label and a route name, never the key.
@@ -31,11 +33,13 @@ public class AuditService {
     private static final Pattern TARGET_ID =
         Pattern.compile("[A-Za-z0-9][A-Za-z0-9._:-]{0,98}(/[A-Za-z0-9][A-Za-z0-9._:-]{0,98})?");
     /**
-     * A qa_route target (§7.9.6): an optional key label (the §7.9.1 label rule) and one of the five route names, so a path id
-     * or a query value can never be recorded for a QA read. TARGET_ID stays unchanged for every other target type.
+     * A qa_route target (§7.9.6): an optional key label and one of the route names, so a path id or a query value can never
+     * be recorded for a QA read. The label is an env label (the §7.9.1 label rule) or a DB key's {@code key.{id}} (§7.10.4);
+     * the route {@code mcp} is a hosted MCP request refused before any tool ran (§7.10.6). TARGET_ID stays unchanged for every
+     * other target type.
      */
     private static final Pattern QA_TARGET_ID =
-        Pattern.compile("([a-z0-9][a-z0-9_-]{0,31}/)?(batches|batch|record|records|pairs)");
+        Pattern.compile("(([a-z0-9][a-z0-9_-]{0,31}|key\\.[1-9][0-9]{0,17})/)?(batches|batch|record|records|pairs|mcp)");
     public static final String QA_READ = "qa_read", QA_ROUTE = "qa_route";
     private static final Pattern OUTCOME = Pattern.compile("[a-z_]{1,32}");
     private static final Pattern UUID_TEXT =

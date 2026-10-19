@@ -4,6 +4,8 @@ A small, read-only [Model Context Protocol](https://modelcontextprotocol.io) ser
 
 It sits outside `web/`: the web build, the bundle-secret scan and the island check never see it. CI runs it as its own `qa-mcp` job.
 
+**No install needed for most clients:** the same five tools and the same rules are also served by the web app itself, at `https://drugdb.eliooo.org/api/qa/mcp` (the [hosted server](#hosted-server-no-install), spec §7.10.6). This stdio server is for clients that can only start a local process, such as Claude Desktop.
+
 ## Setup
 
 Node 20 or newer.
@@ -26,7 +28,9 @@ The key is sent only as `Authorization: Bearer …`, only to that origin, with r
 
 ### Getting a key
 
-Ask the product owner. A key is generated and handed over once, by the runbook [`docs/runbooks/qa-api-keys.md`](../../docs/runbooks/qa-api-keys.md); only its SHA-256 hash is stored on the server. **Never commit the key, and never put it in a config file under version control** (for example a project `.mcp.json`). Keep it in a password manager and in your user-level MCP client config only. If it leaks, tell the product owner, who revokes it.
+**Create your own** on the QA tools page, [`/review/qa`](https://drugdb.eliooo.org/review/qa), signed in with an account that has the QA, engineer or senior role: give it a name (a device or tool name), copy the key (`idqa_…`, shown once), and revoke it there when you no longer need it. A key lasts 90 days; you can have 5 active keys. It works here unchanged, in the hosted server and with the QA API. It stops working when it expires, when you revoke it, or when your account no longer has a QA role.
+
+Otherwise, ask the product owner: an admin key is generated and handed over once, by the runbook [`docs/runbooks/qa-api-keys.md`](../../docs/runbooks/qa-api-keys.md). Either way only the key's SHA-256 hash is stored on the server. **Never commit the key, and never put it in a config file under version control** (for example a project `.mcp.json`). Keep it in a password manager and in your user-level MCP client config only. If it leaks, revoke it on `/review/qa` (or tell the product owner, for an admin key).
 
 ## Client configuration
 
@@ -58,6 +62,46 @@ unset INTELLIDRUGS_QA_KEY
 ```
 
 For a local web app, add `--env INTELLIDRUGS_QA_BASE_URL=http://localhost:3000`.
+
+## Hosted server (no install)
+
+The web app serves the same server at **`https://drugdb.eliooo.org/api/qa/mcp`**: MCP Streamable HTTP, stateless, plain JSON answers (no event stream, no session). Every request sends your QA key as `Authorization: Bearer <key>`. The tools, their inputs and refusals, the results and the preamble are the same as here (a parity test, `tests/parity.test.ts`, fails if they ever differ), each tool call counts toward the same 60-a-minute limit per key as the QA API, and each is audited like the equivalent API read.
+
+### Claude Code
+
+Read the key without echoing it or keeping it in shell history, then add the server (local scope, the default; never `--scope project`):
+
+```sh
+read -rs INTELLIDRUGS_QA_KEY
+claude mcp add --transport http intellidrugs-qa https://drugdb.eliooo.org/api/qa/mcp --header "Authorization: Bearer $INTELLIDRUGS_QA_KEY"
+unset INTELLIDRUGS_QA_KEY
+```
+
+### Cursor and other clients that send a configured header
+
+In your user-level MCP config (for Cursor, `~/.cursor/mcp.json`), never a file in a repository:
+
+```json
+{
+  "mcpServers": {
+    "intellidrugs-qa": {
+      "url": "https://drugdb.eliooo.org/api/qa/mcp",
+      "headers": { "Authorization": "Bearer YOUR_KEY" }
+    }
+  }
+}
+```
+
+### Clients that need OAuth
+
+The claude.ai and ChatGPT connectors can only connect to servers that sign in with OAuth. This server has no OAuth (it is out of scope), so those connectors cannot use it. Use Claude Code, Cursor or another client that sends a configured header, or this stdio server.
+
+### Behaviour
+
+- `POST` only; `GET`, `DELETE`, `PUT` and `PATCH` answer 405. Methods: `initialize`, `ping`, `tools/list`, `tools/call`; notifications (such as `notifications/initialized`) are accepted with 202 and no body.
+- Protocol versions `2025-11-25`, `2025-06-18` and `2025-03-26`. A request without `MCP-Protocol-Version` is taken as `2025-03-26`; an unsupported one is refused.
+- A browser `Origin` other than the site's own is refused (403), so a web page cannot call it from your browser.
+- HTTP errors are JSON-RPC errors with fixed messages: 401 `-32001` Unauthorized (no, unknown, revoked or expired key), 429 `-32003` Too many requests (with `Retry-After: 60`), 502 `-32004` Unavailable (the key could not be checked). Tool errors are results with `isError: true`, as below.
 
 ## Tools
 

@@ -11,6 +11,7 @@ import { cspNonce } from "@/lib/nonce";
 import { firstParam } from "@/lib/params";
 import { SIGNIN_CARD } from "@/lib/public-copy";
 import { safeReturnTo } from "@/lib/return-to";
+import { isReviewer } from "@/lib/reviewers";
 import { getSession } from "@/lib/session";
 import { siteOrigin } from "@/lib/site";
 import { turnstileSiteKey } from "@/lib/turnstile";
@@ -26,7 +27,8 @@ export default async function SignInPage({ searchParams }: { searchParams?: Prom
   const brand = <div className={styles.brand}><BrandIcon size={32} /><Wordmark size={19} /></div>;
 
   if (session) {
-    const batches = session.role === "user" ? [] : await listReviewBatches().catch(() => []);
+    // §5.13 (QA portal): the batch list is read for reviewer roles only; a reader and a qa account get none.
+    const batches = isReviewer(session) ? await listReviewBatches().catch(() => []) : [];
     const id = newestInReview(batches);
     const b = batches.find((x) => x.batchId === id);
     const undo = parseUndo((await cookies()).get(UNDO_COOKIE)?.value);

@@ -8,7 +8,7 @@
 | **Approved design** | Direction A "Clinical Calm", wordmark option A ("IntelliDrugs" + cobalt full stop), approved by the user on 12/10/2026 |
 | **Visual source of truth** | `docs/artifacts/2026-10-12-intellidrugs-design-system.html`, `-reviewer.html`, `-public.html`, `-learn.html`, and `docs/design/intellidrugs/tokens.css` |
 | **Earlier approved docs** | `docs/design/2026-10-11-bd-drug-kb-design.md`, `docs/design/database.md` (schema `db-schema-v1.0` is locked) |
-| **Amendments** | P1C "Review model and source links", 15/10/2026, from the product owner's decisions of 15/10/2026 (see "Changes in P1C" below); QA "QA API, QA MCP and checker text", 18/10/2026, from the product owner's decisions of 17–18/10/2026 (see "Changes in QA" below) |
+| **Amendments** | P1C "Review model and source links", 15/10/2026, from the product owner's decisions of 15/10/2026 (see "Changes in P1C" below); QA "QA API, QA MCP and checker text", 18/10/2026, from the product owner's decisions of 17–18/10/2026 (see "Changes in QA" below); QA portal "QA role, self-service keys, hosted MCP and QA page", 18/10/2026, from the product owner's decisions of 18/10/2026 (see "Changes in QA portal" below) |
 
 > **Changes in P1C (15/10/2026).** The product owner's decisions of 15/10/2026 (PO D1–D10) add plan P1C, "Review model and source links". It brings in the senior pharmacist role, senior review by substance and by pair across all batches, the reopen rule, cross-batch pairs on the desk, removed items never public, source links for every code, and dismissing an issue. Learn is not touched (PO D9: the chapter 6 Chloramphenicol row is fixed in the P3 branch). Sections touched:
 >
@@ -36,6 +36,19 @@
 > - new §7.9 (QA API and QA MCP, the `GET /v1/qa/*` internal endpoints, V8);
 > - §9.3, §9.7; §11.1–§11.3; §12.2 (new QA row, seven plans), §12.3, §12.4 (`QA_API_KEYS`);
 > - §13.2 (D18 note, D61–D65).
+
+> **Changes in QA portal (18/10/2026).** The product owner's decisions of 18/10/2026 add plan "QA portal", so QA team members reach the QA tools, the MCP server and the QA API through the site: a new `qa` role that sees only the QA section, self-service QA keys stored hashed in the database (V9), a hosted MCP endpoint on the existing web app, and the QA tools page with its menu item and toolbar link. The §7.9 QA API and the stdio QA MCP stay as shipped; the env keys in `QA_API_KEYS` keep working. Sections touched:
+>
+> - header table; §1.4 (new S10); §1.7 (intro note, four new rows);
+> - §2.1 (`/review` for `qa`, `/review/qa`, `POST /api/qa/mcp`, the QA API row); §2.2 (new QA column, QA tools row, the D61 note); §2.3 (the `qa` sentence);
+> - §4.2 (`QaKeys` and `CopyButton` islands); §4.3 (the new key reaches the browser once; `/api/qa/mcp` is not browser-callable);
+> - §5.1 ("QA tools" toolbar link, role badge "QA"); §5.12 (new row: QA account on a review page); §5.13 (the `qa` role token and its gates, invite template); §5.15 (`qa_key_created`, `qa_key_revoked`; `qa_read` from the hosted MCP and DB keys); §5.17 (access for `qa`); new §5.18 (QA tools page);
+> - §6.2 (QA welcome state, "QA tools" account-menu item);
+> - §7.9.1 (auth: env or DB key; 401, never the disabled 404; malformed env values); §7.9.6 (DB key labels, the `mcp` route name); §7.9.7; §7.9.8 (DB keys work in the stdio server; the hosted counterpart); new §7.10 (QA portal: role, keys, V9, internal endpoints, verification rule, hosted MCP, audit, privacy);
+> - §9.2, §9.3, §9.7; §10.6;
+> - §11.1–§11.4;
+> - §12.2 (new QA portal row, eight plans), §12.3, §12.4, §12.5;
+> - §13.2 (D18 note, D66–D71).
 
 This document is the authority the implementation plans argue from. Where it says **Decision**, the choice is made and is not open. Where a board and this spec disagree, this spec wins only in the cases listed in §1.6 (board errors found against live data or the safety rules, and board strings that the Decisions here change). Everywhere else the boards win. Any string shown in "quotes" or a code block below must be used verbatim: it is either copied from a board, or it is new copy for a state the boards do not draw, listed in §1.7. Any quoted string that no board contains is new copy whether or not §1.7 names its state: it follows §3.5, and the copy test (§11.1) checks it against the §1.7 list.
 
@@ -101,6 +114,7 @@ The pages stay server-rendered. A short, fixed list of client islands (§4.2) ad
 | S7 | After the ETL route fix and re-run, the eye-drop record's DDInter stage is OK with no `DDInter351` pair in its note. Its checker result with G Warfarin names `DDInter352` and raises no alert. | ETL, API and e2e tests (§8, §11). |
 | S8 | *(P1C)* A DDInter re-run that changes no covered field (§8.3) leaves every approved record approved. A re-run that changes only a pair's severity, actions or text puts that pair back in the senior pair queue as "changed" and re-opens no record. | ETL test `test_pair_change_reopens_no_record` and API test `PairQueueIntegrationTest.changedPairReturnsToQueue` (§11.3), plus the P1C pilot re-run check on production (§12.1). |
 | S9 | *(P1C)* Every code on the desk links to its source (§5.6.6). With the pilot codes, each link pattern opens the page the §5.6.6 table names. | Unit test of `SourceLinks` (§11.3), component test of the links (§11.2), and a manual browser check of each pattern, recorded in the P1C PR (CI never calls external sites). |
+| S10 | *(QA portal)* A QA team member invited with role `qa` signs in, creates a key on `/review/qa`, adds the hosted MCP server to Claude Code with the page's command, and gets a `list_batches` result, in 5 minutes or less, asking for help 0 times. Their key never appears in a URL, a log line, an audit row or browser storage. | Moderated session on production after the deploy, with the page as the only instruction; the e2e QA flow (§11.4) runs the same steps against the CI stack, and the unit tests in §11.1 pin where the key may go. |
 
 ### 1.5 Data finding that shapes this spec: Chloramphenicol eye drops
 
@@ -185,6 +199,8 @@ The boards do not cover the states below. Their copy is defined in the section n
 
 *(QA, 18/10/2026)* The QA plan adds **no row**. The checker's interaction-description block (§6.7.3) reuses Board P's "Interaction description, truncated. Full text from DDInter 2.0." and "Interaction description, full text from DDInter 2.0." and the Expander's "Show full text" / "Show less". The QA API's envelope messages and the QA MCP preamble (§7.9) are machine-facing strings, like the API messages quoted in §7.2 and §7.7: they are not page copy, not §1.7 rows and not in `NEW_COPY`. The preamble is pinned by the MCP's own test (§11.1).
 
+*(QA portal, 18/10/2026)* The QA portal adds the four rows marked *(QA portal)* below. Their strings live in `$WEB/lib/copy.ts` as `NEW_COPY` entries with a typed view `QA_COPY`, like `P1C_COPY`. Three kinds of QA text are **not** rows: the hosted MCP server's JSON-RPC error messages (§7.10.6), which are machine-facing like the §7.9 envelope messages; the setup snippets, endpoint paths, filter names and curl example on `/review/qa`, which are code shown in mono (they are pinned by the page's component test, §11.2); and the "Rules" list, which is rendered line by line from the `PREAMBLE` constant (§7.10.6) and never retyped.
+
 | State | Section |
 |---|---|
 | Decision sent but not confirmed (timeout, lost response, 5xx) | §5.7, §5.8.4 |
@@ -224,6 +240,10 @@ The boards do not cover the states below. Their copy is defined in the section n
 | *(P1C)* Source links: link labels, "fetched on {date}", the ICD-11 search link, the evidence drawer's "Sources" section, the product page's "Source" column | §5.6.3, §5.6.6, §6.5 |
 | *(P1C)* Product page "With other approved medicines" (cross-batch, grouped by partner substance) and its paging | §6.5 |
 | *(P2)* Public page could not load (`app/error.tsx`) | §4.2 |
+| *(QA portal)* QA role: role badge "QA", welcome state, invite role, the "QA tools" account-menu item and toolbar link | §5.1, §5.13, §6.2 |
+| *(QA portal)* QA account on a review page | §5.12 |
+| *(QA portal)* QA tools page: heading, "Connect your AI", "API" and "Rules" sections, copy buttons and their announcements, the pharmacist banner | §5.18 |
+| *(QA portal)* QA keys: create form, name rules and errors, the one-time key panel, the key list and statuses, revoke confirmation and outcomes, limit, bot-check, sign-in and network failures, load error, no-JavaScript line, announcements | §5.18 |
 
 ---
 
@@ -245,7 +265,7 @@ The boards do not cover the states below. Their copy is defined in the section n
 | `/privacy` | Privacy statement (expands the sign-in card's privacy text) | server | everyone |
 | `/signin` | Sign in or sign up with Google; post-sign-in welcome states | server + SignInButton island | everyone |
 | `POST /api/session` | Session create (existing, extended with Turnstile). `DELETE /api/session` is removed: `POST /signout` is the only way to sign out. | route handler | everyone, rate-limited |
-| `/review` | Batch list (§5.16); redirects 307 to the newest `in_review` batch if there is exactly one | server | pharmacist, engineer |
+| `/review` | Batch list (§5.16); redirects 307 to the newest `in_review` batch if there is exactly one | server | pharmacist, engineer. *(QA portal)* Role `qa`: redirects 307 to `/review/qa` |
 | `/review/[batchId]` | Redirects 307 to the first record in the current filter that needs review for the viewer's role, otherwise record 1 | server | pharmacist, engineer |
 | `/review/[batchId]/[conceptId]?show=&q=` | **The workspace**. One route. The batch layout (toolbar and the ReviewDesk island) persists across records; the record page renders the filters, the list and the detail pane (§5.8.1). | server + ReviewDesk and DeskRecordContext islands | pharmacist, engineer |
 | `/review/[batchId]/versions` | Version tokens for stale detection (route handler, JSON) | server | pharmacist, engineer |
@@ -253,9 +273,11 @@ The boards do not cover the states below. Their copy is defined in the section n
 | `/review/pairs?show=&pairs=&severity=&page=` | *(P1C)* Senior pair queue: every stored pair between substances we hold, from all batches, Major first (PO D3(b), §5.17) | server + SeniorDesk island | senior (others: not-authorised page, §5.17) |
 | `/review/substances?q=&page=` | *(P1C)* Senior review: the substances we hold, from all batches (§5.17) | server | senior |
 | `/review/substances/[bdsId]?pairs=&severity=&page=` | *(P1C)* Senior review by substance: brands from every batch, mappings, codes with source links, and pairs (§5.17) | server + SeniorDesk island | senior |
+| `/review/qa` | *(QA portal)* QA tools (§5.18): connect your AI, your keys, the API, the rules | server + QaKeys and CopyButton islands | qa, engineer, senior (pharmacist: info banner, §5.18; `user`: not-authorised page, §5.12) |
 | `POST /signout` | Sign out (route handler, §9.6): checks `Origin`, clears the session cookie, sends `Clear-Site-Data: "storage"`, then 303 to `/` (or to `/signin?returnTo=…` for "Use another Google account") | route handler | everyone, rate-limited |
 | `/healthz` | Liveness (route handler, `200 ok`, not rate-limited) | server | container healthcheck |
-| `GET /api/qa/v1/*` | *(QA)* Read-only QA API (route handlers, JSON, §7.9). 404 for every path while `QA_API_KEYS` is unset. | route handler | `Authorization: Bearer` QA key holders only (never a session); rate-limited |
+| `GET /api/qa/v1/*` | *(QA)* Read-only QA API (route handlers, JSON, §7.9). *(QA portal)* 401 without a valid env or DB key, whether or not `QA_API_KEYS` is set (§7.9.1); unknown QA paths 404. | route handler | `Authorization: Bearer` QA key holders only (never a session); rate-limited |
+| `POST /api/qa/mcp` | *(QA portal)* Hosted QA MCP server: MCP Streamable HTTP, stateless JSON responses (§7.10.6). `GET` and `DELETE` answer 405. | route handler | `Authorization: Bearer` QA key holders only (env or DB key, never a session); rate-limited with the QA API |
 
 **Decision: one route per Learn chapter, not one long page.** Each chapter loads on its own, which keeps page weight down on slow connections. The chapter nav becomes links with `aria-current="page"`. The "On this page" rail lists that chapter's sections.
 
@@ -263,35 +285,38 @@ The boards do not cover the states below. Their copy is defined in the section n
 
 **Decision (P1C, D49).** Every route above that is open to "pharmacist, engineer" is also open to `senior`. The three senior routes are open to `senior` only.
 
+**Decision (QA portal, D66).** Role `qa` opens no route above that is open to "pharmacist, engineer" or to `senior`. `/review` redirects it 307 to `/review/qa`; every other `/review/*` page answers it as for a role that may not review: status 200, the §5.12 "QA account on a review page" view, no review data and no review API call; `/review/[batchId]/versions` answers it as it answers `user`. On public routes a `qa` session is a reader (`user`), with public scope (§2.2).
+
 ### 2.2 Who sees what
 
-| Data | Anonymous | Signed in, role `user` | Engineer | Pharmacist | Senior pharmacist *(P1C)* |
-|---|---|---|---|---|---|
-| Approved product, substance and clinical drug | yes | yes | yes | yes | yes |
-| Unapproved product (any state other than `approved`: pending, engineer checked, issue, back in review) | stub only: concept id, trade name, "Not yet reviewed by a pharmacist", batch id | stub only | stub on public routes; full in `/review` only | stub on public routes; full in `/review` only | as pharmacist |
-| Product whose latest batch item is marked "removed from batch file" | stub with "Removed from the DGDA batch file." (§6.4), whatever its last decision | same | same on public routes; not listed in `/review`, and decisions on it are refused (§7.2) | same | same |
-| Unapproved substance (none of its products approved) | stub only: BDS id, name, "Not yet reviewed by a pharmacist" | stub only | stub on public routes; full in `/review` only | stub on public routes; full in `/review` only | as pharmacist |
-| Unapproved clinical drug (no approved product maps to it) | not served | not served | in `/review` only | in `/review` only | in `/review` only |
-| Batch evidence (source JSON, stage evidence, extraction) | no | no | yes | yes | yes |
-| Decision history, with notes | no | no | yes (roles only; "(you)" for own) | yes | yes |
-| Public verification line (role and date of the counting approval) | yes, approved records only | yes | yes | yes | yes. A senior's approval reads "Approved by a pharmacist" in public (D49). |
-| Emails of anyone else | never | never | never | never | never |
-| Own name and email | n/a | in the account menu only | same | same | same |
-| Report a problem (flag) | no ("Sign in to report a problem") | yes | yes | yes | yes |
-| Review decisions | no | no ("Your account can't review this batch.") | records an engineer check | approves and publishes | approves and publishes, as a pharmacist |
-| *(P1C)* Dismiss an open issue on a record (§5.10a) | no | no | no: sees the issue, no Dismiss control | no: same | yes |
-| *(P1C)* Senior review pages (`/review/pairs`, `/review/substances/*`, §5.17) | no (sign-in redirect) | no (not-authorised page) | no ("Senior review is for senior pharmacists.") | no (same) | yes |
-| *(P1C)* Pair decisions: mark reviewed, report pair issue (§5.17) | no | no | no | no | yes |
-| *(P1C)* Pair review state | pairs between approved products only: `PAIR_REVIEWED` with its date, or `PAIR_NOT_REVIEWED` (D53) | same | all four states in `/review` (§5.17) | same | same |
-| *(P1C)* Source links and "fetched on" dates (§5.6.6) | approved records only (P2, §6.5) | same | every record in `/review` | same | same |
-| Resolve flags | no | no | yes | yes | yes |
-| Partner access request | no (sign in first) | yes | yes | yes | yes |
+| Data | Anonymous | Signed in, role `user` | Engineer | Pharmacist | Senior pharmacist *(P1C)* | QA *(QA portal)* |
+|---|---|---|---|---|---|---|
+| Approved product, substance and clinical drug | yes | yes | yes | yes | yes | yes |
+| Unapproved product (any state other than `approved`: pending, engineer checked, issue, back in review) | stub only: concept id, trade name, "Not yet reviewed by a pharmacist", batch id | stub only | stub on public routes; full in `/review` only | stub on public routes; full in `/review` only | as pharmacist | stub only on every page; full only through QA key reads (§7.9), never in `/review` |
+| Product whose latest batch item is marked "removed from batch file" | stub with "Removed from the DGDA batch file." (§6.4), whatever its last decision | same | same on public routes; not listed in `/review`, and decisions on it are refused (§7.2) | same | same | same on public routes; QA key reads exclude it, as `/review` does |
+| Unapproved substance (none of its products approved) | stub only: BDS id, name, "Not yet reviewed by a pharmacist" | stub only | stub on public routes; full in `/review` only | stub on public routes; full in `/review` only | as pharmacist | stub only on every page; full only through QA key reads |
+| Unapproved clinical drug (no approved product maps to it) | not served | not served | in `/review` only | in `/review` only | in `/review` only | not served on any page; through QA key reads only |
+| Batch evidence (source JSON, stage evidence, extraction) | no | no | yes | yes | yes | no page; through QA key reads only |
+| Decision history, with notes | no | no | yes (roles only; "(you)" for own) | yes | yes | no page; QA key reads give role, time and decision, never a note (§7.9.7) |
+| Public verification line (role and date of the counting approval) | yes, approved records only | yes | yes | yes | yes. A senior's approval reads "Approved by a pharmacist" in public (D49). | yes |
+| Emails of anyone else | never | never | never | never | never | never |
+| Own name and email | n/a | in the account menu only | same | same | same | in the account menu only |
+| Report a problem (flag) | no ("Sign in to report a problem") | yes | yes | yes | yes | yes, as a reader |
+| Review decisions | no | no ("Your account can't review this batch.") | records an engineer check | approves and publishes | approves and publishes, as a pharmacist | no, never: the web refuses before any API call and the API refuses `reviewerRole=qa` (§5.13, §7.10.1) |
+| *(P1C)* Dismiss an open issue on a record (§5.10a) | no | no | no: sees the issue, no Dismiss control | no: same | yes | no |
+| *(P1C)* Senior review pages (`/review/pairs`, `/review/substances/*`, §5.17) | no (sign-in redirect) | no (not-authorised page) | no ("Senior review is for senior pharmacists.") | no (same) | yes | no (QA account view, §5.12) |
+| *(P1C)* Pair decisions: mark reviewed, report pair issue (§5.17) | no | no | no | no | yes | no |
+| *(P1C)* Pair review state | pairs between approved products only: `PAIR_REVIEWED` with its date, or `PAIR_NOT_REVIEWED` (D53) | same | all four states in `/review` (§5.17) | same | same | public state on pages; all four states through QA key reads |
+| *(P1C)* Source links and "fetched on" dates (§5.6.6) | approved records only (P2, §6.5) | same | every record in `/review` | same | same | approved records on pages; every current record through QA key reads |
+| Resolve flags | no | no | yes | yes | yes | no |
+| Partner access request | no (sign in first) | yes | yes | yes | yes | yes |
+| *(QA portal)* QA tools page and own QA keys (`/review/qa`, §5.18) | no (sign-in redirect) | no (not-authorised page) | yes | no ("QA tools are for QA team members, engineers and senior pharmacists.") | yes | yes |
 
 **Decision (P1C, PO D2, D49).** `senior` is a pharmacist role. Every rule in this spec that names the pharmacist also applies to the senior pharmacist: approval, the promise's consequence, the "needs review" set, Report issue, history, and access to every pharmacist route. The senior also has the senior review surfaces (§5.17) and Dismiss issue (§5.10a). Wherever this spec writes "pharmacist" for a power, read "pharmacist or senior pharmacist". Wherever it writes "pharmacist" for a label shown to reviewers, the senior's label is "senior pharmacist".
 
 **Decision: public routes always read with public scope.** `/`, `/search`, `/products/*`, `/substances/*`, `/check`, `/check/suggest`, `/partners`, `/learn/*` and `/privacy` call the API with `scope=public` whatever the session, so a reviewer sees exactly what a reader sees there. Unapproved data is readable only under `/review/*`, through the token-gated endpoints in §7.3. The current `UnreviewedBadge` and the `scopeFor(session)` switch on public pages are removed. An e2e test opens `/products/{unapprovedId}` with a pharmacist session and asserts the stub (§11.4).
 
-**Decision (QA, D61).** A QA key holder (§7.9) is a machine reader outside the table above. It reads what the desk shows for every current record, unapproved ones included (source JSON, extraction, codes with source links, stage results and evidence, pairs, pair review state, and decision history as role, time and decision), plus the senior substance read's pairs. It never receives an email, a decision note, a dismissal note, a pair-issue note, `mine`, a flag, an audit row or session data, and it writes nothing but its own `qa_read` audit rows.
+**Decision (QA, D61).** A QA key holder (§7.9) is a machine reader outside the table above. It reads what the desk shows for every current record, unapproved ones included (source JSON, extraction, codes with source links, stage results and evidence, pairs, pair review state, and decision history as role, time and decision), plus the senior substance read's pairs. It never receives an email, a decision note, a dismissal note, a pair-issue note, `mine`, a flag, an audit row or session data, and it writes nothing but its own `qa_read` audit rows. *(QA portal)* This holds for every key, env or DB (§7.10.2), and for the hosted MCP server (§7.10.6). A DB key reads as its owner's QA access, not as the owner: the owner's role gives no extra field, and a pharmacist's session never makes a key (D67).
 
 Stored emails ("Emails of anyone else") are never rendered by any route. The team reads them only with database access, through the runbook queries in `docs/runbooks/` (§6.9). The folder does not exist yet: `docs/runbooks/reviewer-invite.md` is a new file written in P1B and `docs/runbooks/partner-requests.md` a new file written in P2 (§12.2).
 
@@ -306,7 +331,7 @@ Stored emails ("Emails of anyone else") are never rendered by any route. The tea
 | `/flags` | `/review/flags` |
 | `/products/[id]`, `/substances/[id]`, `/check`, `/signin`, `/api/session` | unchanged |
 
-**Decision.** Anonymous access to any `/review/*` route redirects 307 to `/signin?returnTo=…`, and `user` access returns status 200 with the not-authorised page in §5.12. Neither ever shows the data. This closes the gap where `/batches/[id]` showed unreviewed data to anonymous visitors.
+**Decision.** Anonymous access to any `/review/*` route redirects 307 to `/signin?returnTo=…`, and `user` access returns status 200 with the not-authorised page in §5.12. Neither ever shows the data. This closes the gap where `/batches/[id]` showed unreviewed data to anonymous visitors. *(QA portal)* A `qa` session gets the same answer as `user` (status 200, no data) on every `/review/*` route except `/review` (307 to `/review/qa`) and `/review/qa` itself, with the §5.12 QA account view in place of the not-authorised page (§2.1, D66).
 
 ---
 
@@ -462,6 +487,8 @@ A build check, `scripts/check-client-islands.mjs` (run in `postbuild` next to th
 | LearnRail | `components/learn/LearnRail.tsx` | Scroll-spy `aria-current` on "On this page"; scrolls the current chapter into view in the narrow nav; drives chapter 8's `.seg` example switches | none |
 | ErrorBoundary | `app/error.tsx`, `app/review/error.tsx` | Next requires error boundaries to be client components | none |
 | SeniorDesk *(P1C)* | `components/review/senior/SeniorDesk.tsx` plus `components/review/senior/*` | Keyboard model of the senior pages (J, K, M, R, ?, Esc), pair decisions with Turnstile and `requestId`, the pair-issue note drafts, row-level 409 banners, live region | role, page kind (`queue` or `substance`), the visible pair order with each pair's `{ddinterA, ddinterB, version}`, desk settings (single-key shortcuts). No clinical text and no emails in props; the rows are server-rendered. |
+| QaKeys *(QA portal)* | `components/qa/QaKeys.tsx` plus `components/qa/*` (except `CopyButton`) | The create and revoke forms as server actions with Turnstile (action `qakey`), the one-time key panel (focus, copy, "I've saved it", `beforeunload` while it is open), the inline revoke confirmation, field errors, outcome banners and announcements (§5.18) | the viewer's own keys as `{id, name, createdAt, expiresAt, lastUsedAt, status}` (never an email, never a hash), the active-key count, the Turnstile site key and the nonce. The new key is never a prop: it arrives once, in the create action's result, and lives only in the island's state until "I've saved it" or the page unloads. |
+| CopyButton *(QA portal)* | `components/qa/CopyButton.tsx` | `navigator.clipboard.writeText` of a server-rendered text, with the "Copied." announcement and the select-the-text fallback (§5.18) | the id of the element whose text it copies, and its label. It never receives the text itself as a prop, so a key panel's text is read from the DOM at click time. |
 
 *(P1C)* ReviewDesk's `role` prop also takes `senior` (§5.7, §5.10a).
 
@@ -476,6 +503,8 @@ A build check, `scripts/check-client-islands.mjs` (run in `postbuild` next to th
   - `/api/session`.
 - `GET /v1/products/loaded` is no longer called by any page. The checker picker uses suggestions.
 - *(QA)* `/api/qa/v1/*` (§7.9) is not browser-callable: it is authorised only by a Bearer QA key, reads no cookie, and sends no CORS header, so no page script on any origin can use it. It is the one key-gated, server-to-server JSON surface, and its list endpoints are paged (100 records, 50 pairs).
+- *(QA portal)* `/api/qa/mcp` (§7.10.6) is not browser-callable either: Bearer key only, no cookie read, no CORS header, and a request with an `Origin` other than `https://{SITE_HOST}` is refused with 403.
+- *(QA portal)* **A new QA key reaches the browser exactly once**: in the result of the create server action, to the QaKeys island, which shows it in the one-time panel (§5.18). It is never in a URL, a prop, a cookie, `localStorage`, `sessionStorage`, a server-rendered page or a log line, and the web never stores it: the API stores only its SHA-256 hash (§7.10.2). No other QA endpoint, page or island ever carries a key or a hash.
 - `INTERNAL_API_TOKEN`, `SESSION_SECRET`, `TURNSTILE_SECRET_KEY` and *(QA)* `QA_API_KEYS` stay server-only. The existing `check-client-bundle.mjs` scan stays.
 
 ### 4.4 Progressive enhancement
@@ -503,6 +532,7 @@ The source is Board R's `.app`.
   - `Wordmark` at 17 px with sub "Review";
   - centre: "Batch `0001-pilot`", `ProgressMeter` (160 px), "0 of 10 approved" (tabular), a separator, then "Record 1 of 10", or "Batch approved" in the complete view;
   - right: role badge "Pharmacist" or "Engineer" (`.role-badge`), then the account (initials avatar, name, AccountMenu). *(P1C)* For role `senior` the badge reads "Senior pharmacist".
+  - *(QA portal)* In `ReviewToolbar` (the toolbar of `/review`, `/review/flags`, the senior pages, `/review/qa` and the not-authorised and QA account views), for roles `qa`, `engineer` and `senior` only: a plain link "QA tools" to `/review/qa` before the role badge, with `aria-current="page"` on `/review/qa`. For role `qa` the badge reads "QA" (`ROLE_LABEL.qa`). The desk's own toolbar (the ReviewDesk island, §4.2) is unchanged; the desk reaches QA tools through the account menu (§6.2).
 - **Panes**: `grid-template-columns: var(--pane-side) var(--pane-list) minmax(0,1fr)`, which is 232 px, 336 px and the rest.
 - **Sidebar** (`.chrome-sidebar.material`):
   - heading "Batches", with one `.filter` per batch: stack icon, mono batch id, item count. The current batch has `aria-current="true"`. Clicking it clears the filter and the search.
@@ -1164,6 +1194,7 @@ Focus stays where it was. After navigation, the island restores focus to the ele
 | Empty filter or search | see §5.3 | "No records with an issue reported." etc., "Show all {n} records" |
 | Batch complete (every current item approved) | `.done` in the record pane, no animation: approved pill, `<h2>` "Batch {id} approved. {n} records are now public.", paragraph, button | "Each record was approved by a pharmacist. If the pipeline re-runs a record, it goes back in review and leaves public view until a pharmacist approves it again." *(P1C, D54: the second sentence becomes "If the pipeline changes data a record's approval covered, it goes back in review and leaves public view until a pharmacist approves it again.")* Button: "Open record 1" |
 | Not authorised (role `user` on any `/review` route) | Server page, no batch data: info banner, then two buttons | title "Your account can't review this batch."; body "Ask the IntelliDrugs team for a reviewer invite, then sign in with the invited Google account."; then a warn banner "This Google account isn't on the reviewer list." with "You're signed in as {own email}. Reviewer tools need the account your invite was sent to. You can still search and check interactions."; buttons "Use another Google account" (signs out, then opens `/signin?returnTo=/review`) and "Search medicines" |
+| *(QA portal)* QA account on a review page (role `qa` on any `/review/*` page except `/review` and `/review/qa`, D66) | Server page, status 200, no review data and no review API call: the reviewer toolbar (§5.1, with the "QA tools" link and the "QA" badge), an info banner, then two buttons. No warn banner: the account is on `REVIEWERS`, so the "isn't on the reviewer list" banner would be false. | title "Your account has QA access, not reviewer access."; body "QA accounts read data through QA tools. Reviewing records needs a reviewer invite."; buttons "Open QA tools" (tonal, to `/review/qa`) and "Search medicines" (plain) |
 | Not signed in on `/review` | Redirect 307 to `/signin?returnTo=/review/...` | n/a |
 | Role lowered mid-session (the server action returns `forbidden`) | The record stays on screen. The no-auth block replaces the decision bar (§5.7). An open window is cancelled. | announce "Your account can't review this batch. Your decision on {name} was not saved." |
 | Session expired mid-session (the server action returns `unauthenticated`) | The record stays on screen. The signed-out block replaces the decision bar (§5.7). An open window is cancelled. The note draft is kept. | announce "Your sign-in expired. Your decision on {name} was not saved." |
@@ -1184,6 +1215,13 @@ Focus stays where it was. After navigation, the island restores focus to the ele
   - the API's `AuditService.ROLES` adds `senior` (§7.5); without it every web audit event of a senior (`sign_in`, `review_open`, `evidence_open`, `decision_denied`, `senior_open`) is refused with 400. V7 widens only the database `CHECK`.
 
   A unit test (§11.1 `reviewers.test.ts` and `review-copy.test.tsx`) pins each point, including that a senior `ok` history line reads "Approved by a senior pharmacist. Published.".
+- *(QA portal, D66)* **QA.** `REVIEWERS` accepts a fourth role token, `qa` (for example `q@x.org:qa`), label "QA". A `qa` account is **not a reviewer**: it has no power in §2.2 beyond a reader's, plus the QA tools page and its own QA keys (§5.18, §7.10). The roles that may use QA tools are `qa`, `engineer` and `senior`; `pharmacist` and `user` may not. Pharmacist, engineer and senior semantics are unchanged. **Every role gate learns `qa` (Decision)**, and none may keep its own role list:
+  - `$WEB/lib/reviewers.ts`: `Role` = `ReviewerRole | "qa" | "user"`; `ROLES` = `["pharmacist", "engineer", "senior", "qa", "user"]` (without it a `qa` session decodes to null); `parseReviewers` accepts `qa`; `ROLE_LABEL.qa` = "QA"; `isReviewer()` stays `pharmacist | engineer | senior` and is false for `qa`; a new helper `canUseQa(role)` (true for `qa`, `engineer`, `senior`) is the one test for QA tools. `ReviewerRole` (`lib/review-types.ts`), `ROLE_LABEL_DESK` and every decision type are unchanged, so no desk or senior code path can type a `qa` role;
+  - `app/review/layout.tsx` admits a session when `isReviewer(session) || canUseQa(session.role)` (anonymous: sign-in redirect; `user`: not-authorised page, as today). Because a layout cannot see the path, **every page under `app/review/` other than `qa/page.tsx` re-checks `isReviewer` and renders the §5.12 QA account view for role `qa`** (`app/review/page.tsx` redirects it to `/review/qa` instead): `[batchId]/layout.tsx`, `[batchId]/page.tsx`, `[batchId]/[conceptId]/page.tsx`, `flags/page.tsx`, `pairs/page.tsx`, `substances/page.tsx` and `substances/[bdsId]/page.tsx`. Today they `return null` for a non-reviewer, which a `qa` session would see as a blank page. `[batchId]/versions/route.ts` keeps its `isReviewer` check (403 `FORBIDDEN` for `qa`). A component test walks every `app/review/**/page.tsx` and fails when one renders data or calls a review read for a `qa` session (§11.2);
+  - every server action keeps `isReviewer()` (or `actsAsPharmacist`, or the senior test), so a `qa` session is `forbidden` before any API call and writes its `decision_denied` row as today: `decide` and `decideFormAction` (`runDecide` in `lib/desk-core.ts`: approve, report, dismiss and the no-JavaScript confirm), `loadDiff`, `pairDecide` (`runPairDecide` in `lib/senior-core.ts`), `resolveFlagAction` (`submitResolve` in `lib/actions-core.ts`), and the audit actions `logRecordOpen`, `logEvidence`, `logSeniorOpen` and `logOpenOnRender`. Flags and partner requests stay open to any signed-in account, `qa` included (as a reader);
+  - `components/Header.tsx` and `components/review/ReviewAccount.tsx`: the account menu items of §6.2; `components/review/ReviewToolbar.tsx`: the §5.1 link and badge; `components/public/Welcome.tsx` and `app/signin/page.tsx`: the QA welcome state (§6.2), and `app/signin/page.tsx` reads `listReviewBatches()` for reviewer roles only (today it reads it for every role except `user`);
+  - the API: `AuditService.ROLES` adds `qa` (a `qa` session's `sign_in`, `sign_out` and `decision_denied` rows); `ReviewService.ROLES`, `ApprovalRule` and `SeniorReviewService` do **not**, so `reviewerRole=qa` is 400 `field=reviewerRole` on every decision and pair decision, and V9 leaves the `review_decision` and `pair_review` role checks narrow, so the database refuses a `qa` decision too (§7.10.1).
+- *(QA portal)* **Invite for a QA account** (same procedure; `docs/runbooks/reviewer-invite.md` adds it): "Role: QA. You read IntelliDrugs data for quality checks through QA tools: your own keys, the MCP server and the QA API. You can't review or publish records. Sign in at drugdb.eliooo.org with this Google account." Removing a `qa` entry from `REVIEWERS` (or changing it to `pharmacist`) stops every DB key the account owns on the next request (§7.10.4).
 - *(P1C, PO D1, D50)* **Publishing is unchanged.** Any pharmacist's (or senior's) "Looks correct" approves and publishes its record, batch by batch, as today. Batches stay the unit of engineering review: an engineer checks extraction correctness record by record in its batch. The senior's clinical review (§5.17) runs across batches and after the fact.
 - **Pharmacist "Looks correct"**: publishes after the window. Engineer: records the check and never publishes.
 - **Invites are sent by the team by hand** (**Decision**: no SES automation). The fixed template is:
@@ -1259,10 +1297,12 @@ These events are written to `ops.audit_event` (V6, §7.5) through `POST /v1/audi
 | `pair_decision` *(P1C)* | API, in the pair decision transaction | Every accepted pair decision (§7.7) | `ddinter_pair` `{ddinterA}/{ddinterB}`; `outcome` = `reviewed` or `issue` |
 | `pair_decision_rejected` *(P1C)* | API, in its own transaction after the pair decision fails | 409 or 400 on a pair decision. `outcome` = the code. | `ddinter_pair` |
 | `senior_open` *(P1C)* | web (SeniorDesk, via the `logSeniorOpen` server action) | A senior page is shown (it reads unreviewed data from every batch). Never on a prefetch. At most one per actor, page and 10 minutes. | `substance` `{bdsId}`, or `pair_queue` `{show}` |
-| `qa_read` *(QA)* | web, the `/api/qa/v1/*` route handlers (§7.9.6) | Every QA API call except while the QA API is disabled; `unauthorized` and `rate_limited` rows throttled. `outcome` = `ok` or the lower-cased error code. No actor email or role. | `qa_route` `{label}/{route}` (`{route}` alone when unauthenticated) |
+| `qa_read` *(QA)* | web, the `/api/qa/v1/*` route handlers (§7.9.6); *(QA portal)* and the hosted MCP server's tool calls (§7.10.6) | Every QA API call *(QA portal: there is no disabled state any more, §7.9.1)*, and every hosted MCP `tools/call`; `unauthorized` and `rate_limited` rows throttled. `outcome` = `ok` or the lower-cased error code. No actor email or role. | `qa_route` `{label}/{route}` (`{route}` alone when unauthenticated). *(QA portal)* A DB key's label is `key.{id}`; an MCP request refused before a tool runs uses the route name `mcp` |
+| `qa_key_created` *(QA portal)* | API, in the key-creation transaction (§7.10.3) | Every key created | `qa_key` `{id}`; `outcome` = `ok`; `actor_email` = the owner, `actor_role` = the session role (`qa`, `engineer` or `senior`). Never the key or its hash. |
+| `qa_key_revoked` *(QA portal)* | API, in the revocation transaction (§7.10.3) | Every key revoked by its owner | `qa_key` `{id}`; `outcome` = `ok`; actor as above. Never the key or its hash. |
 
 - Undo and discarded windows are **not** audit events, because nothing reached the server.
-- Audit rows hold `actor_email` (team-only, like `review_decision`), `actor_role` (*P1C*: also `senior`) and `request_id`. There are no IP addresses and no free text from forms. For `decision` and `decision_rejected`, `request_id` is the decision's `requestId` (§7.2); for other events it is the web request id, the `x-request-id` header the middleware sets on every request (§9.4).
+- Audit rows hold `actor_email` (team-only, like `review_decision`), `actor_role` (*P1C*: also `senior`; *QA portal*: also `qa`) and `request_id`. There are no IP addresses and no free text from forms. For `decision` and `decision_rejected`, `request_id` is the decision's `requestId` (§7.2); for other events it is the web request id, the `x-request-id` header the middleware sets on every request (§9.4).
 - The audit table cannot be changed after insert: V6 adds triggers that reject UPDATE, DELETE and TRUNCATE (§7.6).
 - The web container's stdout logs never contain emails, notes, flag messages, or the query strings of `/search` and `/check`. Logs record the route template, status, duration and request id.
 
@@ -1293,7 +1333,7 @@ No board draws these two pages. They use the reviewer toolbar (§5.1, without th
 
 No board draws these pages. They use the reviewer toolbar (§5.1), with "Senior review" and "{t} pair[s] to review" (tabular) in place of the batch centre section. Below the toolbar sits a nav row (`<nav aria-label="Senior review">`) with the links "Pair queue" and "Substances", the current one carrying `aria-current="page"`. Then comes one column of at most 960 px, built from `ui/` components only. All copy here is new (§1.7). Every read covers **all batches at once**, so a review never misses a partner in another batch.
 
-**Access (Decision).** Role `senior` only. Anonymous visitors get the 307 sign-in redirect (§2.3). Role `user` gets the not-authorised page (§5.12). Pharmacists and engineers get status 200 and an info `Banner`: title "Senior review is for senior pharmacists.", body "Your account reviews batches. Ask the IntelliDrugs team if you need senior access.", and the button "Open the review desk". These pages carry no data for those roles (§13.1 Q8).
+**Access (Decision).** Role `senior` only. Anonymous visitors get the 307 sign-in redirect (§2.3). Role `user` gets the not-authorised page (§5.12). *(QA portal)* Role `qa` gets the §5.12 QA account view, not the banner below. Pharmacists and engineers get status 200 and an info `Banner`: title "Senior review is for senior pharmacists.", body "Your account reviews batches. Ask the IntelliDrugs team if you need senior access.", and the button "Open the review desk". These pages carry no data for those roles (§13.1 Q8).
 
 **What "substances we hold" and "pairs" mean (Decision).**
 
@@ -1410,6 +1450,121 @@ No board draws these pages. They use the reviewer toolbar (§5.1), with "Senior 
 - **Audit**: `senior_open` on page show and `pair_decision` on every accepted decision (§5.15).
 - **No JavaScript**: the pages read fully. Pair decisions need the bot check and show the `<noscript>` line "Reviewing pairs needs JavaScript for the bot check."
 
+### 5.18 QA tools (`/review/qa`) *(QA portal, Decision, PO 18/10/2026; D66, D67, D69, D70)*
+
+No board draws this page. It gives QA team members, engineers and senior pharmacists everything they need to point an AI assistant or a script at the read-only QA data: the hosted MCP address with setup snippets, their own keys, the API and the rules. All copy below is new (§1.7) unless it is code (snippets, paths, filter names) or the `PREAMBLE`. Files: `app/review/qa/page.tsx` (server component), `app/review/qa/qa.module.css`, `components/qa/*` (the QaKeys and CopyButton islands, §4.2), `lib/qa-key-actions.ts` (`"use server"`) and `lib/qa-key-core.ts` (`server-only`, §7.10.5).
+
+**Access (Decision).** `canUseQa(role)`: `qa`, `engineer` and `senior`. Anonymous visitors get the 307 sign-in redirect (§2.3, `returnTo=/review/qa`). Role `user` gets the not-authorised page (§5.12). Role `pharmacist` gets status 200 and an info `Banner`: title "QA tools are for QA team members, engineers and senior pharmacists.", body "Your account reviews batches. Ask the IntelliDrugs team if you need QA access.", and the button "Open the review desk"; no key data and no key API call. A `qa` session reads nothing but its own key list on this page: no batch list and no other review read (the toolbar's account menu shows no batch for `qa`).
+
+**Layout.** The reviewer toolbar (§5.1, without the batch centre section; "QA tools" link current), no sidebar, then one column of at most 860 px, built from `ui/` components and CSS Modules with tokens only (no inline style). The page has one `<h1>`, then four sections in this order, each an `<h2>` with an `id` so the page can link to it: "Connect your AI", "Your keys", "API", "Rules". It owns the page's one polite live region (`id="qa-live"`, sr-only, §10.2), server-rendered; both islands announce through it with `announce()` (`lib/live-region.ts`).
+
+- `<h1>` "QA tools". Sub: "Read IntelliDrugs data for quality checks from your AI assistant or a script. Everything here is read-only."
+
+**1. "Connect your AI"**
+
+- "The QA MCP server runs on this site. Add it to your AI client with this address, and send one of your keys as a Bearer token."
+- A row with the label "MCP server address", the mono value `https://{SITE_HOST}/api/qa/mcp` (`SITE_HOST` is server-only; the page renders the string) and a `CopyButton` "Copy address".
+- `<h3>` "Claude Code", then a `<pre>` (mono, `white-space: pre-wrap`, `overflow-wrap: anywhere`, so it reflows at 320 px with no scroll region) with exactly:
+
+  ```
+  claude mcp add --transport http intellidrugs-qa https://{SITE_HOST}/api/qa/mcp --header "Authorization: Bearer $INTELLIDRUGS_QA_KEY"
+  ```
+
+  a `CopyButton` "Copy command", and the help line "Set INTELLIDRUGS_QA_KEY to your key first. Claude Code saves the header in your own settings. Never add it with --scope project, which writes the key into the project's files."
+- `<h3>` "Cursor and other clients", then a `<pre>` with exactly:
+
+  ```
+  {
+    "mcpServers": {
+      "intellidrugs-qa": {
+        "url": "https://{SITE_HOST}/api/qa/mcp",
+        "headers": { "Authorization": "Bearer YOUR_KEY" }
+      }
+    }
+  }
+  ```
+
+  a `CopyButton` "Copy configuration", and the help line "Replace YOUR_KEY with your key. Keep this file out of version control."
+- `<h3>` "claude.ai and ChatGPT": "Their connectors sign in with OAuth, which IntelliDrugs does not offer. Use Claude Code, Cursor or another client that can send an Authorization header." (OAuth is out of scope, §7.10.6.)
+- "The server has five read-only tools: `list_batches`, `get_batch`, `get_record`, `find_records` and `get_pairs`. A local version that runs on your computer is in `tools/qa-mcp`." The tool names are rendered from `TOOLS` (`lib/qa-mcp-tools.ts`, §7.10.6), never retyped.
+- The page never embeds a key, a label or a hash in any snippet: the snippets carry `$INTELLIDRUGS_QA_KEY` and `YOUR_KEY` only.
+
+**2. "Your keys"** (the QaKeys island; the `<h2>` has `tabindex="-1"` so focus can return to it)
+
+- "A key lets a client read QA data on your behalf. It expires 90 days after you create it, and you can revoke it at any time. You can have up to 5 active keys."
+- **Create form** (`<form>` posting to `createQaKeyAction`): a `Field` labelled "Key name" (`maxlength` 40, `autocomplete="off"`, counter "{n} of 40"), help "1–40 characters, for example the laptop or tool that will use it.", then the one shared `TurnstileField` (action `qakey`) with its `BotCheck` status, and the primary button "Create key" (busy label "Creating"). With 5 active keys the button is `aria-disabled` and the field's help adds "You have 5 active keys. Revoke one to create another."; a press shows that line as the field's hint and sends nothing.
+  - Name rule (web and API): trimmed of white space, 1–40 characters, no control characters. Error (`aria-invalid`, `.field-error`): "Name the key with 1–40 characters."
+  - `<noscript>`: "Creating and revoking keys needs JavaScript for the bot check."
+- **The one-time key panel** (shown after `created`, above the list; a `<section aria-labelledby>` with the `.banner--info` look, not a dialog):
+  - `<h3 tabindex="-1">` "Copy your new key now", which receives focus;
+  - "This is the only time it is shown. IntelliDrugs keeps only a fingerprint of it and can't show it again.";
+  - the label "Key {name}" and the key in a mono `<code id="qa-new-key">` (`overflow-wrap: anywhere`, `user-select: all`);
+  - a `CopyButton` "Copy key" and the tonal button "I've saved it". "I've saved it" removes the panel and the key from the DOM and from the island's state, and moves focus to the "Your keys" heading;
+  - while the panel is open, a `beforeunload` prompt guards against losing the key (the browser's own text), and leaving through the account menu or a link prompts the same way;
+  - announce "Key {name} created. Copy it now; it is shown only once."
+- **Create outcomes** (a `Banner` above the form, announced; the form keeps the typed name, and nothing in it is ever the key):
+
+| Outcome (§7.10.5) | Tone | Title | Body | Action |
+|---|---|---|---|---|
+| `active_limit` | warn | "You already have 5 active keys." | "No key was created. Revoke one, then create another." | none |
+| `daily_limit` | warn | "You've created 10 keys in the last 24 hours." | "No key was created. Try again tomorrow." | none |
+| `captcha` | crit | "We couldn't confirm you're a person." | "No key was created. Retry the check, then try again." | "Retry check" |
+| `forbidden` | info | "Your account no longer has QA access." | "No key was created. Ask the IntelliDrugs team if you need QA access." | none |
+| `unauthenticated` | warn | "Your sign-in expired." | "No key was created. Sign in again to continue." | "Sign in" (to `/signin?returnTo=/review/qa`) |
+| `failed` (network, 5xx, 502) | crit | "Couldn't create the key." | "If a new key appears in your list, revoke it: it can't be shown again. Check your connection and try again." | "Try again" (submits the form again) |
+
+- **Key list**: a table in a labelled, keyboard-scrollable region (`tabindex="0"`, `role="region"`, `aria-label` "Your QA keys", §10.4), `<caption class="sr-only">` "Your QA keys", the newest first (at most 50, §7.10.3). Columns: "Name", "Created", "Expires", "Last used", "Status", and an action column whose header is sr-only "Actions". Dates use `fmtDhaka` (reviewer surfaces); "Last used" reads "Never" when there is no use. Status is plain text, never green, never a pill (§3.4 mark exclusivity): "Active", "Expired", "Revoked". An active row has the destructive sm button "Revoke" with sr-only " key {name}".
+  - Empty: "You have no keys yet."
+  - **Revoke confirmation** (inline, in the row's action cell): "Revoke {name}? Clients using it stop working at once." with the destructive sm button "Revoke key" (busy label "Revoking"), which receives focus, and the plain sm button "Cancel". Esc or Cancel closes it and returns focus to the row's "Revoke". "Revoke key" posts `revokeQaKeyAction` through the same Turnstile token. Enter on "Revoke" opens the confirmation only; it never revokes.
+  - **Revoke outcomes** (the row stays in place; focus moves to the "Your keys" heading after `revoked`, otherwise stays on the control):
+
+| Outcome | What shows | Copy |
+|---|---|---|
+| `revoked` | the row's status becomes "Revoked", its action cell empties | announce "Key {name} revoked." |
+| `already_revoked` | the row's status becomes "Revoked" | status line and announcement "Key {name} was already revoked." |
+| `not_found`, `invalid` | warn `Banner` | "That key isn't in your list any more." / "Nothing was changed. Reload the page." with "Reload" |
+| `rate_limited` | warn `Banner` | "Too many changes to your keys." / "Nothing was changed. Wait a few minutes and try again." |
+| `captcha` | crit `Banner` | "We couldn't confirm you're a person." / "No key was revoked. Retry the check, then try again." with "Retry check" |
+| `forbidden`, `unauthenticated` | as for create | the same titles, with the body's first sentence "No key was revoked." |
+| `failed` | crit `Banner` | "Couldn't revoke the key." / "It still works. Check your connection and try again." with "Try again" |
+
+  - **Load error** (the list read failed): crit `Banner` "Couldn't load your keys." / "Nothing was changed. Check your connection and try again." with the link "Try again" (`/review/qa`). The create form is not rendered, so no key can be made without the cap check being shown.
+
+**3. "API"**
+
+- "The same data over HTTPS, for scripts. Send your key in the Authorization header. Each key may make 60 requests a minute, shared with the MCP server."
+- The label "API base address", the mono value `https://{SITE_HOST}/api/qa/v1` and a `CopyButton` "Copy address".
+- A table (`<caption class="sr-only">` "QA API endpoints") with the columns "Request" (mono) and "Returns":
+  - `GET /batches`: "Every batch, with its status and counts."
+  - `GET /batches/{batchId}`: "One batch's current records, with each pipeline stage's result."
+  - `GET /batches/{batchId}/records/{conceptId}`: "One record in full: DGDA source, extraction, codes with source links, stages, pairs and decision history."
+  - `GET /records?filter={filter}`: "Records with a problem, 100 a page. Optional: stage (with stage_warn only), batch and page."
+  - `GET /substances/{bdsId}/pairs`: "One substance's DDInter pairs, 50 a page. Optional: page."
+- `<h3>` "Problem filters", a `dl` with the mono filter names (rendered from `QA_FILTERS`) and: `strength_missing` "A parsed ingredient has no strength."; `parse_partial` "The generic content was parsed only in part."; `route_assumed` "The pipeline assumed the DDInter route."; `no_ddinter_data` "A substance has DDInter coverage "none". This never means a combination is safe."; `unaligned` "An ingredient has no substance."; `stage_warn` "A pipeline stage warns. Add stage to name one: dgda, substances, clinical or ddinter."; `stage_fail` "A pipeline stage failed."
+- `<h3>` "Example", a `<pre>` with exactly the line below, and a `CopyButton` "Copy example":
+
+  ```
+  curl -H "Authorization: Bearer $INTELLIDRUGS_QA_KEY" "https://{SITE_HOST}/api/qa/v1/records?filter=strength_missing"
+  ```
+
+- "Every answer uses the same envelope: success, data, message, errors and metadata. Quote metadata.requestId with each finding, so the team can find the exact read."
+
+**4. "Rules"**
+
+- "Every answer from the MCP server starts with these rules. Follow them in every report."
+- An `<ol>` with one item per line of `PREAMBLE` (`lib/qa-mcp-tools.ts`, §7.10.6), rendered from the constant.
+- "Use only your own keys. Never paste a key into a chat, a ticket or a file under version control. If a key may have leaked, revoke it at once."
+
+**Copy buttons (CopyButton island).** Plain sm buttons, at least 24 × 24 px, with the visible labels above. On press: `navigator.clipboard.writeText(text of the target element)`, then announce "Copied.". When the clipboard is unavailable or refused, the island selects the target's text and announces "Couldn't copy. The text is selected; press Ctrl C (Cmd C on Mac) to copy it." Without JavaScript the buttons are not rendered (`hidden` until the island mounts) and every text stays selectable.
+
+**States, keyboard and a11y.**
+
+- One `<h1>`; headings in order (`h1`, `h2`, `h3`); every control labelled; status words, never colour alone; targets at least 24 × 24 px; no horizontal page scroll at 320 CSS px (the key, the address and the snippets wrap; the two tables sit in labelled scroll regions); `:focus-visible` everywhere; focus never falls to `<body>` after an outcome.
+- Keyboard: native controls only, no single-key shortcuts on this page. Esc closes the revoke confirmation.
+- No JavaScript: sections 1, 3 and 4 and the key list read fully; creating and revoking need the bot check and show the `<noscript>` line.
+- CSP: the Turnstile script carries the nonce (§9.4); no inline script or style.
+- Audit: none for viewing the page (it reads no unreviewed data); `qa_key_created` and `qa_key_revoked` from the API (§5.15).
+
 ---
 
 ## 6. Public surfaces
@@ -1489,6 +1644,7 @@ No board draws these pages. They use the reviewer toolbar (§5.1), with "Senior 
 | Loading | The button shows a spinner and "Opening Google", keeping its size. The line "Finish signing in in the Google window. This page updates when you're done." |
 | Signed in, reader (`?welcome=1`, role `user`) | Account row (initials, own name, own email). `<h2>` "You're signed in as a reader". "You can search medicines and check interactions. Reviewing needs an invite. If you were invited, sign out and continue with the invited Google account." Buttons "Search medicines" and "Sign out". |
 | Invited reviewer (`?welcome=1`, role pharmacist or engineer) | Role badge with shield, "Signed in as {name}". `<h2>` "You're a {pharmacist\|engineer} reviewer for batch {id}". Steps: "{n} records are waiting. Each shows [Not yet reviewed by a pharmacist] until a pharmacist approves it." / "Compare the DGDA register with the extraction, then press `A` or choose Looks correct. You have {undo} seconds to undo with `U`." ({undo} = the reviewer's undo window, §5.8.1; 8 by default, which is Board P's wording) / pharmacist: "Your approval publishes the record. If the pipeline re-runs it later, it comes back to you as [Back in review]."; engineer: "Your check is recorded but does not publish. A pharmacist approves each record." Button "Open the review desk" with "Shortcuts work inside the desk only, and pause while you type." *(P1C)* Role `senior`: the `<h2>` reads "You're a senior pharmacist reviewer for batch {id}", the pharmacist step is shown, and a fourth step follows: "Senior review shows every interaction pair between the medicines we hold, from all batches. Mark each pair reviewed, or report a pair issue." with the link "Open the pair queue". |
+| *(QA portal)* QA account (`?welcome=1`, role `qa`) | Role badge "QA", "Signed in as {name}". `<h2>` "You have QA access". Steps: "Create a key on the QA tools page. It is shown once, so copy it then." / "Connect Claude Code, Cursor or a script with the key. What it reads may not be reviewed yet, and it can't change anything." / "QA accounts don't review records. Reviewing needs a reviewer invite." Button "Open QA tools" (to `/review/qa`). No batch read: the page calls `listReviewBatches()` for reviewer roles only (§5.13). Engineer and senior welcomes are unchanged; they reach QA tools from the account menu. |
 | Bot check failed | crit: "We couldn't confirm you're a person." / "You weren't signed in. Retry the check. If it fails again, turn off extensions that block scripts on this page." Button "Retry check". |
 | Sign-in cancelled (popup closed) | info: "Sign-in cancelled." / "You closed the Google window before finishing. Nothing changed. Continue with Google to try again." |
 | Pop-up blocked | warn: "Your browser blocked the Google window." / "Allow pop-ups for drugdb.eliooo.org, or continue in this tab instead." Button "Continue in this tab" (`signInWithRedirect`, §9.5). |
@@ -1500,8 +1656,8 @@ No board draws these pages. They use the reviewer toolbar (§5.1), with "Senior 
 **Account menu** (`<details>`):
 
 - the `summary` (avatar button) carries sr-only text "Account menu for {own name}" (Board P);
-- head: avatar, own name and own email; for reviewers, the role badge plus "Batch {id}";
-- items: "Review desk" and "Problem reports and partner requests" (reviewers only), *(P1C)* "Senior review" (seniors only, to `/review/pairs`), the theme control; on `/review/*` also "Keyboard shortcuts and settings" and the "Single-key shortcuts" control (§5.14); then "Sign out" (form POST to `/signout`, §2.1).
+- head: avatar, own name and own email; for reviewers, the role badge plus "Batch {id}"; *(QA portal)* for role `qa`, the badge "QA" and no batch;
+- items: "Review desk" and "Problem reports and partner requests" (reviewers only), *(P1C)* "Senior review" (seniors only, to `/review/pairs`), *(QA portal)* "QA tools" (roles `qa`, `engineer` and `senior`, to `/review/qa`; after "Senior review"), the theme control; on `/review/*` also "Keyboard shortcuts and settings" and the "Single-key shortcuts" control (§5.14); then "Sign out" (form POST to `/signout`, §2.1).
 
 ### 6.3 Search (`/search?q=`)
 
@@ -2222,11 +2378,12 @@ CREATE UNIQUE INDEX audit_event_pair_decision_request_uq ON ops.audit_event (req
 
 #### 7.9.1 Auth, rate limit, headers, envelope
 
-- **Keys.** New env `QA_API_KEYS` (web only) = `label:sha256hex[,label:sha256hex…]`. Entries are trimmed. `label` matches `^[a-z0-9][a-z0-9_-]{0,31}$`; the hash is the 64-character lower-case SHA-256 hex of the UTF-8 key. Only hashes are stored anywhere. A key is generated and handed to its holder once, by the runbook `docs/runbooks/qa-api-keys.md` (new: `openssl rand -hex 32`, then `printf '%s' "$KEY" | shasum -a 256`; rotate by adding the new entry before removing the old; revoke by removing the entry and recreating the `web` container only).
-- **Disabled (Decision).** `QA_API_KEYS` unset or empty: every `/api/qa/*` path answers 404 `NOT_FOUND`, exactly as an unknown path does, and writes no audit row. A malformed value (a bad label or hash, a duplicate label or hash) fails closed the same way, and the web logs one line, once, "QA_API_KEYS invalid: entry {n}" (the index only, never the value).
-- **Request auth.** Only `Authorization: Bearer <key>`: scheme case-insensitive, one space, key of 32–256 characters from `[A-Za-z0-9._~+/=-]`. The handler hashes the presented key and compares the 32-byte digest with **every** configured hash using `crypto.timingSafeEqual`, with no early exit. Missing, malformed or unknown: 401 `UNAUTHORIZED` with `WWW-Authenticate: Bearer`, no `field` and no detail (it never says which part failed). Cookies, sessions and any `X-Internal-Token` sent by the caller are ignored: a reviewer's browser session never authorises a QA call.
-- **Order.** disabled (404) → auth (401) → rate limit (429) → input validation (400) → internal API read → map → audit → answer.
-- **Rate limit.** 60 requests per minute per key label, sliding window: `qa: createWindowLimiter({ limit: 60, windowMs: 60_000 })` in `createLimits()` (`lib/limits.ts`, §9.3). Every authenticated request counts, 400s included. Over the limit: 429 `RATE_LIMITED`, `Retry-After: 60`. The middleware's per-IP limit (10/s, burst 30) still applies first, and its 429 stays the existing plain-text answer, not the envelope; QA paths start with `/api/`, so the daily page caps never count them (existing `isPage`).
+- **Keys.** New env `QA_API_KEYS` (web only) = `label:sha256hex[,label:sha256hex…]`. Entries are trimmed. `label` matches `^[a-z0-9][a-z0-9_-]{0,31}$`; the hash is the 64-character lower-case SHA-256 hex of the UTF-8 key. Only hashes are stored anywhere. A key is generated and handed to its holder once, by the runbook `docs/runbooks/qa-api-keys.md` (new: `openssl rand -hex 32`, then `printf '%s' "$KEY" | shasum -a 256`; rotate by adding the new entry before removing the old; revoke by removing the entry and recreating the `web` container only). *(QA portal)* These **env keys** stay, unchanged, beside the self-service **DB keys** of §7.10.2 (the admin key and the existing `tanvir-qa` key keep working); the runbook adds the DB keys and how the team revokes one (§7.10.3).
+- **Disabled (Decision; superseded by D68 in the QA portal).** Until the QA portal ships: `QA_API_KEYS` unset or empty makes every `/api/qa/*` path answer 404 `NOT_FOUND`, exactly as an unknown path does, with no audit row, and a malformed value fails closed the same way. The QA portal replaces this rule with the one below.
+- **Enabled when either key source can authenticate (Decision, QA portal, D68).** There is no disabled state once the QA portal ships: the QA API is enabled when either source can authenticate, the env keys (`QA_API_KEYS`) or the DB keys (§7.10.2), and a request that no source authenticates is 401, never 404. So with no env keys and no DB keys every QA route answers 401 `UNAUTHORIZED` (and writes its throttled `unauthorized` row), not 404. `/api/qa`, and every QA path that is not a route (the catch-all), still answer the 404 envelope with no auth check and no audit row. **Malformed env values stay fail-closed:** a bad label or hash, an empty entry, or a duplicate label or hash makes the env source authenticate nothing (no env key works, not even the valid entries), and the web logs one line, once, "QA_API_KEYS invalid: entry {n}" (the index only, never the value). DB keys keep working, because a typo in the env must not lock out every QA user, and it can never let an env key in. Unset or empty `QA_API_KEYS` simply means no env keys.
+- **Request auth.** Only `Authorization: Bearer <key>`: scheme case-insensitive, one space, key of 32–256 characters from `[A-Za-z0-9._~+/=-]`. The handler hashes the presented key and compares the 32-byte digest with **every** configured hash using `crypto.timingSafeEqual`, with no early exit. *(QA portal)* When no env key matches and the key has the DB key form (`^idqa_[A-Za-z0-9_-]{43}$`), the handler applies the §7.10.4 verification rule; a key of any other form makes no API call. Missing, malformed or unknown: 401 `UNAUTHORIZED` with `WWW-Authenticate: Bearer`, no `field` and no detail (it never says which part failed). Cookies, sessions and any `X-Internal-Token` sent by the caller are ignored: a reviewer's browser session never authorises a QA call.
+- **Order.** auth (401; *QA portal*: env keys, then DB keys, §7.10.4; the earlier "disabled (404)" first step is gone) → rate limit (429) → input validation (400) → internal API read → map → audit → answer.
+- **Rate limit.** 60 requests per minute per key label, sliding window: `qa: createWindowLimiter({ limit: 60, windowMs: 60_000 })` in `createLimits()` (`lib/limits.ts`, §9.3). Every authenticated request counts, 400s included. *(QA portal)* A DB key's label is `key.{id}` (§7.10.4), which no env label can equal (env labels have no `.`), and the hosted MCP server counts against the same limiter and label (§7.10.6). Over the limit: 429 `RATE_LIMITED`, `Retry-After: 60`. The middleware's per-IP limit (10/s, burst 30) still applies first, and its 429 stays the existing plain-text answer, not the envelope; QA paths start with `/api/`, so the daily page caps never count them (existing `isPage`).
 - **Methods and CORS.** GET only (Next serves HEAD through GET, and its automatic OPTIONS answer carries `Allow` only). No `Access-Control-*` header on any response.
 - **Headers** on every QA response, errors included: `Cache-Control: private, no-store`, `X-Robots-Tag: noindex, nofollow`, `Content-Type: application/json`.
 - **Envelope (Decision).** The platform `ApiResponse` shape, as the internal API and `/api/session` use it: `{ success, data, message, errors: [ { field, code, message } ], metadata: { timestamp, requestId } }`. `requestId` is the web request id (`x-request-id`, §9.4), which is also the `qa_read` row's `request_id`, so a finding can name the exact read. Codes and fixed messages: `INVALID_QUERY` "Invalid query" (400, with `field`); `UNAUTHORIZED` "Unauthorized" (401); `NOT_FOUND` "Not found" (404, with `field` when an id is unknown); `RATE_LIMITED` "Too many requests" (429); `UNAVAILABLE` "Unavailable" (502: the internal API failed, timed out or sent a malformed body, or the audit write of a 200 failed). Success: `message` "OK", `errors` empty. **Never 500**: every handler catches and maps to one of these.
@@ -2328,16 +2485,16 @@ GET /v1/qa/records?filter=&stage=&batch=&page=0       → the /api/qa/v1/records
 
 #### 7.9.6 Audit
 
-- **Event `qa_read`**, written by the web through `POST /v1/audit-events` (`recordAudit`): `actorEmail` and `actorRole` null; `targetType` `qa_route`; `targetId` `{label}/{route}`, with `route` one of `batches`, `batch`, `record`, `records`, `pairs` (an unauthenticated call has no label, so `targetId` is `{route}`); `outcome` `ok` for a 200, else the lower-cased error code (`invalid_query`, `unauthorized`, `not_found`, `rate_limited`, `unavailable`); `requestId` the web request id. Never the key or its hash, and never path ids or query values (the route template only, as in logs, §5.15).
+- **Event `qa_read`**, written by the web through `POST /v1/audit-events` (`recordAudit`): `actorEmail` and `actorRole` null; `targetType` `qa_route`; `targetId` `{label}/{route}`, with `route` one of `batches`, `batch`, `record`, `records`, `pairs` (an unauthenticated call has no label, so `targetId` is `{route}`); *(QA portal)* `label` is an env label or a DB key's `key.{id}`, and `route` may also be `mcp` for a hosted MCP request refused before any tool ran (§7.10.6); `outcome` `ok` for a 200, else the lower-cased error code (`invalid_query`, `unauthorized`, `not_found`, `rate_limited`, `unavailable`); `requestId` the web request id. Never the key or its hash, and never path ids or query values (the route template only, as in logs, §5.15).
 - **A 200 is sent only after its row is written (Decision).** If the write fails, the answer is 502 `UNAVAILABLE` with no data, so no read of unreviewed data leaves without a trace. Other outcomes are written best effort: the answer stands if the write fails.
-- **Throttled rows.** `unauthorized` rows at most one per minute per (route, hashed IP), and `rate_limited` rows one per minute per label, with the `allowDeniedAudit` limiter style of `decision_denied` (§5.15; the IP is hashed in memory and never stored). A disabled API and unknown QA paths write nothing.
-- **`AuditService`**: `WEB_EVENTS` adds `qa_read`; `TARGET_TYPES` adds `qa_route`. The `TARGET_ID` and `OUTCOME` patterns are unchanged; labels and route names fit them.
+- **Throttled rows.** `unauthorized` rows at most one per minute per (route, hashed IP), and `rate_limited` rows one per minute per label, with the `allowDeniedAudit` limiter style of `decision_denied` (§5.15; the IP is hashed in memory and never stored). Unknown QA paths write nothing (*QA portal*: there is no disabled API any more).
+- **`AuditService`**: `WEB_EVENTS` adds `qa_read`; `TARGET_TYPES` adds `qa_route`. The `TARGET_ID` and `OUTCOME` patterns are unchanged; labels and route names fit them. *(QA portal)* `QA_TARGET_ID` widens to `(([a-z0-9][a-z0-9_-]{0,31}|key\.[1-9][0-9]{0,17})/)?(batches|batch|record|records|pairs|mcp)`: a DB key label and the `mcp` route name. It still admits no path id, query value, key or hash.
 - **Schema change, needed (Decision, D63): `V8__qa_read_audit.sql`.** V7's `audit_event_event_check` refuses `qa_read`, so V8 drops it and adds it again with `qa_read` appended. Nothing else changes: `target_type` has no database check and `actor_role` stays nullable. Additive in effect; it follows the lock policy: the `db/migrations.lock` line and its header `db-schema-v1.3`, the four `database.md` headings, `docs/design/database.md` updated, tag `db-schema-v1.3`. Rollback keeps V8 (older images never write `qa_read`). `V8MigrationIntegrationTest` asserts the widened check.
 
 #### 7.9.7 Privacy rules (Decision, D62)
 
 - **An allowlist, never a pass-through.** The mappers in `lib/qa-map.ts` copy each field of §7.9.3 by name and never spread an API object, so a field the internal API adds later never reaches a QA caller.
-- **Never returned:** any email; decision, dismissal and pair-issue notes (`history[].note`, `openIssues`, `PairReview.note`, `PairView.history`); `mine`; version tokens and content hashes; `reopen`; flags, audit rows and session data; `INTERNAL_API_TOKEN`, keys and key hashes. Notes are omitted entirely: they are free text that could carry PHI (§9.7) and are shown to signed-in team members only, and a QA caller is neither. Decision history keeps role, time and decision. Stage notes and evidence are pipeline output, not reviewer text, and are returned.
+- **Never returned:** any email (*QA portal*: including a DB key owner's, §7.10.8); decision, dismissal and pair-issue notes (`history[].note`, `openIssues`, `PairReview.note`, `PairView.history`); `mine`; version tokens and content hashes; `reopen`; flags, audit rows and session data; `INTERNAL_API_TOKEN`, keys and key hashes. Notes are omitted entirely: they are free text that could carry PHI (§9.7) and are shown to signed-in team members only, and a QA caller is neither. Decision history keeps role, time and decision. Stage notes and evidence are pipeline output, not reviewer text, and are returned.
 - **Read-only.** No POST, PUT, PATCH or DELETE route; the only write is the `qa_read` row.
 - **Logs** are the existing request line only (route template, method, status, duration, request id): never the `Authorization` header, the label, ids or query values.
 
@@ -2366,8 +2523,204 @@ GET /v1/qa/records?filter=&stage=&batch=&page=0       → the /api/qa/v1/records
   ```
 
 - **Errors.** `isError: true`, the preamble, then "QA API error {status} {code}" with the envelope's first error code (for example "QA API error 401 UNAUTHORIZED"), or "QA API error {status}" when an error body is not the envelope (the middleware's plain-text per-IP 429), "QA API error {status} invalid response" when a 200 body is not the envelope, or "QA API unreachable" on a network failure or timeout. Never the key, never request headers.
-- **README** (`tools/qa-mcp/README.md`): setup; getting a key from the PO (never committed, never in a config file under version control); the Claude Desktop `mcpServers` snippet and the Claude Code `claude mcp add` command; the five tools; and the preamble's rules.
+- **README** (`tools/qa-mcp/README.md`): setup; getting a key from the PO (never committed, never in a config file under version control); the Claude Desktop `mcpServers` snippet and the Claude Code `claude mcp add` command; the five tools; and the preamble's rules. *(QA portal)* The README adds: a self-service DB key from `/review/qa` works here unchanged (`idqa_…` is inside the Bearer token set), and the hosted server at `https://drugdb.eliooo.org/api/qa/mcp` (§7.10.6) needs no local install. The stdio server stays, unchanged in behaviour; its preamble, server name, version and tool list are pinned against the hosted server's by `tests/parity.test.ts` (§11.1).
 - **Tests** (vitest, mocked `fetch`): §11.1.
+
+### 7.10 QA portal: QA role, self-service keys, hosted MCP *(QA portal, Decision, PO 18/10/2026; D66–D71)*
+
+**Purpose.** QA team members get the QA tools, the MCP server and the QA API through the site, without the PO handing out keys: a `qa` role that sees only the QA section (§5.13, §5.18), keys they create and revoke themselves, and an MCP endpoint on the existing web app. Everything in §7.9 stays: the five QA API routes and their shapes, the allowlist mappers, `qa_read`, the env keys and `tools/qa-mcp/`. **Out of scope:** OAuth (so claude.ai and ChatGPT connectors cannot connect, §5.18), an OpenAPI page, partner keys (§1.3 is unchanged), and any new container, port, network or Caddy change (§12.4).
+
+#### 7.10.1 Role `qa` (Decision, D66)
+
+- `REVIEWERS` accepts `qa` (§5.13). The roles that may use QA tools, create keys and own a working DB key are `qa`, `engineer` and `senior` (`canUseQa`, web; `QaKeyRule.OWNER_ROLES`, API). `pharmacist` and `user` may not.
+- A `qa` account sees only the QA section: `/review` redirects it to `/review/qa`, and every other `/review/*` page answers it with the §5.12 QA account view (§2.1, §5.13).
+- **A `qa` user can never make any decision (Decision).** Three independent guards, each tested (§11.1, §11.3):
+  - web: every review, report, dismiss, pair and resolve action tests `isReviewer` / `actsAsPharmacist` / senior, all false for `qa`, so the action answers `forbidden` before any API call;
+  - API: `ReviewService.ROLES` and `SeniorReviewService` do not accept `qa`, so `reviewerRole=qa` is 400 `field=reviewerRole` (audited as `decision_rejected` / `pair_decision_rejected`, as today);
+  - database: V9 does not widen `review_decision_reviewer_role_check` or `pair_review`'s role check, so an insert with role `qa` fails.
+
+#### 7.10.2 Self-service keys: format, storage, lifetime (Decision, D67)
+
+- **Format.** `"idqa_"` followed by 43 base64url characters: 32 bytes from `crypto.randomBytes(32)`, encoded with `toString("base64url")` (no padding). Pattern `^idqa_[A-Za-z0-9_-]{43}$`, 48 characters, inside the §7.9.1 Bearer token set, so the stdio MCP and every HTTP client send it unchanged.
+- **Generation.** The web generates the key inside the create server action and sends **only its hash** to the API: SHA-256 of the full key's UTF-8 bytes (prefix included), 64 lower-case hex characters, the same digest form as `QA_API_KEYS`. The API never sees a key. The web never stores it: it returns it once in the action result (§4.3) and drops it.
+- **Stored** (`ops.qa_key`, V9 below): the hash, the owner (the session's verified email, lower-cased; server-side only, §7.10.8), the name, `created_at`, `expires_at`, `revoked_at`, `last_used_at`. Never the key, never a prefix or suffix of it.
+- **Name.** Trimmed of white space (JavaScript `trim()`, Java `strip()`), 1–40 characters (code points), no control characters (U+0000–U+001F, U+007F–U+009F). Names need not be unique. Bengali and other scripts are allowed.
+- **Lifetime.** `expires_at = created_at + 2160 hours` (90 days, written as hours so no time-zone rule can move it). There is no renewal: an expiring key is replaced by a new one.
+- **Status** (computed by the API, `QaKeyRule.status(row, now)`, database clock): `revoked` when `revoked_at` is set (it wins over expiry); else `expired` when `expires_at <= now()`; else `active`.
+- **Limits (Decision).** At most **5 active keys** per owner. At most **10 keys created per owner in any rolling 24 hours** (revoked and expired keys count). Both are enforced by the API in the creation transaction, so they hold across web restarts; the web also keeps an in-memory first line (§9.3).
+- **`last_used_at`** is set to the time of a successful authentication, at most once per minute per key (§7.10.4).
+- **Retention (Decision).** Key rows are kept indefinitely and never deleted (a trigger refuses DELETE and TRUNCATE), like decisions: an audit row's `qa_key` id always resolves. An expired or revoked row authenticates nothing; its hash is of a 256-bit secret and is useless without the key.
+
+**Schema change, needed (Decision, D71): `V9__qa_keys.sql`.** No existing table can hold keys, and V8's checks refuse the new audit events and the `qa` actor role.
+
+```sql
+-- IntelliDrugs QA portal (spec §7.10, D71, db-schema-v1.4): self-service QA keys, the qa role in audit rows, and the
+-- key audit events. Additive in effect: a new table, and two widened checks that every existing row satisfies.
+CREATE TABLE ops.qa_key (
+  id           BIGSERIAL   PRIMARY KEY,
+  key_hash     TEXT        NOT NULL CHECK (key_hash ~ '^[0-9a-f]{64}$'),
+  owner_email  TEXT        NOT NULL CHECK (owner_email = lower(owner_email) AND length(owner_email) BETWEEN 3 AND 320),
+  name         TEXT        NOT NULL CHECK (name = btrim(name) AND char_length(name) BETWEEN 1 AND 40
+                                           AND name !~ '[[:cntrl:]]'),
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at   TIMESTAMPTZ NOT NULL,
+  revoked_at   TIMESTAMPTZ,
+  last_used_at TIMESTAMPTZ,
+  CONSTRAINT qa_key_hash_uq UNIQUE (key_hash),
+  CONSTRAINT qa_key_lifetime CHECK (expires_at = created_at + interval '2160 hours'),
+  CONSTRAINT qa_key_revoked_after_created CHECK (revoked_at IS NULL OR revoked_at >= created_at),
+  CONSTRAINT qa_key_used_after_created CHECK (last_used_at IS NULL OR last_used_at >= created_at)
+);
+CREATE INDEX qa_key_owner_idx ON ops.qa_key (owner_email, created_at DESC, id DESC);
+
+-- Only revoked_at (once, from NULL) and last_used_at (forward only) may change; rows are never deleted.
+CREATE FUNCTION ops.qa_key_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.id IS DISTINCT FROM OLD.id OR NEW.key_hash IS DISTINCT FROM OLD.key_hash
+     OR NEW.owner_email IS DISTINCT FROM OLD.owner_email OR NEW.name IS DISTINCT FROM OLD.name
+     OR NEW.created_at IS DISTINCT FROM OLD.created_at OR NEW.expires_at IS DISTINCT FROM OLD.expires_at THEN
+    RAISE EXCEPTION 'ops.qa_key: only revoked_at and last_used_at may change';
+  END IF;
+  IF OLD.revoked_at IS NOT NULL AND NEW.revoked_at IS DISTINCT FROM OLD.revoked_at THEN
+    RAISE EXCEPTION 'ops.qa_key: a revocation is final';
+  END IF;
+  IF OLD.last_used_at IS NOT NULL AND (NEW.last_used_at IS NULL OR NEW.last_used_at < OLD.last_used_at) THEN
+    RAISE EXCEPTION 'ops.qa_key: last_used_at only moves forward';
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER qa_key_guard BEFORE UPDATE ON ops.qa_key FOR EACH ROW EXECUTE FUNCTION ops.qa_key_guard();
+CREATE TRIGGER qa_key_no_delete BEFORE DELETE ON ops.qa_key FOR EACH ROW EXECUTE FUNCTION ops.reject_change();
+CREATE TRIGGER qa_key_no_truncate BEFORE TRUNCATE ON ops.qa_key FOR EACH STATEMENT EXECUTE FUNCTION ops.reject_change();
+REVOKE DELETE, TRUNCATE ON ops.qa_key FROM PUBLIC;
+
+ALTER TABLE ops.audit_event DROP CONSTRAINT audit_event_event_check;
+ALTER TABLE ops.audit_event ADD CONSTRAINT audit_event_event_check CHECK (event IN (
+  'sign_in','sign_in_denied','sign_out','review_open','evidence_open',
+  'decision','decision_rejected','decision_denied',
+  'flag_created','flag_resolved','partner_request',
+  'pair_decision','pair_decision_rejected','senior_open',
+  'qa_read','qa_key_created','qa_key_revoked'));
+ALTER TABLE ops.audit_event DROP CONSTRAINT audit_event_actor_role_check;
+ALTER TABLE ops.audit_event ADD CONSTRAINT audit_event_actor_role_check
+  CHECK (actor_role IN ('pharmacist','engineer','senior','qa','user'));
+```
+
+- **Not widened (Decision):** `review_decision_reviewer_role_check` and `pair_review.reviewer_role` stay as V7 left them, so the database itself refuses a `qa` decision (§7.10.1).
+- **The PR must:** add the `db/migrations.lock` line for V9 and change the lock's header to `db-schema-v1.4` (`db/check-migration-lock.sh` passes); explain the change under the four headings `database.md` requires; update `docs/design/database.md` and the data model page; and note in the PR that the tag `db-schema-v1.4` is created **after the merge** to `main` (the tag names the merged commit).
+- **Tests:** `V9MigrationIntegrationTest`: the table, its checks (a bad hash, a non-lower-case owner, a 41-character or untrimmed name, a lifetime other than 2160 hours are refused), the unique hash, the guard (changing `name`, `key_hash`, `owner_email` or `expires_at` fails; a second `revoked_at` fails; `last_used_at` moving back fails; setting `revoked_at` once and moving `last_used_at` forward pass), DELETE and TRUNCATE refused, the widened audit checks, and that `review_decision` and `pair_review` still refuse role `qa`.
+- **Rollback**: keep V9 (older images never read or write `ops.qa_key`, and never write `qa` or the key events; §12.5).
+
+#### 7.10.3 Internal API (new `QaKeyController`; token required, `auth.require`)
+
+```
+POST /v1/qa-keys                       body { ownerEmail, ownerRole, name, keyHash, requestId }
+  → 201 QaKey
+POST /v1/qa-keys/{id}/revoke           body { ownerEmail, ownerRole, requestId }
+  → 200 QaKey                          // status "revoked"
+GET  /v1/qa-keys                       header X-Viewer-Email (required)
+  → { keys: [ QaKey ] }                // the owner's keys, newest first (created_at DESC, id DESC), at most 50
+POST /v1/qa-keys/verify                body { keyHash }
+  → 200 { keyId, ownerEmail }          // only for an active key; read-only
+POST /v1/qa-keys/{id}/used             (no body)
+  → 204                                // last_used_at = now() when it is NULL or at least one minute old
+
+QaKey = { id, name, createdAt, expiresAt, lastUsedAt|null, revokedAt|null, status: "active"|"expired"|"revoked" }
+```
+
+- **Hexagonal:** `presentation/QaKeyController` → `application/QaKeyService` (validation as `INVALID_QUERY` with the field; the rules from `domain/QaKeyRule`: owner roles, name rule, `ACTIVE_MAX = 5`, `DAILY_MAX = 10`, `LIFETIME = 2160 hours`, `status()`) → `application/port/QaKeyPort` → `adapter/persistence/R2dbcQaKeyAdapter`. Nothing in the controller or service logs a body: it holds an email and a hash.
+- **Validation (400 `INVALID_QUERY`, with the field):** `ownerEmail` (`Validate.email`, then lower-cased), `ownerRole` (one of `qa`, `engineer`, `senior`; the web sends the session's role, re-read from `REVIEWERS`), `name` (§7.10.2), `keyHash` (`^[0-9a-f]{64}$`), `requestId` (a UUID), `id` (`^[1-9][0-9]{0,17}$`), and `X-Viewer-Email` on the list (missing or invalid: 400 `field=X-Viewer-Email`).
+- **Create**, in one transaction: `pg_advisory_xact_lock(hashtextextended('ops.qa_key:' || owner_email, 0))` (so two concurrent creates by one owner cannot both pass the cap); count the owner's active keys (5 or more: 409 `CONFLICT`, `field=activeKeys`, "You already have 5 active keys"); count the owner's keys with `created_at > now() - interval '24 hours'` (10 or more: 409, `field=createdToday`, "You have created 10 keys in the last 24 hours"); insert with `created_at = now()`, `expires_at = now() + interval '2160 hours'`; a duplicate hash (never expected from 32 random bytes) is 409 `field=keyHash`; then the `qa_key_created` audit row (§7.10.7) in the same transaction. A key never exists without its audit row.
+- **Revoke**, in one transaction: `SELECT … FOR UPDATE` of the row with that `id` **and** that owner. None: 404 `NOT_FOUND`, `field=id` (the same answer for an unknown id and another owner's key, so an id says nothing about other accounts). Already revoked: 409 `CONFLICT`, `field=status`, "This key is already revoked". Otherwise `revoked_at = now()` (an expired key can be revoked too), then the `qa_key_revoked` audit row in the same transaction.
+- **Verify** is read-only: `SELECT id, owner_email FROM ops.qa_key WHERE key_hash = $1 AND revoked_at IS NULL AND expires_at > now()`. No row: 404 `NOT_FOUND`, `field=keyHash`, one answer for unknown, revoked and expired. It returns the owner's email to the web server only (§7.10.4); no other endpoint returns an email.
+- **Used**: `UPDATE ops.qa_key SET last_used_at = now() WHERE id = $1 AND revoked_at IS NULL AND expires_at > now() AND (last_used_at IS NULL OR last_used_at <= now() - interval '1 minute')`; 204 whether or not a row changed; 404 `field=id` only for an id that does not exist.
+- The API holds no role list of its own for verification: `REVIEWERS` is web-only, so the owner's current role is checked by the web on every request (§7.10.4).
+- **Tests:** `QaKeyRuleTest` (name rule including Unicode white space and control characters, status precedence, lifetime) and `QaKeyIntegrationTest`: 401 without the token on all five endpoints; create 201 with the computed `expiresAt`; the sixth active key 409 `activeKeys`, and after a revoke a new key is 201; the eleventh key in 24 hours 409 `createdToday` even after revoking; two concurrent creates at four active keys give one 201 and one 409; revoke 200, a second revoke 409 `status`, another owner's id 404 `id`; list newest first, owner-only, at most 50, with each status, and no `ownerEmail` or `keyHash` field anywhere in a create, revoke or list body; verify 200 for an active key, 404 for unknown, revoked and expired; used touches at most once a minute and never touches a revoked or expired key; one audit row per create and revoke with the owner, role, `qa_key` target and request id, and none on a 400, 404 or 409.
+
+#### 7.10.4 Key verification rule (Decision, D68)
+
+`authenticateQa(header)` in `lib/qa-api.ts` (async; replaces the sync `authenticate` call in `qaHandler`) runs, in this order, for the QA API and the hosted MCP alike:
+
+1. The Bearer form of §7.9.1. Missing or malformed: 401.
+2. **Env keys**: the presented key's SHA-256 digest against every `QA_API_KEYS` hash with `timingSafeEqual`, no early exit (§7.9.1, unchanged). A match authenticates as that env label. A malformed `QA_API_KEYS` contributes no keys (§7.9.1).
+3. **DB keys**, only when no env key matched and the key matches `^idqa_[A-Za-z0-9_-]{43}$`: `POST /v1/qa-keys/verify { keyHash }`. On 200 `{ keyId, ownerEmail }`, the owner's role is read from the **current** `REVIEWERS` (`roleFor(ownerEmail)`, on every request, never cached) and must pass `canUseQa`; then the key authenticates as the label `key.{keyId}`. A 404, or an owner who no longer holds `qa`, `engineer` or `senior`: 401, the same undifferentiated 401 as an unknown key. A verify call that fails (network, timeout, 5xx, a malformed body): 502 `UNAVAILABLE` (the hosted MCP: HTTP 502, §7.10.6), with a best-effort `qa_read` row `unavailable` for the route, unauthenticated (no label).
+4. Anything else: 401.
+
+- A DB key authenticates the QA API and the hosted MCP **exactly like an env key**: the same routes, shapes, limiter (keyed by its label), audit rows and privacy rules. It fails when it is expired, revoked, or its owner's role no longer allows QA tools, from the next request on: verification is never cached.
+- **Timing.** The DB lookup is an index lookup by the SHA-256 of a 256-bit random secret, which an attacker cannot steer, so it needs no constant-time comparison; the env comparison keeps its constant-time rule.
+- **Last used.** After a DB key authenticates (whatever the request's later outcome), the web sends `POST /v1/qa-keys/{id}/used` at most once per minute per key (in-memory limiter `qaKeyTouch`, 1 per 60 s per key id), without awaiting it; a failure is ignored. The API's own one-minute guard makes a repeated touch harmless.
+- No other change to §7.9: the order after auth (rate limit, validation, read, map, audit, answer) and the envelope are as there.
+
+#### 7.10.5 Web: server actions, page reads and the shared QA query code
+
+- **Server actions** (`lib/qa-key-actions.ts`, `"use server"`, thin wrappers; logic in `lib/qa-key-core.ts`, `server-only`), matching `lib/actions-core.ts`. Each runs, in order:
+  1. the session, re-read from the encrypted cookie with the role re-checked against `REVIEWERS` (§9.6): none is `unauthenticated`; a role that fails `canUseQa` is `forbidden` (and writes nothing);
+  2. CSRF and origin: Next's built-in server-action check, which refuses a POST whose `Origin` does not match the host (`next.config.ts` sets no `serverActions.allowedOrigins`, and a test pins that), plus `SameSite=Lax` on the session cookie;
+  3. input validation (`invalid`);
+  4. the web rate limit (create: `qaKeyCreate`, `daily_limit`; revoke: `qaKeyRevoke`, `rate_limited`; §9.3), keyed by the account (§9.3);
+  5. Turnstile, action `qakey` (`TURNSTILE_ACTIONS` adds it; `captcha`);
+  6. the API call with the internal token and the **session's** email and role, never values from the form.
+- `createQaKeyAction` → `{ code: "created", key, row: QaKey }` or `{ code }` with `code` ∈ `invalid`, `active_limit` (409 `activeKeys`), `daily_limit` (409 `createdToday`, or the web limiter), `captcha`, `forbidden`, `unauthenticated`, `failed` (network, timeout, 5xx, 409 `keyHash`, any other answer). The key is created after step 5 only, so a refused request never makes one. The key is in the result object only for `created`, and never in a log line, an error, a redirect or `revalidatePath` data.
+- `revokeQaKeyAction` (form field `keyId`, `^[1-9][0-9]{0,17}$`) → `{ code, row? }` with `code` ∈ `revoked`, `already_revoked` (409 `status`), `not_found` (404), `invalid`, `rate_limited`, `captcha`, `forbidden`, `unauthenticated`, `failed`.
+- Both call `revalidatePath("/review/qa")`.
+- **Page read**: `listQaKeys(session.email)` (`GET /v1/qa-keys` with `X-Viewer-Email`), only for a session that passes `canUseQa`. The page passes the rows to QaKeys without any email.
+- **`lib/api.ts`** adds `createQaKey`, `revokeQaKey`, `listQaKeys`, `verifyQaKey` and `touchQaKey` (server-only, internal token).
+- **Shared QA query code (no HTTP self-call).** The five route handlers' run steps move into `lib/qa-query.ts` (`server-only`): `QaInput` = `{route: "batches"}` | `{route: "batch", batchId}` | `{route: "record", batchId, conceptId}` | `{route: "records", filter, stage?, batch?, page}` | `{route: "pairs", bdsId, page}`; `runQa(input)` (the §7.9.2 checks, the internal API read and the allowlist map, giving a `QaOutcome`); and `answerQa(input, label, requestId)`, which runs it, writes the `qa_read` row and applies the 200-only-after-its-row rule (§7.9.6), returning the status and the envelope. `qaHandler` becomes auth → limit → URL to `QaInput` (a refused path or query is a 400 through the same audit) → `answerQa`. The hosted MCP calls `answerQa` with the same label. The five routes answer byte-for-byte as before (their §11.1 tests are unchanged).
+
+#### 7.10.6 Hosted MCP endpoint (`POST /api/qa/mcp`, Decision, D69)
+
+- **Where.** A Next route handler, `web/app/api/qa/mcp/route.ts`, on the existing web app (the specific route wins over the `/api/qa/[[...rest]]` catch-all), wrapped in `withRequestLog("/api/qa/mcp")`; the dispatcher in `web/lib/qa-mcp.ts` (`server-only`). No new container, port or Caddy change. No MCP SDK in `web/`: the five methods are handled directly.
+- **Transport.** MCP Streamable HTTP, **stateless**, **JSON responses only**: every request is one `POST` carrying one JSON-RPC message; a request gets one `application/json` response; there is no SSE stream, no `Mcp-Session-Id` (none is issued; one sent by a client is ignored) and no server-to-client request. `GET`, `DELETE`, `PUT` and `PATCH` answer 405 with `Allow: POST`.
+- **Protocol versions.** Supported: `2025-11-25`, `2025-06-18` and `2025-03-26` (pinned as `SUPPORTED_PROTOCOL_VERSIONS` in `lib/qa-mcp-tools.ts`). `initialize` answers the client's requested `protocolVersion` when supported, otherwise `2025-11-25`. Every other request's `MCP-Protocol-Version` header: absent means `2025-03-26` (per the specification); present and unsupported is 400.
+- **Checks, in this order** (each refusal is a JSON-RPC error with `id` null unless the request was parsed):
+
+| Step | Check | Answer |
+|---|---|---|
+| 1 | method is `POST` | 405, `Allow: POST`, `-32000` "Method not allowed" |
+| 2 | `Origin`: absent, or exactly `https://{SITE_HOST}` (DNS-rebinding protection; `null` and every other origin refused) | 403, `-32002` "Forbidden" |
+| 3 | auth: §7.10.4 (env or DB key) | 401 with `WWW-Authenticate: Bearer`, `-32001` "Unauthorized", and the throttled `qa_read` `unauthorized` row with target `mcp`; a failed verify call: 502, `-32004` "Unavailable" |
+| 4 | the key's rate limit (`LIMITS.qa`, the label of §7.10.4): **every authenticated MCP request counts once**, shared with the QA API | 429, `Retry-After: 60`, `-32003` "Too many requests", and the throttled `rate_limited` row `{label}/mcp` |
+| 5 | `Content-Type` is `application/json` (parameters allowed) | 415, `-32000` "Unsupported media type" |
+| 6 | `Accept` absent, or it allows `application/json` (`application/json`, `application/*` or `*/*`) | 406, `-32000` "Not acceptable" |
+| 7 | body at most 64 KiB (counted while reading, whatever `Content-Length` says) | 413, `-32000` "Request too large" |
+| 8 | the body parses as JSON | 400, `-32700` "Parse error" |
+| 9 | one JSON-RPC 2.0 object: `jsonrpc` = `"2.0"`, `method` a string, `id` (when present) a string or a number; a JSON array (batch) is refused | 400, `-32600` "Invalid Request" |
+| 10 | `MCP-Protocol-Version` (every method except `initialize`) | 400, `-32600` "Unsupported protocol version" |
+| 11 | dispatch | below |
+
+- **Methods.**
+  - `initialize` (`params.protocolVersion` a string, else `-32602` "Invalid params") → `{ protocolVersion, capabilities: { tools: { listChanged: false } }, serverInfo: { name: "intellidrugs-qa", version: "1.0.0" }, instructions: PREAMBLE }`, the stdio server's name, version and instructions;
+  - `ping` → `{}`;
+  - `tools/list` → `{ tools }`, exactly the stdio server's list: each tool's `name`, `title`, `description`, `inputSchema` and `annotations` `{ title, readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }`; no paging (`cursor` ignored);
+  - `tools/call` (`params.name` a string and `params.arguments`, when present, an object; else `-32602`) → a tool result, below;
+  - a notification (no `id`), including `notifications/initialized` and `notifications/cancelled`, and a client response (a result or error with no `method`): 202 with no body;
+  - any other method: `-32601` "Method not found".
+  Method-level answers are HTTP 200; a thrown error is `-32603` "Internal error" with HTTP 200 and no detail (never 500).
+- **Tool calls go through the QA query code.** `checkToolArgs(name, args)` (`lib/qa-mcp-tools.ts`) applies exactly the stdio server's input rules (§7.9.8: the §7.9.2 patterns, an input the tool does not take first, dot segments and lone surrogates refused) and maps the arguments to a `QaInput`; then `answerQa(input, label, requestId)` (§7.10.5), so a tool call writes the same `qa_read` row as the equivalent GET (`{label}/{route}`, outcome `ok` or the error code) and gets the same 200-only-after-its-row rule. The result is the stdio result, byte for byte apart from the envelope's `metadata`:
+  - success: `content` = `[{type: "text", text: PREAMBLE}, {type: "text", text: JSON.stringify(envelope, null, 2)}]`, where `envelope` is the QA API envelope for the equivalent GET (its `metadata.requestId` is this MCP request's id, which is also the `qa_read` row's);
+  - error: `isError: true`, the preamble, then "QA API error {status} {code}" (for example "QA API error 404 NOT_FOUND", "QA API error 502 UNAVAILABLE");
+  - input refusal: `isError: true`, the preamble, then "Invalid input {name}", with a best-effort `qa_read` row `invalid_query` for the tool's route; unknown tool: `isError: true`, the preamble, then "Unknown tool" (no row: no route).
+- **Never leaked.** No answer carries a key, a hash, an email, a note or request headers; the tool bodies come from the §7.9.7 allowlist mappers; the JSON-RPC error messages are the fixed strings above. Logs are the request line only (§7.9.7), never the body, the method name or the `Authorization` header.
+- **Headers** on every answer: `Cache-Control: private, no-store`, `X-Robots-Tag: noindex, nofollow`, and `Content-Type: application/json` on every answer with a body. No `Access-Control-*` header. The per-IP middleware limit applies first, as for the QA API.
+- **Shared text (Decision).** `web/lib/qa-mcp-tools.ts` is a dependency-free module (no imports, no `server-only`, so another package's test can import it): `PREAMBLE`, `SERVER_NAME`, `SERVER_VERSION`, `SUPPORTED_PROTOCOL_VERSIONS`, `TOOLS` (name, title, description, input schema) and `checkToolArgs`. `tools/qa-mcp/tests/parity.test.ts` imports it by relative path (`../../../web/lib/qa-mcp-tools.ts`) and fails when the preamble, the server name or version, any tool's name, title, description, input schema or annotations, or the refused field for a fixture table of bad arguments differs from the stdio server's (`PREAMBLE`, `TOOLS`, `toPath`, and its `tools/list` output). A web test pins `PREAMBLE` to the §7.9.8 text.
+- **OAuth is out of scope.** There is no `/.well-known/oauth-protected-resource` or `/.well-known/oauth-authorization-server`, and `WWW-Authenticate` carries no `resource_metadata`. A client that needs OAuth (the claude.ai and ChatGPT connectors) cannot connect; clients that send a configured header can (§5.18).
+- **Client setup** (on `/review/qa` and in `tools/qa-mcp/README.md`):
+  - Claude Code: `claude mcp add --transport http intellidrugs-qa https://drugdb.eliooo.org/api/qa/mcp --header "Authorization: Bearer <key>"` (the page writes `$INTELLIDRUGS_QA_KEY` for `<key>`, so the key stays out of shell history; local scope only, never `--scope project`);
+  - Cursor and other header-capable clients: the `mcpServers` entry with `url` and `headers` (§5.18);
+  - Claude Desktop and other stdio-only clients: `tools/qa-mcp` (§7.9.8), with the same key.
+
+#### 7.10.7 Audit
+
+- `qa_key_created` and `qa_key_revoked` (§5.15) are written by the API inside the create and revoke transactions (§7.10.3): `actor_email` = the owner, `actor_role` = the session role (`qa`, `engineer` or `senior`), `target_type` `qa_key`, `target_id` the key's id, `outcome` `ok`, `request_id` the web request id. **Never the key, its hash or its name** (the name is free text, and §5.15 keeps free text out of audit rows). They are API-only events: `AuditService.WEB_EVENTS` and `TARGET_TYPES` do not add them, so a web `POST /v1/audit-events` with either event is 400 `event`.
+- `AuditService.ROLES` adds `qa`; `QA_TARGET_ID` widens for `key.{id}` labels and the `mcp` route name (§7.9.6). `qa_read` keeps no actor (D63): the key id in its label is enough for the team to find the owner in `ops.qa_key`.
+- `AuditApiIntegrationTest` adds: a `sign_in` with role `qa` is 201; `qa_read` with targets `key.12/record` and `mcp` and `key.12/mcp` is 201; `qa_read` with `key.0/record`, `key.x/record` or `tanvir.qa/batches` is 400 `targetId`; `qa_key_created` and `qa_key_revoked` posted by the web are 400 `event`.
+
+#### 7.10.8 Privacy (Decision, D67)
+
+- **The owner's email** is stored in `ops.qa_key.owner_email` and in the key audit rows only (team-only, like `review_decision`). It is returned by exactly one endpoint, the internal `POST /v1/qa-keys/verify`, to the web server, which uses it for the role check and never logs, stores or forwards it. No QA API route, no MCP answer (stdio or hosted), no page and no island ever receives it; the QA page lists the viewer's own keys without any email.
+- **Keys** exist in full only in the create action's memory, in its one result to the owner's browser, and with the owner. The database holds a SHA-256 hash; audit rows hold a key id. No log, audit row, URL, cookie, browser storage or error message holds a key, a hash, a prefix of either, or a key name.
+- **Key names** are free text seen only by their owner on `/review/qa` (and by the team with database access). Their help asks for a device or tool name, and they are never logged or audited.
+- §9.7 lists these rules with the other stored personal data.
 
 ---
 
@@ -2500,6 +2853,7 @@ P0 also adds an optional `stages` input to `load-dgda.yml` (passed as `--stages`
 | Flags (problem reports) | Turnstile `action=flag` |
 | Resolve flag | Turnstile `action=resolve` (one shared `TurnstileField` on `/review/flags`) |
 | Partner request | Turnstile `action=partner` |
+| *(QA portal)* QA key create and revoke (`/review/qa`) | Turnstile `action=qakey` (one shared `TurnstileField` per page), the session role re-checked by the web action (`canUseQa`), Next's server-action origin check, and the account limits below (§7.10.5) |
 | Sign-in (`POST /api/session`) | Turnstile `action=signin` (**new**), plus the fresh Firebase token (5 min `auth_time`), a verified email, and a JSON-only POST |
 | Reads | Rate limits (§9.3), a public search page cap (§6.3), no bulk endpoints, `noindex` (header and metadata), `robots.txt` with `Disallow: /` while the site is in pilot |
 
@@ -2520,7 +2874,10 @@ P0 also adds an optional `stages` input to `load-dgda.yml` (passed as `--stages`
 | Decision and report actions, per account (*P1C*: including dismissals and pair decisions, one shared budget) | 60 per minute | the action returns `rate_limited`. The desk shows the "not saved" network banner (§5.7), and a `decision_denied` audit event is written. |
 | Flags, per account | 10 per hour | flag outcome `failed` |
 | Partner requests, per account | 3 per day | flag outcome `failed` |
-| *(QA)* `/api/qa/v1/*`, per QA key label (§7.9.1) | 60 per minute, sliding window; every authenticated request counts | 429 envelope `RATE_LIMITED`, `Retry-After: 60`; a throttled `qa_read` row (§7.9.6) |
+| *(QA)* `/api/qa/v1/*`, per QA key label (§7.9.1); *(QA portal)* and `/api/qa/mcp`, sharing the same budget per label (an env label, or `key.{id}` for a DB key) | 60 per minute, sliding window; every authenticated request counts (an MCP request counts once, whatever its method) | 429 envelope `RATE_LIMITED`, `Retry-After: 60` (MCP: 429 with the JSON-RPC error of §7.10.6); a throttled `qa_read` row (§7.9.6) |
+| *(QA portal)* QA key creation, per account | 10 per 24 hours in the web (`qaKeyCreate`, in memory); and, durably, in the API: 10 created per rolling 24 hours and at most 5 active keys per owner (§7.10.2) | the action returns `daily_limit` or `active_limit`; no key is created (§5.18) |
+| *(QA portal)* QA key revocation, per account | 30 per hour (`qaKeyRevoke`) | the action returns `rate_limited`; nothing is changed |
+| *(QA portal)* `last_used_at` touches, per DB key | 1 per minute (`qaKeyTouch`; the API guards the same minute, §7.10.4) | the touch is skipped; the request is answered as usual |
 
 - The IP is the first `X-Forwarded-For` entry, set by Caddy (existing).
 - **"Per account" keys use the session's email** (lower-cased, hashed with SHA-256 in memory, never logged), not the session id, so signing in again does not reset a limit.
@@ -2572,10 +2929,11 @@ frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'
 - **No PHI is requested.** No field asks for patient data, and a checker selection is a list of products in the URL. It is not logged (route template only), not stored, and not persisted in the browser.
 - **Free text could still carry PHI**, because these fields take free text that is stored and shown to the team: the reviewer note (`review_decision.note`, shown to every reviewer; *P1C*: also the dismissal note), *(P1C)* the pair-issue note (`pair_review.note`, shown to every reviewer role, pharmacists and engineers included, in the pair's state line on the desk and the senior pages; never in public), "Report a problem" (`flag.message`) and "What you will build" (`flag.message`). Each carries `NO_PHI_HELP` (§3.6) under its label. None of these texts is ever logged or written to `audit_event`.
 - Emails:
-  - stored for the team only, in `review_decision`, `flag`, `audit_event` and (*P1C*) `pair_review`;
+  - stored for the team only, in `review_decision`, `flag`, `audit_event`, (*P1C*) `pair_review` and (*QA portal*) `qa_key`;
   - never in public responses, never in logs;
   - shown only to their owner (account menu, the reader welcome state, and the "not on the reviewer list" banner).
 - *(QA)* The QA API (§7.9.7) returns no email and none of the free-text notes above. QA keys are stored only as SHA-256 hashes in `QA_API_KEYS`, and `qa_read` rows hold a key label, never a key, an email or an IP address.
+- *(QA portal)* Self-service keys (§7.10.8): `ops.qa_key` holds the key's SHA-256 hash and its owner's email (team-only, like the other stored emails above, and added to that list); the owner's email is never returned by a QA route, the MCP server or a page; the full key is shown once to its owner and stored nowhere; key names are seen only by their owner and are never logged or audited.
 - `/privacy` states this, in the words of the sign-in card plus the audit-trail paragraph: "Each reviewer decision and sign-in is recorded with the account and time, for the team's audit trail. These records are never public." It adds: "Don't include patient names or other personal health details in notes, reports or requests. We don't ask for patient information."
 
 ### 9.8 Infrastructure identifiers (Decision)
@@ -2646,6 +3004,7 @@ These come from `tokens.css`:
 | `/learn/[chapter]` | ≤ 60 KB | ≤ 140 KB | ≤ 25 KB | same | ≤ 2.8 s (Decision, product owner 16/10/2026: Lighthouse's simulated LCP counts the self-hosted font downloads although `font-display: optional` never delays real visitors' text) |
 | `/review/[b]/[c]` (laptop, broadband) | ≤ 80 KB | ≤ 200 KB | ≤ 25 KB | same | ≤ 1.5 s; J/K to next record painted ≤ 300 ms with prefetch |
 | *(P1C)* `/review/pairs`, `/review/substances/[id]` (laptop, broadband; 50 pairs per page) | ≤ 120 KB | ≤ 180 KB | ≤ 25 KB | same | ≤ 1.5 s |
+| *(QA portal)* `/review/qa` (laptop, broadband; 50 keys) | ≤ 50 KB | ≤ 160 KB (excluding Cloudflare's Turnstile script) | ≤ 25 KB | same | ≤ 1.5 s |
 
 - Server: API p95 ≤ 300 ms per call (existing target). Page TTFB p75 ≤ 600 ms.
 - The web container stays at `mem_limit 256m`.
@@ -2676,8 +3035,14 @@ These come from `tokens.css`:
 | *(P1C)* Senior keys | `senior-keys.test.tsx` | J/K move between rows; M marks the current row; Enter on "Mark reviewed" is blocked with its hint; R opens the row's panel; single-key Off disables J, K, M, R and ?. |
 | *(P1C)* Source links | `source-link.test.tsx` | `SourceLink` renders only with a URL; "fetched on" only with a stored time, in Dhaka date form; `target="_blank"`, `rel="noopener noreferrer"` and the sr-only text. |
 | Learn snapshot | `learn-snapshot.test.ts` | Counts are consistent; the 28-pair totals (§1.6 item 5) and the chapter 6 and glossary counts (§1.6 item 11); every snapshot-only value listed in §6.8 is present and dated. |
-| *(QA)* QA API | `qa-api.test.ts`, `qa-map.test.ts`, `qa-routes.test.ts` | `QA_API_KEYS` parsing: valid; unset or empty; a bad label, a bad hash, a duplicate label or hash (each disables, logging the entry index only). Disabled: 404 envelope on every QA route and the catch-all, with no API or audit call. Auth: no header, a wrong scheme, a short key and an unknown key are 401 with `WWW-Authenticate: Bearer` and no detail; a session cookie or `X-Internal-Token` alone is 401; the digest is compared with every configured hash (one `timingSafeEqual` call per entry, also when the first matches). The 61st request in a minute for one label is 429 with `Retry-After: 60`, and another label is unaffected. Every §7.9.2 bad input is 400 with its field, and only after auth; API 404 gives 404 with the route's field; API 5xx, timeout and a malformed body give 502; no path gives 500. Headers on success and on every error; no `Access-Control-*`. Audit: the `qa_read` fields per outcome; the throttled 401 and 429 rows; a 200 whose audit write fails becomes 502 with no data. Mappers: output keys equal the §7.9.3 allowlist; an API fixture with a sentinel email and a sentinel note in every place the API has one yields neither anywhere (deep scan); `textMissing` treats null and DDInter placeholders as missing; `partner` picks the side that is not the substance. |
+| *(QA)* QA API | `qa-api.test.ts`, `qa-map.test.ts`, `qa-routes.test.ts` | `QA_API_KEYS` parsing: valid; unset or empty; a bad label, a bad hash, a duplicate label or hash (each disables, logging the entry index only). Disabled: 404 envelope on every QA route and the catch-all, with no API or audit call (*QA portal*: replaced by the "QA auth" row below; only the catch-all keeps the 404). Auth: no header, a wrong scheme, a short key and an unknown key are 401 with `WWW-Authenticate: Bearer` and no detail; a session cookie or `X-Internal-Token` alone is 401; the digest is compared with every configured hash (one `timingSafeEqual` call per entry, also when the first matches). The 61st request in a minute for one label is 429 with `Retry-After: 60`, and another label is unaffected. Every §7.9.2 bad input is 400 with its field, and only after auth; API 404 gives 404 with the route's field; API 5xx, timeout and a malformed body give 502; no path gives 500. Headers on success and on every error; no `Access-Control-*`. Audit: the `qa_read` fields per outcome; the throttled 401 and 429 rows; a 200 whose audit write fails becomes 502 with no data. Mappers: output keys equal the §7.9.3 allowlist; an API fixture with a sentinel email and a sentinel note in every place the API has one yields neither anywhere (deep scan); `textMissing` treats null and DDInter placeholders as missing; `partner` picks the side that is not the substance. |
 | *(QA)* QA MCP | `tools/qa-mcp/tests/*.test.ts` (own vitest, mocked `fetch`) | Each tool's URL, path encoding and `Authorization: Bearer` header; `redirect: "error"`; schema refusals for every §7.9.2 rule, with no call made; the preamble verbatim and first on success and on error; "QA API error {status} {code}" for 400, 401, 404, 429 and 502, "QA API error 429" for the plain-text per-IP 429, "invalid response" for a 200 whose body is not the envelope, "QA API unreachable" for a network error and a timeout; the key never appears in any result or stderr line; a missing key and each bad base URL exit 1; the tool list has exactly the five read-only tools. |
+| *(QA portal)* QA role | `reviewers.test.ts`, `session.test.ts`, `qa-role-actions.test.ts` | `qa` parses as a role and is in `ROLES`; a `qa` session token decodes to role `qa`; `ROLE_LABEL.qa` = "QA"; `isReviewer` is false and `canUseQa` true for `qa`; `canUseQa` is true for `engineer` and `senior` and false for `pharmacist` and `user`. Every server action listed in §5.13 answers `forbidden` for a `qa` session with no API call (mocked `@/lib/api` asserts zero calls) and writes its `decision_denied` row with role `qa`; `/review/[b]/versions` is 403 for `qa`; flags and partner requests accept a `qa` session. |
+| *(QA portal)* QA auth | `qa-api.test.ts` (extended), `qa-auth.test.ts` | With `QA_API_KEYS` unset and no DB key, every QA route is 401 (never 404) with its throttled row; `/api/qa` and unknown paths stay 404 with no row. A malformed `QA_API_KEYS` logs its one line and makes every env key 401, while a valid DB key still answers 200. Env keys are compared before any DB call, with one `timingSafeEqual` per entry. A key that is not of the `idqa_` form and matches no env key makes no verify call. Verify 404, an owner whose current `REVIEWERS` role is `pharmacist`, `user` or absent, and an owner removed between two requests: 401 with no detail. A failed verify call: 502 with an `unavailable` row and no label. A DB key's label `key.{id}` is the limiter key and the audit label; its 61st request in a minute (QA API and MCP together) is 429. The touch is sent at most once a minute per key and never awaited. No log line, audit row or error carries the key, its hash or the owner's email (deep scan of every mocked sink). |
+| *(QA portal)* QA keys | `qa-keys.test.ts` | The generated key matches `^idqa_[A-Za-z0-9_-]{43}$` and decodes to 32 bytes; the hash is the SHA-256 hex of the full key. Create and revoke cores run the §7.10.5 order: no session, a pharmacist or `user` role, a bad name (empty, 41 characters, untrimmed control characters), the web limiter and a failed Turnstile check (action `qakey`) each stop before any key is generated or any API call; the API is called with the session's email and role even when the form carries `ownerEmail` or `ownerRole`; each API answer maps to its code (§7.10.5); the key appears only in a `created` result; `revalidatePath("/review/qa")` is called; `next.config.ts` sets no `serverActions.allowedOrigins`; `TURNSTILE_ACTIONS` includes `qakey`. |
+| *(QA portal)* QA keys island | `qa-keys-island.test.tsx` (jsdom), `copy-button.test.tsx` | After `created`, focus is on "Copy your new key now", the key shows once and is not in any prop, `localStorage`, `sessionStorage`, cookie or URL (spies); "I've saved it" removes it from the DOM and moves focus to "Your keys"; `beforeunload` is armed only while the panel is open; Revoke opens the inline confirmation with focus on "Revoke key", Esc and Cancel return focus to "Revoke", Enter on "Revoke" never revokes; at 5 active keys "Create key" is `aria-disabled` with its hint and sends nothing; each create and revoke outcome shows the §5.18 banner and announcement; the one live region gets each message after 60 ms. CopyButton writes the target's text, announces "Copied.", and on a refused clipboard selects the text and announces the fallback. |
+| *(QA portal)* Hosted MCP | `qa-mcp-route.test.ts` | Each §7.10.6 step and its answer, in order: 405 for GET and DELETE; 403 for a foreign `Origin` and for `null`, 200 for none and for `https://{SITE_HOST}`; 401 with `WWW-Authenticate: Bearer` and the `mcp` row; 429 with `Retry-After: 60` on the 61st request, shared with the QA API; 415, 406, 413, 400 parse error, 400 for a batch array and a bad `jsonrpc`, 400 for an unsupported `MCP-Protocol-Version`, and an absent header accepted as `2025-03-26`. `initialize` echoes each supported version and answers `2025-11-25` otherwise, with `serverInfo` and `instructions` = `PREAMBLE`; `ping` gives `{}`; notifications and client responses give 202 with no body; an unknown method gives `-32601`. `tools/list` equals the stdio list. `tools/call` for each tool calls `answerQa` with the mapped `QaInput` (no `fetch` to the site itself), writes the same `qa_read` row as the equivalent GET, and returns the preamble then the indented envelope; each QA error gives "QA API error {status} {code}"; a refused input gives "Invalid input {name}" with an `invalid_query` row; an unknown tool gives "Unknown tool". No answer has an `Access-Control-*` or `Mcp-Session-Id` header; every answer has `no-store` and `noindex`; nothing contains the key, the owner's email or a note. |
+| *(QA portal)* MCP parity | `tools/qa-mcp/tests/parity.test.ts` (own vitest), `qa-mcp-tools.test.ts` (web) | The stdio server and `web/lib/qa-mcp-tools.ts` agree on `PREAMBLE`, server name and version, and every tool's name, title, description, input schema and annotations (the stdio `tools/list` output against the web list); for a fixture table of bad arguments, `toPath` and `checkToolArgs` refuse the same field, and for good ones they address the same route and inputs. The web test pins `PREAMBLE` to the §7.9.8 text. |
 
 ### 11.2 Component tests (server components)
 
@@ -2703,6 +3068,7 @@ These come from `tokens.css`:
 - *(P1C)* the senior pages: queue filters (both scopes) and empty states, the pair row in all four states (including "What changed in DDInter"), a non-applying pair with its plain line and no warning tone, a pair with more than 10 brands on a side ("and {n} more." and the substance link), the substance page with brands from two batches, the not-authorised banner for a pharmacist and for an engineer;
 - *(P1C)* source links on the desk (comparison table, ingredient block, pair footers, evidence "Sources") with the §5.6.6 hrefs for the pilot codes; the ICD-11 link text "Search ICD-11 for XM5DJ7";
 - *(P1C, P2)* public pair cards with `FROM_DDINTER` and `PAIR_REVIEWED` or `PAIR_NOT_REVIEWED`, never green; the product page "With other approved medicines" grouped by partner substance, with partners from two batches.
+- *(QA portal)* `/review/qa`: the four sections in order with one `<h1>`; the MCP address, the snippets and the curl example built from `SITE_HOST` exactly as §5.18 writes them, with no key, label or hash anywhere in the HTML; the tool names and filter names rendered from `TOOLS` and `QA_FILTERS`; the Rules list equal to the `PREAMBLE` lines; the key list with each status, "Never", and Revoke only on active rows; the empty list; the load error with no create form; the 5-active state; the pharmacist banner with no key read; a `qa` session makes only the key-list read. The account menus (`Header`, `ReviewAccount`) show "QA tools" for `qa`, `engineer` and `senior` only, and a `qa` menu shows the "QA" badge with no batch, no "Review desk", no flags link and no single-key control; `ReviewToolbar` shows the "QA tools" link for the same roles, current on `/review/qa`. The QA welcome state. `review-gates.test.tsx` walks every `app/review/**/page.tsx` and `layout.tsx`: with a `qa` session each renders the §5.12 QA account view (or, for `/review`, redirects to `/review/qa`), and none calls a review read.
 - *(QA)* the checker alert card with management and an interaction description (§6.7.3): both texts, in that order, each in its own wrapper with its own label line; over 200 characters, each has its own Expander targeting its own text and described by its own label; a description that is a DDInter placeholder gives today's management-only card; with the management text clamped, the description's label still shows; `FROM_DDINTER` and the review state unchanged; management-only, description-only and no-text cards unchanged; the product-page and substance-page pair cards render the same markup as before.
 
 The existing 228 tests are updated where copy or routes change. None is deleted without a replacement.
@@ -2750,6 +3116,7 @@ The existing 228 tests are updated where copy or routes change. None is deleted 
 - *(P1C)* `PairQueueIntegrationTest`: every stored pair between held substances is queued by default (PO D3(b)): `DDInter351` pairs are present with `applies: false` while only the eye drop is held, after the applying pairs of the same severity, and absent under `pairs=applies`; order; filters and counts; `changedPairReturnsToQueue` (update a pair's text and the pair is `changed`, its public `pairReview` is `not_reviewed`, and no `batch_item` changes); decisions: 201, replay, 400 role, note and requestId, 404 for an unheld pair, 409 `contentHash`, `lastPairReviewId` and `state`; the audit rows.
 - *(P1C)* `VisibilityApiIntegrationTest` (PO D7): the approved-then-removed fixture on every endpoint of the matrix, including `POST /v1/interactions/check` (listed in `notReviewed`, never in `products` or `alerts`) and P10; public `pairReview` never shows `changed` or `issue`. `PublicStatusGuardTest` scans `adapter/persistence` and fails when a public adapter reads `batch_item.review` without `ReviewSql.statusOf` or `ReviewSql.LATEST_PUBLIC`.
 - *(P1C)* `V7MigrationIntegrationTest` (§7.8), and `AuditAppendOnlyIntegrationTest` extended to `ops.pair_review`.
+- *(QA portal)* `QaKeyRuleTest`, `QaKeyIntegrationTest` (§7.10.3), `V9MigrationIntegrationTest` (§7.10.2) and the `AuditApiIntegrationTest` additions (§7.10.7). `ReviewApiIntegrationTest` and `PairQueueIntegrationTest`: a decision and a pair decision with `reviewerRole=qa` are 400 `field=reviewerRole`, write no decision row and one rejected audit row.
 - *(QA)* `QaQueryIntegrationTest` (§7.9.5): 401 without the token; batch items with stages in pipeline order, a stage with no result absent, removed items excluded, 404 `batchId`; each filter with a matching and a non-matching fixture (coverage `not_run` never matches `no_ddinter_data`; `route_assumed` reads the ddinter-stage evidence; both `unaligned` causes); `stage` with `stage_warn` only (400 `stage` with any other filter); 400 for a bad `filter`, `batch` and `page`; 404 `batch`; paging, order and `total`. `QaRecordsScaleIntegrationTest`. `AuditApiIntegrationTest` adds `qa_read` with target type `qa_route` (201). `V8MigrationIntegrationTest` asserts the widened `audit_event_event_check`.
 
 **ETL** (`etl/tests/test_stage_ddinter.py`):
@@ -2819,13 +3186,14 @@ The existing 228 tests are updated where copy or routes change. None is deleted 
 - *(P1C)* **Senior pages**: the queue lists a pair whose partner is in a second test batch; M marks it reviewed, and its row reads `PAIR_REVIEWED`; the test updates the pair text in the database, and the pair is back under "Changed since review" while the approved record stays approved (P1C pins the public `pairReview` of the checker at API level, `PairQueueIntegrationTest`; P2's checker e2e asserts `PAIR_REVIEWED` and `PAIR_NOT_REVIEWED` on the page); R reports a pair issue and the pair text stays visible in public; a pharmacist session gets the not-authorised banner.
 - *(P1C)* **Desk cross-batch**: with a second test batch, the record shows "In other batches" with both subgroups; a second-batch record whose text-missing partner was mapped by `0001-pilot` shows it under "…with medicines outside this batch.", never under "…in this batch."; a combination record whose two ingredients form a text-missing pair shows it under "…between ingredients of this product."
 - **Not authorised**: `user` on `/review`; anonymous redirect.
+- *(QA portal)* **QA flow**: a `qa` session on `/review` lands on `/review/qa`; on `/review/0001-pilot/{conceptId}`, `/review/flags` and `/review/pairs` it gets the QA account view with no record data in the HTML; "QA tools" in the account menu opens the page; create a key named "CI laptop" (the bot check uses the e2e test key), see the panel with focus on its heading, copy, then "I've saved it"; the key list shows it Active with "Never"; with that key, `GET /api/qa/v1/batches` is 200 and the list then shows a "Last used" time; `POST /api/qa/mcp` `initialize`, `tools/list` and `tools/call list_batches` succeed with the preamble first; revoke it, and the next API and MCP calls are 401; a sixth active key is refused; a key row the test inserts for an account that the e2e `REVIEWERS` lists as `pharmacist` (its hash only) is 401, and that account's session on `/review/qa` gets the pharmacist banner. An engineer and a senior see "QA tools" and can create a key; a pharmacist cannot.
 - **Public scope for reviewers**: a pharmacist session on `/products/{unapprovedId}` renders the stub, and on `/check` lists that product under "Not yet reviewed by a pharmacist".
 - **Sign-in return path**: `/signin?returnTo=/\evil.com` lands on `/signin?welcome=1`.
 - **Sign-out**: drafts in `sessionStorage` are gone after `POST /signout`.
 - **Checker**: combobox keyboard; add and remove announcements; Clear all moves focus to the "Add a medicine" input (never to `<body>`); summary sentence; Major first; the no-data block; "No interaction listed"; the eye drop "What was checked" names `DDInter352`; not reviewed listed by name; the no-JS GET flow (JavaScript disabled).
 - **Public**: landing; search "paracetamol", "warfarin" (stub) and "warfrin" (suggestion); stub page; product page; sign-in state pages; partner form.
-- **axe** (`@axe-core/playwright`, WCAG 2.2 AA tags) on every page and on these desk states: ready, armed, committing, stale, net error (not saved and unconfirmed), bot hold, no-auth, signed out, complete, loading, drawer, sheet (with settings), report error, shortcuts Off, and the no-JavaScript confirm page; *(P1C)* the dismiss panel (empty, error, sending), the pair queue (each filter, a row's issue panel, a row-level 409 banner), the substance page, and the senior not-authorised banner. Each in light, dark and forced colours.
-- **Reflow** at 320 px (public and desk): no horizontal page scroll. At 1280×800 with 400% zoom (a 320×200 CSS px viewport) the focused element is never covered by the toolbar, the decision bar or the public and Learn toolbars, checked by tabbing through the desk, the product page and a Learn chapter. Learn below 860 px: the chapter nav is a sticky horizontal row and a focused heading is not covered by it.
+- **axe** (`@axe-core/playwright`, WCAG 2.2 AA tags) on every page and on these desk states: ready, armed, committing, stale, net error (not saved and unconfirmed), bot hold, no-auth, signed out, complete, loading, drawer, sheet (with settings), report error, shortcuts Off, and the no-JavaScript confirm page; *(P1C)* the dismiss panel (empty, error, sending), the pair queue (each filter, a row's issue panel, a row-level 409 banner), the substance page, and the senior not-authorised banner; *(QA portal)* `/review/qa` (empty list, list with every status, new-key panel open, revoke confirmation open, a create error banner, the pharmacist banner) and the QA account view. Each in light, dark and forced colours.
+- **Reflow** at 320 px (public, desk and *(QA portal)* `/review/qa` with the key panel open): no horizontal page scroll. At 1280×800 with 400% zoom (a 320×200 CSS px viewport) the focused element is never covered by the toolbar, the decision bar or the public and Learn toolbars, checked by tabbing through the desk, the product page and a Learn chapter. Learn below 860 px: the chapter nav is a sticky horizontal row and a focused heading is not covered by it.
 - **Lighthouse CI**: §1.4 S5 and the §10.6 budgets.
 
 ### 11.5 Visual regression (optional, non-blocking)
@@ -2854,7 +3222,7 @@ The pharmacist reviews the pilot in phase 1, on the workspace. The public site k
 
 ### 12.2 Implementation plans (Decision)
 
-This spec is **not one implementation plan**. It is split into seven plans (*P1C*: five before 15/10/2026, six until the QA plan of 18/10/2026), each written, reviewed and executed on its own, in this order. Each plan cites the sections it implements and may not change a Decision here without amending this spec first.
+This spec is **not one implementation plan**. It is split into eight plans (*P1C*: five before 15/10/2026, six until the QA plan of 18/10/2026, seven until the QA portal plan of the same day), each written, reviewed and executed on its own, in this order. Each plan cites the sections it implements and may not change a Decision here without amending this spec first.
 
 | Plan | Phase | Scope | Depends on |
 |---|---|---|---|
@@ -2865,12 +3233,13 @@ This spec is **not one implementation plan**. It is split into seven plans (*P1C
 | **P3 Learn** | 3 | §6.8, the §1.6 Learn corrections, and the §7.4 `GET /v1/stats` row | P0, P1A, P1B; builds the §7.4 `GET /v1/stats` row |
 | **P1C Review model and source links** *(P1C)* | 1C | The senior role (§2.2; §5.13, every role gate listed there; `AuditService` in §7.5); Dismiss issue (§5.2, §5.6.5, §5.7, §5.8, §5.10a, §7.2); senior review (§5.17, §7.7, the `SeniorDesk` island, §4.2); the reopen rule (§8.1 item 4, §8.3.1: `settle`, `approval_view`, `--reopen`, batch status); the desk's cross-batch pairs, the `partnerScope` note split and the `Interactions.tsx` combination fix (§5.5.3, §5.6.1, §5.6.2, §7.3 `otherPairs`); source links on the desk (§5.5.2, §5.6.3, §5.6.6, `SourceLinks.java`); the PO D7 visibility tests (§7.4); the checker alerts' `ddinterA`, `ddinterB` and public `pairReview` (§7.4, API only); V7 and `db-schema-v1.2` (§7.8); the P1C §1.7 copy; and the P1C rows of §11. **Not in P1C**: public pages (P2 builds §6.5–§6.7 on this model) and Learn (PO D9). Learn's re-run sentences (§1.6 item 4) still describe the pre-P1C rule; they are listed for the next Learn amendment. | P0, P1A, P1B, P3; ships before P2 |
 | **QA API, QA MCP and checker text** *(QA)* | after 2 | §7.9 (the `/api/qa/v1/*` route handlers, `lib/qa-api.ts`, `lib/qa-map.ts`, `LIMITS.qa`, the `qa_read` audit event and `AuditService` changes, the `GET /v1/qa/*` internal endpoints, `tools/qa-mcp/` with its README and CI job, `docs/runbooks/qa-api-keys.md`); the §6.7.3 checker interaction-description block and the `Expander` `describedBy` prop (§4.2); `QA_API_KEYS` in `web.environment` and `deploy/.env.example` (§12.4); and the QA rows of §11. **Schema:** one change, because the audit event needs it: `V8__qa_read_audit.sql` widens `audit_event_event_check` with `qa_read` and nothing else, tag `db-schema-v1.3` (§7.9.6). A complete release: it may merge to `main` on its own (§12.3). | P2 (shipped) |
+| **QA portal** *(QA portal)* | after QA | §7.10 (the `qa` role and every gate in §5.13, the QA account view in §5.12; self-service keys: `ops.qa_key`, `QaKeyController` and the §7.10.3 endpoints, the §7.10.4 verification rule in `lib/qa-api.ts`, `last_used_at`; the server actions and `lib/qa-key-core.ts`; `lib/qa-query.ts` shared by the QA API and the hosted MCP; `POST /api/qa/mcp`, `lib/qa-mcp.ts` and the shared `lib/qa-mcp-tools.ts` with the `tools/qa-mcp` parity test; the `qa_key_created` and `qa_key_revoked` events, `AuditService` changes), §7.9.1 and §7.9.6 as amended, the `/review/qa` page (§5.18) with the QaKeys and CopyButton islands (§4.2), the "QA tools" account-menu item and toolbar link (§5.1, §6.2), the QA welcome state (§6.2), the Turnstile action `qakey` and the §9.3 limits, `docs/runbooks/qa-api-keys.md` and `docs/runbooks/reviewer-invite.md` (QA invite, DB keys, team revocation), `tools/qa-mcp/README.md` (hosted server, DB keys), the QA portal §1.7 copy, and the QA portal rows of §11. **Schema:** one change, `V9__qa_keys.sql` (§7.10.2), lock header `db-schema-v1.4`; the tag `db-schema-v1.4` is created after the merge. A complete release: it may merge to `main` on its own (§12.3). | QA (shipped) |
 
 P1A may ship as its own release: it changes the shared layout, security and the sign-in function, and no other surface's behaviour. P1B and P2 each ship as one release (§12.3).
 
 ### 12.3 Feature flags
 
-**Decision: no runtime feature flags.** Each phase is one release (an image tag) with its own redirects. This avoids a second code path for safety rules. Partially built surfaces are not deployed, and the branch model enforces it: every push to `main` that passes CI deploys at once (§12.4), so each plan's PRs merge into a `phase-N` integration branch (`phase-0`, `phase-1`, `phase-2`, `phase-3`), and only the phase-complete merge of that branch into `main` deploys. P0, P1A and P3 are the exceptions that may merge to `main` on their own, because each is a complete release (§12.2; P3 is the whole of phase 3). *(P1C)* P1C is the whole of phase 1C and may merge to `main` on its own, after P3. *(QA)* The QA plan is a complete release after phase 2 and may merge to `main` on its own; V8 runs through Flyway on deploy, and the QA API stays disabled until `QA_API_KEYS` is set (§12.4). V7 runs through Flyway on deploy (§12.4), and the P1C pilot check (§8.3.1) follows the deploy.
+**Decision: no runtime feature flags.** Each phase is one release (an image tag) with its own redirects. This avoids a second code path for safety rules. Partially built surfaces are not deployed, and the branch model enforces it: every push to `main` that passes CI deploys at once (§12.4), so each plan's PRs merge into a `phase-N` integration branch (`phase-0`, `phase-1`, `phase-2`, `phase-3`), and only the phase-complete merge of that branch into `main` deploys. P0, P1A and P3 are the exceptions that may merge to `main` on their own, because each is a complete release (§12.2; P3 is the whole of phase 3). *(P1C)* P1C is the whole of phase 1C and may merge to `main` on its own, after P3. *(QA)* The QA plan is a complete release after phase 2 and may merge to `main` on its own; V8 runs through Flyway on deploy, and the QA API stays disabled until `QA_API_KEYS` is set (§12.4). *(QA portal)* The QA portal plan is a complete release after the QA plan and may merge to `main` on its own; V9 runs through Flyway on deploy, and from that release on the QA API and the hosted MCP answer 401 (never the disabled 404) to a request no key authenticates (§7.9.1). The tag `db-schema-v1.4` is created on the merged commit. V7 runs through Flyway on deploy (§12.4), and the P1C pilot check (§8.3.1) follows the deploy.
 
 ### 12.4 Deploy without touching other services
 
@@ -2879,7 +3248,7 @@ P1A may ship as its own release: it changes the shared layout, security and the 
 - **Smoke check.** The workflow's last step requests `$PUBLIC_URL/batches` with `curl -f`; it keeps passing in phase 0 (§12.1). P1A changes it to `$PUBLIC_URL/healthz`, so the `/batches` redirect (P1B) and the reviewer-only pages never fail a deploy.
 - The `medscribe`, `baymax`, `medioo` and `n8n` containers and the Caddy container are never restarted.
 - The `drugdb.eliooo.org` Caddy block is unchanged: the `/__/auth` proxy is a Next rewrite (§9.5).
-- **New env vars reach the web container only through `web.environment`.** Compose passes only the variables listed there (host `.env` values are interpolated, not inherited). P1A adds to `web.environment` in `deploy/docker-compose.yml`: `SITE_HOST: ${SITE_HOST}` and `HERO_CONCEPT_ID: ${HERO_CONCEPT_ID:-}`, and lists both in `deploy/.env.example` with `SITE_HOST=drugdb.eliooo.org` and `HERO_CONCEPT_ID=186-0030-006--napa`. `SITE_HOST` is required: `instrumentation.ts` exits when it is unset in production (a unit test in `instrumentation.test.ts` pins this), and `deploy.yml`'s pre-flight check requires it in the host `.env` so the running containers stay up. `INTELLIDRUGS_E2E` is never added here (§11.4). *(QA)* The QA plan adds `QA_API_KEYS: ${QA_API_KEYS:-}` to `web.environment` and an empty `QA_API_KEYS=` to `deploy/.env.example`, so the QA API ships disabled (404, §7.9.1). The product owner sets the hashed entries in the host `.env` after the deploy and recreates the `web` container only (`docker-compose up -d web`), following `docs/runbooks/qa-api-keys.md`; no other service is touched.
+- **New env vars reach the web container only through `web.environment`.** Compose passes only the variables listed there (host `.env` values are interpolated, not inherited). P1A adds to `web.environment` in `deploy/docker-compose.yml`: `SITE_HOST: ${SITE_HOST}` and `HERO_CONCEPT_ID: ${HERO_CONCEPT_ID:-}`, and lists both in `deploy/.env.example` with `SITE_HOST=drugdb.eliooo.org` and `HERO_CONCEPT_ID=186-0030-006--napa`. `SITE_HOST` is required: `instrumentation.ts` exits when it is unset in production (a unit test in `instrumentation.test.ts` pins this), and `deploy.yml`'s pre-flight check requires it in the host `.env` so the running containers stay up. `INTELLIDRUGS_E2E` is never added here (§11.4). *(QA)* The QA plan adds `QA_API_KEYS: ${QA_API_KEYS:-}` to `web.environment` and an empty `QA_API_KEYS=` to `deploy/.env.example`, so the QA API ships disabled (404, §7.9.1). The product owner sets the hashed entries in the host `.env` after the deploy and recreates the `web` container only (`docker-compose up -d web`), following `docs/runbooks/qa-api-keys.md`; no other service is touched. *(QA portal)* No new environment variable: the hosted MCP address is built from `SITE_HOST`, and `QA_API_KEYS` stays as it is (env keys keep working). QA team members are added to `REVIEWERS` as `email:qa` with the §5.13 procedure (recreating `web` only). The hosted MCP is a route of the existing web container, so the Caddy block, ports and networks are unchanged.
 - **Firebase auth domain (before the P1A deploy, in this order):**
   1. set the GitHub repository variable `FIREBASE_AUTH_DOMAIN=drugdb.eliooo.org` (the deploy workflow bakes it into the web image as `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`) and the same value for `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` in the host `.env`;
   2. in Google Cloud console, Credentials, the Firebase web OAuth client: add the authorized redirect URI `https://drugdb.eliooo.org/__/auth/handler` (without it, sign-in fails with `redirect_uri_mismatch`);
@@ -2896,6 +3265,7 @@ P1A may ship as its own release: it changes the shared layout, security and the 
   - Sessions issued by the new web (JWE) are not readable by the old web. Reviewers sign in again; this is accepted.
 - **ETL**: a rollback does not restore stage notes. Re-run the ddinter stage with the previous image if needed. Re-runs only ever re-open review; they never publish. *(P1C)* A carried approval (§8.3.1 item 8) keeps an already public product public when nothing it covered changed; it never makes public a product that was not, and a record that comes back into its batch file is always re-opened (§8.3.1 item 5).
 - **V6**: do not drop it on rollback. It is harmless to older images. Dropping it follows the lock policy (a new migration).
+- *(QA portal)* **V9**: keep it on rollback. Older images never read or write `ops.qa_key` and never write `qa` or the key events. Under a pre-portal image `parseReviewers` skips `qa` entries (those accounts read as `user`), DB keys stop authenticating, `/api/qa/mcp` is gone, and the QA API returns to the D61 disabled-404 rule when `QA_API_KEYS` is unset; env keys keep working.
 - *(P1C)* **V7**: the same. Older images never write `senior`, `dismiss` or pair reviews, and they read decisions with the V4 values, but a pre-P1C `ApprovalRule` would ignore a `dismiss` row. So a rollback below P1C must be preceded by a check that no `dismiss` row is counted on a current item (runbook query in `docs/runbooks/reviewer-invite.md`). Otherwise a pharmacist re-approves, or anyone re-reports, those records first (amended by the P1C plan, 15/10/2026: a pre-P1C `ApprovalRule` counts an `ok` only from role `pharmacist`, so a senior's re-approval would read as pending under the older image; the runbook query lists a record until a counted `issue`, or a `pharmacist` `ok`, follows its latest dismissal).
 
 ---
@@ -2939,7 +3309,7 @@ P1A may ship as its own release: it changes the shared layout, security and the 
 | D15 | A checked pair with no DDInter row = "No interaction listed in DDInter 2.0" (counted as checked, with the caveat); pairs inside one product = not checked | §6.7.2 |
 | D16 | Search stubs match on trade name and DAR only; public paging capped at 10 pages; spelling suggestion in memory (no trigram migration) | §6.3, §7.4 |
 | D17 | Partner access requests stored as flags (`other`/`partner-access`), no schema change | §6.9 |
-| D18 | V6 adds `ops.item_snapshot` and `ops.audit_event`, the decision `request_id` unique index, and append-only triggers; nothing else changes in the schema *(P1C: V7, D59, is the next change; QA: V8, D63, the one after it)* | §7.6 |
+| D18 | V6 adds `ops.item_snapshot` and `ops.audit_event`, the decision `request_id` unique index, and append-only triggers; nothing else changes in the schema *(P1C: V7, D59, is the next change; QA: V8, D63, the one after it; QA portal: V9, D71, the one after that)* | §7.6 |
 | D19 | Global reviewer roles; invites sent by hand from a fixed template | §5.13 |
 | D20 | Encrypted session cookie (JWE) with the `__Host-` prefix; the old cookie is retired | §9.6 |
 | D21 | Nonce-based CSP without `script-src 'unsafe-inline'`; Turnstile on sign-in | §9.2, §9.4 |
@@ -2982,8 +3352,14 @@ P1A may ship as its own release: it changes the shared layout, security and the 
 | D58 | *(P1C, PO D8)* Every code links to its source page, built only by the API from a validated code, with "fetched on" where a fetch time is stored; desk for every record, public pages for approved records only; SNOMED CT through RxNav search and ICD-11 through the browser home, because neither has a working deep link by code | §5.6.6, §6.5 |
 | D59 | *(P1C)* V7 widens the decision and role checks, adds `ops.pair_review` (append-only by trigger) and the new audit events; tag `db-schema-v1.2` | §7.8 |
 | D60 | *(P1C)* Plan P1C ships after P3 and before P2; P2 builds the P1C public model, including P10 across batches grouped by partner substance (replacing D25's batch-only rule) | §6.5, §12.1, §12.2 |
-| D61 | *(QA, PO 17–18/10/2026)* A read-only QA API served by the existing web app under `/api/qa/v1/` (route handlers calling the internal API with the token; no new container, port or Caddy change); Bearer keys stored only as SHA-256 hashes in `QA_API_KEYS`, compared in constant time; unset means disabled (404 everywhere); 60 requests per minute per key; no CORS, `no-store`, `noindex` | §2.1, §2.2, §7.9.1 |
+| D61 | *(QA, PO 17–18/10/2026)* A read-only QA API served by the existing web app under `/api/qa/v1/` (route handlers calling the internal API with the token; no new container, port or Caddy change); Bearer keys stored only as SHA-256 hashes in `QA_API_KEYS`, compared in constant time; unset means disabled (404 everywhere); 60 requests per minute per key; no CORS, `no-store`, `noindex` *(QA portal: the disabled-404 rule is replaced by D68)* | §2.1, §2.2, §7.9.1 |
 | D62 | *(QA)* QA responses are built from a field allowlist; they never carry an email, a decision, dismissal or pair-issue note, `mine`, session data or a token; decision history is role, time and decision only | §7.9.3, §7.9.7 |
 | D63 | *(QA)* Every QA call writes a `qa_read` audit row (label, route template, outcome; never the key), with `unauthorized` and `rate_limited` rows throttled and none while the API is disabled; a 200 is sent only after its row is written; `V8` widens the event check for it, tag `db-schema-v1.3` | §5.15, §7.9.6 |
 | D64 | *(QA, PO 17/10/2026)* The public checker's alert cards show DDInter's interaction description after the management text, in its own block, clamped behind the existing Expander; checker only; no new copy, island, API field or unapproved data | §6.7.3 |
 | D65 | *(QA)* `tools/qa-mcp/`: a stdio MCP server with five read-only tools mapped 1:1 to the QA API, a fixed preamble on every result, errors with the HTTP status and never the key; outside the web build | §7.9.8 |
+| D66 | *(QA portal, PO 18/10/2026)* A `qa` role (label "QA") in `REVIEWERS`; QA tools are for `qa`, `engineer` and `senior`, never `pharmacist` or `user`; a `qa` account sees only the QA section (`/review` redirects to `/review/qa`, every other review page is refused as for a non-reviewer) and can never make a decision: web, API and database each refuse it; existing role semantics are unchanged | §2.1–§2.3, §5.12, §5.13, §7.10.1 |
+| D67 | *(QA portal)* Self-service QA keys: `idqa_` + 43 base64url characters (32 random bytes), generated by the web, stored only as SHA-256 hashes in `ops.qa_key` with the owner's verified email (server-side only, never returned by a QA route, the MCP or a page), name, 90-day expiry, revocation and a last-used time touched at most once a minute; at most 5 active keys and 10 created per rolling 24 hours per owner; the key is shown once and stored nowhere | §5.18, §7.10.2, §7.10.3, §7.10.8 |
+| D68 | *(QA portal)* The QA API and the hosted MCP authenticate an env key or a DB key alike; a DB key fails when expired, revoked, or its owner's current `REVIEWERS` role no longer allows QA tools, checked on every request; the QA API is enabled when either source can authenticate, so with no keys at all it answers 401, never 404; a malformed `QA_API_KEYS` disables env keys only | §7.9.1, §7.10.4 |
+| D69 | *(QA portal)* A hosted MCP server at `POST /api/qa/mcp` on the existing web app: Streamable HTTP, stateless JSON, the five read-only tools and the preamble shared with `tools/qa-mcp` (a parity test fails on divergence), tool calls through the QA API's own query code, rate limit and `qa_read` rows; `Origin` validated, `MCP-Protocol-Version` handled; OAuth out of scope | §7.10.6 |
+| D70 | *(QA portal)* The QA tools page `/review/qa` ("Connect your AI", "Your keys", "API", "Rules"), reached from a "QA tools" account-menu item and toolbar link shown to `qa`, `engineer` and `senior`; key creation and revocation are server actions with the session role re-checked, Next's origin check, Turnstile `qakey` and account limits | §5.1, §5.18, §6.2, §7.10.5, §9.2, §9.3 |
+| D71 | *(QA portal)* `V9__qa_keys.sql` adds `ops.qa_key` (a guard trigger lets only `revoked_at` once and `last_used_at` forward change; no delete), the `qa_key_created` and `qa_key_revoked` audit events and the `qa` actor role; the decision role checks stay narrow; lock header and tag `db-schema-v1.4`, the tag after the merge | §7.10.2, §7.10.7 |

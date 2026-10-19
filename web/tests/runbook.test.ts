@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { P1C_COPY } from "@/lib/copy";
+import { P1C_COPY, QA_COPY } from "@/lib/copy";
 
 const repo = (p: string) => fileURLToPath(new URL(`../../${p}`, import.meta.url));
 
@@ -101,5 +101,35 @@ describe("QA API keys runbook (§7.9.1, §12.4)", () => {
 
   it("the README links to it", () => {
     expect(readFileSync(repo("README.md"), "utf8")).toContain("docs/runbooks/qa-api-keys.md");
+  });
+
+  it("QA portal (§7.9.1 as amended, D68): no key answers 401, never a disabled 404; a malformed value stops env keys only", () => {
+    const md = readFileSync(path, "utf8");
+    expect(md).not.toMatch(/disables the QA API|404: disabled|A disabled API|the API is disabled/);
+    expect(md).toContain("QA_API_KEYS invalid: entry {n}");
+    expect(md).toMatch(/DB keys keep working/);
+  });
+
+  it("QA portal (§7.10.2, §7.10.3): self-service DB keys, and how the team revokes one with a read-only lookup first", () => {
+    const md = readFileSync(path, "utf8");
+    expect(md).toContain("## Self-service keys (DB keys)");
+    expect(md).toContain("/review/qa");
+    expect(md).toContain("idqa_");
+    expect(md).toContain("key.{id}");
+    expect(md).toContain("## Revoke a DB key for its owner");
+    // the lookup is read-only and prints ids, names and times, never a hash; the revocation is one guarded UPDATE
+    expect(md).toContain("SELECT id, name, created_at, expires_at, revoked_at, last_used_at FROM ops.qa_key WHERE owner_email = lower(:'owner')");
+    expect(md).toContain("UPDATE ops.qa_key SET revoked_at = now() WHERE id = :id AND revoked_at IS NULL");
+    expect(md).not.toMatch(/SELECT[^;]*key_hash/);
+    expect(md).not.toMatch(/DELETE FROM ops\.qa_key/);
+  });
+});
+
+describe("reviewer-invite runbook: the QA account (§5.13, QA portal)", () => {
+  it("holds the QA invite template and the qa role token, and says removing it stops the account's keys", () => {
+    const md = readFileSync(repo("docs/runbooks/reviewer-invite.md"), "utf8");
+    expect(md).toContain(QA_COPY.role.invite);
+    expect(md).toContain(":qa");
+    expect(md).toMatch(/stops every DB key/);
   });
 });

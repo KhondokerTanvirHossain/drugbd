@@ -142,4 +142,21 @@ describe("/signin card and welcome states (§6.2, Board P section 2)", () => {
       expect(html).toContain('href="/review">Open the review desk</a>');
     }
   });
+
+  it("a qa account's welcome (§6.2, QA portal): the QA badge, the three QA steps and Open QA tools; no batch read", async () => {
+    getSession.mockResolvedValue({ email: "qa@example.org", name: "Quality Person", role: "qa" });
+    const html = await render();
+    expect(html).toContain('<span class="role-badge"><span class="ico shield" aria-hidden="true"></span>QA</span>');
+    expect(html).toContain("Signed in as Quality Person");
+    expect(html).toContain("<h2");
+    expect(html).toContain("You have QA access");
+    expect(html).toContain("Create a key on the QA tools page. It is shown once, so copy it then.");
+    expect(html).toContain("Connect Claude Code, Cursor or a script with the key. What it reads may not be reviewed yet, and it can&#x27;t change anything.");
+    expect(html).toContain("QA accounts don&#x27;t review records. Reviewing needs a reviewer invite.");
+    expect(html).toContain('href="/review/qa">Open QA tools</a>');
+    expect(html).not.toContain('href="/review">');
+    expect(html).not.toContain("reviewer for batch");
+    expect(html).not.toContain("qa@example.org");
+    expect(listReviewBatches).not.toHaveBeenCalled();
+  });
 });

@@ -125,6 +125,22 @@ class PairDecisionIntegrationTest {
         assertThat(rejected((String) wrongRole.get("requestId"))).isEqualTo(1);
     }
 
+    /** §7.10.1 (D66): a qa account can never decide; the API refuses reviewerRole=qa with one rejected row and no pair review. */
+    @Test void aQaRoleIs400ReviewerRoleWithOneRejectedRowAndNoPairReview() throws Exception {
+        long before = count(pg, "SELECT count(*) FROM ops.pair_review");
+        for (String decision : new String[]{"reviewed", "issue"}) {
+            Map<String, Object> b = body(decision, decision.equals("issue") ? "the text contradicts the severity" : "", H_14_1951, null);
+            b.put("reviewerEmail", "qa.member@example.org");
+            b.put("reviewerRole", "qa");
+            post("DDInter14", "DDInter1951", b).expectStatus().isBadRequest().expectBody()
+                .jsonPath("$.errors[0].code").isEqualTo("INVALID_QUERY").jsonPath("$.errors[0].field").isEqualTo("reviewerRole");
+            assertThat(rejected((String) b.get("requestId"))).isEqualTo(1);
+            assertThat(count(pg, "SELECT count(*) FROM ops.audit_event WHERE event = 'pair_decision' AND request_id = '" +
+                b.get("requestId") + "'")).isZero();
+        }
+        assertThat(count(pg, "SELECT count(*) FROM ops.pair_review")).isEqualTo(before);
+    }
+
     @Test void aPairThatIsNotStoredOrNotHeldIs404() {
         post("DDInter1951", "DDInter999", body("reviewed", "", H_14_1951, null)).expectStatus().isNotFound()
             .expectBody().jsonPath("$.errors[0].field").isEqualTo("pair");

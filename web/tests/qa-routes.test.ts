@@ -108,15 +108,20 @@ async function expectError(res: Response, status: number, code: string, field: s
     metadata: { timestamp: expect.any(String), requestId: RID } });
 }
 
-describe("disabled QA API (§7.9.1)", () => {
+describe("no disabled QA API any more (§7.9.1 as amended by the QA portal, D68)", () => {
   it.each([["unset", undefined], ["empty", ""], ["blank", "  "], ["invalid", `Checker:${sha(KEY)}`]])(
-    "%s QA_API_KEYS: every QA route and the catch-all answer the 404 envelope, with no API or audit call", async (_n, value) => {
+    "%s QA_API_KEYS: every QA route is 401 for an env key, never 404, and reads nothing; the catch-all stays 404", async (_n, value) => {
       vi.spyOn(console, "error").mockImplementation(() => {});
       if (value === undefined) vi.stubEnv("QA_API_KEYS", undefined as unknown as string);
       else vi.stubEnv("QA_API_KEYS", value);
-      for (const [, handler, path] of ROUTES) await expectError(await call(handler, path), 404, "NOT_FOUND", null);
+      for (const [route, handler, path] of ROUTES) {
+        await expectError(await call(handler, path), 401, "UNAUTHORIZED", null);
+        expect(audits.filter((a) => a.targetId === route)).toEqual([expect.objectContaining({ outcome: "unauthorized" })]);
+      }
+      audits = [];
       await expectError(await call(restGET, "/api/qa"), 404, "NOT_FOUND", null);
-      expect(fetchMock).not.toHaveBeenCalled();
+      expect(reads).toEqual([]);
+      expect(audits).toEqual([]);
     });
 
   it("an unknown QA path is the same 404 while enabled, with or without a key, and writes nothing", async () => {

@@ -122,7 +122,7 @@ a { color: var(--accent); }
     <p class="lede">How the Bangladesh drug knowledge base is stored in PostgreSQL. It covers the brand, clinical drug and substance levels, the crosswalk codes, the DDInter interaction mirror, and the evidence and review tables behind the approval gate.</p>
     <div class="meta">
       <span>Schema as of 12 Oct 2026</span>
-      <span>Migrations V1–V8 (V8, db-schema-v1.3, adds the qa_read audit event)</span>
+      <span>Migrations V1–V9 (V9, db-schema-v1.4, adds self-service QA keys and the qa role)</span>
       <span>PostgreSQL 16</span>
       <span>Row counts: live pilot (10 medicines)</span>
     </div>
@@ -174,6 +174,7 @@ a { color: var(--accent); }
           <li><code>item_snapshot</code> <span>0</span></li>
           <li><code>audit_event</code> <span>0</span></li>
           <li><code>pair_review</code> <span>0</span></li>
+          <li><code>qa_key</code> <span>0</span></li>
         </ul>
       </div>
     </div>
@@ -381,6 +382,7 @@ erDiagram
   batch_item ||--o{ item_snapshot : "one per pipeline stamp, append-only"
   audit_event }o..o| batch_item : "target_type, target_id"
   pair_review }o--|| ddinter_pair : "append-only senior pair decisions"
+  audit_event }o..o| qa_key : "qa_key_created, qa_key_revoked: target_id"
   batch_item }o..|| brand_product : "concept_id"
   brand_product ||..|| ocl_concept : "concept_id, verbatim DGDA record"
   flag }o..o| brand_product : "target_type, target_id"
@@ -449,9 +451,9 @@ erDiagram
   audit_event {
     bigint id PK
     timestamptz at
-    text event "sign_in decision pair_decision senior_open qa_read ..."
+    text event "sign_in decision pair_decision senior_open qa_read qa_key_created ..."
     text actor_email "never public"
-    text actor_role "pharmacist | engineer | senior | user"
+    text actor_role "pharmacist | engineer | senior | qa | user"
     text target_type
     text target_id
     text outcome
@@ -468,6 +470,16 @@ erDiagram
     text reviewer_email "never public"
     text reviewer_role "senior"
     timestamptz decided_at
+  }
+  qa_key {
+    bigint id PK
+    text key_hash UK "sha256 hex of the key; never the key"
+    text owner_email "never public, never returned by a QA route"
+    text name "1 to 40 chars, trimmed"
+    timestamptz created_at
+    timestamptz expires_at "created_at + 2160 hours"
+    timestamptz revoked_at "set once"
+    timestamptz last_used_at "forward only, at most once a minute"
   }
   brand_product {
     text concept_id PK
@@ -500,6 +512,7 @@ erDiagram
       <div class="rule"><h3>Snapshots and the audit trail are append-only</h3><p>Triggers reject UPDATE, DELETE and TRUNCATE on <code>item_snapshot</code> and <code>audit_event</code>. A batch item with a snapshot cannot be deleted, so an item that leaves the batch file is kept and marked “removed from batch file”.</p><span class="where">ops.reject_change() triggers</span></div>
       <div class="rule"><h3>A re-run re-opens only what an approval covers</h3><p>The pipeline's <code>settle()</code> compares each record's approval view (brand fields, clinical drug and, per ingredient, substance, strength, codes, chosen DDInter entries and coverage) with the view in its snapshot. Only a changed view stamps the record <code>pending</code>; DDInter pairs, texts and entry names never re-open it. A new item of a product approved in another batch with the same view carries that approval (<code>carried_from</code> in its snapshot). <code>settle()</code> locks <code>batch_item</code> rows before the <code>batch</code> row, the same order as the API's decisions.</p><span class="where">load/batches.py settle · snapshots.approval_view</span></div>
       <div class="rule"><h3>Pair reviews are append-only and keep what they reviewed</h3><p>A senior pharmacist's pair decision stores the pair's content and its hash, so the API can tell when DDInter changed a reviewed pair. Triggers reject UPDATE, DELETE and TRUNCATE on <code>pair_review</code>.</p><span class="where">pair_review, ops.reject_change() triggers</span></div>
+      <div class="rule"><h3>QA keys are hashed, expire and are never deleted</h3><p><code>qa_key</code> stores only the SHA-256 of a self-service QA key, its owner and name. A key lives 90 days (2160 hours, checked). A guard trigger lets only <code>revoked_at</code> change once and <code>last_used_at</code> move forward; DELETE and TRUNCATE are rejected. The decision role checks do not admit <code>qa</code>, so a QA account can never decide.</p><span class="where">qa_key, ops.qa_key_guard(), ops.reject_change() triggers</span></div>
       <div class="rule"><h3>Confidence and enums are checked</h3><p>Confidence must be 0–1. Code systems, severities, stages, review states and roles are restricted by CHECK constraints.</p><span class="where">CHECK constraints</span></div>
     </div>
   </section>
@@ -550,8 +563,9 @@ erDiagram
           <tr><td class="t">review_decision</td><td class="mono">id</td><td>Append-only OK / issue decisions with reviewer role and time.</td><td class="n">0</td></tr>
           <tr><td class="t">flag</td><td class="mono">id</td><td>Problems reported by signed-in users, open or resolved.</td><td class="n">0</td></tr>
           <tr><td class="t">item_snapshot</td><td class="mono">batch_id, concept_id, extracted_at</td><td>The record as each pipeline stamp left it, grouped by run. Append-only.</td><td class="n">0</td></tr>
-          <tr><td class="t">audit_event</td><td class="mono">id</td><td>Who did what and when: sign-ins, decisions, rejections, flags, QA API reads. Append-only.</td><td class="n">0</td></tr>
+          <tr><td class="t">audit_event</td><td class="mono">id</td><td>Who did what and when: sign-ins, decisions, rejections, flags, QA API reads, QA keys created and revoked. Append-only.</td><td class="n">0</td></tr>
           <tr><td class="t">pair_review</td><td class="mono">id</td><td>Senior pharmacists' pair decisions (reviewed or issue) with the content reviewed. Append-only.</td><td class="n">0</td></tr>
+          <tr><td class="t">qa_key</td><td class="mono">id</td><td>Self-service QA keys: the key's SHA-256 hash, owner, name, expiry, revocation and last use. Never deleted.</td><td class="n">0</td></tr>
         </tbody>
       </table>
     </div>

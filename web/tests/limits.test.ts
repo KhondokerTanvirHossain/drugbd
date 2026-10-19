@@ -93,4 +93,29 @@ describe("§9.3 limits", () => {
     expect(allowQaUnauthorizedAudit("records", "203.0.113.9", l)).toBe(true);
     expect(allowQaRateLimitedAudit("checker", l)).toBe(true);
   });
+  it("QA portal (§9.3, §7.10.4): a DB key's last-used touch is 1 per minute per key id, 10,000 keys (LRU)", () => {
+    let now = 0;
+    const l = createLimits(() => now);
+    expect(burst(() => l.qaKeyTouch.allow("7"), 3).filter(Boolean)).toHaveLength(1);
+    expect(l.qaKeyTouch.allow("8")).toBe(true);
+    now = 59_999;
+    expect(l.qaKeyTouch.allow("7")).toBe(false);
+    now = 60_000;
+    expect(l.qaKeyTouch.allow("7")).toBe(true);
+    for (let i = 0; i < 10_050; i++) l.qaKeyTouch.allow(String(1000 + i));
+    expect(l.qaKeyTouch.size()).toBe(10_000);
+  });
+  it("QA portal (§9.3): key creation 10 per 24 hours and revocation 30 per hour, per account, through allowAccountAction", () => {
+    let now = 0;
+    const l = createLimits(() => now);
+    expect(Array.from({ length: 11 }, () => allowAccountAction("qaKeyCreate", "Eng@E2E.test", l)).filter(Boolean)).toHaveLength(10);
+    expect(allowAccountAction("qaKeyCreate", "other@e2e.test", l)).toBe(true);
+    expect(Array.from({ length: 31 }, () => allowAccountAction("qaKeyRevoke", "eng@e2e.test", l)).filter(Boolean)).toHaveLength(30);
+    now = 3_600_000;
+    expect(allowAccountAction("qaKeyRevoke", "eng@e2e.test", l)).toBe(true);
+    expect(allowAccountAction("qaKeyCreate", "eng@e2e.test", l)).toBe(false);
+    now = 86_400_000;
+    expect(allowAccountAction("qaKeyCreate", "eng@e2e.test", l)).toBe(true);
+    for (const k of l.qaKeyCreate.keys()) expect(k).not.toContain("@");
+  });
 });

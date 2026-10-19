@@ -1,11 +1,11 @@
 # Database design and schema lock
 
-**Status:** locked as `db-schema-v1.3`. The product owner approved `db-schema-v1.0` (V1–V5) on 2026-10-12; V6 is the additive change in the IntelliDrugs UX spec (§7.6); V7 is the additive P1C change (§7.8); V8 is the additive QA change (§7.9.6).
-**Schema:** migrations `V1`–`V8` in `db/migrations/`, applied on drugdb.eliooo.org.
+**Status:** locked as `db-schema-v1.4`. The product owner approved `db-schema-v1.0` (V1–V5) on 2026-10-12; V6 is the additive change in the IntelliDrugs UX spec (§7.6); V7 is the additive P1C change (§7.8); V8 is the additive QA change (§7.9.6); V9 is the additive QA portal change (§7.10.2).
+**Schema:** migrations `V1`–`V9` in `db/migrations/`, applied on drugdb.eliooo.org.
 **Reference:** [Data model page](../artifacts/2026-10-12-data-model.html) (repo copy) · live version: https://claude.ai/artifact/5axV32KDeM55TrSUNF4qGc
 
 ## What "locked" means
-1. **Applied migrations are immutable.** `V1`–`V8` are never edited, renamed or removed. Their SHA-256 checksums are recorded in `db/migrations.lock`.
+1. **Applied migrations are immutable.** `V1`–`V9` are never edited, renamed or removed. Their SHA-256 checksums are recorded in `db/migrations.lock`.
 2. **CI enforces it.** The `schema-lock` job runs `db/check-migration-lock.sh` on every push and pull request. The job fails when:
    - a locked file changed, is missing, or was renamed;
    - a migration exists that is not in the lock file;
@@ -17,13 +17,13 @@
    - add its line to `db/migrations.lock` (`shasum -a 256 V<next>__<what>.sql`);
    - in the PR description, explain the change, why it is needed, what it does to existing rows, and how to roll it back;
    - have it reviewed. A change to the data model also updates the data model page and this document.
-4. **Version tags.** Each approved schema state gets a git tag: `db-schema-v1.0` = V1–V5, `db-schema-v1.1` = V1–V6, `db-schema-v1.2` = V1–V7, `db-schema-v1.3` = V1–V8. Bump the minor version for additive changes. Bump the major version for changes that alter or remove existing structures.
+4. **Version tags.** Each approved schema state gets a git tag: `db-schema-v1.0` = V1–V5, `db-schema-v1.1` = V1–V6, `db-schema-v1.2` = V1–V7, `db-schema-v1.3` = V1–V8, `db-schema-v1.4` = V1–V9 (created on the merge commit to `main`). Bump the minor version for additive changes. Bump the major version for changes that alter or remove existing structures.
 
 ## The design in one paragraph
 Three PostgreSQL schemas:
 - **`raw`** holds verbatim source responses: the DGDA/OCL concepts plus every RxNav and DDInter HTTP response.
 - **`curated`** holds the drug master. It has three levels: a brand (`brand_product`), its clinical drug (`clinical_drug`, ID `BDC-`), and its substances (`substance`, ID `BDS-`). Substances carry names, crosswalk codes (ICD-11 XM, RxCUI, ATC, DrugBank, SNOMED CT, DDInter, with route scope) and interaction coverage. `curated` also holds a mirror of DDInter's drug–drug, drug–disease and drug–food data, joined to our substances through `DDINTER` codes.
-- **`ops`** holds batches, per-stage evidence, run history, append-only review decisions, flags, a snapshot of every record at each pipeline stamp (`item_snapshot`) and the audit trail (`audit_event`), and senior pharmacists' pair reviews (`pair_review`). The public approval gate is computed from these: a record is public only after a pharmacist's OK made since its latest extraction.
+- **`ops`** holds batches, per-stage evidence, run history, append-only review decisions, flags, a snapshot of every record at each pipeline stamp (`item_snapshot`) and the audit trail (`audit_event`), senior pharmacists' pair reviews (`pair_review`) and self-service QA keys (`qa_key`, the key's SHA-256 hash only). The public approval gate is computed from these: a record is public only after a pharmacist's OK made since its latest extraction.
 
 ## Rules enforced by the database
 - One substance per ICD-11 XM code (partial unique index).
@@ -38,9 +38,17 @@ Three PostgreSQL schemas:
 - Only a senior pharmacist may dismiss an issue, with a note of 5–1000 characters (`review_decision_dismiss_by_senior`).
 - One `pair_decision` audit row per `request_id` (partial unique index), the backstop for idempotent pair decisions.
 - One `decision` audit row per `request_id` (partial unique index), the backstop for idempotent decision retries.
+- QA keys (`qa_key`) store only a 64-character SHA-256 hex hash (unique), a lower-case owner email and a trimmed 1–40 character name; `expires_at` is exactly `created_at + 2160 hours`. A guard trigger lets only `revoked_at` (once, from NULL) and `last_used_at` (forward only) change, and DELETE and TRUNCATE are rejected (42501).
+- The decision role checks (`review_decision`, `pair_review`) do not admit `qa`: a QA account can never decide, even past the web and the API.
 - Enumerations and confidence (0–1) are enforced by CHECK constraints.
 
 ## Change log
+
+### V9 `qa_keys` (db-schema-v1.4)
+- **The change:** adds `ops.qa_key` (id, `key_hash`, `owner_email`, `name`, `created_at`, `expires_at`, `revoked_at`, `last_used_at`) with its checks (64 lower-case hex hash, unique; lower-case owner of 3–320 characters; trimmed name of 1–40 characters with no control character; lifetime exactly 2160 hours; revocation and last use not before creation), the index `qa_key_owner_idx (owner_email, created_at DESC, id DESC)`, the guard trigger `ops.qa_key_guard()` (only `revoked_at`, once, and `last_used_at`, forward, may change), DELETE and TRUNCATE triggers on `ops.reject_change()` and a REVOKE. Widens `audit_event.event` with `qa_key_created` and `qa_key_revoked`, and `audit_event.actor_role` with `qa`. `review_decision` and `pair_review` role checks are **not** widened.
+- **Why it is needed:** the product owner's decisions of 18/10/2026 (D66–D71) add the `qa` role and self-service QA keys: QA team members, engineers and senior pharmacists create and revoke their own keys for the QA API and the hosted MCP server. No existing table can hold a key, and V8's checks refuse the key events and the `qa` actor role. The key itself is never stored: only its SHA-256 hash, so a database read cannot authenticate.
+- **What it does to existing rows:** nothing. The table is new, and every existing audit row satisfies the widened checks; a constraint change is DDL, so the append-only triggers are not involved. Retention: key rows are kept indefinitely, like decisions, so an audit row's `qa_key` id always resolves; an expired or revoked row authenticates nothing.
+- **How to roll it back:** V9 stays (spec §7.10.2, §12.5). Older images never read or write `ops.qa_key` and never write `qa` or the key events, so they run unchanged on V9 (DB keys then stop authenticating; env keys keep working). A narrowing migration would fail once any `qa` or key audit row exists, because audit rows can never be deleted.
 
 ### V8 `qa_read_audit` (db-schema-v1.3)
 - **The change:** drops `audit_event_event_check` and adds it again with `qa_read` appended. Nothing else: `target_type` has no database check (the new target type `qa_route` is checked by the API's `AuditService`), and `actor_role` stays nullable.

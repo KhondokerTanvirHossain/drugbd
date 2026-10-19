@@ -1,5 +1,5 @@
 import { Fragment, createElement, type ReactNode } from "react";
-import { APPROVED, DESK_NEW, P1C_COPY, UNCLASSIFIED_NOT_LOW_RISK, fill } from "./copy";
+import { APPROVED, DESK_NEW, P1C_COPY, QA_COPY, UNCLASSIFIED_NOT_LOW_RISK, fill } from "./copy";
 import { actsAsPharmacist, type DisplayStatus, type HistoryEntry, type ReviewerRole, type StageKey } from "./review-types";
 
 /*
@@ -123,7 +123,8 @@ export const DESK = {
   noAuthTitle: "Your account can't review this batch.",
   noAuthBody: "Ask the IntelliDrugs team for a reviewer invite, then sign in with the invited Google account. You can still read this record.",
   noAuthPageBody: "Ask the IntelliDrugs team for a reviewer invite, then sign in with the invited Google account.",
-  botError: "We couldn't confirm you're a person. Your decision is kept. Retry the check to continue.",
+  // The bot-check title is QA_COPY's (§5.18 uses the same sentence alone), so the retyping guard sees it once.
+  botError: `${QA_COPY.keys.captchaTitle} Your decision is kept. Retry the check to continue.`,
   retryCheck: "Retry check", checking: "Checking",
   reportIssue: "Report issue", looksCorrect: "Looks correct",
   noteLabel: "What's wrong with this record? An engineer reads this note.",
@@ -271,4 +272,6 @@ export const SHARED_WORDS = {
   status: "Status", substance: "Substance", substances: "Substances", reload: "Reload", bdsId: "BDS id",
   ddinterEntries: "DDInter entries", sources: "Sources", names: "Names", codes: "Codes", route: "Route", strength: "Strength",
   all: "All", ddinter: "DDInter 2.0", drugbank: "DrugBank", icd11: "ICD-11", clinicalDrug: "Clinical drug", severity: "Severity",
+  // QA portal (§5.18): the key list's headers and the API section's "Example", printed already by Learn and ExampleMarker.
+  name: "Name", actions: "Actions", example: "Example",
 } as const;

@@ -47,6 +47,11 @@ const SPEC_ROWS = [
   "Product page \"With other approved medicines\" (cross-batch, grouped by partner substance) and its paging",
   // P2 final review finding 3 (the spec's "*(P2)* " marker removed, as for P1C)
   "Public page could not load (`app/error.tsx`)",
+  // QA portal rows (the spec's "*(QA portal)* " marker removed, as for P1C)
+  "QA role: role badge \"QA\", welcome state, invite role, the \"QA tools\" account-menu item and toolbar link",
+  "QA account on a review page",
+  "QA tools page: heading, \"Connect your AI\", \"API\" and \"Rules\" sections, copy buttons and their announcements, the pharmacist banner",
+  "QA keys: create form, name rules and errors, the one-time key panel, the key list and statuses, revoke confirmation and outcomes, limit, bot-check, sign-in and network failures, load error, no-JavaScript line, announcements",
 ];
 
 describe("§3.6 fixed safety strings", () => {

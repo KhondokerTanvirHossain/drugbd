@@ -9,8 +9,17 @@ final class PilotSeed {
     private PilotSeed() {}
 
     static void migrateAndSeed(PostgreSQLContainer<?> pg) throws Exception {
+        migrateAndSeed(pg, "latest");
+    }
+
+    /**
+     * Migrates up to {@code target} (a version such as "8", or "latest") and seeds. A migration test that asserts the schema
+     * one migration left (V8MigrationIntegrationTest) stops there, so a later migration that widens the same check cannot
+     * break it; the later migration has its own test.
+     */
+    static void migrateAndSeed(PostgreSQLContainer<?> pg, String target) throws Exception {
         Flyway.configure().dataSource(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword())
-            .locations("filesystem:../db/migrations").load().migrate();
+            .locations("filesystem:../db/migrations").target(target).load().migrate();
         try (var c = DriverManager.getConnection(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword()); var s = c.createStatement()) {
             s.execute(SQL);
         }

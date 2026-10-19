@@ -1,0 +1,21 @@
+{
+  "ci": {
+    "collect": {
+      "url": ["http://localhost:3000/review/qa"],
+      "numberOfRuns": 3,
+      "puppeteerScript": "./e2e/lhci-session-qa.cjs",
+      "settings": { "preset": "desktop", "disableStorageReset": true, "blockedUrlPatterns": ["https://challenges.cloudflare.com/*"] }
+    },
+    "assert": {
+      "assertions": {
+        "categories:accessibility": ["error", { "minScore": 1 }],
+        "resource-summary:document:size": ["error", { "maxNumericValue": 51200 }],
+        "resource-summary:script:size": ["error", { "maxNumericValue": 163840 }],
+        "resource-summary:stylesheet:size": ["error", { "maxNumericValue": 25600 }],
+        "resource-summary:font:size": ["error", { "maxNumericValue": 92160 }],
+        "largest-contentful-paint": ["error", { "maxNumericValue": 1500 }]
+      }
+    },
+    "upload": { "target": "filesystem", "outputDir": ".lighthouseci-qa" }
+  }
+}

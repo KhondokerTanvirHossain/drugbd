@@ -2,10 +2,10 @@ import AccountMenu from "@/components/AccountMenu";
 import ThemeSwitch from "@/components/ThemeSwitch";
 import { buttonClass } from "@/components/ui/Button";
 import { initials, newestInReview } from "@/lib/account";
-import { DESK_NEW, P1C_COPY } from "@/lib/copy";
+import { DESK_NEW, P1C_COPY, QA_COPY } from "@/lib/copy";
 import type { KeysSetting } from "@/lib/desk-settings";
 import { DESK, ROLE_LABEL_DESK } from "@/lib/review-copy";
-import { isReviewer } from "@/lib/reviewers";
+import { ROLE_LABEL, canUseQa, isReviewer } from "@/lib/reviewers";
 import type { Session } from "@/lib/session";
 import type { Theme } from "@/lib/theme";
 import KeysSwitch from "./desk/KeysSwitch";
@@ -15,7 +15,7 @@ export { initials, newestInReview };
 
 /**
  * The account menu on /review/* (§6.2): own name and email, role badge and batch, Review desk, Problem reports and
- * partner requests, the theme, "Keyboard shortcuts and settings" (desk only; shown once the desk is running) and the
+ * partner requests, Senior review (seniors), QA tools (qa, engineer, senior; QA portal), the theme, "Keyboard shortcuts and settings" (desk only; shown once the desk is running) and the
  * single-key shortcuts control, then Sign out. Links are plain <a>: leaving /review is a document navigation.
  */
 export default function ReviewAccount({ session, theme, batchId, keys, shortcutsItem }:
@@ -31,9 +31,11 @@ export default function ReviewAccount({ session, theme, batchId, keys, shortcuts
         <p className={styles.who}><b>{name}</b><span>{session.email}</span></p>
         {reviewer && <p><span className="role-badge">{ROLE_LABEL_DESK[session.role]}</span>
           {batchId && <> {DESK.batchPrefix} <span className="mono">{batchId}</span></>}</p>}
+        {session.role === "qa" && <p><span className="role-badge">{ROLE_LABEL.qa}</span></p>}
         {reviewer && <a className={styles.menuLink} href="/review">{DESK.reviewDesk}</a>}
         {reviewer && <a className={styles.menuLink} href="/review/flags">{DESK_NEW.reviewLists.flagsLink}</a>}
         {reviewer && session.role === "senior" && <a className={styles.menuLink} href="/review/pairs">{P1C_COPY.senior.seniorReview}</a>}
+        {canUseQa(session.role) && <a className={styles.menuLink} href="/review/qa">{QA_COPY.role.qaTools}</a>}
         {reviewer && shortcutsItem && (
           <button type="button" className={buttonClass("plain", "sm")} data-desk-open="sheet" hidden>{DESK_NEW.shortcutsMenuItem.item}</button>
         )}
