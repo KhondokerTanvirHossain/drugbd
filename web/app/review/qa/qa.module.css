@@ -31,6 +31,11 @@
 .table td { overflow-wrap: break-word; }
 /* The request path is the one cell that may break anywhere; 16ch keeps it legible and leaves room for its Returns column. */
 .table .request { font-family: var(--font-mono); font-size: 12.5px; white-space: normal; overflow-wrap: anywhere; min-width: 16ch; }
+/* From 40em up there is room for every path on one line, so it never splits mid-identifier ("{concept" | "Id}"). A 1280 px
+   window at 400% zoom is 320 CSS px wide and keeps the narrow rule above. */
+@media (min-width: 40em) {
+  .table .request { white-space: nowrap; }
+}
 .name { font-weight: 600; min-width: 8ch; }
 .actionCell { min-width: 9ch; }
 .confirm { display: flex; flex-direction: column; gap: var(--s2); min-width: 18ch; }

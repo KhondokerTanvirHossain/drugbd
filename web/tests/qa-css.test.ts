@@ -28,9 +28,14 @@ describe("qa.module.css: the two tables stay readable at 320 px", () => {
     expect(r).toMatch(/min-width:\s*16ch/);
   });
 
-  it("nothing in the tables is held on one line except the column headers", () => {
+  it("nothing in the tables is held on one line except the column headers and, from 40em up, the request path", () => {
     const body = css.replace(/\/\*[\s\S]*?\*\//g, "");
-    const nowrap = [...body.matchAll(/([^{}]+)\{[^}]*white-space:\s*nowrap/g)].map((m) => m[1].trim());
-    expect(nowrap).toEqual([".table thead th"]);
+    const nowrap = [...body.matchAll(/([^{}]+)\{[^{}]*white-space:\s*nowrap/g)].map((m) => m[1].trim());
+    expect(nowrap).toEqual([".table thead th", ".table .request"]);
+    // The one-line request path lives only inside the min-width: 40em query, never at 320 px.
+    const wide = body.match(/@media\s*\(min-width:\s*40em\)\s*\{\s*\.table\s+\.request\s*\{([^}]*)\}\s*\}/);
+    expect(wide, "the 40em request rule").not.toBeNull();
+    expect(wide![1]).toMatch(/white-space:\s*nowrap/);
+    expect(body.indexOf("@media (min-width: 40em)")).toBeGreaterThan(body.indexOf(".table .request {"));
   });
 });
