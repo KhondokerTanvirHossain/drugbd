@@ -52,6 +52,8 @@ const SPEC_ROWS = [
   "QA account on a review page",
   "QA tools page: heading, \"Connect your AI\", \"API\" and \"Rules\" sections, copy buttons and their announcements, the pharmacist banner",
   "QA keys: create form, name rules and errors, the one-time key panel, the key list and statuses, revoke confirmation and outcomes, limit, bot-check, sign-in and network failures, load error, no-JavaScript line, announcements",
+  // QA API reference row (the spec's "*(QA API reference)* " marker removed, as for P1C)
+  "QA tools page: the API reference (every request and answer, the endpoint panels with their parameters, examples, key fields and errors, MCP over HTTP)",
 ];
 
 describe("§3.6 fixed safety strings", () => {

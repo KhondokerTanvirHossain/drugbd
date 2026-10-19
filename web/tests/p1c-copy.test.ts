@@ -191,6 +191,7 @@ describe("the P1C rows of §1.7, verbatim", () => {
       ddinterEntries: "DDInter entries", sources: "Sources", names: "Names", codes: "Codes", route: "Route", strength: "Strength",
       all: "All", ddinter: "DDInter 2.0", drugbank: "DrugBank", icd11: "ICD-11", clinicalDrug: "Clinical drug", severity: "Severity",
       name: "Name", actions: "Actions", example: "Example",   // QA portal (§5.18)
+      code: "Code", yes: "Yes", no: "No", endpoints: "Endpoints",   // QA API reference (§1.7 note)
     });
     const values = Object.values(NEW_COPY).flatMap((r) => Object.values(r));
     for (const w of Object.values(SHARED_WORDS)) expect(values).not.toContain(w);

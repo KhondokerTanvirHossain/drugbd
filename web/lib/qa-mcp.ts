@@ -17,8 +17,8 @@ import { siteOrigin } from "./site";
 const HEADERS = { "Cache-Control": "private, no-store", "X-Robots-Tag": "noindex, nofollow" } as const;
 /** The body limit (§7.10.6 step 7), counted while reading. */
 export const MCP_MAX_BODY = 64 * 1024;
-/** The version a request without MCP-Protocol-Version speaks (MCP specification). */
-const DEFAULT_PROTOCOL_VERSION = "2025-03-26";
+/** The version a request without MCP-Protocol-Version speaks (MCP specification); the /review/qa reference names it (§5.18). */
+export const DEFAULT_PROTOCOL_VERSION = "2025-03-26";
 
 type Id = string | number | null;
 

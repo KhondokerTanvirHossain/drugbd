@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allowAccountAction, allowDeniedAudit, allowQaRateLimitedAudit, allowQaUnauthorizedAudit, createLimits } from "@/lib/limits";
+import { QA_RATE_LIMIT, allowAccountAction, allowDeniedAudit, allowQaRateLimitedAudit, allowQaUnauthorizedAudit, createLimits } from "@/lib/limits";
 
 const burst = (allow: (k: string) => boolean, n: number) => Array.from({ length: n }, () => allow("k"));
 
@@ -71,6 +71,8 @@ describe("§9.3 limits", () => {
     expect(burst((k) => l.anonymousDaily.allow(k), 50_001).filter(Boolean)).toHaveLength(50_000);
   });
   it("QA (§7.9.1): 60 requests per minute per key label, sliding", () => {
+    // QA API reference (§5.18): the page's 429 row reads QA_RATE_LIMIT, so the limiter must use the same constant.
+    expect(QA_RATE_LIMIT).toBe(60);
     let now = 0;
     const l = createLimits(() => now);
     expect(burst((k) => l.qa.allow(k), 61).filter(Boolean)).toHaveLength(60);

@@ -22,7 +22,7 @@ describe("QA portal in CI (§10.6, §11.4)", () => {
     expect(c.collect.settings.blockedUrlPatterns).toEqual(["https://challenges.cloudflare.com/*"]);   // the Turnstile script is excluded
     const a = c.assert.assertions;
     expect(a["categories:accessibility"]).toEqual(["error", { minScore: 1 }]);
-    expect(a["resource-summary:document:size"]).toEqual(["error", { maxNumericValue: 51200 }]);
+    expect(a["resource-summary:document:size"]).toEqual(["error", { maxNumericValue: 65536 }]);   // ≤ 64 KB (QA API reference amendment)
     expect(a["resource-summary:script:size"]).toEqual(["error", { maxNumericValue: 163840 }]);
     expect(a["resource-summary:stylesheet:size"]).toEqual(["error", { maxNumericValue: 25600 }]);
     expect(a["largest-contentful-paint"]).toEqual(["error", { maxNumericValue: 1500 }]);
@@ -31,5 +31,14 @@ describe("QA portal in CI (§10.6, §11.4)", () => {
     expect(seed).toBeGreaterThan(ci.indexOf("npx playwright test"));
     expect(run).toBeGreaterThan(seed);
     expect(read("web/e2e/lhci-qa.sql")).toContain("generate_series(1, 50)");
+  });
+
+  it("the spec's §10.6 /review/qa row and the QA API reference note state the HTML budget Lighthouse asserts", () => {
+    const spec = read("docs/superpowers/specs/2026-10-12-intellidrugs-ux-design.md");
+    const kb = JSON.parse(read("web/lighthouserc.qa.json")).ci.assert.assertions["resource-summary:document:size"][1].maxNumericValue / 1024;
+    const row = spec.split("\n").find((l) => l.startsWith("| *(QA portal)* `/review/qa` (laptop, broadband; 50 keys) |"));
+    expect(row?.split("|")[2].trim()).toBe(`≤ ${kb} KB`);
+    const note = spec.split("\n").find((l) => l.startsWith("- *(QA API reference)* The `/review/qa` row"));
+    expect(note).toContain(`the Lighthouse run with 50 keys keeps HTML ≤ ${kb} KB`);
   });
 });

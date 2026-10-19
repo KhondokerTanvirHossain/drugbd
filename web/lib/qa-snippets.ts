@@ -1,6 +1,7 @@
 /*
- * The code shown on /review/qa (§5.18): the MCP and API addresses and the three setup snippets, built from SITE_HOST. Code,
- * not copy (§1.7); the page's component test pins each one. They carry $INTELLIDRUGS_QA_KEY or YOUR_KEY, never a key.
+ * The code shown on /review/qa (§5.18): the MCP and API addresses and the two setup snippets, built from SITE_HOST. Code,
+ * not copy (§1.7); the page's component test pins each one. They carry $INTELLIDRUGS_QA_KEY or YOUR_KEY, never a key. The API
+ * reference's commands are lib/qa-api-reference.ts's (QA API reference, D72).
  */
 /** The §5.18 snippets, exactly, for `host` (SITE_HOST: host[:port]). */
 export function qaSnippets(host: string) {
@@ -19,6 +20,5 @@ export function qaSnippets(host: string) {
       "  }",
       "}",
     ].join("\n"),
-    curl: `curl -H "Authorization: Bearer $INTELLIDRUGS_QA_KEY" "${api}/records?filter=strength_missing"`,
   };
 }

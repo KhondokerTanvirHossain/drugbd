@@ -274,4 +274,6 @@ export const SHARED_WORDS = {
   all: "All", ddinter: "DDInter 2.0", drugbank: "DrugBank", icd11: "ICD-11", clinicalDrug: "Clinical drug", severity: "Severity",
   // QA portal (§5.18): the key list's headers and the API section's "Example", printed already by Learn and ExampleMarker.
   name: "Name", actions: "Actions", example: "Example",
+  // QA API reference (§1.7 note): the reference's "Code" column and "Yes"/"No" (Learn prints them) and "Endpoints" (Learn's heading)
+  code: "Code", yes: "Yes", no: "No", endpoints: "Endpoints",
 } as const;

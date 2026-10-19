@@ -10,17 +10,18 @@ import { listQaKeys } from "@/lib/api";
 import { QA_COPY } from "@/lib/copy";
 import { KEYS_COOKIE, parseKeys } from "@/lib/desk-settings";
 import { cspNonce } from "@/lib/nonce";
-import { QA_FILTERS } from "@/lib/qa-api";
+import { qaReference } from "@/lib/qa-api-reference";
 import { toQaKeyView, type QaKeyView } from "@/lib/qa-key-types";
 import { PREAMBLE, TOOLS } from "@/lib/qa-mcp-tools";
 import { qaSnippets } from "@/lib/qa-snippets";
-import { DESK, SHARED_WORDS } from "@/lib/review-copy";
+import { DESK } from "@/lib/review-copy";
 import { canUseQa } from "@/lib/reviewers";
 import { getSession, type Session } from "@/lib/session";
 import { siteHost } from "@/lib/site";
 import { THEME_COOKIE, parseTheme, type Theme } from "@/lib/theme";
 import { turnstileSiteKey } from "@/lib/turnstile";
 import reviewStyles from "../review.module.css";
+import ApiReference from "./ApiReference";
 import styles from "./qa.module.css";
 
 export const dynamic = "force-dynamic";
@@ -32,18 +33,6 @@ const K = QA_COPY.keys;
 function fillNodes(template: string, nodes: Record<string, ReactNode>): ReactNode[] {
   return template.split(/\{(\w+)\}/).map((part, i) => <Fragment key={i}>{i % 2 === 1 ? nodes[part] ?? `{${part}}` : part}</Fragment>);
 }
-
-const FILTER_TEXT: Record<(typeof QA_FILTERS)[number], string> = {
-  strength_missing: P.filterStrengthMissing, parse_partial: P.filterParsePartial, route_assumed: P.filterRouteAssumed,
-  no_ddinter_data: P.filterNoDdinterData, unaligned: P.filterUnaligned, stage_warn: P.filterStageWarn, stage_fail: P.filterStageFail,
-};
-const ENDPOINTS: [string, string][] = [
-  ["GET /batches", P.returnsBatches],
-  ["GET /batches/{batchId}", P.returnsBatch],
-  ["GET /batches/{batchId}/records/{conceptId}", P.returnsRecord],
-  ["GET /records?filter={filter}", P.returnsRecords],
-  ["GET /substances/{bdsId}/pairs", P.returnsPairs],
-];
 
 function Shell({ session, theme, keys, children }: { session: Session; theme: Theme; keys: "on" | "off"; children: ReactNode }) {
   return (
@@ -59,7 +48,8 @@ function Shell({ session, theme, keys, children }: { session: Session; theme: Th
 }
 
 /**
- * §5.18 QA tools (QA portal, D66, D67, D69, D70): connect your AI, your keys, the API and the rules, for qa, engineer and
+ * §5.18 QA tools (QA portal, D66, D67, D69, D70): connect your AI, your keys, the API (with its full reference, D72) and the
+ * rules, for qa, engineer and
  * senior. A pharmacist gets an info banner with no key read; app/review/layout.tsx has answered anonymous visitors (sign-in)
  * and readers (not authorised). The page reads nothing but the viewer's own key list: no batch, no review read.
  */
@@ -136,27 +126,7 @@ export default async function QaToolsPage() {
           <code id="qa-api-address" className={styles.mono}>{s.api}</code>
           <CopyButton target="qa-api-address" label={P.copyAddress} />
         </div>
-        <div className={styles.scroll} role="region" aria-label={P.endpointsCaption} tabIndex={0}>
-          <table className={styles.table}>
-            <caption className="sr-only">{P.endpointsCaption}</caption>
-            <thead><tr><th scope="col">{P.colRequest}</th><th scope="col">{P.colReturns}</th></tr></thead>
-            <tbody>
-              {ENDPOINTS.map(([request, returns]) => (
-                <tr key={request}><td className={styles.request}>{request}</td><td>{returns}</td></tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <h3>{P.filtersHeading}</h3>
-        <dl className={styles.filters}>
-          {QA_FILTERS.map((f) => (
-            <Fragment key={f}><dt>{f}</dt><dd>{FILTER_TEXT[f]}</dd></Fragment>
-          ))}
-        </dl>
-        <h3>{SHARED_WORDS.example}</h3>
-        <pre id="qa-curl" className={styles.pre}>{s.curl}</pre>
-        <div className={styles.row}><CopyButton target="qa-curl" label={P.copyExample} /></div>
-        <p>{P.envelopeLine}</p>
+        <ApiReference reference={qaReference(siteHost())} />
       </section>
 
       <section className={styles.section} aria-labelledby="rules">

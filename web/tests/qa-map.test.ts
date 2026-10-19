@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MalformedBody, mapBatch, mapBatches, mapPairs, mapRecord, mapRecords } from "@/lib/qa-map";
+import { MalformedBody, QA_PAIRS_SIZE, QA_RECORDS_SIZE, mapBatch, mapBatches, mapPairs, mapRecord, mapRecords } from "@/lib/qa-map";
 import { apiRecord, apiSubstance, SENTINELS, SENTINEL_EMAIL, SENTINEL_NOTE } from "./fixtures/qa";
 
 const keys = (o: unknown) => Object.keys(o as object);
@@ -198,5 +198,13 @@ describe("mapBatches, mapBatch, mapRecords (§7.9.3)", () => {
       items: [{ batchId: "0001-pilot", conceptId: "186-0030-006--napa", tradeName: "Napa", displayStatus: "pending",
         stages: { dgda: "ok", substances: "ok", clinical: "ok", ddinter: "warn" } }] });
     expect(() => mapRecords({ items: [{ stages: [] }] })).toThrow(MalformedBody);
+  });
+});
+
+describe("page sizes (§7.9.3; QA API reference, §5.18)", () => {
+  it("QA_RECORDS_SIZE is the records page size the internal API serves, QA_PAIRS_SIZE the pairs one", () => {
+    expect(QA_RECORDS_SIZE).toBe(100);
+    expect(QA_PAIRS_SIZE).toBe(50);
+    expect(mapPairs(apiSubstance(), "BDS-000003", 0).size).toBe(QA_PAIRS_SIZE);
   });
 });

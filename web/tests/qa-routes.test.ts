@@ -15,7 +15,7 @@ import { GET as recordsGET } from "@/app/api/qa/v1/records/route";
 import { GET as pairsGET } from "@/app/api/qa/v1/substances/[bdsId]/pairs/route";
 import { GET as restGET } from "@/app/api/qa/[[...rest]]/route";
 import { qaKeysForTests } from "@/lib/qa-api";
-import { apiRecord, apiSubstance, SENTINELS } from "./fixtures/qa";
+import { apiBatchItems, apiBatches, apiRecord, apiRecords, apiSubstance, SENTINELS } from "./fixtures/qa";
 
 const TOKEN = "test-internal-token-0123456789abcdef";
 const RID = "3f2b8c1e-5d4a-4c6b-9e7f-0a1b2c3d4e5f";
@@ -32,14 +32,7 @@ const ROUTES: [string, Handler, string][] = [
   ["pairs", pairsGET, "/api/qa/v1/substances/BDS-000003/pairs"],
 ];
 
-const BATCHES = [{ batchId: "0001-pilot", status: "in_review", runAt: "2026-10-11T21:27:17.629Z", itemCount: 10,
-  counts: { approved: 4, issue: 1, needsReview: 5, engineerChecked: 0, backInReview: 0, noData: 1, warnings: 8 } }];
-const BATCH = { batchId: "0001-pilot", status: "in_review", runAt: "2026-10-11T21:27:17.629Z", itemCount: 1,
-  items: [{ conceptId: "186-0030-006--napa", tradeName: "Napa", displayStatus: "pending",
-    stages: [{ stage: "dgda", status: "ok", note: "" }] }] };
-const RECORDS = { filter: "stage_warn", stage: null, batch: null, page: 0, size: 100, total: 1,
-  items: [{ batchId: "0001-pilot", conceptId: "186-0030-006--napa", tradeName: "Napa", displayStatus: "pending",
-    stages: { dgda: "ok", substances: "ok", clinical: "ok", ddinter: "warn" } }] };
+const BATCHES = apiBatches(), BATCH = apiBatchItems(), RECORDS = apiRecords();
 
 const envelope = (data: unknown) => ({ success: true, data, message: "OK", errors: [],
   metadata: { timestamp: "2026-10-18T00:00:00Z", requestId: "00000000-0000-4000-8000-000000000000" } });
