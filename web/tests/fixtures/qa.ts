@@ -96,5 +96,25 @@ export function apiSubstance(): SubstanceDetail & Record<string, unknown> {
   } as unknown as SubstanceDetail & Record<string, unknown>;
 }
 
+/** GET /v1/review/batches: the pilot batch with its counts (qa-routes.test.ts, qa-api-reference.test.ts). */
+export function apiBatches() {
+  return [{ batchId: "0001-pilot", status: "in_review", runAt: "2026-10-11T21:27:17.629Z", itemCount: 10,
+    counts: { approved: 4, issue: 1, needsReview: 5, engineerChecked: 0, backInReview: 0, noData: 1, warnings: 8 } }];
+}
+
+/** GET /v1/qa/batches/{b}/items (§7.9.5): one item with one stage and its stored note. */
+export function apiBatchItems() {
+  return { batchId: "0001-pilot", status: "in_review", runAt: "2026-10-11T21:27:17.629Z", itemCount: 1,
+    items: [{ conceptId: "186-0030-006--napa", tradeName: "Napa", displayStatus: "pending",
+      stages: [{ stage: "dgda", status: "ok", note: "" }] }] };
+}
+
+/** GET /v1/qa/records (§7.9.5): one stage_warn match, no stage or batch sent. */
+export function apiRecords() {
+  return { filter: "stage_warn", stage: null, batch: null, page: 0, size: 100, total: 1,
+    items: [{ batchId: "0001-pilot", conceptId: "186-0030-006--napa", tradeName: "Napa", displayStatus: "pending",
+      stages: { dgda: "ok", substances: "ok", clinical: "ok", ddinter: "warn" } }] };
+}
+
 export const SENTINELS = [SENTINEL_EMAIL, SENTINEL_NOTE, "SENTINEL", "@", HASH, "reviewerEmail", "\"mine\"", "\"note\"", "openIssues",
   "\"reopen\"", "\"version\"", "lastDecisionId", "contentHash", "lastPairReviewId", "interactionId"];
