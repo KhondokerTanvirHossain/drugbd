@@ -225,8 +225,39 @@ test("320 px: no horizontal page scroll with the key panel open (§10.4)", async
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(0);
   await page.getByRole("button", { name: "I've saved it" }).click();
+  await expectTablesReadable(page);
   await revokeKey(page, "Phone");
 });
+
+/**
+ * §5.18/§11.4 reflow: no page scroll is not enough, the tables must stay readable. The endpoints table fits its region, and
+ * outside the request path (which may break anywhere) no word in either table breaks across lines ('18/10/2' / '026').
+ */
+async function expectTablesReadable(page: Page): Promise<void> {
+  const endpoints = page.getByRole("region", { name: "QA API endpoints" });
+  const fit = await endpoints.evaluate((el) => el.scrollWidth - el.clientWidth);
+  expect(fit, "the endpoints table fits its region").toBeLessThanOrEqual(0);
+  for (const name of ["QA API endpoints", "Your QA keys"]) {
+    const split = await page.getByRole("region", { name }).evaluate((region, isEndpoints) => {
+      const out: string[] = [];
+      for (const td of region.querySelectorAll("tbody td")) {
+        if ((isEndpoints && td.matches(":first-child")) || td.querySelector("button")) continue;
+        const walker = document.createTreeWalker(td, NodeFilter.SHOW_TEXT);
+        for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+          for (const m of (n.textContent ?? "").matchAll(/\S+/g)) {
+            const range = document.createRange();
+            range.setStart(n, m.index!);
+            range.setEnd(n, m.index! + m[0].length);
+            const lines = new Set([...range.getClientRects()].filter((r) => r.width > 0).map((r) => Math.round(r.top)));
+            if (lines.size > 1) out.push(m[0]);
+          }
+        }
+      }
+      return out;
+    }, name === "QA API endpoints");
+    expect(split, `${name}: words broken across lines`).toEqual([]);
+  }
+}
 
 for (const role of ["engineer", "senior"] as const) {
   test(`320 px: the toolbar's "QA tools" link, badge and avatar fit for ${role} (§5.18, §10.4)`, async ({ context, page }) => {
