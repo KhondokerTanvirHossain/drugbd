@@ -30,6 +30,65 @@ const mcp = (page: Page, key: string, body: Record<string, unknown>, version?: s
 const keyRow = (page: Page, name: string) => page.getByRole("region", { name: "Your QA keys" }).getByRole("row").filter({ hasText: name }).first();
 const cell = (page: Page, name: string, i: number) => keyRow(page, name).getByRole("cell").nth(i);
 
+// ---- QA API reference (§5.18 section 3, §11.4): the page's own commands, run with a real key.
+
+/** Every path of a JSON value (`a.b[]` for an array's elements) with the JSON types seen there; stored pass-throughs are opaque. */
+type Tree = Map<string, Set<string>>;
+const OPAQUE = new Set(["data.source.json", "data.stages[].evidence"]);
+function tree(v: unknown, path = "", out: Tree = new Map()): Tree {
+  const t = v === null ? "null" : Array.isArray(v) ? "array" : typeof v;
+  if (path) out.set(path, (out.get(path) ?? new Set()).add(t));
+  if (OPAQUE.has(path)) return out;
+  if (Array.isArray(v)) for (const e of v) tree(e, `${path}[]`, out);
+  else if (t === "object") for (const [k, x] of Object.entries(v as object)) tree(x, path ? `${path}.${k}` : k, out);
+  return out;
+}
+const parentOf = (p: string): string | null => p.endsWith("[]") ? p.slice(0, -2) : p.includes(".") ? p.slice(0, p.lastIndexOf(".")) : null;
+/** A path one tree never reached: its nearest recorded ancestor was only ever null, or an array with no element. */
+function unobserved(t: Tree, p: string): boolean {
+  let a = parentOf(p);
+  while (a !== null && !t.has(a)) a = parentOf(a);
+  if (a === null) return false;
+  const types = t.get(a)!;
+  return [...types].every((x) => x === "null") || (types.has("array") && !t.has(`${a}[]`));
+}
+/** The live answer has the example's field names and shapes (not its values): no path either side lacks, but unobserved ones. */
+function expectSameShape(live: unknown, example: unknown, what: string): void {
+  const a = tree(live), b = tree(example);
+  const optional = (p: string) => /(^|\.)history\[\]\./.test(p);   // a history entry's optional keys (§7.9.3)
+  for (const p of a.keys()) if (!b.has(p) && !optional(p)) expect(unobserved(b, p), `${what}: ${p} is not in the example`).toBe(true);
+  for (const p of b.keys()) if (!a.has(p) && !optional(p)) expect(unobserved(a, p), `${what}: ${p} is missing from the answer`).toBe(true);
+}
+/** A command on the page as curl would send it: its URL, -H headers and -d body. */
+function parseCurl(text: string) {
+  const line = text.replace(/ \\\n\s*/g, " ");
+  const url = new URL(/"(https:\/\/[^"]+)"/.exec(line)![1]);
+  const headers = Object.fromEntries([...line.matchAll(/-H "([^"]+)"/g)].map((m) => [m[1].slice(0, m[1].indexOf(": ")), m[1].slice(m[1].indexOf(": ") + 2)]));
+  return { path: url.pathname + url.search, headers, body: /-d '([^']*)'/.exec(line)?.[1] ?? null };
+}
+const REFERENCE_PANELS = ["qa-ref-batches", "qa-ref-batch", "qa-ref-record", "qa-ref-records", "qa-ref-pairs"];
+
+/** Runs each endpoint panel's command and the MCP panel's two with `key`: each answers 200 in its example's shape (§11.4). */
+async function expectReferenceRuns(page: Page, key: string): Promise<void> {
+  const text = async (id: string) => (await page.locator(`#${id}`).textContent()) ?? "";
+  for (const id of REFERENCE_PANELS) {
+    const c = parseCurl(await text(`${id}-command`));
+    expect(c.headers).toEqual({ Authorization: "Bearer $INTELLIDRUGS_QA_KEY" });
+    const res = await page.request.get(c.path, { headers: bearer(key) });
+    expect(res.status(), c.path).toBe(200);
+    expectSameShape(await res.json(), JSON.parse(await text(`${id}-answer`)), c.path);
+  }
+  for (const [command, answer] of [["qa-ref-mcp-init-command", "qa-ref-mcp-init-answer"], ["qa-ref-mcp-call-command", "qa-ref-mcp-call-answer"]]) {
+    const c = parseCurl(await text(command));
+    expect(c.path).toBe("/api/qa/mcp");
+    const res = await page.request.post(c.path, { headers: { ...c.headers, ...bearer(key) }, data: c.body! });
+    expect(res.status(), command).toBe(200);
+    const live = await res.json(), example = JSON.parse(await text(answer));
+    expectSameShape(live, example, command);
+    if (live.result?.content) expectSameShape(JSON.parse(live.result.content[1].text), JSON.parse(example.result.content[1].text), `${command} block 2`);
+  }
+}
+
 /** Creates a key on the open /review/qa page through the form and the (fake) bot check; returns the key the panel shows. */
 async function createKey(page: Page, name: string): Promise<string> {
   await page.getByLabel("Key name").fill(name);
@@ -143,6 +202,9 @@ test("an engineer creates a key, sees it once, uses it, revokes it, and it stops
   expect((await page.request.post("/api/qa/mcp", { headers: { ...MCP_HEADERS, ...bearer(key), Origin: "https://evil.example" },
     data: JSON.stringify({ jsonrpc: "2.0", id: 4, method: "ping" }) })).status()).toBe(403);
 
+  // QA API reference (§11.4): each endpoint panel's command, and the MCP panel's two, run as written with this key.
+  await expectReferenceRuns(page, key);
+
   // Revoke: the next request with it is 401.
   await expect(page.getByText("Bot check passed")).toBeVisible();
   await revokeKey(page, "CI laptop");
@@ -230,18 +292,18 @@ test("320 px: no horizontal page scroll with the key panel open (§10.4)", async
 });
 
 /**
- * §5.18/§11.4 reflow: no page scroll is not enough, the tables must stay readable. The endpoints table fits its region, and
- * outside the request path (which may break anywhere) no word in either table breaks across lines ('18/10/2' / '026').
+ * §5.18/§11.4 reflow: no page scroll is not enough, the tables must stay readable: no word in any table cell breaks across
+ * lines ('18/10/2' / '026'). Every table sits in its own labelled region, which scrolls when a long pattern needs it.
  */
 async function expectTablesReadable(page: Page): Promise<void> {
-  const endpoints = page.getByRole("region", { name: "QA API endpoints" });
-  const fit = await endpoints.evaluate((el) => el.scrollWidth - el.clientWidth);
-  expect(fit, "the endpoints table fits its region").toBeLessThanOrEqual(0);
-  for (const name of ["QA API endpoints", "Your QA keys"]) {
-    const split = await page.getByRole("region", { name }).evaluate((region, isEndpoints) => {
+  const regions = page.locator("main .scroll[role=region]");
+  expect(await regions.count()).toBeGreaterThan(1);
+  for (const region of await regions.all()) {
+    const name = (await region.getAttribute("aria-label")) ?? "";
+    const split = await region.evaluate((el) => {
       const out: string[] = [];
-      for (const td of region.querySelectorAll("tbody td")) {
-        if ((isEndpoints && td.matches(":first-child")) || td.querySelector("button")) continue;
+      for (const td of el.querySelectorAll("tbody td")) {
+        if (td.querySelector("button")) continue;
         const walker = document.createTreeWalker(td, NodeFilter.SHOW_TEXT);
         for (let n = walker.nextNode(); n; n = walker.nextNode()) {
           for (const m of (n.textContent ?? "").matchAll(/\S+/g)) {
@@ -254,10 +316,36 @@ async function expectTablesReadable(page: Page): Promise<void> {
         }
       }
       return out;
-    }, name === "QA API endpoints");
+    });
     expect(split, `${name}: words broken across lines`).toEqual([]);
   }
 }
+
+test("320 px, QA API reference: every panel open, no page scroll; code scrolls in its own region; Enter and Space toggle a panel (§5.18, §11.4)", async ({ context, page }) => {
+  await page.setViewportSize({ width: 320, height: 720 });
+  await signInAs(context, "qa", "Quinn QA");
+  await page.goto("/review/qa");
+  const panels = page.locator("main details.endpoint");
+  await expect(panels).toHaveCount(6);
+  await expect(page.locator("#qa-ref-batches")).toHaveAttribute("open", "");
+  // Keyboard: the native disclosure (no JavaScript needed).
+  const summary = page.locator("#qa-ref-batch > summary");
+  await summary.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.locator("#qa-ref-batch")).toHaveAttribute("open", "");
+  await page.keyboard.press("Space");
+  await expect(page.locator("#qa-ref-batch")).not.toHaveAttribute("open", "");
+  expect(await summary.evaluate((el) => el.getBoundingClientRect().height)).toBeGreaterThanOrEqual(24);
+  await panels.evaluateAll((all) => all.forEach((d) => { (d as HTMLDetailsElement).open = true; }));
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+  // The record's command is wider than 320 px: its region scrolls sideways, the page does not; Tab reaches the region.
+  const region = page.getByRole("region", { name: "Command for GET /api/qa/v1/batches/{batchId}/records/{conceptId}" });
+  expect(await region.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
+  await region.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(() => region.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0);
+  await expectTablesReadable(page);
+});
 
 for (const role of ["engineer", "senior"] as const) {
   test(`320 px: the toolbar's "QA tools" link, badge and avatar fit for ${role} (§5.18, §10.4)`, async ({ context, page }) => {
@@ -315,6 +403,8 @@ for (const look of LOOKS) {
     await expect(keyRow(page, `Axe expired ${look.name}`).getByRole("button")).toHaveCount(0);   // Revoke on active rows only
     await expect(keyRow(page, `Axe revoked ${look.name}`).getByRole("button")).toHaveCount(0);
     await axe(page, "list with every status");
+    await page.locator("main details.endpoint").evaluateAll((all) => all.forEach((d) => { (d as HTMLDetailsElement).open = true; }));
+    await axe(page, "every API reference panel open");
     const name = `Axe ${look.name}`;
     await createKey(page, name);
     await axe(page, "new-key panel");
