@@ -120,6 +120,8 @@ export const NEW_COPY_ROWS = {
   qaAccount: "QA account on a review page",
   qaPage: "QA tools page: heading, \"Connect your AI\", \"API\" and \"Rules\" sections, copy buttons and their announcements, the pharmacist banner",
   qaKeys: "QA keys: create form, name rules and errors, the one-time key panel, the key list and statuses, revoke confirmation and outcomes, limit, bot-check, sign-in and network failures, load error, no-JavaScript line, announcements",
+  // QA API reference (the spec's "*(QA API reference)* " marker removed, as for P1C)
+  qaReference: "QA tools page: the API reference (every request and answer, the endpoint panels with their parameters, examples, key fields and errors, MCP over HTTP)",
 } as const;
 export type NewCopyState = (typeof NEW_COPY_ROWS)[keyof typeof NEW_COPY_ROWS];
 
@@ -414,6 +416,152 @@ const QA_KEYS = {
   loadErrorBody: "Nothing was changed. Check your connection and try again.",
 } as const;
 
+/**
+ * §5.18 section 3 "API" (QA API reference, D72): "Every request and answer", the endpoint panels (request, parameters,
+ * response, key fields, errors) and "MCP over HTTP". Short words other modules print are SHARED_WORDS (status, code, yes,
+ * no, endpoints); the "Returns" sentences, "Copy command", "Copy example" and the envelope line stay QA_PAGE strings.
+ * Not copy (§1.7): commands, example answers, paths, parameter names, patterns, values, headers, field paths, codes and
+ * messages, which app/review/qa/ApiReference.tsx fills into `{name}` placeholders as mono code.
+ */
+const QA_REFERENCE = {
+  // 3a "Every request and answer"
+  commonHeading: "Every request and answer",
+  commonHeader: "Send GET requests with one header, {header}, where {key} is one of your keys. The examples read the key from the INTELLIDRUGS_QA_KEY environment variable, so it stays out of your shell history.",
+  envSuccess: "true for a 200 answer, false for every error.",
+  envData: "The endpoint's data, shown in each panel below. null on an error.",
+  envMessage: "OK, or the error's fixed message.",
+  envErrors: "Empty on success. On an error, one entry: field (the input that was refused or not found, or null), code and message.",
+  envMetadata: "timestamp (UTC) and requestId. Quote requestId when you report a finding or a problem.",
+  errorAnswer: "Error answer",
+  exampleNote: "Anything marked {marker} is an illustration, not a stored record. Its field names and shapes are the API's own.",
+  headersLine: "Answers are JSON and never cached. A 401 answer has the header {auth}; a 429 answer has {retry}, the seconds to wait.",
+  pageLine: "{page} counts from 0. A list answer has {total} and {size}: the last page is {total} divided by {size}, rounded up, minus 1.",
+  notFoundLine: "A path that is not one of the five endpoints answers 404 with no field. No QA answer is ever a 500.",
+  // 3b "Endpoints"
+  endpointsLead: "Open an endpoint to see what to send, an example answer, and the errors it can give.",
+  forRequest: " for {request}",
+  regionLabel: "{label} for {request}",
+  request: "Request",
+  requiredHeader: "Required header: {header}.",
+  paramsCaption: "Parameters for {request}",
+  colParameter: "Parameter",
+  colIn: "In",
+  colRequired: "Required",
+  colRule: "Rule",
+  inPath: "Path",
+  inQuery: "Query",
+  noParams: "This endpoint takes no parameters.",
+  otherParams: "Any other query parameter, or one sent twice, is refused with 400.",
+  command: "Command",
+  response: "Response",
+  answer: "Answer",
+  keyFields: "Key fields",
+  errors: "Errors",
+  errorsCaption: "Errors for {request}",
+  colWhen: "When",
+  colFix: "What to do",
+  // parameter rules
+  ruleBatchId: "1 to {max} letters, digits, dots, underscores or hyphens ({pattern}), as {source} lists it.",
+  ruleConceptId: "1 to {max} characters, with no control characters, exactly as {source} lists it. Percent-encode any character other than a letter, digit, dot, underscore, hyphen or tilde.",
+  ruleFilter: "One of {values}. Problem filters, below, says what each one matches.",
+  ruleStage: "One of {values}, and only with {only}. With any other filter it is refused.",
+  ruleBatch: "A batch id, by the batchId rule ({pattern}). Only that batch's records are listed.",
+  ruleBdsId: "BDS- and six digits ({pattern}), as a record's {source} gives it.",
+  rulePage: "A whole number from 0 to {max}; 0 when left out. {size} a page.",
+  // key fields: batches
+  fieldBatchesBatchId: "The id to use in the other endpoints.",
+  fieldBatchesStatus: "The batch's state: in_review, approved or rejected.",
+  fieldBatchesItemCount: "How many current records the batch holds.",
+  fieldBatchesApprovedCount: "How many of them a pharmacist has approved.",
+  fieldBatchesRunAt: "When the pipeline last ran the batch, in UTC.",
+  // key fields: batch
+  fieldBatchConceptId: "The record's DGDA concept id, for the record endpoint.",
+  fieldBatchDisplayStatus: "The review state: pending, engineer_checked, approved, issue or back_in_review.",
+  fieldBatchStage: "dgda, substances, clinical or ddinter, in pipeline order. A stage with no result is left out.",
+  fieldBatchStageStatus: "ok, warn or fail.",
+  fieldBatchStageNote: "The pipeline's note for that stage, whole.",
+  // key fields: record
+  fieldRecordSourceJson: "The DGDA register record exactly as stored. Check the extraction against it.",
+  fieldRecordSourceLink: "The register page to cite for the source.",
+  fieldRecordStrength: "The parsed strength, with strengthUnit, perValue and perUnit. null means none was found.",
+  fieldRecordCodes: "Each code with its system, method, confidence and source link.",
+  fieldRecordCoverage: "full, none or not_run. none never means a combination is safe.",
+  fieldRecordChosen: "The DDInter entries chosen for the product's route, and whether the route was assumed.",
+  fieldRecordRoute: "The route used to choose DDInter entries. Compare routeAssumed with the ddinter stage's evidence.",
+  fieldRecordEvidence: "What the pipeline stored for that stage, unchanged.",
+  fieldRecordTextMissing: "true where DDInter has no interaction or management text for the pair.",
+  fieldRecordOtherPairs: "Pairs with records in other batches. partnerCount counts every partner.",
+  fieldRecordHistory: "Runs and decisions, oldest first: role, time and decision only.",
+  // key fields: records
+  fieldRecordsTotal: "How many current records match.",
+  fieldRecordsPage: "This page's index, from 0, with size records a page.",
+  fieldRecordsStage: "The stage you sent, or null.",
+  fieldRecordsBatch: "The batch you sent, or null.",
+  fieldRecordsItems: "The matching records, by batch id, then concept id.",
+  fieldRecordsStages: "Each stage's status: ok, warn, fail, or null when the stage has no result.",
+  // key fields: pairs
+  fieldPairsTotal: "How many stored DDInter pairs link this substance with another substance we hold. 50 a page.",
+  fieldPairsEntry: "This substance's DDInter entry in the pair, with its route scope.",
+  fieldPairsPartner: "The other substance and its entry. When both sides are this substance, side b.",
+  fieldPairsSeverity: "DDInter's severity: major, moderate, minor or unknown.",
+  fieldPairsInteraction: "DDInter's interaction text as stored, like management. null when DDInter has none.",
+  fieldPairsApplies: "true when a medicine we hold is checked against both entries for its route.",
+  fieldPairsReview: "The senior review state and time: not_reviewed, reviewed, changed or issue.",
+  fieldPairsChanges: "What changed in DDInter since the review. Only when the state is changed.",
+  // errors
+  when400: "{field} is the first input refused: {fields}, or a query parameter this endpoint doesn't take, or one sent twice.",
+  when400None: "{field} is the query parameter you sent: this endpoint takes none.",
+  fix400: "Fix that input by the rule in Parameters, then send again.",
+  when401: "The Authorization header is missing or malformed, the key is unknown, expired or revoked, or your account no longer has QA access. The answer never says which.",
+  fix401: "Check the header is Authorization: Bearer and your key. In Your keys, check the key is Active; if it isn't, create a new one.",
+  when404: "{field} names the id that wasn't found: {fields}.",
+  fix404: "Check the id. Ids are case-sensitive: copy them from another answer.",
+  when429: "Your key made more than {limit} requests in a minute, counting the API and the MCP server together.",
+  fix429: "Wait the seconds in Retry-After, then send again. A plain-text 429 without the envelope is the site's per-address limit: send fewer requests a second.",
+  when502: "IntelliDrugs couldn't read the data, or couldn't record the read.",
+  fix502: "Try again in a minute. If it keeps failing, report it with metadata.requestId.",
+  // 3d "MCP over HTTP"
+  mcpHeading: "MCP over HTTP",
+  mcpLead: "The MCP server address takes the same keys and returns the same data over JSON-RPC 2.0. Your AI client sends these requests for you; use this to test the server from a script.",
+  mcpReturns: "JSON-RPC 2.0 for AI clients and scripts: initialize, then list and call the five tools.",
+  headersCaption: "Headers for {request}",
+  colHeader: "Header",
+  colValue: "Value",
+  acceptLine: "Accept may be left out; if you send it, it must allow application/json.",
+  versionLine: "Send MCP-Protocol-Version on every request after initialize, with the version initialize returned. Without it the server assumes {default}. Supported versions: {versions}.",
+  bodyLine: "Send one JSON-RPC 2.0 message per request, at most {max} KiB, and get one JSON answer. A batch (a JSON array) is refused. The server answers {methods}; a notification gets 202 with no body. It keeps no session between requests.",
+  initializeHeading: "Initialize",
+  initializeLead: "Ask for a protocol version. The answer gives the version to send in MCP-Protocol-Version, the server's name and version, and the rules as instructions.",
+  callHeading: "Call a tool",
+  callLead: "The result has two text blocks: the rules, then the answer of the matching endpoint as indented JSON, here the same envelope as {path}. Parse the second block's text as JSON.",
+  toolsHeading: "Tools",
+  toolsCaption: "MCP tools",
+  colTool: "Tool",
+  colArguments: "Arguments",
+  colSameData: "Same data as",
+  argRequired: " required",
+  argOptional: " optional",
+  noArguments: "No arguments.",
+  argsLine: "Arguments follow the rules in each endpoint's Parameters. {page} is a JSON integer, not text. A tool refuses any argument it doesn't list, and a {batchId}, {batch} or {conceptId} of {dot} or {dotdot}.",
+  colRpcCode: "JSON-RPC code",
+  colMessage: "Message",
+  mcpFix405: "Send POST.",
+  mcpFix403: "Leave out Origin, or send this site's own address.",
+  mcpFix502: "Your key couldn't be checked. Try again in a minute.",
+  mcpFix415: "Send Content-Type: application/json.",
+  mcpFix406: "Leave out Accept, or allow application/json in it.",
+  mcpFix413: "Keep the body under {max} KiB.",
+  mcpFixParse: "Send one JSON value in UTF-8.",
+  mcpFixInvalidRequest: 'Send one object with jsonrpc "2.0", a method, and a string or number id. Never an array.',
+  mcpFixVersion: "Send a supported MCP-Protocol-Version, or leave it out.",
+  mcpFixParams: "initialize needs params.protocolVersion; tools/call needs params.name, and arguments must be an object.",
+  mcpFixMethod: "Use initialize, ping, tools/list or tools/call.",
+  mcpFixInternal: "Try again. If it keeps failing, tell the IntelliDrugs team when it happened.",
+  mcpFixInput: "Fix that argument by the rule of the endpoint's parameter.",
+  mcpFixUnknownTool: "Use a tool name from tools/list.",
+  mcpFixQaError: "See that status in the endpoint's Errors table.",
+} as const;
+
 /** Strings per §1.7 state. Empty records are filled by the plan that builds that state (P1B, P2, P3; the QA portal page). */
 export const NEW_COPY: Record<NewCopyState, Record<string, string>> = {
   [NEW_COPY_ROWS.decisionUnconfirmed]: {
@@ -644,6 +792,7 @@ export const NEW_COPY: Record<NewCopyState, Record<string, string>> = {
   [NEW_COPY_ROWS.qaAccount]: QA_ACCOUNT,
   [NEW_COPY_ROWS.qaPage]: QA_PAGE,
   [NEW_COPY_ROWS.qaKeys]: QA_KEYS,
+  [NEW_COPY_ROWS.qaReference]: QA_REFERENCE,
 };
 /** Typed shortcut for the sign-in row. */
 export const SIGN_IN_STATES = NEW_COPY[NEW_COPY_ROWS.signIn] as {
@@ -694,7 +843,7 @@ export const P1C_COPY = {
 } as const;
 
 /** Typed views of the QA portal rows (§1.7), so modules never index NEW_COPY by row text. */
-export const QA_COPY = { role: QA_ROLE, account: QA_ACCOUNT, page: QA_PAGE, keys: QA_KEYS } as const;
+export const QA_COPY = { role: QA_ROLE, account: QA_ACCOUNT, page: QA_PAGE, keys: QA_KEYS, reference: QA_REFERENCE } as const;
 
 /** Learn (§6.8): the date suffix after a snapshot-only value, and the footer's batch line. */
 export const LEARN_NEW = NEW_COPY[NEW_COPY_ROWS.learnSnapshotDate] as Record<"asStored", string>;
