@@ -74,6 +74,12 @@ export function mapBatch(data: unknown): QaBatch {
 
 // ---- GET /api/qa/v1/records
 
+/**
+ * The records page size the internal API serves (§7.9.3, §7.9.5). Documentation only: mapRecords copies `size` from the
+ * body; the /review/qa reference (§5.18) reads this for its page rule.
+ */
+export const QA_RECORDS_SIZE = 100;
+
 export type QaRecords = {
   filter: Scalar; stage: Scalar; batch: Scalar; page: Scalar; size: Scalar; total: Scalar;
   items: { batchId: Scalar; conceptId: Scalar; tradeName: Scalar; displayStatus: Scalar;

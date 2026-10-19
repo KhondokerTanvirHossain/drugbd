@@ -27,6 +27,13 @@ describe("CopyButton (§4.2, §5.18)", () => {
     expect(screen.getByRole("button", { name: "Copy command" }).hidden).toBe(false);
   });
 
+  it("context (QA API reference, §4.2): sr-only text after the visible label, so many buttons have distinct names", () => {
+    expect(renderToStaticMarkup(<CopyButton target="x" label="Copy command" context=" for GET /api/qa/v1/batches" />))
+      .toBe('<button hidden="" type="button" class="btn btn--plain btn--sm">Copy command<span class="sr-only"> for GET /api/qa/v1/batches</span></button>');
+    render(<><pre id="a">one</pre><CopyButton target="a" label="Copy example" context=" for initialize" /></>);
+    expect(screen.getByRole("button", { name: "Copy example for initialize" })).toBeTruthy();
+  });
+
   it("writes the target's text, read at press time, and announces Copied.", async () => {
     const writeText = vi.fn(async (_t: string) => {});
     vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });

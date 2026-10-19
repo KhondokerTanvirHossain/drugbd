@@ -27,7 +27,8 @@ import { GET as recordGET } from "@/app/api/qa/v1/batches/[batchId]/records/[con
 import { GET as recordsGET } from "@/app/api/qa/v1/records/route";
 import { GET as pairsGET } from "@/app/api/qa/v1/substances/[bdsId]/pairs/route";
 import { qaKeysForTests } from "@/lib/qa-api";
-import { PREAMBLE, SERVER_NAME, SERVER_VERSION, TOOLS } from "@/lib/qa-mcp-tools";
+import { DEFAULT_PROTOCOL_VERSION } from "@/lib/qa-mcp";
+import { PREAMBLE, SERVER_NAME, SERVER_VERSION, SUPPORTED_PROTOCOL_VERSIONS, TOOLS } from "@/lib/qa-mcp-tools";
 import { apiRecord, apiSubstance, SENTINELS } from "./fixtures/qa";
 
 const TOKEN = "test-internal-token-0123456789abcdef";
@@ -306,6 +307,11 @@ describe("the §7.10.6 checks, in order", () => {
     const init = await result(await send(rpc("initialize", { protocolVersion: "2025-06-18", capabilities: {},
       clientInfo: { name: "t", version: "1" } }), { headers: { "mcp-protocol-version": "1999-01-01" } }));
     expect(init.protocolVersion).toBe("2025-06-18");
+  });
+
+  it("DEFAULT_PROTOCOL_VERSION (exported for the QA API reference, §5.18) is the version an absent header speaks", () => {
+    expect(DEFAULT_PROTOCOL_VERSION).toBe("2025-03-26");
+    expect(SUPPORTED_PROTOCOL_VERSIONS).toContain(DEFAULT_PROTOCOL_VERSION);
   });
 });
 

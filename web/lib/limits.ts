@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
 import { accountKey, createDailyCounter, createRateLimiter, createWindowLimiter } from "./rate-limit";
 
+/** QA API and hosted MCP (§7.9.1): requests per minute per key label. The /review/qa reference's 429 row reads it (§5.18). */
+export const QA_RATE_LIMIT = 60;
+
 /** Every limit in spec §9.3. In memory, single process. */
 export function createLimits(now: () => number = Date.now, overrides: { anonymousDaily?: number; accountDaily?: number } = {}) {
   return {
@@ -17,7 +20,7 @@ export function createLimits(now: () => number = Date.now, overrides: { anonymou
     /** decision_denied audit rows (§5.15, §7.6): 1 per minute per (actor, outcome); at most 10,000 keys (LRU). */
     deniedAudit: createWindowLimiter({ limit: 1, windowMs: 60_000, now, maxKeys: 10_000 }),
     /** QA API (§7.9.1): 60 requests per minute per key label, sliding; every authenticated request counts. */
-    qa: createWindowLimiter({ limit: 60, windowMs: 60_000, now }),
+    qa: createWindowLimiter({ limit: QA_RATE_LIMIT, windowMs: 60_000, now }),
     /** Throttled qa_read rows (§7.9.6): 1 per minute per (route, hashed IP) for 401s and per label for 429s; 10,000 keys (LRU). */
     qaDeniedAudit: createWindowLimiter({ limit: 1, windowMs: 60_000, now, maxKeys: 10_000 }),
     /** QA portal (§7.10.4): a DB key's last-used touch, 1 per minute per key id (the API guards the same minute); 10,000 keys (LRU). */
