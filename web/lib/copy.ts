@@ -122,6 +122,8 @@ export const NEW_COPY_ROWS = {
   qaKeys: "QA keys: create form, name rules and errors, the one-time key panel, the key list and statuses, revoke confirmation and outcomes, limit, bot-check, sign-in and network failures, load error, no-JavaScript line, announcements",
   // QA API reference (the spec's "*(QA API reference)* " marker removed, as for P1C)
   qaReference: "QA tools page: the API reference (every request and answer, the endpoint panels with their parameters, examples, key fields and errors, MCP over HTTP)",
+  // QA guide (the spec's "*(QA guide)* " marker removed, as for P1C)
+  qaGuide: "QA tools page: the six-tools line and the MCP panel's QA guide part (its heading, lead and result line, the resource error fix, and the amended arguments line and MCP fixes)",
 } as const;
 export type NewCopyState = (typeof NEW_COPY_ROWS)[keyof typeof NEW_COPY_ROWS];
 
@@ -319,7 +321,7 @@ const QA_PAGE = {
   cursorHelp: "Replace YOUR_KEY with your key. Keep this file out of version control.",
   oauthHeading: "claude.ai and ChatGPT",
   oauthBody: "Their connectors sign in with OAuth, which IntelliDrugs does not offer. Use Claude Code, Cursor or another client that can send an Authorization header.",
-  toolsLine: "The server has five read-only tools: {t1}, {t2}, {t3}, {t4} and {t5}. A local version that runs on your computer is in {path}.",
+  toolsLine: "The server has six read-only tools: {t1}, {t2}, {t3}, {t4}, {t5} and {t6}. {t6} gives your AI the QA guide: how the data is built, which source to check each field against, and how to report a finding. A local version that runs on your computer is in {path}.",
   apiHeading: "API",
   apiLead: "The same data over HTTPS, for scripts. Send your key in the Authorization header. Each key may make 60 requests a minute, shared with the MCP server.",
   apiBaseLabel: "API base address",
@@ -520,7 +522,7 @@ const QA_REFERENCE = {
   // 3d "MCP over HTTP"
   mcpHeading: "MCP over HTTP",
   mcpLead: "The MCP server address takes the same keys and returns the same data over JSON-RPC 2.0. Your AI client sends these requests for you; use this to test the server from a script.",
-  mcpReturns: "JSON-RPC 2.0 for AI clients and scripts: initialize, then list and call the five tools.",
+  mcpReturns: "JSON-RPC 2.0 for AI clients and scripts: initialize, then list and call the six tools and read the QA guide.",
   headersCaption: "Headers for {request}",
   colHeader: "Header",
   colValue: "Value",
@@ -531,6 +533,9 @@ const QA_REFERENCE = {
   initializeLead: "Ask for a protocol version. The answer gives the version to send in MCP-Protocol-Version, the server's name and version, and the rules as instructions.",
   callHeading: "Call a tool",
   callLead: "The result has two text blocks: the rules, then the answer of the matching endpoint as indented JSON, here the same envelope as {path}. Parse the second block's text as JSON.",
+  guideHeading: "Read the QA guide",
+  guideLead: "The QA guide tells your AI how IntelliDrugs data is built, which source to check each field against, the known traps and how to report a finding. List its topics with resources/list, then read one with resources/read and its uri, or call {tool} with a {topic}. Each topic is Markdown, and {version} changes whenever the guide does.",
+  guideResultLine: "A {tool} result has the same two text blocks as any tool; the second is JSON with {fields}.",
   toolsHeading: "Tools",
   toolsCaption: "MCP tools",
   colTool: "Tool",
@@ -539,7 +544,7 @@ const QA_REFERENCE = {
   argRequired: " required",
   argOptional: " optional",
   noArguments: "No arguments.",
-  argsLine: "Arguments follow the rules in each endpoint's Parameters. {page} is a JSON integer, not text. A tool refuses any argument it doesn't list, and a {batchId}, {batch} or {conceptId} of {dot} or {dotdot}.",
+  argsLine: "Arguments follow the rules in each endpoint's Parameters. {page} is a JSON integer, not text. {topic} is one of {topics}, or left out. A tool refuses any argument it doesn't list, and a {batchId}, {batch} or {conceptId} of {dot} or {dotdot}.",
   colRpcCode: "JSON-RPC code",
   colMessage: "Message",
   mcpFix405: "Send POST.",
@@ -551,10 +556,11 @@ const QA_REFERENCE = {
   mcpFixParse: "Send one JSON value in UTF-8.",
   mcpFixInvalidRequest: 'Send one object with jsonrpc "2.0", a method, and a string or number id. Never an array.',
   mcpFixVersion: "Send a supported MCP-Protocol-Version, or leave it out.",
-  mcpFixParams: "initialize needs params.protocolVersion; tools/call needs params.name, and arguments must be an object.",
-  mcpFixMethod: "Use initialize, ping, tools/list or tools/call.",
+  mcpFixParams: "initialize needs params.protocolVersion; tools/call needs params.name, and arguments must be an object; resources/read needs params.uri.",
+  mcpFixResource: "Use a uri from resources/list.",
+  mcpFixMethod: "Use initialize, ping, tools/list, tools/call, resources/list, resources/templates/list or resources/read.",
   mcpFixInternal: "Try again. If it keeps failing, tell the IntelliDrugs team when it happened.",
-  mcpFixInput: "Fix that argument by the rule of the endpoint's parameter.",
+  mcpFixInput: "Fix that argument by the rule of the endpoint's parameter. For topic, use one of the guide's topics.",
   mcpFixUnknownTool: "Use a tool name from tools/list.",
   mcpFixQaError: "See that status in the endpoint's Errors table.",
 } as const;
@@ -565,6 +571,16 @@ const QA_REFERENCE = {
  * and the node tests get the full row; an island must never read QA_COPY.reference.
  */
 const QA_REFERENCE_ROW = (typeof window === "undefined" ? QA_REFERENCE : {}) as typeof QA_REFERENCE;
+/**
+ * §1.7 (QA guide): the QA guide row is a view of strings that live in QA_PAGE and QA_REFERENCE (one source each), server-only
+ * like the reference row. The guide's own text, titles and summaries are machine-facing (lib/qa-guide.ts), never page copy.
+ */
+const QA_GUIDE_ROW = (typeof window === "undefined" ? {
+  toolsLine: QA_PAGE.toolsLine, mcpReturns: QA_REFERENCE.mcpReturns, guideHeading: QA_REFERENCE.guideHeading,
+  guideLead: QA_REFERENCE.guideLead, guideResultLine: QA_REFERENCE.guideResultLine, mcpFixResource: QA_REFERENCE.mcpFixResource,
+  argsLine: QA_REFERENCE.argsLine, mcpFixParams: QA_REFERENCE.mcpFixParams, mcpFixMethod: QA_REFERENCE.mcpFixMethod,
+  mcpFixInput: QA_REFERENCE.mcpFixInput,
+} : {}) as Record<string, string>;
 
 /** Strings per §1.7 state. Empty records are filled by the plan that builds that state (P1B, P2, P3; the QA portal page). */
 export const NEW_COPY: Record<NewCopyState, Record<string, string>> = {
@@ -797,6 +813,7 @@ export const NEW_COPY: Record<NewCopyState, Record<string, string>> = {
   [NEW_COPY_ROWS.qaPage]: QA_PAGE,
   [NEW_COPY_ROWS.qaKeys]: QA_KEYS,
   [NEW_COPY_ROWS.qaReference]: QA_REFERENCE_ROW,
+  [NEW_COPY_ROWS.qaGuide]: QA_GUIDE_ROW,
 };
 /** Typed shortcut for the sign-in row. */
 export const SIGN_IN_STATES = NEW_COPY[NEW_COPY_ROWS.signIn] as {

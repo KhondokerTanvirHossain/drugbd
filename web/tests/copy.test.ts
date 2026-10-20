@@ -54,6 +54,8 @@ const SPEC_ROWS = [
   "QA keys: create form, name rules and errors, the one-time key panel, the key list and statuses, revoke confirmation and outcomes, limit, bot-check, sign-in and network failures, load error, no-JavaScript line, announcements",
   // QA API reference row (the spec's "*(QA API reference)* " marker removed, as for P1C)
   "QA tools page: the API reference (every request and answer, the endpoint panels with their parameters, examples, key fields and errors, MCP over HTTP)",
+  // QA guide row (the spec's "*(QA guide)* " marker removed, as for P1C)
+  "QA tools page: the six-tools line and the MCP panel's QA guide part (its heading, lead and result line, the resource error fix, and the amended arguments line and MCP fixes)",
 ];
 
 describe("§3.6 fixed safety strings", () => {

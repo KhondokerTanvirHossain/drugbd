@@ -31,6 +31,7 @@ vi.mock("@/components/qa/CopyButton", () => ({ default: ({ target, label, contex
 import QaToolsPage from "@/app/review/qa/page";
 import { QA_FILTERS } from "@/lib/qa-api";
 import { codeBlocks, qaReference } from "@/lib/qa-api-reference";
+import { GUIDE, GUIDE_TOPICS } from "@/lib/qa-guide";
 import { PREAMBLE, TOOLS } from "@/lib/qa-mcp-tools";
 
 const ENG = { email: "eng@example.org", name: "Eng Ineer", role: "engineer" as const };
@@ -96,7 +97,8 @@ describe("/review/qa for qa, engineer and senior (§5.18)", () => {
   it("the tool names come from TOOLS and the filter names from QA_FILTERS; the Rules list is the PREAMBLE, line by line", async () => {
     const html = unescape(await render());
     const tools = TOOLS.map((t) => `<code class="mono">${t.name}</code>`);
-    expect(html).toContain(`The server has five read-only tools: ${tools.slice(0, 4).join(", ")} and ${tools[4]}. A local version that runs on your computer is in <code class="mono">tools/qa-mcp</code>.`);
+    expect(TOOLS).toHaveLength(6);
+    expect(html).toContain(`The server has six read-only tools: ${tools.slice(0, 5).join(", ")} and ${tools[5]}. ${tools[5]} gives your AI the QA guide: how the data is built, which source to check each field against, and how to report a finding. A local version that runs on your computer is in <code class="mono">tools/qa-mcp</code>.`);
     const filters = html.slice(html.indexOf('<h3 id="qa-api-filters">'), html.indexOf("</dl>", html.indexOf('<h3 id="qa-api-filters">')));
     const dts = [...filters.matchAll(/<dt>([a-z_]+)<\/dt>/g)].map((m) => m[1]);
     expect(dts).toEqual([...QA_FILTERS]);
@@ -242,7 +244,7 @@ describe("/review/qa API reference (§5.18 section 3)", () => {
       "One record in full: DGDA source, extraction, codes with source links, stages, pairs and decision history.",
       "Records with a problem, 100 a page. Optional: stage (with stage_warn only), batch and page.",
       "One substance's DDInter pairs, 50 a page. Optional: page.",
-      "JSON-RPC 2.0 for AI clients and scripts: initialize, then list and call the five tools."];
+      "JSON-RPC 2.0 for AI clients and scripts: initialize, then list and call the six tools and read the QA guide."];
     expect([...api.matchAll(/<summary class="summary"><code class="summaryPath">([^<]+)<\/code><span class="summaryText">([^<]+)<\/span><\/summary>/g)]
       .map((m) => [m[1], m[2]])).toEqual([...REQUESTS, "POST /api/qa/mcp"].map((r, i) => [r, returns[i]]));
   });
@@ -252,7 +254,8 @@ describe("/review/qa API reference (§5.18 section 3)", () => {
     const api = unescape(apiSection(html));
     const h4 = (id: string) => [...panel(api, id).matchAll(/<h4>([^<]+)<span class="sr-only">([^<]+)<\/span><\/h4>/g)].map((m) => m[1] + m[2]);
     IDS.forEach((id, i) => expect(h4(id)).toEqual(["Request", "Response", "Errors"].map((h) => `${h} for ${REQUESTS[i]}`)));
-    expect(h4("qa-ref-mcp")).toEqual(["Request", "Initialize", "Call a tool", "Tools", "Errors"].map((h) => `${h} for POST /api/qa/mcp`));
+    expect(h4("qa-ref-mcp")).toEqual(["Request", "Initialize", "Call a tool", "Read the QA guide", "Tools", "Errors"]
+      .map((h) => `${h} for POST /api/qa/mcp`));
     const levels = [...html.matchAll(/<h([1-6])[ >]/g)].map((m) => Number(m[1]));
     levels.forEach((l, i) => { if (i > 0) expect(l, `heading ${i}`).toBeLessThanOrEqual(levels[i - 1] + 1); });
     expect(levels).toContain(4);
@@ -279,7 +282,7 @@ describe("/review/qa API reference (§5.18 section 3)", () => {
   it("every command and example answer is qaReference(SITE_HOST)'s, in its labelled region, with Example and a copy button that targets it", async () => {
     const api = unescape(apiSection(await render()));
     const blocks = codeBlocks(qaReference(HOST));
-    expect(blocks).toHaveLength(15);
+    expect(blocks).toHaveLength(17);
     for (const b of blocks) {
       expect(api).toContain(`<div class="codeRegion" role="region" tabindex="0" aria-label="${b.region}"><pre id="${b.id}" class="codeBlock">${b.text}</pre></div>`);
       const context = b.context ? `<span class="sr-only">${b.context}</span>` : "";
@@ -287,6 +290,8 @@ describe("/review/qa API reference (§5.18 section 3)", () => {
     }
     expect(api).toContain('aria-label="Command for GET /api/qa/v1/batches"');
     expect(api).toContain('aria-label="Answer for initialize"');
+    expect(api).toContain('aria-label="Command for resources/list"');
+    expect(api).toContain('aria-label="Answer for resources/list"');
     expect(api).toContain('aria-label="Error answer"');
     expect(api).toContain('<pre id="qa-ref-batches-command" class="codeBlock">curl -H "Authorization: Bearer $INTELLIDRUGS_QA_KEY" "https://drugdb.example.org/api/qa/v1/batches"</pre>');
     expect(api).toContain('<pre id="qa-ref-records-command" class="codeBlock">curl -H "Authorization: Bearer $INTELLIDRUGS_QA_KEY" "https://drugdb.example.org/api/qa/v1/records?filter=stage_warn&stage=ddinter&batch=0001-pilot&page=0"</pre>');
@@ -363,7 +368,7 @@ describe("/review/qa API reference (§5.18 section 3)", () => {
     expect(panel(api, "qa-ref-batch")).toContain('<td><code class="mono">INVALID_QUERY</code></td>');
   });
 
-  it("MCP over HTTP: lead, address, headers, the three lines, initialize, call a tool, the tools from TOOLS and the errors", async () => {
+  it("MCP over HTTP: lead, address, headers, the three lines, initialize, call a tool, the QA guide, the tools from TOOLS and the errors", async () => {
     const api = unescape(apiSection(await render()));
     expect(api).toContain("<p>The MCP server address takes the same keys and returns the same data over JSON-RPC 2.0. Your AI client sends these requests for you; use this to test the server from a script.</p>");
     const p = panel(api, "qa-ref-mcp");
@@ -372,9 +377,16 @@ describe("/review/qa API reference (§5.18 section 3)", () => {
       ["Content-Type", "application/json", "Yes"], ["Accept", "application/json, text/event-stream", "No"], ["MCP-Protocol-Version", "2025-11-25", "No"]]);
     expect(p).toContain("<p>Accept may be left out; if you send it, it must allow application/json.</p>");
     expect(strip(p)).toContain("Send MCP-Protocol-Version on every request after initialize, with the version initialize returned. Without it the server assumes 2025-03-26. Supported versions: 2025-11-25, 2025-06-18, 2025-03-26.");
-    expect(strip(p)).toContain("Send one JSON-RPC 2.0 message per request, at most 64 KiB, and get one JSON answer. A batch (a JSON array) is refused. The server answers initialize, ping, tools/list, tools/call; a notification gets 202 with no body. It keeps no session between requests.");
+    expect(strip(p)).toContain("Send one JSON-RPC 2.0 message per request, at most 64 KiB, and get one JSON answer. A batch (a JSON array) is refused. The server answers initialize, ping, tools/list, tools/call, resources/list, resources/templates/list, resources/read; a notification gets 202 with no body. It keeps no session between requests.");
     expect(p).toContain("<p>Ask for a protocol version. The answer gives the version to send in MCP-Protocol-Version, the server's name and version, and the rules as instructions.</p>");
     expect(p).toContain('<p>The result has two text blocks: the rules, then the answer of the matching endpoint as indented JSON, here the same envelope as <code class="mono">GET /api/qa/v1/batches</code>. Parse the second block\'s text as JSON.</p>');
+    expect(p).toContain('<p>The QA guide tells your AI how IntelliDrugs data is built, which source to check each field against, the known traps and how to report a finding. List its topics with resources/list, then read one with resources/read and its uri, or call <code class="mono">get_qa_guide</code> with a <code class="mono">topic</code>. Each topic is Markdown, and <code class="mono">guideVersion</code> changes whenever the guide does.</p>');
+    expect(strip(p)).toContain("A get_qa_guide result has the same two text blocks as any tool; the second is JSON with guideVersion, topic, title, text, related.");
+    // only the topic list: the guide's own text is never on the page (§5.18, §7.11)
+    for (const t of GUIDE_TOPICS) {
+      expect(p).toContain(GUIDE[t].summary);
+      for (const line of GUIDE[t].text.split("\n").filter((l) => l.length > 40)) expect(api).not.toContain(line);
+    }
     const tools = rows(tableBy(p, "MCP tools"));
     expect(tools[0]).toEqual(["Tool", "Arguments", "Same data as"]);
     expect(tools.slice(1)).toEqual([
@@ -383,20 +395,26 @@ describe("/review/qa API reference (§5.18 section 3)", () => {
       ["get_record", "batchId required, conceptId required", "GET /api/qa/v1/batches/{batchId}/records/{conceptId}"],
       ["find_records", "filter required, stage optional, batch optional, page optional", "GET /api/qa/v1/records"],
       ["get_pairs", "bdsId required, page optional", "GET /api/qa/v1/substances/{bdsId}/pairs"],
+      ["get_qa_guide", "topic optional", "intellidrugs://qa-guide/{topic}"],
     ]);
     expect(tools.slice(1).map((r) => r[0])).toEqual(TOOLS.map((t) => t.name));
-    expect(strip(p)).toContain("Arguments follow the rules in each endpoint's Parameters. page is a JSON integer, not text. A tool refuses any argument it doesn't list, and a batchId, batch or conceptId of . or ...");
+    expect(strip(p)).toContain("Arguments follow the rules in each endpoint's Parameters. page is a JSON integer, not text. topic is one of overview, data_model, sources, checks, pitfalls, reporting, or left out. A tool refuses any argument it doesn't list, and a batchId, batch or conceptId of . or ...");
     const errors = rows(tableBy(p, "Errors for POST /api/qa/mcp"));
     expect(errors[0]).toEqual(["Status", "JSON-RPC code", "Message", "What to do"]);
     expect(errors.slice(1).map((r) => r.slice(0, 3))).toEqual([
       ["405", "-32000", "Method not allowed"], ["403", "-32002", "Forbidden"], ["401", "-32001", "Unauthorized"], ["502", "-32004", "Unavailable"],
       ["429", "-32003", "Too many requests"], ["415", "-32000", "Unsupported media type"], ["406", "-32000", "Not acceptable"],
       ["413", "-32000", "Request too large"], ["400", "-32700", "Parse error"], ["400", "-32600", "Invalid Request"],
-      ["400", "-32600", "Unsupported protocol version"], ["200", "-32602", "Invalid params"], ["200", "-32601", "Method not found"],
+      ["400", "-32600", "Unsupported protocol version"], ["200", "-32602", "Invalid params"], ["200", "-32002", "Resource not found"],
+      ["200", "-32601", "Method not found"],
       ["200", "-32603", "Internal error"], ["200", "isError: true", "Invalid input {name}"], ["200", "isError: true", "Unknown tool"],
       ["200", "isError: true", "QA API error {status} {code}"],
     ]);
     expect(errors[8][3]).toBe("Keep the body under 64 KiB.");
     expect(errors[3][3]).toBe("Check the header is Authorization: Bearer and your key. In Your keys, check the key is Active; if it isn't, create a new one.");
+    expect(errors[12].slice(2)).toEqual(["Invalid params", "initialize needs params.protocolVersion; tools/call needs params.name, and arguments must be an object; resources/read needs params.uri."]);
+    expect(errors[13].slice(2)).toEqual(["Resource not found", "Use a uri from resources/list."]);
+    expect(errors[14][3]).toBe("Use initialize, ping, tools/list, tools/call, resources/list, resources/templates/list or resources/read.");
+    expect(errors[16][3]).toBe("Fix that argument by the rule of the endpoint's parameter. For topic, use one of the guide's topics.");
   });
 });

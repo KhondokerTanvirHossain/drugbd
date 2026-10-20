@@ -5,6 +5,7 @@ import { BATCHES_BODY, BATCH_BODY, EXAMPLE_BATCH, EXAMPLE_BDS, EXAMPLE_CONCEPT, 
   RECORDS_BODY, RECORD_BODY } from "./qa-api-examples";
 import { QA_RATE_LIMIT } from "./limits";
 import { QA_PAIRS_SIZE, QA_RECORDS_SIZE, mapBatch, mapBatches, mapPairs, mapRecord, mapRecords } from "./qa-map";
+import { GUIDE_TOOL, GUIDE_TOPICS, GUIDE_URI_PREFIX, guideResources } from "./qa-guide";
 import { DEFAULT_PROTOCOL_VERSION, MCP_MAX_BODY } from "./qa-mcp";
 import { PREAMBLE, SERVER_NAME, SERVER_VERSION, SUPPORTED_PROTOCOL_VERSIONS, TOOLS, TOOL_ROUTES } from "./qa-mcp-tools";
 import { BATCH_ID, BDS_ID, PAGE_MAX, QA_FILTERS, QA_STAGES, failAnswer, okAnswer, type QaAnswer, type QaCode, type QaEnvelope,
@@ -15,7 +16,8 @@ import { BATCH_ID, BDS_ID, PAGE_MAX, QA_FILTERS, QA_STAGES, failAnswer, okAnswer
  * app/review/qa/ApiReference.tsx (a server component). Nothing here is typed twice:
  * - each example answer is the endpoint's real allowlist mapper (lib/qa-map.ts) over an example internal API body
  *   (lib/qa-api-examples.ts), wrapped by the real envelope (okAnswer, failAnswer) with fixed metadata;
- * - the MCP examples come from the shared MCP text (lib/qa-mcp-tools.ts) and the batches example envelope;
+ * - the MCP examples come from the shared MCP text (lib/qa-mcp-tools.ts), the batches example envelope and the QA guide's
+ *   resource list (lib/qa-guide.ts; the guide's own text is never on the page);
  * - every parameter rule, limit and number is read from the validators' own constants.
  * Commands, example answers, paths, patterns, values, headers and codes are code, not copy (§1.7); every sentence is
  * QA_COPY.reference, with its `{name}` placeholders filled here as plain text or mono code.
@@ -55,6 +57,8 @@ export type McpReference = {
   versionLine: Sentence; bodyLine: Sentence;
   initialize: { command: CodeBlock; answer: CodeBlock; message: unknown; body: unknown };
   call: { lead: Sentence; command: CodeBlock; answer: CodeBlock; message: unknown; body: unknown };
+  /** "Read the QA guide" (§5.18, §7.11): the lead, the result line, and the resources/list command and answer. */
+  guide: { lead: Sentence; resultLine: Sentence; command: CodeBlock; answer: CodeBlock; message: unknown; body: unknown };
   tools: { name: string; args: { name: string; required: boolean }[]; request: string }[];
   argsLine: Sentence; errors: McpError[];
 };
@@ -255,11 +259,16 @@ function mcpReference(host: string, batchesBody: QaEnvelope, endpoints: RefEndpo
 
   const initMessage = { jsonrpc: "2.0", id: 1, method: "initialize",
     params: { protocolVersion: version, capabilities: {}, clientInfo: { name: "qa-script", version: "1.0.0" } } };
-  const initBody = { jsonrpc: "2.0", id: 1, result: { protocolVersion: version, capabilities: { tools: { listChanged: false } },
+  // lib/qa-mcp.ts CAPABILITIES; the (a) accuracy test fails if these ever differ from the server's answer
+  const initBody = { jsonrpc: "2.0", id: 1, result: { protocolVersion: version,
+    capabilities: { tools: { listChanged: false }, resources: { subscribe: false, listChanged: false } },
     serverInfo: { name: SERVER_NAME, version: SERVER_VERSION }, instructions: PREAMBLE } };
   const callMessage = { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "list_batches", arguments: {} } };
   // The hosted server's tool result (lib/qa-mcp.ts toolText): the preamble, then the envelope indented by 2.
   const callBody = { jsonrpc: "2.0", id: 2, result: { content: [{ type: "text", text: PREAMBLE }, { type: "text", text: json(batchesBody) }] } };
+  const listMessage = { jsonrpc: "2.0", id: 3, method: "resources/list" };
+  const listBody = { jsonrpc: "2.0", id: 3, result: { resources: guideResources() } };
+  const withVersion = [...head, `  -H "MCP-Protocol-Version: ${version}" \\`];
 
   const requestOf = Object.fromEntries(endpoints.map((e) => [e.route, e.request]));
   const fixSay = (text: string) => say(text);
@@ -274,7 +283,8 @@ function mcpReference(host: string, batchesBody: QaEnvelope, endpoints: RefEndpo
       { name: "MCP-Protocol-Version", value: version, required: false },
     ],
     versionLine: say(C.versionLine, { default: code(DEFAULT_PROTOCOL_VERSION), versions: codes(SUPPORTED_PROTOCOL_VERSIONS) }),
-    bodyLine: say(C.bodyLine, { max: kib, methods: codes(["initialize", "ping", "tools/list", "tools/call"]) }),
+    bodyLine: say(C.bodyLine, { max: kib, methods: codes(["initialize", "ping", "tools/list", "tools/call", "resources/list",
+      "resources/templates/list", "resources/read"]) }),
     initialize: {
       command: block("qa-ref-mcp-init-command", C.command, P.copyCommand, [...head, `  -d '${JSON.stringify(initMessage)}'`].join("\n"), "initialize"),
       answer: block("qa-ref-mcp-init-answer", C.answer, P.copyExample, json(initBody), "initialize"),
@@ -283,17 +293,27 @@ function mcpReference(host: string, batchesBody: QaEnvelope, endpoints: RefEndpo
     call: {
       lead: say(C.callLead, { path: code("GET /api/qa/v1/batches") }),
       command: block("qa-ref-mcp-call-command", C.command, P.copyCommand,
-        [...head, `  -H "MCP-Protocol-Version: ${version}" \\`, `  -d '${JSON.stringify(callMessage)}'`].join("\n"), "tools/call"),
+        [...withVersion, `  -d '${JSON.stringify(callMessage)}'`].join("\n"), "tools/call"),
       answer: block("qa-ref-mcp-call-answer", C.answer, P.copyExample, json(callBody), "tools/call"),
       message: callMessage, body: callBody,
+    },
+    guide: {
+      lead: say(C.guideLead, { tool: code(GUIDE_TOOL.name), topic: code("topic"), version: code("guideVersion") }),
+      resultLine: say(C.guideResultLine, { tool: code(GUIDE_TOOL.name),
+        fields: codes(["guideVersion", "topic", "title", "text", "related"]) }),
+      command: block("qa-ref-mcp-guide-command", C.command, P.copyCommand,
+        [...withVersion, `  -d '${JSON.stringify(listMessage)}'`].join("\n"), "resources/list"),
+      answer: block("qa-ref-mcp-guide-answer", C.answer, P.copyExample, json(listBody), "resources/list"),
+      message: listMessage, body: listBody,
     },
     tools: TOOLS.map((t) => ({
       name: t.name,
       args: Object.keys(t.inputSchema.properties).map((name) => ({ name, required: (t.inputSchema.required ?? []).includes(name) })),
-      request: requestOf[TOOL_ROUTES[t.name]],
+      // get_qa_guide reads no endpoint (§7.11): its row names the guide's resource uri instead
+      request: t.name === GUIDE_TOOL.name ? `${GUIDE_URI_PREFIX}{topic}` : requestOf[TOOL_ROUTES[t.name]],
     })),
-    argsLine: say(C.argsLine, { page: code("page"), batchId: code("batchId"), batch: code("batch"), conceptId: code("conceptId"),
-      dot: code("."), dotdot: code("..") }),
+    argsLine: say(C.argsLine, { page: code("page"), topic: code("topic"), topics: codes(GUIDE_TOPICS), batchId: code("batchId"),
+      batch: code("batch"), conceptId: code("conceptId"), dot: code("."), dotdot: code("..") }),
     errors: [
       { status: 405, code: "-32000", message: "Method not allowed", fix: fixSay(C.mcpFix405) },
       { status: 403, code: "-32002", message: "Forbidden", fix: fixSay(C.mcpFix403) },
@@ -307,6 +327,7 @@ function mcpReference(host: string, batchesBody: QaEnvelope, endpoints: RefEndpo
       { status: 400, code: "-32600", message: "Invalid Request", fix: fixSay(C.mcpFixInvalidRequest) },
       { status: 400, code: "-32600", message: "Unsupported protocol version", fix: fixSay(C.mcpFixVersion) },
       { status: 200, code: "-32602", message: "Invalid params", fix: fixSay(C.mcpFixParams) },
+      { status: 200, code: "-32002", message: "Resource not found", fix: fixSay(C.mcpFixResource) },
       { status: 200, code: "-32601", message: "Method not found", fix: fixSay(C.mcpFixMethod) },
       { status: 200, code: "-32603", message: "Internal error", fix: fixSay(C.mcpFixInternal) },
       { status: 200, code: "isError: true", message: "Invalid input {name}", fix: fixSay(C.mcpFixInput) },
@@ -319,5 +340,6 @@ function mcpReference(host: string, batchesBody: QaEnvelope, endpoints: RefEndpo
 /** Every command and example answer of the reference, in page order (the §10.6 budget and the secret guard read it). */
 export function codeBlocks(ref: QaReference): CodeBlock[] {
   return [ref.common.error, ...ref.endpoints.flatMap((e) => [e.command, e.answer]),
-    ref.mcp.initialize.command, ref.mcp.initialize.answer, ref.mcp.call.command, ref.mcp.call.answer];
+    ref.mcp.initialize.command, ref.mcp.initialize.answer, ref.mcp.call.command, ref.mcp.call.answer,
+    ref.mcp.guide.command, ref.mcp.guide.answer];
 }
