@@ -29,6 +29,9 @@ const GUIDE_HISTORY: readonly { version: string; sha256: string }[] = [
   // fix round 3: source.json is the register record as last fetched, dated by source.link.fetchedAt, not extractedAt; extractedAt
   // moves only when a run changes the record's data or review state (data_model, sources)
   { version: "1.3.0", sha256: "637064207e74347c5cd832788326370ab46e575cdffef03e3e30c0425348ab59" },
+  // 1.4.0: a pair whose text was not found may still have a link, since a later run keeps an interaction id stored
+  // earlier; with a link open the pair page, without one go through the drug page (checks)
+  { version: "1.4.0", sha256: "61b2da23d549ea1e0a481c477f0e11e8b591c52ee180e3105c560fd440988671" },
 ];
 
 const contentHash = () => createHash("sha256")

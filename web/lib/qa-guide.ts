@@ -13,7 +13,7 @@
  */
 
 /** §7.11.5: semver, independent of the server version. */
-export const GUIDE_VERSION = "1.3.0";
+export const GUIDE_VERSION = "1.4.0";
 export const GUIDE_TITLE = "IntelliDrugs QA guide";
 export const GUIDE_TOPICS = ["overview", "data_model", "sources", "checks", "pitfalls", "reporting"] as const;
 export type GuideTopic = (typeof GUIDE_TOPICS)[number];
@@ -225,7 +225,7 @@ const CHECKS = md(
   "- For a `name` match, compare the DrugBank id on the DDInter drug page with the substance's `DRUGBANK` codes.",
   "- Check a pair's severity and actions against its DDInter pair page (`pairs.inBatch.pairs[].link`), and its interaction and management text through `get_pairs`.",
   "- `textMissing` has three shapes. On a pair, `pairs.inBatch.pairs[].textMissing` holds two booleans, `interaction` and `management`, true when that text is missing; on a stage, `stages[].textMissing` lists the pairs whose DDInter text was not found, with `ddinterA`, `ddinterB`, their names and `severity`; `stages[ddinter].evidence.text_missing` lists the same pairs as id pairs.",
-  "- A pair whose text was not found usually has no `link`: the pipeline stores its DDInter interaction id only when it found a text. To check it, open the DDInter drug page of `ddinterA` or `ddinterB` in a browser, find the partner in its interaction list and open that interaction: a text found there that we lack is `missing_value`.",
+  "- A pair whose text was not found may or may not have a `link`: the pipeline stores its DDInter interaction id only when it finds a text, and a later run that finds none removes the text but keeps an id stored earlier. With a link, open that pair page. Without one, open the DDInter drug page of `ddinterA` or `ddinterB` in a browser, find the partner in its interaction list and open that interaction: a text found there that we lack is `missing_value`.",
   "- Its warnings: matched by name only, DDInter route assumed, no DDInter entry for the route, no interaction data, DDInter text not found. It fails when a DDInter pair list could not be read in full, or a DGDA ingredient has no substance yet.",
 );
 
