@@ -1,8 +1,11 @@
+import { GUIDE_TOOL } from "./qa-guide";
+
 /*
  * The QA MCP server's shared text (spec §7.10.6, D69): the preamble, the server name and version, the protocol versions the
- * hosted server accepts, and the five read-only tools with their input schemas and annotations. Dependency-free (no
- * imports, no "server-only"), so the /review/qa page, the hosted MCP route and tools/qa-mcp's parity test all read this one
- * module. tools/qa-mcp/tests/parity.test.ts fails when any of it differs from the stdio server (§11.1 "MCP parity").
+ * hosted server accepts, and the six read-only tools with their input schemas and annotations: the five data tools and,
+ * last, the QA guide (get_qa_guide, §7.11). Dependency-free: no server-only marker, and its one import is ./qa-guide, itself
+ * import-free, so the /review/qa page, the hosted MCP route and tools/qa-mcp's parity test all read this one module.
+ * tools/qa-mcp/tests/parity.test.ts fails when any of it differs from the stdio server (§11.1 "MCP parity").
  * Machine-facing strings, not page copy (§1.7): the page renders the tool names and the preamble lines from here.
  */
 
@@ -16,7 +19,8 @@ export const PREAMBLE = [
 ].join("\n");
 
 export const SERVER_NAME = "intellidrugs-qa";
-export const SERVER_VERSION = "1.0.0";
+/** §7.9.8, §7.10.6: 1.1.0 since the QA guide (a tool and resources added, nothing removed). */
+export const SERVER_VERSION = "1.1.0";
 /** §7.10.6: the hosted server's protocol versions, newest first; `initialize` answers the first when the client's is not here. */
 export const SUPPORTED_PROTOCOL_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26"] as const;
 
@@ -63,7 +67,10 @@ const annotations = (title: string): ToolAnnotations =>
 const tool = (name: string, title: string, description: string, inputSchema: JsonSchema): ToolDef =>
   ({ name, title, description, inputSchema, annotations: annotations(title) });
 
-/** The five read-only tools, 1:1 with the QA API endpoints (§7.9.8), in the stdio server's `tools/list` order. */
+/**
+ * The six read-only tools, in the stdio server's `tools/list` order: five 1:1 with the QA API endpoints (§7.9.8), then the
+ * QA guide (§7.11.2), which reads no endpoint.
+ */
 export const TOOLS: readonly ToolDef[] = [
   tool("list_batches", "List batches",
     "Every DGDA batch: batchId, status, itemCount, approvedCount and runAt. " + READ_ONLY_NOTE,
@@ -99,11 +106,12 @@ export const TOOLS: readonly ToolDef[] = [
       + "actions, interaction and management text, the DDInter pair link, whether the pair applies, and the pair's review "
       + "state with its changes. " + READ_ONLY_NOTE,
     { type: "object", properties: { bdsId: S.bdsId, page: S.page(50) }, required: ["bdsId"], additionalProperties: false }),
+  tool(GUIDE_TOOL.name, GUIDE_TOOL.title, GUIDE_TOOL.description, GUIDE_TOOL.inputSchema),
 ];
 
 // ---- the input check (§7.9.8 rules), mapping a tool call to the QaInput the hosted server runs (§7.10.6)
 
-/** Each tool's QA route: the qa_read row's route name for its calls, refusals included. */
+/** Each data tool's QA route: the qa_read row's route name for its calls, refusals included. get_qa_guide has none (§7.11.4). */
 export const TOOL_ROUTES: Readonly<Record<string, QaInput["route"]>> = {
   list_batches: "batches", get_batch: "batch", get_record: "record", find_records: "records", get_pairs: "pairs",
 };

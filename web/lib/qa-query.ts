@@ -16,8 +16,11 @@ import type { QaInput } from "./qa-mcp-tools";
 export type { QaInput } from "./qa-mcp-tools";
 
 export type QaRoute = QaInput["route"];
-/** A qa_read route name: a QA API route, or `mcp` for a hosted MCP request refused before any tool ran (§7.10.6). */
-export type QaAuditRoute = QaRoute | "mcp";
+/**
+ * A qa_read route name: a QA API route, `mcp` for a hosted MCP request refused before any tool ran (§7.10.6), or `guide` for
+ * a hosted get_qa_guide call or resources/read (§7.11.4).
+ */
+export type QaAuditRoute = QaRoute | "mcp" | "guide";
 export type QaCode = "INVALID_QUERY" | "UNAUTHORIZED" | "NOT_FOUND" | "RATE_LIMITED" | "UNAVAILABLE";
 
 const ERRORS: Record<QaCode, { status: number; message: string }> = {
