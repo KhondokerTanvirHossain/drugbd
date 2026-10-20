@@ -27,18 +27,23 @@ const INDEX_TEXT = (() => {
 const textOf = (w: Where) => (w === "index" ? INDEX_TEXT : GUIDE[w].text);
 const factLines = (w: Where) => textOf(w).split("\n").filter((l) => l.trim() !== "" && !l.startsWith("#"));
 
-/** A spec section: from its heading (matched by its number or name prefix) to the next heading of the same or a higher level. */
+/**
+ * A spec section: from its heading (matched by its number or name prefix) to the next heading of the same or a higher level.
+ * A `#` line inside a fenced code block is not a heading (§7.11.2 quotes the index, whose lines start with `## `).
+ */
 function specSection(section: string): string | null {
   const lines = SPEC.split("\n");
-  const start = lines.findIndex((l) => {
-    const m = /^(#{1,6}) (.+)$/.exec(l);
-    return m !== null && (m[2] === section || m[2].startsWith(`${section} `));
+  let fenced = false;
+  const heading = lines.map((l) => {
+    if (/^\s*```/.test(l)) fenced = !fenced;
+    return fenced ? null : /^(#{1,6}) (.+)$/.exec(l);
   });
+  const start = heading.findIndex((m) => m !== null && (m[2] === section || m[2].startsWith(`${section} `)));
   if (start < 0) return null;
-  const level = /^(#+)/.exec(lines[start])![1].length;
+  const level = heading[start]![1].length;
   let end = lines.length;
   for (let i = start + 1; i < lines.length; i++) {
-    const m = /^(#{1,6}) /.exec(lines[i]);
+    const m = heading[i];
     if (m && m[1].length <= level) {
       end = i;
       break;

@@ -19,7 +19,7 @@ import { QA_FILTERS, QA_STAGES } from "@/lib/qa-query";
  * input schema or the uri scheme). Never edit an old entry.
  */
 const GUIDE_HISTORY: readonly { version: string; sha256: string }[] = [
-  { version: "1.0.0", sha256: "0000000000000000000000000000000000000000000000000000000000000000" },
+  { version: "1.0.0", sha256: "23ddddd10cbcdb0295d6ac4ce7044daf40a7601109a283e4e9f1bfd8363d8cdc" },
 ];
 
 const contentHash = () => createHash("sha256")
