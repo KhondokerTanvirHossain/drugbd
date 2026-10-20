@@ -186,6 +186,11 @@ const PATTERNS: Record<string, Origin> = {
     { file: `${PIPELINE}/jobs/load_dgda.py`, needle: '"OCL_BASE_URL", "https://api.tr.ocl.dghs.gov.bd"' },
   "https://rxnav.nlm.nih.gov/REST/rxcui/{c}/allProperties.json?prop=codes":
     { file: `${PIPELINE}/rxnav/client.py`, needle: 'BASE = "https://rxnav.nlm.nih.gov/REST"' },
+  // fix round 5, guide 1.5.0: an RxCUI's name and tty, and a PIN's IN, as data (the pipeline's _properties and _final_in)
+  "https://rxnav.nlm.nih.gov/REST/rxcui/{c}/properties.json":
+    { file: `${PIPELINE}/rxnav/client.py`, needle: 'BASE = "https://rxnav.nlm.nih.gov/REST"' },
+  "https://rxnav.nlm.nih.gov/REST/rxcui/{c}/related.json?tty=IN":
+    { file: `${PIPELINE}/rxnav/client.py`, needle: 'BASE = "https://rxnav.nlm.nih.gov/REST"' },
   "https://atcddd.fhi.no/atc_ddd_index/?code={c}&showdescription=no": '"https://atcddd.fhi.no/atc_ddd_index/?code={c}&showdescription=no"',
   "https://go.drugbank.com/drugs/{c}": '"https://go.drugbank.com/drugs/{c}"',
   "https://icd.who.int/browse/latest-release/mms/en": 'ICD11_HOME = "https://icd.who.int/browse/latest-release/mms/en"',
@@ -220,12 +225,22 @@ describe("source addresses (§7.11.7)", () => {
     expect(pipeline.map(([p]) => p)).toEqual([
       "https://api.tr.ocl.dghs.gov.bd/orgs/MoHFW/sources/DGDA-Drugs/concepts/{conceptId}/?verbose=true&includeMappings=true",
       "https://rxnav.nlm.nih.gov/REST/rxcui/{c}/allProperties.json?prop=codes",
+      "https://rxnav.nlm.nih.gov/REST/rxcui/{c}/properties.json",
+      "https://rxnav.nlm.nih.gov/REST/rxcui/{c}/related.json?tty=IN",
     ]);
     for (const [pattern, { file, needle }] of pipeline) expect(readFileSync(join(REPO, file), "utf8"), pattern).toContain(needle);
     const ocl = readFileSync(join(REPO, `${PIPELINE}/ocl/client.py`), "utf8");
     expect(ocl).toContain('url = f"{self.base_url}/orgs/{owner}/sources/{source}/concepts/{concept_id}/"');
     expect(ocl).toContain('params={"verbose": "true", "includeMappings": "true"}');
-    expect(readFileSync(join(REPO, `${PIPELINE}/rxnav/client.py`), "utf8")).toContain('f"/rxcui/{rxcui}/allProperties.json", {"prop": "codes"}');
+    const rxnav = readFileSync(join(REPO, `${PIPELINE}/rxnav/client.py`), "utf8");
+    expect(rxnav).toContain('f"/rxcui/{rxcui}/allProperties.json", {"prop": "codes"}');
+    expect(rxnav).toContain('self._json(f"/rxcui/{rxcui}/properties.json")');
+    expect(rxnav).toContain('f"/rxcui/{rxcui}/related.json", {"tty": "IN"}');
+  });
+
+  it("§7.11.7's table lists every pattern (fix round 5, guide 1.5.0, correction 13)", () => {
+    const table = specSection("7.11.7")!;
+    for (const p of Object.keys(PATTERNS)) expect(table, p).toContain(`\`${p}\``);
   });
 
   it("no other topic carries an address", () => {

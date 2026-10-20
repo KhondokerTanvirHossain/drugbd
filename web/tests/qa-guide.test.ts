@@ -32,6 +32,9 @@ const GUIDE_HISTORY: readonly { version: string; sha256: string }[] = [
   // 1.4.0: a pair whose text was not found may still have a link, since a later run keeps an interaction id stored
   // earlier; with a link open the pair page, without one go through the drug page (checks)
   { version: "1.4.0", sha256: "61b2da23d549ea1e0a481c477f0e11e8b591c52ee180e3105c560fd440988671" },
+  // 1.5.0: the RxNav properties call (an RxCUI's name and tty) and related call (a PIN's IN), both read by the pipeline,
+  // so an rxnav-approx name and a PIN can be checked without a browser (sources, checks, pitfalls)
+  { version: "1.5.0", sha256: "c4ba0cceaff66e8c89d8c3d11cfc844e93774fc4867271e3f3c6bef621fc2cb7" },
 ];
 
 const contentHash = () => createHash("sha256")
