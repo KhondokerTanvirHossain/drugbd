@@ -1,6 +1,7 @@
 import "server-only";
 import { LIMITS, allowQaRateLimitedAudit, allowQaUnauthorizedAudit } from "./limits";
 import { authenticateQa, requestIdOf } from "./qa-api";
+import { GUIDE_TOOL, checkGuideArgs, guideBody, guideResources, readGuideResource } from "./qa-guide";
 import { PREAMBLE, SERVER_NAME, SERVER_VERSION, SUPPORTED_PROTOCOL_VERSIONS, TOOLS, checkToolArgs } from "./qa-mcp-tools";
 import { answerQa, auditQa } from "./qa-query";
 import { clientIp } from "./rate-limit";
@@ -11,7 +12,9 @@ import { siteOrigin } from "./site";
  * JSON-RPC message and gets one application/json answer (or 202 with no body); no SSE, no Mcp-Session-Id, no server-to-client
  * request. The checks run in the §7.10.6 order; tool calls go through checkToolArgs (the stdio server's input rules) and
  * answerQa (lib/qa-query.ts), so each writes the same qa_read row as the equivalent QA API GET and counts once toward the
- * same per-key limit. Error messages are fixed strings; nothing here logs a body, a method name, a key, a label or an email.
+ * same per-key limit. The QA guide (§7.11) is the tool get_qa_guide and the resources/* methods: static text, answered here
+ * with no internal API call, counted like any authenticated request and audited best effort as route `guide`. Error
+ * messages are fixed strings; nothing here logs a body, a method name, a key, a label or an email.
  */
 
 const HEADERS = { "Cache-Control": "private, no-store", "X-Robots-Tag": "noindex, nofollow" } as const;
@@ -124,8 +127,26 @@ const toolText = (text: string, isError: boolean) => ({
 const TOOL_LIST = TOOLS.map((t) => ({ name: t.name, title: t.title, description: t.description, inputSchema: t.inputSchema,
   annotations: t.annotations }));
 
+/** §7.10.6 initialize: tools and resources (the QA guide, §7.11.3), neither with list changes or subscriptions. */
+const CAPABILITIES = { tools: { listChanged: false }, resources: { subscribe: false, listChanged: false } } as const;
+
+/**
+ * get_qa_guide (§7.11.2, §7.11.4): checkGuideArgs, then the guide body; a best-effort `guide` row either way (the guide holds
+ * no QA data, so the 200-only-after-its-row rule does not apply). The result is the stdio server's, byte for byte.
+ */
+async function callGuide(args: Record<string, unknown> | undefined, label: string, rid: string) {
+  const checked = checkGuideArgs(args);
+  if (!checked.ok) {
+    await auditQa("guide", label, "invalid_query", rid);
+    return toolText(`Invalid input ${checked.field}`, true);
+  }
+  await auditQa("guide", label, "ok", rid);
+  return toolText(JSON.stringify(guideBody(checked.topic), null, 2), false);
+}
+
 /** One tools/call (§7.10.6): the stdio input rules, then answerQa; the result is the stdio server's, byte for byte. */
 async function callTool(name: string, args: Record<string, unknown> | undefined, label: string, rid: string) {
+  if (name === GUIDE_TOOL.name) return callGuide(args, label, rid);
   const checked = checkToolArgs(name, args);
   if (!checked.ok) {
     if ("unknownTool" in checked) return toolText("Unknown tool", true);
@@ -144,7 +165,7 @@ async function dispatch(m: Extract<Message, { kind: "request" }>, label: string,
       if (!isObject(m.params) || typeof m.params.protocolVersion !== "string") return invalidParams();
       const asked = m.params.protocolVersion;
       const version = (SUPPORTED_PROTOCOL_VERSIONS as readonly string[]).includes(asked) ? asked : SUPPORTED_PROTOCOL_VERSIONS[0];
-      return rpcResult(m.id, { protocolVersion: version, capabilities: { tools: { listChanged: false } },
+      return rpcResult(m.id, { protocolVersion: version, capabilities: CAPABILITIES,
         serverInfo: { name: SERVER_NAME, version: SERVER_VERSION }, instructions: PREAMBLE });
     }
     case "ping":
@@ -156,6 +177,22 @@ async function dispatch(m: Extract<Message, { kind: "request" }>, label: string,
       const args = m.params.arguments;
       if (Object.hasOwn(m.params, "arguments") && !isObject(args)) return invalidParams();
       return rpcResult(m.id, await callTool(m.params.name, args as Record<string, unknown> | undefined, label, rid));
+    }
+    // §7.11.3: the QA guide as resources; the list methods write no row, as tools/list
+    case "resources/list":
+      return rpcResult(m.id, { resources: guideResources() });
+    case "resources/templates/list":
+      return rpcResult(m.id, { resourceTemplates: [] });
+    case "resources/read": {
+      if (!isObject(m.params) || typeof m.params.uri !== "string") return invalidParams();
+      const content = readGuideResource(m.params.uri);
+      // the uri is never echoed in an error; both rows are best effort (§7.11.4)
+      if (content === null) {
+        await auditQa("guide", label, "not_found", rid);
+        return rpcError(200, m.id, -32002, "Resource not found");
+      }
+      await auditQa("guide", label, "ok", rid);
+      return rpcResult(m.id, { contents: [content] });
     }
     default:
       return rpcError(200, m.id, -32601, "Method not found");

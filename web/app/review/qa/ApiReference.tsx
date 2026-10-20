@@ -147,6 +147,12 @@ function Mcp({ m }: { m: QaReference["mcp"] }) {
         <Code block={m.call.command} />
         <Code block={m.call.answer} />
 
+        <h4>{C.guideHeading}{forRequest(m.request)}</h4>
+        <p>{say(m.guide.lead)}</p>
+        <p>{say(m.guide.resultLine)}</p>
+        <Code block={m.guide.command} />
+        <Code block={m.guide.answer} />
+
         <h4>{C.toolsHeading}{forRequest(m.request)}</h4>
         <Table caption={C.toolsCaption} head={[C.colTool, C.colArguments, C.colSameData]}>
           {m.tools.map((t) => (

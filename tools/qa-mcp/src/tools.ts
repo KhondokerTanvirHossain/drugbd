@@ -1,8 +1,10 @@
 import { z } from "zod";
+import { GUIDE_TOOL } from "./qa-guide.js";
 
 /*
- * The five read-only tools, 1:1 with the QA API endpoints (spec §7.9.8), their JSON-schema inputs and the input check that
- * turns a call into a QA API path. The check carries the §7.9.2 rules (and refuses dot segments, which no HTTP client can
+ * The six read-only tools (spec §7.9.8): five 1:1 with the QA API endpoints, then the QA guide (get_qa_guide, §7.11.2),
+ * which answers from the bundled guide and reads no endpoint. Their JSON-schema inputs, and the input check that turns a
+ * data tool call into a QA API path. The check carries the §7.9.2 rules (and refuses dot segments, which no HTTP client can
  * send), so a bad input fails here, before any request. The JSON schemas and the check share the constants below.
  */
 
@@ -108,6 +110,7 @@ export const TOOLS: readonly ToolDef[] = [
     inputSchema: { type: "object", properties: { bdsId: S.bdsId, page: S.page(50) }, required: ["bdsId"],
       additionalProperties: false },
   },
+  { name: GUIDE_TOOL.name, title: GUIDE_TOOL.title, description: GUIDE_TOOL.description, inputSchema: GUIDE_TOOL.inputSchema },
 ];
 
 export type Checked = { ok: true; path: string } | { ok: false; field: string } | { ok: false; unknownTool: true };
@@ -138,7 +141,8 @@ function firstBad(args: Args, checks: readonly [string, z.ZodTypeAny, boolean][]
 const enc = encodeURIComponent;
 
 /**
- * The QA API path (with its query) for a tool call, or the first refused input. Checked in the route's order: an input
+ * The QA API path (with its query) for a data tool call, or the first refused input; get_qa_guide is "Unknown tool" here,
+ * because callTool answers it from the bundled guide before calling this (§7.11.1). Checked in the route's order: an input
  * the tool does not take, then the tool's inputs in path-then-query order (§7.9.2; find_records: filter, stage, batch,
  * page, with stage only for stage_warn).
  */

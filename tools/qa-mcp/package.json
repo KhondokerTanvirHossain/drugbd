@@ -1,6 +1,6 @@
 {
   "name": "intellidrugs-qa-mcp",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "Read-only stdio MCP server over the IntelliDrugs QA API (spec §7.9.8)",
   "type": "module",

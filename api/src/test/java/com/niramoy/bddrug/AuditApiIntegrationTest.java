@@ -241,6 +241,20 @@ class AuditApiIntegrationTest {
         }
     }
 
+    /** §7.10.7 (QA guide): the hosted server's get_qa_guide calls and resource reads are qa_read rows with the route guide. */
+    @Test void qaReadTakesTheGuideRoute() throws Exception {
+        for (String target : List.of("guide", "key.12/guide", "tanvir-qa/guide")) {
+            String rid = UUID.randomUUID().toString();
+            Map<String, Object> body = qa("qa_route", target);
+            body.put("requestId", rid);
+            post(internal(web), body).expectStatus().isCreated();
+            assertThat(text(pg, "SELECT target_id FROM ops.audit_event WHERE request_id = '" + rid + "'")).isEqualTo(target);
+        }
+        long before = rows();
+        for (String bad : List.of("key.12/guides", "guide/key.12")) expectInvalid(qa("qa_route", bad), "targetId");
+        assertThat(rows()).isEqualTo(before);
+    }
+
     @Test void aDbKeyLabelIsKeyDotAPositiveIdOnly() throws Exception {
         long before = rows();
         for (String bad : List.of("key.0/record", "key.x/record", "tanvir.qa/batches", "key./record", "key.01/record",

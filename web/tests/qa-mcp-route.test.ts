@@ -28,6 +28,7 @@ import { GET as recordsGET } from "@/app/api/qa/v1/records/route";
 import { GET as pairsGET } from "@/app/api/qa/v1/substances/[bdsId]/pairs/route";
 import { qaKeysForTests } from "@/lib/qa-api";
 import { DEFAULT_PROTOCOL_VERSION } from "@/lib/qa-mcp";
+import { GUIDE, GUIDE_TOPICS, guideBody, guideResources } from "@/lib/qa-guide";
 import { PREAMBLE, SERVER_NAME, SERVER_VERSION, SUPPORTED_PROTOCOL_VERSIONS, TOOLS } from "@/lib/qa-mcp-tools";
 import { apiRecord, apiSubstance, SENTINELS } from "./fixtures/qa";
 
@@ -320,10 +321,12 @@ describe("methods", () => {
     for (const [asked, answered] of [["2025-11-25", "2025-11-25"], ["2025-06-18", "2025-06-18"], ["2025-03-26", "2025-03-26"],
       ["2024-11-05", "2025-11-25"], ["next", "2025-11-25"]]) {
       expect(await result(await send(rpc("initialize", { protocolVersion: asked, capabilities: {}, clientInfo: { name: "c", version: "0" } }))))
-        .toEqual({ protocolVersion: answered, capabilities: { tools: { listChanged: false } },
+        .toEqual({ protocolVersion: answered,
+          capabilities: { tools: { listChanged: false }, resources: { subscribe: false, listChanged: false } },
           serverInfo: { name: SERVER_NAME, version: SERVER_VERSION }, instructions: PREAMBLE });
     }
     expect(SERVER_NAME).toBe("intellidrugs-qa");
+    expect(SERVER_VERSION).toBe("1.1.0");
   });
 
   it("initialize without a string protocolVersion is -32602 Invalid params (HTTP 200)", async () => {
@@ -358,7 +361,7 @@ describe("methods", () => {
   });
 
   it("an unknown method is -32601 Method not found", async () => {
-    for (const m of ["resources/list", "prompts/list", "tools/delete", "sampling/createMessage", ""]) {
+    for (const m of ["resources/subscribe", "resources/unsubscribe", "prompts/list", "tools/delete", "sampling/createMessage", ""]) {
       await expectRpcError(await send(rpc(m, undefined, 3)), 200, -32601, "Method not found", 3);
     }
   });
@@ -468,6 +471,104 @@ describe("tools/call through the shared QA query code (§7.10.5)", () => {
   });
 });
 
+describe("the QA guide (§7.11, §11.1 \"Hosted guide\")", () => {
+  const row = (outcome: string) => ({ event: "qa_read", actorEmail: null, actorRole: null, targetType: "qa_route",
+    targetId: "checker/guide", outcome, requestId: RID });
+  const guideText = (topic: (typeof GUIDE_TOPICS)[number] | null) =>
+    ({ content: [{ type: "text", text: PREAMBLE }, { type: "text", text: JSON.stringify(guideBody(topic), null, 2) }] });
+
+  it("tools/list has six tools, get_qa_guide last", async () => {
+    const { tools } = await result(await send(rpc("tools/list")));
+    expect(tools.map((t: { name: string }) => t.name)).toEqual(["list_batches", "get_batch", "get_record", "find_records", "get_pairs",
+      "get_qa_guide"]);
+  });
+
+  it("get_qa_guide with no arguments, {} or each topic: the preamble, then the guide JSON, with a guide row; no internal read", async () => {
+    for (const [args, topic] of [[undefined, null], [{}, null], ...GUIDE_TOPICS.map((t) => [{ topic: t }, t])] as
+      [Record<string, unknown> | undefined, (typeof GUIDE_TOPICS)[number] | null][]) {
+      audits = [];
+      expect(await result(await callTool("get_qa_guide", args))).toEqual(guideText(topic));
+      expect(audits).toEqual([row("ok")]);
+    }
+    expect(reads).toEqual([]);
+    expect(spies.answerQa).not.toHaveBeenCalled();
+  });
+
+  it("a refused input is \"Invalid input {field}\" with an invalid_query guide row, an unknown input first", async () => {
+    for (const [args, field] of [[{ topic: "nope" }, "topic"], [{ topic: "Overview" }, "topic"], [{ topic: null }, "topic"],
+      [{ topic: 1 }, "topic"], [{ x: 1, topic: "nope" }, "x"], [{ topic: "checks", page: 0 }, "page"]] as [Record<string, unknown>, string][]) {
+      audits = [];
+      expect(await result(await callTool("get_qa_guide", args)))
+        .toEqual({ isError: true, content: [{ type: "text", text: PREAMBLE }, { type: "text", text: `Invalid input ${field}` }] });
+      expect(audits).toEqual([row("invalid_query")]);
+    }
+    expect(reads).toEqual([]);
+  });
+
+  it("resources/list is the six topics; resources/templates/list is empty; neither writes a row; a cursor is ignored", async () => {
+    expect(await result(await send(rpc("resources/list")))).toEqual({ resources: guideResources() });
+    expect(await result(await send(rpc("resources/list", { cursor: "abc" })))).toEqual({ resources: guideResources() });
+    expect(guideResources().map((r) => r.uri)).toEqual(GUIDE_TOPICS.map((t) => `intellidrugs://qa-guide/${t}`));
+    expect(await result(await send(rpc("resources/templates/list")))).toEqual({ resourceTemplates: [] });
+    expect(audits).toEqual([]);
+    expect(reads).toEqual([]);
+  });
+
+  it("resources/read of each uri is its Markdown text, with a guide row", async () => {
+    for (const t of GUIDE_TOPICS) {
+      audits = [];
+      const uri = `intellidrugs://qa-guide/${t}`;
+      expect(await result(await send(rpc("resources/read", { uri }))))
+        .toEqual({ contents: [{ uri, mimeType: "text/markdown", text: GUIDE[t].text }] });
+      expect(audits).toEqual([row("ok")]);
+    }
+    expect(reads).toEqual([]);
+  });
+
+  it("an unknown uri is HTTP 200, -32002 Resource not found with no data, and a not_found guide row", async () => {
+    for (const uri of ["intellidrugs://qa-guide/OVERVIEW", "intellidrugs://qa-guide/overview/", "intellidrugs://qa-guide/overview?x=1",
+      "intellidrugs://qa-guide/", "intellidrugs://qa-guide", "file:///etc/passwd", ""]) {
+      audits = [];
+      const res = await send(rpc("resources/read", { uri }, 7));
+      await expectRpcError(res, 200, -32002, "Resource not found", 7);
+      expect(audits).toEqual([row("not_found")]);
+    }
+  });
+
+  it("resources/read without a string params.uri is -32602 Invalid params, with no row", async () => {
+    for (const params of [undefined, null, [], {}, { uri: 1 }, { uri: null }]) {
+      await expectRpcError(await send(rpc("resources/read", params, 8)), 200, -32602, "Invalid params", 8);
+    }
+    expect(audits).toEqual([]);
+  });
+
+  it("with the audit write failing, every guide answer still succeeds (best effort)", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init: RequestInit = {}) =>
+      url.endsWith("/v1/audit-events") && init.method === "POST" ? new Response("{}", { status: 500 }) : defaultUpstream(url.replace("http://api:8080", ""))));
+    expect(await result(await callTool("get_qa_guide", { topic: "checks" }))).toEqual(guideText("checks"));
+    expect(await result(await send(rpc("resources/read", { uri: "intellidrugs://qa-guide/sources" }))))
+      .toEqual({ contents: [{ uri: "intellidrugs://qa-guide/sources", mimeType: "text/markdown", text: GUIDE.sources.text }] });
+    expect((await result(await callTool("get_qa_guide", { topic: "nope" }))).isError).toBe(true);
+    await expectRpcError(await send(rpc("resources/read", { uri: "intellidrugs://qa-guide/nope" })), 200, -32002, "Resource not found", 1);
+  });
+
+  it("guide requests and data requests share the key's limit: the 61st in a minute, mixing both, is 429", async () => {
+    for (let i = 0; i < 20; i++) await callTool("get_qa_guide");
+    for (let i = 0; i < 20; i++) await send(rpc("resources/read", { uri: "intellidrugs://qa-guide/pitfalls" }));
+    for (let i = 0; i < 10; i++) await send(rpc("resources/list"));
+    for (let i = 0; i < 10; i++) expect((await batchesGET(new Request("http://localhost/api/qa/v1/batches",
+      { headers: { authorization: `Bearer ${KEY}`, "x-request-id": RID } }))).status).toBe(200);
+    await expectRpcError(await callTool("get_qa_guide"), 429, -32003, "Too many requests");
+    await expectRpcError(await send(rpc("resources/read", { uri: "intellidrugs://qa-guide/pitfalls" })), 429, -32003, "Too many requests");
+  });
+
+  it("a DB key's guide rows carry its key label", async () => {
+    await result(await callTool("get_qa_guide", { topic: "overview" }, { key: DB_KEY }));
+    expect(audits.at(-1)).toEqual({ ...row("ok"), targetId: "key.12/guide" });
+  });
+});
+
 describe("never leaked (§7.10.6, §7.9.7)", () => {
   it("no answer carries the key, its hash, the owner's email, a note or the request headers; logs are the request line only", async () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -482,7 +583,8 @@ describe("never leaked (§7.10.6, §7.9.7)", () => {
     await keep(await send(rpc("tools/list"), { key: DB_KEY }));
     for (const [name, args] of [["list_batches", {}], ["get_batch", { batchId: "0001-pilot" }],
       ["get_record", { batchId: "0001-pilot", conceptId: "186-0030-006--napa" }], ["find_records", { filter: "stage_warn" }],
-      ["get_pairs", { bdsId: "BDS-000003" }], ["get_batch", { batchId: ".." }], ["nope", {}]] as [string, unknown][]) {
+      ["get_pairs", { bdsId: "BDS-000003" }], ["get_batch", { batchId: ".." }], ["nope", {}], ["get_qa_guide", {}],
+      ["get_qa_guide", { topic: "nope" }]] as [string, unknown][]) {
       await keep(await callTool(name, args, { key: DB_KEY }), true);
     }
     await keep(await send(rpc("ping"), { key: "u".repeat(40) }));

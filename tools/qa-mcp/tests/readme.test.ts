@@ -33,3 +33,12 @@ describe("README: the hosted server (§7.10.6)", () => {
     expect(README).toMatch(/works here unchanged/);
   });
 });
+
+describe("README: the QA guide (§7.9.8, §7.11)", () => {
+  it("names get_qa_guide, the guide resources and that the guide is bundled", () => {
+    expect(README).toContain("`get_qa_guide`");
+    expect(README).toContain("`intellidrugs://qa-guide/{topic}`");
+    expect(README).toMatch(/bundled/);
+    expect(README).toContain("six");
+  });
+});

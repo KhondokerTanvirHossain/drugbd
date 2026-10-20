@@ -12,6 +12,20 @@ describe("the QA portal rows of §1.7, verbatim", () => {
     expect(NEW_COPY[NEW_COPY_ROWS.qaReference]).toBe(QA_COPY.reference);
   });
 
+  it("the QA guide row (§1.7, §5.18) is a view of the six-tools line, the MCP summary and the reference's guide strings", () => {
+    const P = QA_COPY.page, R = QA_COPY.reference;
+    expect(NEW_COPY[NEW_COPY_ROWS.qaGuide]).toEqual({ toolsLine: P.toolsLine, mcpReturns: R.mcpReturns, guideHeading: R.guideHeading,
+      guideLead: R.guideLead, guideResultLine: R.guideResultLine, mcpFixResource: R.mcpFixResource, argsLine: R.argsLine,
+      mcpFixParams: R.mcpFixParams, mcpFixMethod: R.mcpFixMethod, mcpFixInput: R.mcpFixInput });
+  });
+
+  it("no guide text, title or summary is page copy (§1.7: the guide is machine-facing)", async () => {
+    const { GUIDE, GUIDE_TITLE, GUIDE_TOOL } = await import("@/lib/qa-guide");
+    const all = Object.values(NEW_COPY).flatMap((r) => Object.values(r));
+    const guide = [GUIDE_TITLE, GUIDE_TOOL.title, GUIDE_TOOL.description, ...Object.values(GUIDE).flatMap((e) => [e.title, e.summary, e.text])];
+    for (const g of guide) expect(all).not.toContain(g);
+  });
+
   it("QA role (§5.1, §5.13, §6.2): badge, menu item, welcome state and invite", () => {
     expect(QA_COPY.role).toEqual({
       badge: "QA",
@@ -49,7 +63,7 @@ describe("the QA portal rows of §1.7, verbatim", () => {
       cursorHelp: "Replace YOUR_KEY with your key. Keep this file out of version control.",
       oauthHeading: "claude.ai and ChatGPT",
       oauthBody: "Their connectors sign in with OAuth, which IntelliDrugs does not offer. Use Claude Code, Cursor or another client that can send an Authorization header.",
-      toolsLine: "The server has five read-only tools: {t1}, {t2}, {t3}, {t4} and {t5}. A local version that runs on your computer is in {path}.",
+      toolsLine: "The server has six read-only tools: {t1}, {t2}, {t3}, {t4}, {t5} and {t6}. {t6} gives your AI the QA guide: how the data is built, which source to check each field against, and how to report a finding. A local version that runs on your computer is in {path}.",
       apiHeading: "API",
       apiLead: "The same data over HTTPS, for scripts. Send your key in the Authorization header. Each key may make 60 requests a minute, shared with the MCP server.",
       apiBaseLabel: "API base address",
@@ -250,7 +264,7 @@ describe("the QA portal rows of §1.7, verbatim", () => {
       // 3d "MCP over HTTP"
       mcpHeading: "MCP over HTTP",
       mcpLead: "The MCP server address takes the same keys and returns the same data over JSON-RPC 2.0. Your AI client sends these requests for you; use this to test the server from a script.",
-      mcpReturns: "JSON-RPC 2.0 for AI clients and scripts: initialize, then list and call the five tools.",
+      mcpReturns: "JSON-RPC 2.0 for AI clients and scripts: initialize, then list and call the six tools and read the QA guide.",
       headersCaption: "Headers for {request}",
       colHeader: "Header",
       colValue: "Value",
@@ -261,6 +275,9 @@ describe("the QA portal rows of §1.7, verbatim", () => {
       initializeLead: "Ask for a protocol version. The answer gives the version to send in MCP-Protocol-Version, the server's name and version, and the rules as instructions.",
       callHeading: "Call a tool",
       callLead: "The result has two text blocks: the rules, then the answer of the matching endpoint as indented JSON, here the same envelope as {path}. Parse the second block's text as JSON.",
+      guideHeading: "Read the QA guide",
+      guideLead: "The QA guide tells your AI how IntelliDrugs data is built, which source to check each field against, the known traps and how to report a finding. List its topics with resources/list, then read one with resources/read and its uri, or call {tool} with a {topic}. Each topic is Markdown, and {version} changes whenever the guide does.",
+      guideResultLine: "A {tool} result has the same two text blocks as any tool; the second is JSON with {fields}.",
       toolsHeading: "Tools",
       toolsCaption: "MCP tools",
       colTool: "Tool",
@@ -269,7 +286,7 @@ describe("the QA portal rows of §1.7, verbatim", () => {
       argRequired: " required",
       argOptional: " optional",
       noArguments: "No arguments.",
-      argsLine: "Arguments follow the rules in each endpoint's Parameters. {page} is a JSON integer, not text. A tool refuses any argument it doesn't list, and a {batchId}, {batch} or {conceptId} of {dot} or {dotdot}.",
+      argsLine: "Arguments follow the rules in each endpoint's Parameters. {page} is a JSON integer, not text. {topic} is one of {topics}, or left out. A tool refuses any argument it doesn't list, and a {batchId}, {batch} or {conceptId} of {dot} or {dotdot}.",
       colRpcCode: "JSON-RPC code",
       colMessage: "Message",
       mcpFix405: "Send POST.",
@@ -281,10 +298,11 @@ describe("the QA portal rows of §1.7, verbatim", () => {
       mcpFixParse: "Send one JSON value in UTF-8.",
       mcpFixInvalidRequest: 'Send one object with jsonrpc "2.0", a method, and a string or number id. Never an array.',
       mcpFixVersion: "Send a supported MCP-Protocol-Version, or leave it out.",
-      mcpFixParams: "initialize needs params.protocolVersion; tools/call needs params.name, and arguments must be an object.",
-      mcpFixMethod: "Use initialize, ping, tools/list or tools/call.",
+      mcpFixParams: "initialize needs params.protocolVersion; tools/call needs params.name, and arguments must be an object; resources/read needs params.uri.",
+      mcpFixResource: "Use a uri from resources/list.",
+      mcpFixMethod: "Use initialize, ping, tools/list, tools/call, resources/list, resources/templates/list or resources/read.",
       mcpFixInternal: "Try again. If it keeps failing, tell the IntelliDrugs team when it happened.",
-      mcpFixInput: "Fix that argument by the rule of the endpoint's parameter.",
+      mcpFixInput: "Fix that argument by the rule of the endpoint's parameter. For topic, use one of the guide's topics.",
       mcpFixUnknownTool: "Use a tool name from tools/list.",
       mcpFixQaError: "See that status in the endpoint's Errors table.",
     });

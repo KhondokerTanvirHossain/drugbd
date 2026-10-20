@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { GUIDE_TOOL } from "@/lib/qa-guide";
 import { PREAMBLE, SERVER_NAME, SERVER_VERSION, SUPPORTED_PROTOCOL_VERSIONS, TOOLS, TOOL_ROUTES, checkToolArgs } from "@/lib/qa-mcp-tools";
 
 /* §7.10.6, §11.1 "MCP parity": the web side of the shared MCP text. tools/qa-mcp/tests/parity.test.ts compares it with the stdio server. */
@@ -15,25 +16,38 @@ describe("lib/qa-mcp-tools.ts", () => {
 
   it("names the server, its version and the supported protocol versions (newest first)", () => {
     expect(SERVER_NAME).toBe("intellidrugs-qa");
-    expect(SERVER_VERSION).toBe("1.0.0");
+    expect(SERVER_VERSION).toBe("1.1.0"); // §7.9.8, §7.10.6: a tool and resources were added (QA guide)
     expect(SUPPORTED_PROTOCOL_VERSIONS).toEqual(["2025-11-25", "2025-06-18", "2025-03-26"]);
   });
 
-  it("lists exactly the five read-only tools, each annotated read-only and closed-world", () => {
-    expect(TOOLS.map((t) => t.name)).toEqual(["list_batches", "get_batch", "get_record", "find_records", "get_pairs"]);
+  it("lists exactly the six read-only tools, each annotated read-only and closed-world", () => {
+    expect(TOOLS.map((t) => t.name)).toEqual(["list_batches", "get_batch", "get_record", "find_records", "get_pairs", "get_qa_guide"]);
     for (const t of TOOLS) {
       expect(t.annotations).toEqual({ title: t.title, readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
       expect(t.inputSchema.type).toBe("object");
       expect(t.inputSchema.additionalProperties).toBe(false);
+    }
+    for (const t of TOOLS.slice(0, 5)) {
       expect(t.description.endsWith("Read-only; the data is unreviewed and is never clinical advice.")).toBe(true);
     }
   });
 
-  it("is dependency-free: no import, no server-only (another package's test imports it)", async () => {
+  it("the sixth tool is GUIDE_TOOL (§7.11.2) with the same annotations as every tool", () => {
+    expect(TOOLS).toHaveLength(6);
+    const t = TOOLS[5];
+    expect({ name: t.name, title: t.title, description: t.description, inputSchema: t.inputSchema }).toEqual(GUIDE_TOOL);
+    expect(t.annotations).toEqual({ title: "Get the QA guide", readOnlyHint: true, destructiveHint: false, idempotentHint: true,
+      openWorldHint: false });
+  });
+
+  it("is dependency-free: its one import is ./qa-guide, itself import-free; no server-only (another package's test imports it)", async () => {
     const { readFileSync } = await import("node:fs");
     const src = readFileSync(new URL("../lib/qa-mcp-tools.ts", import.meta.url), "utf8");
-    expect(src).not.toMatch(/^\s*import\b/m);
-    expect(src).not.toMatch(/\brequire\(/);
+    const imports = src.match(/^\s*import\b.*$/gm) ?? [];
+    expect(imports).toHaveLength(1);
+    expect(imports[0]).toMatch(/^import \{ [A-Za-z_, ]+ \} from "\.\/qa-guide";$/);
+    expect(src).not.toMatch(/\brequire\(|\bimport\(/);
+    expect(src).not.toMatch(/["']server-only["']/);
   });
 
   it("checkToolArgs maps each tool to its QaInput, with page 0 when absent", () => {
@@ -54,5 +68,7 @@ describe("lib/qa-mcp-tools.ts", () => {
     expect(checkToolArgs("get_pairs", { ["x".repeat(150)]: 1 })).toEqual({ ok: false, field: "x".repeat(100), route: "pairs" });
     expect(checkToolArgs("toString", {})).toEqual({ ok: false, unknownTool: true });
     expect(TOOL_ROUTES).toEqual({ list_batches: "batches", get_batch: "batch", get_record: "record", find_records: "records", get_pairs: "pairs" });
+    // §7.11.1: the guide tool reads no endpoint, so checkToolArgs and TOOL_ROUTES keep the five data tools (checkGuideArgs checks it)
+    expect(checkToolArgs("get_qa_guide", {})).toEqual({ ok: false, unknownTool: true });
   });
 });

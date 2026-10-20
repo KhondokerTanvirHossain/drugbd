@@ -1,10 +1,10 @@
 # IntelliDrugs QA MCP server
 
-A small, read-only [Model Context Protocol](https://modelcontextprotocol.io) server over stdio, for the product owner's QA project: another LLM uses it to re-check IntelliDrugs data against its sources and report mismatches. It wraps the read-only QA API (`/api/qa/v1/*`, spec §7.9) and nothing else. It has **no write tool**.
+A small, read-only [Model Context Protocol](https://modelcontextprotocol.io) server over stdio, for the product owner's QA project: another LLM uses it to re-check IntelliDrugs data against its sources and report mismatches. It wraps the read-only QA API (`/api/qa/v1/*`, spec §7.9) and serves the QA guide (spec §7.11), and nothing else. It has **no write tool**.
 
 It sits outside `web/`: the web build, the bundle-secret scan and the island check never see it. CI runs it as its own `qa-mcp` job.
 
-**No install needed for most clients:** the same five tools and the same rules are also served by the web app itself, at `https://drugdb.eliooo.org/api/qa/mcp` (the [hosted server](#hosted-server-no-install), spec §7.10.6). This stdio server is for clients that can only start a local process, such as Claude Desktop.
+**No install needed for most clients:** the same six tools, the same QA guide and the same rules are also served by the web app itself, at `https://drugdb.eliooo.org/api/qa/mcp` (the [hosted server](#hosted-server-no-install), spec §7.10.6). This stdio server is for clients that can only start a local process, such as Claude Desktop.
 
 ## Setup
 
@@ -65,7 +65,7 @@ For a local web app, add `--env INTELLIDRUGS_QA_BASE_URL=http://localhost:3000`.
 
 ## Hosted server (no install)
 
-The web app serves the same server at **`https://drugdb.eliooo.org/api/qa/mcp`**: MCP Streamable HTTP, stateless, plain JSON answers (no event stream, no session). Every request sends your QA key as `Authorization: Bearer <key>`. The tools, their inputs and refusals, the results and the preamble are the same as here (a parity test, `tests/parity.test.ts`, fails if they ever differ), each tool call counts toward the same 60-a-minute limit per key as the QA API, and each is audited like the equivalent API read.
+The web app serves the same server at **`https://drugdb.eliooo.org/api/qa/mcp`**: MCP Streamable HTTP, stateless, plain JSON answers (no event stream, no session). Every request sends your QA key as `Authorization: Bearer <key>`. The tools, their inputs and refusals, the results, the QA guide and the preamble are the same as here (a parity test, `tests/parity.test.ts`, fails if they ever differ), each request counts toward the same 60-a-minute limit per key as the QA API, and each tool call and guide read is audited like the equivalent API read (route `guide` for the guide).
 
 ### Claude Code
 
@@ -98,14 +98,14 @@ The claude.ai and ChatGPT connectors can only connect to servers that sign in wi
 
 ### Behaviour
 
-- `POST` only; `GET`, `DELETE`, `PUT` and `PATCH` answer 405. Methods: `initialize`, `ping`, `tools/list`, `tools/call`; notifications (such as `notifications/initialized`) are accepted with 202 and no body.
+- `POST` only; `GET`, `DELETE`, `PUT` and `PATCH` answer 405. Methods: `initialize`, `ping`, `tools/list`, `tools/call`, `resources/list`, `resources/templates/list`, `resources/read`; notifications (such as `notifications/initialized`) are accepted with 202 and no body.
 - Protocol versions `2025-11-25`, `2025-06-18` and `2025-03-26`. A request without `MCP-Protocol-Version` is taken as `2025-03-26`; an unsupported one is refused.
 - A browser `Origin` other than the site's own is refused (403), so a web page cannot call it from your browser.
 - HTTP errors are JSON-RPC errors with fixed messages: 401 `-32001` Unauthorized (no, unknown, revoked or expired key), 429 `-32003` Too many requests (with `Retry-After: 60`), 502 `-32004` Unavailable (the key could not be checked). Tool errors are results with `isError: true`, as below.
 
 ## Tools
 
-All five are read-only (`readOnlyHint: true`) and map 1:1 to the QA API. Inputs are checked against the API's own rules (§7.9.2) before any request; a bad input is refused with `Invalid input {name}` and no call is made.
+All six are read-only (`readOnlyHint: true`). The first five map 1:1 to the QA API; `get_qa_guide` answers from the QA guide bundled in this package. Inputs are checked against the API's own rules (§7.9.2) before any request; a bad input is refused with `Invalid input {name}` and no call is made.
 
 | Tool | Input | Calls |
 |---|---|---|
@@ -114,6 +114,7 @@ All five are read-only (`readOnlyHint: true`) and map 1:1 to the QA API. Inputs 
 | `get_record` | `{ batchId, conceptId }` | `GET /api/qa/v1/batches/{batchId}/records/{conceptId}` |
 | `find_records` | `{ filter, stage?, batch?, page? }` | `GET /api/qa/v1/records?…` |
 | `get_pairs` | `{ bdsId, page? }` | `GET /api/qa/v1/substances/{bdsId}/pairs?page=` |
+| `get_qa_guide` | `{ topic? }` | none: the bundled QA guide |
 
 - `batchId`, `batch`: `^[A-Za-z0-9._-]{1,100}$` (not `.` or `..`, which no HTTP client can send as a path segment).
 - `conceptId`: 1–200 characters, no control character (not `.` or `..`), exactly as `get_batch` or `find_records` returns it. Ids are percent-encoded into their path segment.
@@ -121,10 +122,21 @@ All five are read-only (`readOnlyHint: true`) and map 1:1 to the QA API. Inputs 
 - `filter`: `strength_missing`, `parse_partial`, `route_assumed`, `no_ddinter_data`, `unaligned`, `stage_warn`, `stage_fail` (§7.9.4).
 - `stage`: `dgda`, `substances`, `clinical` or `ddinter`; only with `filter: "stage_warn"`.
 - `page`: integer 0–999 (100 records or 50 pairs a page; the body carries `total` and `size`).
+- `topic`: `overview`, `data_model`, `sources`, `checks`, `pitfalls` or `reporting`; leave it out for the topic index and the overview.
+
+### The QA guide
+
+The QA guide tells a model, small local ones included, what IntelliDrugs is, how a record is built field by field, which source to check each field against, what to check for each problem filter and stage, the known traps, and how to report a finding. It comes in six compact Markdown topics, so a model can load one at a time:
+
+- `get_qa_guide` returns the preamble, then JSON `{ guideVersion, topic, title, text, related }` (`text` is Markdown). Without `topic` it returns the topic index and the overview.
+- The same topics are MCP resources: `resources/list` lists them, and `resources/read` reads `intellidrugs://qa-guide/{topic}` (`text/markdown`). An unknown uri is the JSON-RPC error `-32002` Resource not found.
+- `guideVersion` is a semver that changes whenever the guide does.
+
+The guide is bundled here (`src/qa-guide.ts`, a byte-identical copy of `web/lib/qa-guide.ts`), so `get_qa_guide` and the resource reads work without reaching the site and write no audit row. They hold no record data.
 
 ### Results
 
-Every result, errors included, is two text items: first the fixed preamble below, then either the QA API's response body as indented JSON (the platform envelope `{ success, data, message, errors, metadata }`, unchanged) or one error line:
+Every result, errors included, is two text items: first the fixed preamble below, then either the QA API's response body as indented JSON (the platform envelope `{ success, data, message, errors, metadata }`, unchanged), the guide JSON for `get_qa_guide`, or one error line:
 
 | Error line | When |
 |---|---|

@@ -108,7 +108,8 @@ export default async function QaToolsPage() {
         <p className={styles.help}>{P.cursorHelp}</p>
         <h3>{P.oauthHeading}</h3>
         <p>{P.oauthBody}</p>
-        <p>{fillNodes(P.toolsLine, { t1: names[0], t2: names[1], t3: names[2], t4: names[3], t5: names[4], path: code("tools/qa-mcp") })}</p>
+        <p>{fillNodes(P.toolsLine, { t1: names[0], t2: names[1], t3: names[2], t4: names[3], t5: names[4], t6: names[5],
+          path: code("tools/qa-mcp") })}</p>
       </section>
 
       <section className={styles.section} aria-labelledby={KEYS_HEADING_ID}>

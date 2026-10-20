@@ -57,7 +57,8 @@ import * as EX from "@/lib/qa-api-examples";
 import { EXAMPLE_NULLS, KEY_VARIABLE, codeBlocks, qaReference, type RefEndpoint } from "@/lib/qa-api-reference";
 import { QA_PAIRS_SIZE, QA_RECORDS_SIZE, mapBatch, mapBatches, mapPairs, mapRecord, mapRecords } from "@/lib/qa-map";
 import { DEFAULT_PROTOCOL_VERSION, MCP_MAX_BODY } from "@/lib/qa-mcp";
-import { SUPPORTED_PROTOCOL_VERSIONS, TOOLS, TOOL_ROUTES } from "@/lib/qa-mcp-tools";
+import { GUIDE, GUIDE_TOPICS, GUIDE_URI_PREFIX, guideResources } from "@/lib/qa-guide";
+import { SERVER_VERSION, SUPPORTED_PROTOCOL_VERSIONS, TOOLS, TOOL_ROUTES } from "@/lib/qa-mcp-tools";
 import { BATCH_ID, BDS_ID, PAGE_MAX, QA_FILTERS, QA_STAGES, type QaRoute } from "@/lib/qa-query";
 import { apiBatchItems, apiBatches, apiRecord, apiRecords, apiSubstance } from "./fixtures/qa";
 import type { StageKey } from "@/lib/review-types";
@@ -259,7 +260,7 @@ describe("(a) every example answer is the real answer to its panel's command (§
     expect(api.paths).toEqual([]);
   });
 
-  it.each([["initialize", REF.mcp.initialize], ["tools/call", REF.mcp.call]] as const)(
+  it.each([["initialize", REF.mcp.initialize], ["tools/call", REF.mcp.call], ["resources/list", REF.mcp.guide]] as const)(
     "MCP %s: the hosted server, given the command's method, headers and body, answers the example exactly", async (_n, ex) => {
       api.upstream = okUpstream("batches");
       const c = parseCurl(ex.command.text);
@@ -271,6 +272,22 @@ describe("(a) every example answer is the real answer to its panel's command (§
       expect(body).toEqual(ex.body);
       expect(ex.answer.text).toBe(JSON.stringify(body, null, 2));
     });
+
+  it("the initialize example carries the real capabilities and version (§7.10.6, QA guide)", () => {
+    const body = REF.mcp.initialize.body as { result: { capabilities: unknown; serverInfo: { version: string } } };
+    expect(body.result.capabilities).toEqual({ tools: { listChanged: false }, resources: { subscribe: false, listChanged: false } });
+    expect(body.result.serverInfo.version).toBe(SERVER_VERSION);
+    expect(SERVER_VERSION).toBe("1.1.0");
+  });
+
+  it("the resources/list example is the six guide topics: uris, titles and summaries, never the guide's text", () => {
+    expect(REF.mcp.guide.message).toEqual({ jsonrpc: "2.0", id: 3, method: "resources/list" });
+    expect(REF.mcp.guide.body).toEqual({ jsonrpc: "2.0", id: 3, result: { resources: guideResources() } });
+    expect(REF.mcp.guide.command.text).toContain('  -H "MCP-Protocol-Version: 2025-11-25" \\');
+    expect(REF.mcp.guide.command.region).toBe("Command for resources/list");
+    expect(REF.mcp.guide.answer.region).toBe("Answer for resources/list");
+    for (const t of GUIDE_TOPICS) expect(REF.mcp.guide.answer.text).not.toContain(GUIDE[t].text.split("\n")[0]);
+  });
 
   it("the tools/call answer's second block is the batches example envelope, indented as the server indents it", () => {
     const body = REF.mcp.call.body as { result: { content: { type: string; text: string }[] } };
@@ -472,6 +489,24 @@ describe("(a) the record example's stage evidence is what the pipeline writes (�
       chosen: [{ bds_id: ing.bdsId, ddinter_id: chosen.ddinterId, route_scope: chosen.routeScope, route_assumed: chosen.routeAssumed }] });
     expect(ev.ddinter.text_missing).toEqual(r.stages.find((s) => s.stage === "ddinter")!.textMissing.map((t) => [t.ddinterA, t.ddinterB]));
   });
+
+  // The guide's dgda check (§7.11.8, guide 1.1.0) names the register keys each brand field comes from; the example's
+  // source.json must carry those keys, so the page and the guide never disagree (ocl/transform.py concept_to_product).
+  it("source.json is a register record as the pipeline reads it: its extras and mappings give the record's brand fields", () => {
+    const r = EX.RECORD_BODY;
+    const src = r.sourceJson as { extras: Record<string, string>; mappings: { map_type: string; to_concept_code: string;
+      to_concept_name: string; retired: boolean }[] };
+    const transform = ETL("ocl/transform.py");
+    for (const k of Object.keys(src.extras)) expect(transform, `extras.${k}`).toContain(`extras.get("${k}")`);
+    const clean = (s: string) => s.split(/\s+/).filter(Boolean).join(" ");
+    expect({ darNumber: clean(src.extras.dar_number), tradeName: clean(src.extras.trade_name), company: clean(src.extras.company),
+      dosageForm: clean(src.extras.dosage_form), genericContentRaw: clean(src.extras.generic_content_raw) })
+      .toEqual({ darNumber: r.brand.darNumber, tradeName: r.brand.tradeName, company: r.brand.company, dosageForm: r.brand.dosageForm,
+        genericContentRaw: r.brand.genericContentRaw });
+    expect(transform).toContain('if m.get("map_type") != "Has-active-ingredient" or m.get("retired"):');
+    expect(src.mappings.filter((m) => m.map_type === "Has-active-ingredient" && !m.retired)
+      .map((m) => ({ xmCode: m.to_concept_code, name: m.to_concept_name }))).toEqual(r.dgdaIngredients);
+  });
 });
 
 // ---- (b)
@@ -637,13 +672,26 @@ describe("(b) MCP over HTTP: the documented rules are the server's", () => {
     ]);
   });
 
-  it("the tools table is TOOLS: names, argument names in order, required, and the TOOL_ROUTES endpoint", () => {
+  it("the tools table is TOOLS: names, argument names in order, required, and the TOOL_ROUTES endpoint or the guide uri", () => {
     expect(REF.mcp.tools).toEqual(TOOLS.map((t) => ({
       name: t.name,
       args: Object.keys(t.inputSchema.properties).map((name) => ({ name, required: (t.inputSchema.required ?? []).includes(name) })),
-      request: endpoint(TOOL_ROUTES[t.name]).request,
+      request: t.name === "get_qa_guide" ? `${GUIDE_URI_PREFIX}{topic}` : endpoint(TOOL_ROUTES[t.name]).request,
     })));
-    expect(REF.mcp.tools.map((t) => t.request)).toEqual(REF.endpoints.map((e) => e.request));
+    expect(REF.mcp.tools.slice(0, 5).map((t) => t.request)).toEqual(REF.endpoints.map((e) => e.request));
+    expect(REF.mcp.tools[5]).toEqual({ name: "get_qa_guide", args: [{ name: "topic", required: false }],
+      request: "intellidrugs://qa-guide/{topic}" });
+    expect(Object.keys(TOOL_ROUTES)).toEqual(["list_batches", "get_batch", "get_record", "find_records", "get_pairs"]);
+  });
+
+  it("the methods line lists the seven methods; the arguments line names the guide topics; the guide lines name the tool and fields", () => {
+    expect(REF.mcp.bodyLine.fills.methods).toEqual({ codes: ["initialize", "ping", "tools/list", "tools/call", "resources/list",
+      "resources/templates/list", "resources/read"] });
+    expect(REF.mcp.argsLine.fills.topic).toEqual({ code: "topic" });
+    expect(REF.mcp.argsLine.fills.topics).toEqual({ codes: GUIDE_TOPICS });
+    expect(REF.mcp.guide.lead.fills).toEqual({ tool: { code: "get_qa_guide" }, topic: { code: "topic" }, version: { code: "guideVersion" } });
+    expect(REF.mcp.guide.resultLine.fills).toEqual({ tool: { code: "get_qa_guide" },
+      fields: { codes: ["guideVersion", "topic", "title", "text", "related"] } });
   });
 
   /** One request that triggers each row of the MCP errors table. */
@@ -674,6 +722,8 @@ describe("(b) MCP over HTTP: the documented rules are the server's", () => {
     "Invalid Request": () => mcp({ body: "[]" }),
     "Unsupported protocol version": () => mcp({ headers: { "mcp-protocol-version": "1999-01-01" } }),
     "Invalid params": () => mcp({ body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: {} }) }),
+    "Resource not found": () => mcp({ body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "resources/read",
+      params: { uri: "intellidrugs://qa-guide/nope" } }) }),
     "Method not found": () => mcp({ body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "nope" }) }),
     "Internal error": () => {
       spies.answerQa.mockImplementationOnce(() => { throw new Error("boom"); });
@@ -737,7 +787,8 @@ describe("(c) no secret or person in the reference (§11.1)", () => {
   }
 
   it("no example answer holds a dropped field; a note key only on a batch item's stage", () => {
-    const answers = [REF.common.errorBody, ...REF.endpoints.map((e) => e.example.body), REF.mcp.initialize.body, REF.mcp.call.body];
+    const answers = [REF.common.errorBody, ...REF.endpoints.map((e) => e.example.body), REF.mcp.initialize.body, REF.mcp.call.body,
+      REF.mcp.guide.body];
     const paths = answers.flatMap((a) => keyPaths(a));
     for (const k of ["mine", "reviewerEmail", "lastDecisionId", "contentHash", "lastPairReviewId", "openIssues", "reopen"]) {
       expect(paths.filter((p) => p.split(".").at(-1) === k), k).toEqual([]);

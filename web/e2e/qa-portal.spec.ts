@@ -1,6 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { createHash, randomBytes } from "node:crypto";
 import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
+import { GUIDE, GUIDE_VERSION } from "../lib/qa-guide";
 import { insertQaKey, qaKeyLastUsed, revokeQaKeysOf } from "./db";
 import { PILOT_IDS } from "./review-helpers";
 import { BASE_URL, E2E_EMAILS, E2E_QA_EMPTY, signInAs } from "./session";
@@ -10,7 +11,8 @@ import { installTurnstileFake } from "./turnstile-fake";
  * §11.4 QA flow (QA portal, D66, D67): the qa role sees only the QA section; an engineer creates a key on /review/qa, sees it
  * once, uses it against the QA API, revokes it, and it stops working; a senior creates one too, and a sixth active key is
  * refused (by the API, then by the page); a pharmacist's page, menu and DB key. The engineer's key also drives the hosted MCP
- * server (§7.10.6) on the built app: initialize, tools/list and tools/call list_batches, then 401 once the key is revoked.
+ * server (§7.10.6) on the built app: initialize, tools/list and tools/call list_batches, the QA guide (§7.11: get_qa_guide
+ * and resources/read), then 401 once the key is revoked.
  */
 
 const KEY = /^idqa_[A-Za-z0-9_-]{43}$/;
@@ -68,7 +70,7 @@ function parseCurl(text: string) {
 }
 const REFERENCE_PANELS = ["qa-ref-batches", "qa-ref-batch", "qa-ref-record", "qa-ref-records", "qa-ref-pairs"];
 
-/** Runs each endpoint panel's command and the MCP panel's two with `key`: each answers 200 in its example's shape (§11.4). */
+/** Runs each endpoint panel's command and the MCP panel's three with `key`: each answers 200 in its example's shape (§11.4). */
 async function expectReferenceRuns(page: Page, key: string): Promise<void> {
   const text = async (id: string) => (await page.locator(`#${id}`).textContent()) ?? "";
   for (const id of REFERENCE_PANELS) {
@@ -78,7 +80,8 @@ async function expectReferenceRuns(page: Page, key: string): Promise<void> {
     expect(res.status(), c.path).toBe(200);
     expectSameShape(await res.json(), JSON.parse(await text(`${id}-answer`)), c.path);
   }
-  for (const [command, answer] of [["qa-ref-mcp-init-command", "qa-ref-mcp-init-answer"], ["qa-ref-mcp-call-command", "qa-ref-mcp-call-answer"]]) {
+  for (const [command, answer] of [["qa-ref-mcp-init-command", "qa-ref-mcp-init-answer"], ["qa-ref-mcp-call-command", "qa-ref-mcp-call-answer"],
+    ["qa-ref-mcp-guide-command", "qa-ref-mcp-guide-answer"]]) {
     const c = parseCurl(await text(command));
     expect(c.path).toBe("/api/qa/mcp");
     const res = await page.request.post(c.path, { headers: { ...c.headers, ...bearer(key) }, data: c.body! });
@@ -180,13 +183,14 @@ test("an engineer creates a key, sees it once, uses it, revokes it, and it stops
   expect(init.status()).toBe(200);
   expect(init.headers()["mcp-session-id"]).toBeUndefined();
   const initBody = await init.json();
-  expect(initBody.result).toMatchObject({ protocolVersion: "2025-06-18", serverInfo: { name: "intellidrugs-qa", version: "1.0.0" } });
+  expect(initBody.result).toMatchObject({ protocolVersion: "2025-06-18", serverInfo: { name: "intellidrugs-qa", version: "1.1.0" },
+    capabilities: { tools: { listChanged: false }, resources: { subscribe: false, listChanged: false } } });
   expect(initBody.result.instructions.startsWith(PREAMBLE_FIRST)).toBe(true);
   expect((await mcp(page, key, { method: "notifications/initialized" }, "2025-06-18")).status()).toBe(202);
   const list = await mcp(page, key, { id: 2, method: "tools/list" }, "2025-06-18");
   expect(list.status()).toBe(200);
   expect((await list.json()).result.tools.map((t: { name: string }) => t.name))
-    .toEqual(["list_batches", "get_batch", "get_record", "find_records", "get_pairs"]);
+    .toEqual(["list_batches", "get_batch", "get_record", "find_records", "get_pairs", "get_qa_guide"]);
   const callRes = await mcp(page, key, { id: 3, method: "tools/call", params: { name: "list_batches", arguments: {} } }, "2025-06-18");
   expect(callRes.status()).toBe(200);
   const call = (await callRes.json()).result;
@@ -198,6 +202,17 @@ test("an engineer creates a key, sees it once, uses it, revokes it, and it stops
   const callText = JSON.stringify(call);
   expect(callText).not.toContain(key);
   expect(callText).not.toContain(E2E_EMAILS.engineer);
+  // The QA guide (§7.11, §11.4): the tool for one topic, and the same guide as a resource.
+  const guideRes = await mcp(page, key, { id: 6, method: "tools/call", params: { name: "get_qa_guide", arguments: { topic: "checks" } } }, "2025-06-18");
+  expect(guideRes.status()).toBe(200);
+  const guide = (await guideRes.json()).result;
+  expect(guide.isError).toBeUndefined();
+  expect(guide.content[0].text.startsWith(PREAMBLE_FIRST)).toBe(true);
+  expect(JSON.parse(guide.content[1].text)).toMatchObject({ guideVersion: GUIDE_VERSION, topic: "checks", text: GUIDE.checks.text });
+  const readRes = await mcp(page, key, { id: 7, method: "resources/read", params: { uri: "intellidrugs://qa-guide/overview" } }, "2025-06-18");
+  expect(readRes.status()).toBe(200);
+  expect((await readRes.json()).result).toEqual({ contents: [{ uri: "intellidrugs://qa-guide/overview", mimeType: "text/markdown",
+    text: GUIDE.overview.text }] });
   // A browser origin other than the site's own is refused.
   expect((await page.request.post("/api/qa/mcp", { headers: { ...MCP_HEADERS, ...bearer(key), Origin: "https://evil.example" },
     data: JSON.stringify({ jsonrpc: "2.0", id: 4, method: "ping" }) })).status()).toBe(403);
@@ -341,6 +356,9 @@ test("320 px, QA API reference: every panel open, no page scroll; code scrolls i
   await expect(page.locator("#qa-ref-batch")).not.toHaveAttribute("open", "");
   expect(await summary.evaluate((el) => el.getBoundingClientRect().height)).toBeGreaterThanOrEqual(24);
   await panels.evaluateAll((all) => all.forEach((d) => { (d as HTMLDetailsElement).open = true; }));
+  // the QA guide part's two code regions (§5.18, QA guide) are inside the open MCP panel
+  await expect(page.getByRole("region", { name: "Command for resources/list" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Answer for resources/list" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
   // The record's command is wider than 320 px: its region scrolls sideways, the page does not; Tab reaches the region.
   const region = page.getByRole("region", { name: "Command for GET /api/qa/v1/batches/{batchId}/records/{conceptId}" });
