@@ -35,6 +35,9 @@ const GUIDE_HISTORY: readonly { version: string; sha256: string }[] = [
   // 1.5.0: the RxNav properties call (an RxCUI's name and tty) and related call (a PIN's IN), both read by the pipeline,
   // so an rxnav-approx name and a PIN can be checked without a browser (sources, checks, pitfalls)
   { version: "1.5.0", sha256: "c4ba0cceaff66e8c89d8c3d11cfc844e93774fc4867271e3f3c6bef621fc2cb7" },
+  // 1.6.0: the RxNav name lookup and approximate match the pipeline makes (sources, checks, pitfalls); properties.json gives
+  // any tty, and the pipeline keeps only an IN or a PIN that resolves to one IN (sources)
+  { version: "1.6.0", sha256: "8401b71cd95b6111509cb53371ae5d371953b0d75cf4bebb03a82515cdceabcb" },
 ];
 
 const contentHash = () => createHash("sha256")

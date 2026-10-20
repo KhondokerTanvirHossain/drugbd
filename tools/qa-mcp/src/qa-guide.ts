@@ -13,7 +13,7 @@
  */
 
 /** §7.11.5: semver, independent of the server version. */
-export const GUIDE_VERSION = "1.5.0";
+export const GUIDE_VERSION = "1.6.0";
 export const GUIDE_TITLE = "IntelliDrugs QA guide";
 export const GUIDE_TOPICS = ["overview", "data_model", "sources", "checks", "pitfalls", "reporting"] as const;
 export type GuideTopic = (typeof GUIDE_TOPICS)[number];
@@ -129,8 +129,11 @@ const SOURCES = md(
   "- Authoritative for `RXCUI`: `https://mor.nlm.nih.gov/RxNav/search?searchBy=RXCUI&searchTerm={c}`.",
   "- `SNOMEDCT` codes also come from RxNav; check them there: `https://mor.nlm.nih.gov/RxNav/search?searchBy=SNOMEDCT&searchTerm={c}`.",
   "- As data, without a browser: `https://rxnav.nlm.nih.gov/REST/rxcui/{c}/allProperties.json?prop=codes` (`{c}` the RxCUI) lists the codes RxNav holds for an RxCUI, `ATC`, `DRUGBANK` and `SNOMEDCT` among them; the pipeline reads the same call.",
-  "- `https://rxnav.nlm.nih.gov/REST/rxcui/{c}/properties.json` gives an RxCUI's `name` and `tty` (`IN` an ingredient, `PIN` a precise ingredient such as a salt); the pipeline reads it to tell them apart.",
-  "- `https://rxnav.nlm.nih.gov/REST/rxcui/{c}/related.json?tty=IN` gives the ingredient (IN) of an RxCUI, so it leads a PIN to its IN; the pipeline reads it for that. Use the two to check an `rxnav-approx` name and a PIN (`checks`).",
+  "- `https://rxnav.nlm.nih.gov/REST/rxcui/{c}/properties.json` gives an RxCUI's `name` and `tty`, of any type (`IN` an ingredient, `PIN` a precise ingredient such as a salt, `BN` a brand, and others); the pipeline keeps an RxCUI only when it is an IN, or a PIN that leads to one IN.",
+  "- `https://rxnav.nlm.nih.gov/REST/rxcui/{c}/related.json?tty=IN` gives the ingredient (IN) of an RxCUI, so it leads a PIN to its IN; the pipeline reads it for that.",
+  "- `https://rxnav.nlm.nih.gov/REST/rxcui.json?name={name}&search=2` (`{name}` a name, URL-encoded) is the exact or normalised name lookup behind `rxnav-exact`; the pipeline tries it first.",
+  "- `https://rxnav.nlm.nih.gov/REST/approximateTerm.json?term={name}&maxEntries=1` is the approximate match behind `rxnav-approx`, tried only when the name lookup finds nothing; the pipeline keeps it only when one RxCUI has the top score, of at least 5.",
+  "- Use these calls to check an `rxnav-approx` name and a PIN (`checks`).",
   "",
   "## WHO ATC/DDD index",
   "",
@@ -213,7 +216,7 @@ const CHECKS = md(
   "- Check the `RXCUI`, `ATC` and `DRUGBANK` codes in `extraction.ingredients[].codes[]` against RxNav and the WHO index.",
   "- An `rxnav-approx` code came from an approximate name search: check by name that the RxCUI is the same substance.",
   "- Compare at the ingredient level: our `RXCUI` is an IN, so when RxNav finds a precise ingredient (PIN) for a salt name, follow it to its ingredient before you compare, and compare `ATC`, `DRUGBANK` and `SNOMEDCT` with that ingredient's codes (`pitfalls`).",
-  "- To check a name or a PIN without a browser, read the RxCUI's `name` and `tty` from the RxNav properties call, and a PIN's IN from the related call (`sources`).",
+  "- Without a browser (`sources`): find a name's RxCUI with the RxNav name lookup or approximate match, then read its `name` and `tty` from the properties call and a PIN's IN from the related call.",
   "- It warns for a substance with no RxCUI, or a DGDA ingredient that no parsed name aligned to. It fails when DGDA maps no ICD-11 ingredient.",
   "",
   "## Stage `clinical`",
@@ -280,7 +283,7 @@ const PITFALLS = md(
   "",
   "## RxNorm codes",
   "",
-  "- Our `RXCUI` is the base ingredient (IN), not a salt: searching RxNav for the register's salt name (`Amlodipine Besilate`) finds a precise ingredient (PIN) with another RxCUI, and that PIN's ingredient is the one to compare. RxNav's related call gives that ingredient (`sources`).",
+  "- Our `RXCUI` is the base ingredient (IN), not a salt: searching RxNav for the register's salt name (`Amlodipine Besilate`) finds a precise ingredient (PIN) with another RxCUI, and that PIN's ingredient is the one to compare. RxNav's name lookup finds that PIN, and its related call gives the ingredient (`sources`).",
   "- When the lookup cannot settle on one ingredient (several match, or the concept found is neither IN nor PIN), no RxCUI is stored.",
   "",
   "## Register ids",

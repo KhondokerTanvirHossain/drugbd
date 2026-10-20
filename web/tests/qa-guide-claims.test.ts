@@ -191,6 +191,11 @@ const PATTERNS: Record<string, Origin> = {
     { file: `${PIPELINE}/rxnav/client.py`, needle: 'BASE = "https://rxnav.nlm.nih.gov/REST"' },
   "https://rxnav.nlm.nih.gov/REST/rxcui/{c}/related.json?tty=IN":
     { file: `${PIPELINE}/rxnav/client.py`, needle: 'BASE = "https://rxnav.nlm.nih.gov/REST"' },
+  // fix round 6, guide 1.6.0: the name lookup and the approximate match the pipeline makes (rxcui_for_name)
+  "https://rxnav.nlm.nih.gov/REST/rxcui.json?name={name}&search=2":
+    { file: `${PIPELINE}/rxnav/client.py`, needle: 'BASE = "https://rxnav.nlm.nih.gov/REST"' },
+  "https://rxnav.nlm.nih.gov/REST/approximateTerm.json?term={name}&maxEntries=1":
+    { file: `${PIPELINE}/rxnav/client.py`, needle: 'BASE = "https://rxnav.nlm.nih.gov/REST"' },
   "https://atcddd.fhi.no/atc_ddd_index/?code={c}&showdescription=no": '"https://atcddd.fhi.no/atc_ddd_index/?code={c}&showdescription=no"',
   "https://go.drugbank.com/drugs/{c}": '"https://go.drugbank.com/drugs/{c}"',
   "https://icd.who.int/browse/latest-release/mms/en": 'ICD11_HOME = "https://icd.who.int/browse/latest-release/mms/en"',
@@ -227,6 +232,8 @@ describe("source addresses (§7.11.7)", () => {
       "https://rxnav.nlm.nih.gov/REST/rxcui/{c}/allProperties.json?prop=codes",
       "https://rxnav.nlm.nih.gov/REST/rxcui/{c}/properties.json",
       "https://rxnav.nlm.nih.gov/REST/rxcui/{c}/related.json?tty=IN",
+      "https://rxnav.nlm.nih.gov/REST/rxcui.json?name={name}&search=2",
+      "https://rxnav.nlm.nih.gov/REST/approximateTerm.json?term={name}&maxEntries=1",
     ]);
     for (const [pattern, { file, needle }] of pipeline) expect(readFileSync(join(REPO, file), "utf8"), pattern).toContain(needle);
     const ocl = readFileSync(join(REPO, `${PIPELINE}/ocl/client.py`), "utf8");
@@ -236,6 +243,18 @@ describe("source addresses (§7.11.7)", () => {
     expect(rxnav).toContain('f"/rxcui/{rxcui}/allProperties.json", {"prop": "codes"}');
     expect(rxnav).toContain('self._json(f"/rxcui/{rxcui}/properties.json")');
     expect(rxnav).toContain('f"/rxcui/{rxcui}/related.json", {"tty": "IN"}');
+    expect(rxnav).toContain('self._json("/rxcui.json", {"name": name, "search": 2})');
+    expect(rxnav).toContain('self._json("/approximateTerm.json", {"term": name, "maxEntries": 1})');
+  });
+
+  it("properties.json gives any tty, not only IN or PIN; related.json is evidenced by a PIN (fix round 6, guide 1.6.0, correction 14)", () => {
+    expect(GUIDE.sources.text).toContain("`BN`");
+    expect(GUIDE.sources.text).not.toContain("`tty` (`IN` an ingredient, `PIN` a precise ingredient such as a salt)");
+    expect(specSection("7.11.7")).not.toContain("`tty` (`IN` or `PIN`) as data");
+    expect(specSection("7.11.8")).not.toContain("`tty` (`IN` or `PIN`)");
+    const related = CLAIMS.filter((c) => c.source.kind === "external" && c.source.url.includes("/related.json"));
+    expect(related.length).toBeGreaterThan(0);
+    for (const c of related) if (c.source.kind === "external") expect(c.source.url).toBe("https://rxnav.nlm.nih.gov/REST/rxcui/104416/related.json?tty=IN");
   });
 
   it("§7.11.7's table lists every pattern (fix round 5, guide 1.5.0, correction 13)", () => {
