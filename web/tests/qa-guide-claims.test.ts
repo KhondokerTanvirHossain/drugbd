@@ -167,12 +167,21 @@ describe("field paths (§7.11.7)", () => {
 
 // ---- source addresses (§7.11.7)
 
-/** The §7.11.7 patterns, and how SourceLinks.java builds the ones it owns (null: external, dated in the claims map). */
-const PATTERNS: Record<string, string | null> = {
+/**
+ * The §7.11.7 patterns, and how SourceLinks.java builds the ones it owns (null: external, dated in the claims map; a file and
+ * needle: a JSON endpoint the pipeline reads, also dated in the claims map).
+ */
+type Origin = string | null | { file: string; needle: string };
+const PIPELINE = "etl/src/bddrug_etl";
+const PATTERNS: Record<string, Origin> = {
   "https://tr.ocl.dghs.gov.bd/#/orgs/MoHFW/sources/DGDA-Drugs/concepts/{conceptId}/":
     'OCL_CONCEPT = "https://tr.ocl.dghs.gov.bd/#/orgs/MoHFW/sources/DGDA-Drugs/concepts/"',
   "https://mor.nlm.nih.gov/RxNav/search?searchBy=RXCUI&searchTerm={c}": '"https://mor.nlm.nih.gov/RxNav/search?searchBy=RXCUI&searchTerm={c}"',
   "https://mor.nlm.nih.gov/RxNav/search?searchBy=SNOMEDCT&searchTerm={c}": '"https://mor.nlm.nih.gov/RxNav/search?searchBy=SNOMEDCT&searchTerm={c}"',
+  "https://api.tr.ocl.dghs.gov.bd/orgs/MoHFW/sources/DGDA-Drugs/concepts/{conceptId}/?verbose=true&includeMappings=true":
+    { file: `${PIPELINE}/jobs/load_dgda.py`, needle: '"OCL_BASE_URL", "https://api.tr.ocl.dghs.gov.bd"' },
+  "https://rxnav.nlm.nih.gov/REST/rxcui/{c}/allProperties.json?prop=codes":
+    { file: `${PIPELINE}/rxnav/client.py`, needle: 'BASE = "https://rxnav.nlm.nih.gov/REST"' },
   "https://atcddd.fhi.no/atc_ddd_index/?code={c}&showdescription=no": '"https://atcddd.fhi.no/atc_ddd_index/?code={c}&showdescription=no"',
   "https://go.drugbank.com/drugs/{c}": '"https://go.drugbank.com/drugs/{c}"',
   "https://icd.who.int/browse/latest-release/mms/en": 'ICD11_HOME = "https://icd.who.int/browse/latest-release/mms/en"',
@@ -191,15 +200,28 @@ describe("source addresses (§7.11.7)", () => {
   });
 
   it("each SourceLinks pattern is the one SourceLinks.java builds; the OCL one ends with the concept id and a slash", () => {
-    for (const [pattern, needle] of Object.entries(PATTERNS)) if (needle !== null) expect(SOURCE_LINKS, pattern).toContain(needle);
+    for (const [pattern, needle] of Object.entries(PATTERNS)) if (typeof needle === "string") expect(SOURCE_LINKS, pattern).toContain(needle);
     expect(SOURCE_LINKS).toContain("return OCL_CONCEPT + encoded + \"/\";");
   });
 
-  it("each external pattern has a dated external claim in sources", () => {
+  it("each external and pipeline pattern has a dated external claim in sources", () => {
     for (const [pattern, needle] of Object.entries(PATTERNS)) {
-      if (needle !== null) continue;
+      if (typeof needle === "string") continue;
       expect(CLAIMS.some((c) => c.topic === "sources" && c.text.includes(pattern) && c.source.kind === "external"), pattern).toBe(true);
     }
+  });
+
+  it("each pipeline pattern is the endpoint the pipeline reads: its file has the base address, the pipeline the path and query", () => {
+    const pipeline = Object.entries(PATTERNS).flatMap(([p, o]) => (typeof o === "object" && o !== null ? [[p, o] as const] : []));
+    expect(pipeline.map(([p]) => p)).toEqual([
+      "https://api.tr.ocl.dghs.gov.bd/orgs/MoHFW/sources/DGDA-Drugs/concepts/{conceptId}/?verbose=true&includeMappings=true",
+      "https://rxnav.nlm.nih.gov/REST/rxcui/{c}/allProperties.json?prop=codes",
+    ]);
+    for (const [pattern, { file, needle }] of pipeline) expect(readFileSync(join(REPO, file), "utf8"), pattern).toContain(needle);
+    const ocl = readFileSync(join(REPO, `${PIPELINE}/ocl/client.py`), "utf8");
+    expect(ocl).toContain('url = f"{self.base_url}/orgs/{owner}/sources/{source}/concepts/{concept_id}/"');
+    expect(ocl).toContain('params={"verbose": "true", "includeMappings": "true"}');
+    expect(readFileSync(join(REPO, `${PIPELINE}/rxnav/client.py`), "utf8")).toContain('f"/rxcui/{rxcui}/allProperties.json", {"prop": "codes"}');
   });
 
   it("no other topic carries an address", () => {

@@ -13,7 +13,7 @@
  */
 
 /** §7.11.5: semver, independent of the server version. */
-export const GUIDE_VERSION = "1.0.0";
+export const GUIDE_VERSION = "1.1.0";
 export const GUIDE_TITLE = "IntelliDrugs QA guide";
 export const GUIDE_TOPICS = ["overview", "data_model", "sources", "checks", "pitfalls", "reporting"] as const;
 export type GuideTopic = (typeof GUIDE_TOPICS)[number];
@@ -120,13 +120,16 @@ const SOURCES = md(
   "",
   "- Authoritative for `source.json`, `extraction.tradeName`, `extraction.company`, `extraction.dosageForm`, `extraction.darNumber`, `extraction.genericContentRaw` and `extraction.dgdaIngredients[]` (XM code and name).",
   "- Address: `https://tr.ocl.dghs.gov.bd/#/orgs/MoHFW/sources/DGDA-Drugs/concepts/{conceptId}/`, the record's `source.link`.",
+  "- That register page and the RxNav search pages below are JavaScript apps that render only in a browser: a plain HTTP request gets the page shell with no data, which is never evidence of a missing value.",
+  "- To read the register record as data, use the OCL API the pipeline reads: `https://api.tr.ocl.dghs.gov.bd/orgs/MoHFW/sources/DGDA-Drugs/concepts/{conceptId}/?verbose=true&includeMappings=true`.",
   "- `source.json` is the register record our data was built from, as stored at `extractedAt`. Compare the extraction with it first.",
-  "- A difference between `source.json` and the live register page means the source changed after extraction, not that the extraction is wrong: report it as a changed source, not as an extraction error.",
+  "- A difference between `source.json` and the live register record means the source changed after extraction, not that the extraction is wrong: report it as a changed source, not as an extraction error.",
   "",
   "## NLM RxNav",
   "",
   "- Authoritative for `RXCUI`: `https://mor.nlm.nih.gov/RxNav/search?searchBy=RXCUI&searchTerm={c}`.",
   "- `SNOMEDCT` codes also come from RxNav; check them there: `https://mor.nlm.nih.gov/RxNav/search?searchBy=SNOMEDCT&searchTerm={c}`.",
+  "- As data, without a browser: `https://rxnav.nlm.nih.gov/REST/rxcui/{c}/allProperties.json?prop=codes` (`{c}` the RxCUI) lists the codes RxNav holds for an RxCUI, `ATC`, `DRUGBANK` and `SNOMEDCT` among them; the pipeline reads the same call.",
   "",
   "## WHO ATC/DDD index",
   "",
@@ -199,7 +202,9 @@ const CHECKS = md(
   "",
   "## Stage `dgda`",
   "",
-  "- Compare `extraction.tradeName`, `extraction.darNumber`, `extraction.company`, `extraction.dosageForm`, `extraction.genericContentRaw` and `extraction.dgdaIngredients[]` with `source.json`, then `source.json` with the register page at `source.link`.",
+  "- Compare `extraction.tradeName`, `extraction.darNumber`, `extraction.company`, `extraction.dosageForm`, `extraction.genericContentRaw` and `extraction.dgdaIngredients[]` with `source.json`, then `source.json` with the live register record from the OCL API (`sources`).",
+  "- In `source.json` they are the `extras` keys `trade_name` (else `display_name`), `dar_number`, `company`, `dosage_form` and `generic_content_raw`; each DGDA ingredient is a `mappings` entry with `map_type` `Has-active-ingredient`, its XM code in `to_concept_code` and its name in `to_concept_name`.",
+  "- The extraction collapses whitespace, skips retired mappings and keeps the first name for each XM code (`pitfalls`).",
   "- It fails when the concept is not found at source, or is not a registered Drug product.",
   "",
   "## Stage `substances`",
@@ -219,7 +224,8 @@ const CHECKS = md(
   "- Check each chosen entry's route scope in `extraction.ingredients[].ddinter.chosen[]` against `ddinterRoute.route`.",
   "- For a `name` match, compare the DrugBank id on the DDInter drug page with the substance's `DRUGBANK` codes.",
   "- Check a pair's severity and actions against its DDInter pair page (`pairs.inBatch.pairs[].link`), and its interaction and management text through `get_pairs`.",
-  "- For a pair in `textMissing`, check that its DDInter pair page has no interaction or management text.",
+  "- `textMissing` has three shapes. On a pair, `pairs.inBatch.pairs[].textMissing` holds two booleans, `interaction` and `management`, true when that text is missing; on a stage, `stages[].textMissing` lists the pairs whose DDInter text was not found, with `ddinterA`, `ddinterB`, their names and `severity`; `stages[ddinter].evidence.text_missing` lists the same pairs as id pairs.",
+  "- A pair whose text was not found usually has no `link`: the pipeline stores its DDInter interaction id only when it found a text. To check it, open the DDInter drug page of `ddinterA` or `ddinterB` in a browser, find the partner in its interaction list and open that interaction: a text found there that we lack is `missing_value`.",
   "- Its warnings: matched by name only, DDInter route assumed, no DDInter entry for the route, no interaction data, DDInter text not found. It fails when a DDInter pair list could not be read in full, or a DGDA ingredient has no substance yet.",
 );
 
@@ -257,6 +263,11 @@ const PITFALLS = md(
   "- DDInter's drug page may list ATC codes that we do not hold, because our ATC codes come from RxNav for the substance's RxCUI. That alone is not a mismatch.",
   "- Some substances have no DDInter data (coverage `none`). That never means a combination is safe.",
   "- RxNav may list more than one DrugBank id for one substance, and we keep every one it lists. A DDInter drug page's DrugBank id is used only when the page links exactly one.",
+  "",
+  "## Register text",
+  "",
+  "- Register text is stored with each run of whitespace collapsed to one space and no leading or trailing space: the register's `Paracetamol  500 mg` (two spaces) is stored as `Paracetamol 500 mg`. A whitespace-only difference is not a mismatch.",
+  "- The extraction skips retired ingredient mappings, and when one XM code has more than one mapping it keeps the first name.",
   "",
   "## Register ids",
   "",

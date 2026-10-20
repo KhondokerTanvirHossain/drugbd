@@ -20,6 +20,9 @@ import { QA_FILTERS, QA_STAGES } from "@/lib/qa-query";
  */
 const GUIDE_HISTORY: readonly { version: string; sha256: string }[] = [
   { version: "1.0.0", sha256: "23ddddd10cbcdb0295d6ac4ce7044daf40a7601109a283e4e9f1bfd8363d8cdc" },
+  // fix round 1: the whitespace pitfall and the source.json key map (dgda); the textMissing shapes and the partner route
+  // (ddinter); the browser-only register and RxNav pages and the two JSON endpoints the pipeline reads (sources)
+  { version: "1.1.0", sha256: "4fe1385762e62a65ed10fd3f80dd9f7b9d4845ac49f4f347db57835f17a6652e" },
 ];
 
 const contentHash = () => createHash("sha256")
