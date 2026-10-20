@@ -1,7 +1,10 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterEach, describe, expect, it } from "vitest";
-import { createServer } from "../src/server.js";
+import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
+import { readFileSync } from "node:fs";
+import { GUIDE, GUIDE_TOPICS, guideBody, guideResources } from "../src/qa-guide.js";
+import { SERVER_VERSION, createServer } from "../src/server.js";
 import { BATCH_ID, BDS_ID, FILTERS, STAGES } from "../src/tools.js";
 import { BATCHES, CONFIG, KEY, PREAMBLE_TEXT, envelope, errorEnvelope, jsonResponse, mockFetch } from "./helpers.js";
 
@@ -20,10 +23,12 @@ async function connect(fetch: typeof globalThis.fetch) {
 type Schema = { type: string; properties: Record<string, Record<string, unknown>>; required?: string[]; additionalProperties: boolean };
 
 describe("the MCP server over a transport", () => {
-  it("lists exactly the five read-only tools, with JSON-schema inputs carrying the §7.9.2 patterns and enums", async () => {
+  it("lists exactly the six read-only tools, with JSON-schema inputs carrying the §7.9.2 patterns and enums", async () => {
     const client = await connect(mockFetch().fetch);
     const { tools } = await client.listTools();
-    expect(tools.map((t) => t.name)).toEqual(["list_batches", "get_batch", "get_record", "find_records", "get_pairs"]);
+    expect(tools.map((t) => t.name)).toEqual(["list_batches", "get_batch", "get_record", "find_records", "get_pairs", "get_qa_guide"]);
+    expect(tools.find((t) => t.name === "get_qa_guide")!.inputSchema).toEqual({ type: "object",
+      properties: { topic: { type: "string", enum: [...GUIDE_TOPICS], description: expect.any(String) } }, additionalProperties: false });
     for (const t of tools) {
       expect(t.annotations?.readOnlyHint).toBe(true);
       expect(t.annotations?.destructiveHint).toBe(false);
@@ -87,10 +92,75 @@ describe("the MCP server over a transport", () => {
     expect(m.calls).toEqual([]);
   });
 
-  it("declares tools only: no resources, prompts or other capability", async () => {
+  it("declares tools and resources only (the QA guide, §7.11.3): no prompts or other capability; version 1.1.0", async () => {
     const client = await connect(mockFetch().fetch);
     const caps = client.getServerCapabilities();
-    expect(Object.keys(caps ?? {})).toEqual(["tools"]);
+    expect(Object.keys(caps ?? {}).sort()).toEqual(["resources", "tools"]);
     expect(client.getInstructions()).toBe(PREAMBLE_TEXT);
+    expect(client.getServerVersion()).toEqual({ name: "intellidrugs-qa", version: "1.1.0" });
+    expect(SERVER_VERSION).toBe("1.1.0");
+    expect(JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version).toBe("1.1.0");
+  });
+});
+
+/** One raw JSON-RPC message to a fresh server (no client), and the server's answer, so error codes and messages show exactly. */
+async function raw(message: JSONRPCMessage, fetch = mockFetch().fetch): Promise<JSONRPCMessage> {
+  const server = createServer(CONFIG, { fetch });
+  const [a, b] = InMemoryTransport.createLinkedPair();
+  await server.connect(a);
+  const answer = new Promise<JSONRPCMessage>((resolve) => { b.onmessage = resolve; });
+  await b.start();
+  await b.send(message);
+  const out = await answer;
+  await server.close();
+  return out;
+}
+
+describe("the QA guide over the protocol (§7.11.2, §7.11.3), bundled: no request", () => {
+  it("get_qa_guide answers the preamble, then the guide JSON; a bad topic is refused", async () => {
+    const m = mockFetch();
+    const client = await connect(m.fetch);
+    expect((await client.callTool({ name: "get_qa_guide", arguments: {} })).content)
+      .toEqual([{ type: "text", text: PREAMBLE_TEXT }, { type: "text", text: JSON.stringify(guideBody(null), null, 2) }]);
+    for (const topic of GUIDE_TOPICS) {
+      expect((await client.callTool({ name: "get_qa_guide", arguments: { topic } })).content)
+        .toEqual([{ type: "text", text: PREAMBLE_TEXT }, { type: "text", text: JSON.stringify(guideBody(topic), null, 2) }]);
+    }
+    const r = await client.callTool({ name: "get_qa_guide", arguments: { topic: "nope" } });
+    expect(r.isError).toBe(true);
+    expect(r.content).toEqual([{ type: "text", text: PREAMBLE_TEXT }, { type: "text", text: "Invalid input topic" }]);
+    expect(m.calls).toEqual([]);
+  });
+
+  it("resources/list is the six topics; resources/templates/list is empty", async () => {
+    const m = mockFetch();
+    const client = await connect(m.fetch);
+    expect((await client.listResources()).resources).toEqual(guideResources());
+    expect((await client.listResourceTemplates()).resourceTemplates).toEqual([]);
+    expect(m.calls).toEqual([]);
+  });
+
+  it("resources/read of each uri is its Markdown text", async () => {
+    const m = mockFetch();
+    const client = await connect(m.fetch);
+    for (const t of GUIDE_TOPICS) {
+      const uri = `intellidrugs://qa-guide/${t}`;
+      expect((await client.readResource({ uri })).contents).toEqual([{ uri, mimeType: "text/markdown", text: GUIDE[t].text }]);
+    }
+    expect(m.calls).toEqual([]);
+  });
+
+  it("an unknown uri is -32002 with the message exactly \"Resource not found\" and no data", async () => {
+    for (const uri of ["intellidrugs://qa-guide/OVERVIEW", "intellidrugs://qa-guide/overview/", "intellidrugs://qa-guide/", "x"]) {
+      expect(await raw({ jsonrpc: "2.0", id: 5, method: "resources/read", params: { uri } }))
+        .toEqual({ jsonrpc: "2.0", id: 5, error: { code: -32002, message: "Resource not found" } });
+    }
+  });
+
+  it("a missing or non-string uri is -32602 \"Invalid params\", as on the hosted server", async () => {
+    for (const params of [undefined, {}, { uri: 1 }, { uri: null }]) {
+      expect(await raw({ jsonrpc: "2.0", id: 6, method: "resources/read", ...(params === undefined ? {} : { params }) } as JSONRPCMessage))
+        .toEqual({ jsonrpc: "2.0", id: 6, error: { code: -32602, message: "Invalid params" } });
+    }
   });
 });

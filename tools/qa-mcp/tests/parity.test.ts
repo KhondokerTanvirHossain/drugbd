@@ -1,7 +1,10 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { PREAMBLE } from "../src/preamble.js";
-import { SERVER_NAME, SERVER_VERSION } from "../src/server.js";
+import { GUIDE_TOPICS } from "../src/qa-guide.js";
+import { SERVER_NAME, SERVER_VERSION, callTool } from "../src/server.js";
 import { TOOLS, toPath } from "../src/tools.js";
+import { CONFIG, mockFetch } from "./helpers.js";
 
 /*
  * §7.10.6, §11.1 "MCP parity": the hosted server (web/lib/qa-mcp-tools.ts, dependency-free) and this stdio server must say
@@ -19,6 +22,10 @@ type WebModule = { PREAMBLE: string; SERVER_NAME: string; SERVER_VERSION: string
   checkToolArgs: (name: string, args: Record<string, unknown> | undefined) => WebChecked };
 const WEB_TOOLS_URL = new URL("../../../web/lib/qa-mcp-tools.ts", import.meta.url).href;
 const web = async () => (await import(/* @vite-ignore */ WEB_TOOLS_URL)) as WebModule;
+type WebGuide = { checkGuideArgs: (args: Record<string, unknown> | undefined) => { ok: true; topic: string | null } | { ok: false; field: string };
+  guideBody: (topic: string | null) => unknown };
+const WEB_GUIDE_URL = new URL("../../../web/lib/qa-guide.ts", import.meta.url);
+const webGuide = async () => (await import(/* @vite-ignore */ WEB_GUIDE_URL.href)) as WebGuide;
 
 /** The stdio server's tools/list entries (src/server.ts builds the annotations from each title). */
 const stdioList = TOOLS.map((t) => ({ name: t.name, title: t.title, description: t.description, inputSchema: t.inputSchema,
@@ -157,9 +164,54 @@ describe("stdio toPath and hosted checkToolArgs agree (§7.10.6, §11.1)", () =>
     }
   });
 
-  it("every good fixture's tool is covered, and every tool has a bad fixture", () => {
+  it("every good fixture's tool is covered, and every tool has a bad fixture (get_qa_guide through the guide fixtures)", () => {
     const names = TOOLS.map((t) => t.name);
-    expect([...new Set(GOOD.map(([n]) => n))].sort()).toEqual([...names].sort());
-    expect([...new Set(BAD.map(([n]) => n))].sort()).toEqual([...names].sort());
+    const guide = GUIDE_GOOD.length > 0 && GUIDE_BAD.length > 0 ? ["get_qa_guide"] : [];
+    expect([...new Set([...GOOD.map(([n]) => n), ...guide])].sort()).toEqual([...names].sort());
+    expect([...new Set([...BAD.map(([n]) => n), ...guide])].sort()).toEqual([...names].sort());
+  });
+});
+
+// ---- the QA guide (§7.11.1, §7.11.2; §11.1 "Stdio guide and parity")
+
+const GUIDE_GOOD: (Record<string, unknown> | undefined)[] = [undefined, {}, ...GUIDE_TOPICS.map((topic) => ({ topic }))];
+const GUIDE_BAD: Record<string, unknown>[] = [{ topic: "nope" }, { topic: null }, { x: 1 }, { topic: "checks", page: 0 },
+  { topic: "Overview" }, { topic: 1 }, { x: 1, topic: "nope" }];
+
+describe("the QA guide: one module, two byte-identical copies (§7.11.1)", () => {
+  it("src/qa-guide.ts is byte-identical to web/lib/qa-guide.ts (cp web/lib/qa-guide.ts tools/qa-mcp/src/qa-guide.ts)", () => {
+    const mine = readFileSync(new URL("../src/qa-guide.ts", import.meta.url));
+    expect(mine.equals(readFileSync(WEB_GUIDE_URL)), "copy web/lib/qa-guide.ts to tools/qa-mcp/src/qa-guide.ts").toBe(true);
+  });
+
+  /** The hosted server's get_qa_guide result (lib/qa-mcp.ts callGuide), built from the web modules. */
+  const hosted = async (args: Record<string, unknown> | undefined) => {
+    const w = await web(), g = await webGuide();
+    const checked = g.checkGuideArgs(args);
+    return checked.ok
+      ? { content: [{ type: "text", text: w.PREAMBLE }, { type: "text", text: JSON.stringify(g.guideBody(checked.topic), null, 2) }] }
+      : { content: [{ type: "text", text: w.PREAMBLE }, { type: "text", text: `Invalid input ${checked.field}` }], isError: true };
+  };
+
+  it.each(GUIDE_GOOD.map((a) => [a]))("get_qa_guide %j: the stdio result equals the hosted one, with no request", async (args) => {
+    const m = mockFetch();
+    const stdio = await callTool(CONFIG, "get_qa_guide", args, { fetch: m.fetch });
+    expect(stdio.isError).toBeUndefined();
+    expect(stdio).toEqual(await hosted(args));
+    expect(m.calls).toEqual([]);
+  });
+
+  it.each(GUIDE_BAD.map((a) => [a]))("get_qa_guide %j: the same refusal on both servers, with no request", async (args) => {
+    const m = mockFetch();
+    const stdio = await callTool(CONFIG, "get_qa_guide", args, { fetch: m.fetch });
+    expect(stdio.isError).toBe(true);
+    expect(stdio).toEqual(await hosted(args));
+    expect(m.calls).toEqual([]);
+  });
+
+  it("toPath and checkToolArgs keep the five data tools: get_qa_guide is dispatched before them", async () => {
+    const { checkToolArgs } = await web();
+    expect(toPath("get_qa_guide", {})).toEqual({ ok: false, unknownTool: true });
+    expect(checkToolArgs("get_qa_guide", {})).toEqual({ ok: false, unknownTool: true });
   });
 });
