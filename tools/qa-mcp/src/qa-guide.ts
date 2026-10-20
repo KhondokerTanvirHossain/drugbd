@@ -13,7 +13,7 @@
  */
 
 /** §7.11.5: semver, independent of the server version. */
-export const GUIDE_VERSION = "1.2.0";
+export const GUIDE_VERSION = "1.3.0";
 export const GUIDE_TITLE = "IntelliDrugs QA guide";
 export const GUIDE_TOPICS = ["overview", "data_model", "sources", "checks", "pitfalls", "reporting"] as const;
 export type GuideTopic = (typeof GUIDE_TOPICS)[number];
@@ -51,7 +51,7 @@ const OVERVIEW = md(
 );
 
 const DATA_MODEL = md(
-  "A record is one brand product in one batch. `get_record` returns it; the paths below are paths in the answer's `data`.",
+  "A record is one brand product in one batch. `get_record` returns it; the paths below are in the answer's `data`.",
   "",
   "## The chain",
   "",
@@ -60,10 +60,10 @@ const DATA_MODEL = md(
   "## Brand product",
   "",
   "- `conceptId` is the DGDA concept id, for example `186-0030-006--napa`.",
-  "- `source.json` is the register record exactly as stored, and `extractedAt` is when the record was last extracted. `source.link` is its register page.",
-  "- `extraction.darNumber`, `extraction.tradeName`, `extraction.company`, `extraction.dosageForm` and `extraction.genericContentRaw` come from the register record's extras; the trade name falls back to the concept's display name.",
-  "- `extraction.dgdaIngredients[]` lists the register's active ingredients, each an ICD-11 `xmCode` and its `name`.",
-  "- `extraction.parseStatus` is `parsed`, `partial` or `failed`, and `extraction.parseNote` says why a parse was not full, or why a full parse made no clinical drug.",
+  "- `source.json` is the register record as last fetched (`source.link.fetchedAt`); `source.link` is its register page. `extractedAt` moves only when a run changes the record's data or review state (a `history[]` `extract` entry).",
+  "- `extraction.darNumber`, `tradeName`, `company`, `dosageForm` and `genericContentRaw` come from the register record's extras; the trade name falls back to the concept's display name.",
+  "- `extraction.dgdaIngredients[]` lists the register's active ingredients, each an ICD-11 `xmCode` and `name`.",
+  "- `extraction.parseStatus` is `parsed`, `partial` or `failed`, and `parseNote` says why a parse was not full, or why a full parse made no clinical drug.",
   "",
   "## Parsed ingredients and strengths",
   "",
@@ -101,7 +101,7 @@ const DATA_MODEL = md(
   "",
   "- `stages[]` has one result per stage that ran: `stage`, `status` (`ok`, `warn` or `fail`), `notes`, `textMissing` and `evidence`, what the stage stored, unchanged.",
   "- Evidence keys: `dgda` has `source` and `concept_class`; `substances` has `substances` (each `bds_id`, `name`, `xm`, `rxcui`, `atc`, `drugbank`, `method`); `clinical` has `raw`, `parse_status`, `parsed`, `aligned`, `bdc_id` and `signature`; `ddinter` has `mappings`, `coverage`, `pair_count`, `disease_count`, `food_count`, `text_fetch_count`, `text_missing`, `route`, `chosen` and `route_assumed`.",
-  "- `displayStatus` is `pending`, `engineer_checked`, `approved`, `issue` or `back_in_review` (approved before its latest extraction, waiting for a new approval).",
+  "- `displayStatus` is `pending`, `engineer_checked`, `approved`, `issue` or `back_in_review` (approved, then re-extracted; awaiting a new approval).",
   "- `history[]` lists runs and decisions, oldest first: role, time and decision only.",
   "",
   "## The other tools",
@@ -121,8 +121,8 @@ const SOURCES = md(
   "- Address: `https://tr.ocl.dghs.gov.bd/#/orgs/MoHFW/sources/DGDA-Drugs/concepts/{conceptId}/`, the record's `source.link`.",
   "- That register page and the RxNav search pages below are JavaScript apps that render only in a browser: a plain HTTP request gets the page shell with no data, which is never evidence of a missing value.",
   "- To read the register record as data, use the OCL API the pipeline reads: `https://api.tr.ocl.dghs.gov.bd/orgs/MoHFW/sources/DGDA-Drugs/concepts/{conceptId}/?verbose=true&includeMappings=true`.",
-  "- `source.json` is the register record our data was built from, as stored at `extractedAt`. Compare the extraction with it first.",
-  "- A difference between `source.json` and the live register record means the source changed after extraction, not that the extraction is wrong: report it as a changed source, not as an extraction error.",
+  "- `source.json` is the register record our data was built from, as fetched at `source.link.fetchedAt`. Compare the extraction with it first.",
+  "- A difference between `source.json` and the live register record means the source changed after it was fetched, not that the extraction is wrong: report it as a changed source, not as an extraction error.",
   "",
   "## NLM RxNav",
   "",

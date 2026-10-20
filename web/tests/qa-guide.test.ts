@@ -26,6 +26,9 @@ const GUIDE_HISTORY: readonly { version: string; sha256: string }[] = [
   // fix round 2: a shared clinical drug's raw, strengths and dose form may be another brand's (data_model, pitfalls); RXCUI is
   // always the ingredient (IN), compared at that level (data_model, checks, pitfalls); a re-check follows extractedAt, not runAt
   { version: "1.2.0", sha256: "3e2146618893727d59d1f34f8585a7c66f12bf639c8b6a305fb0ad02f23235dd" },
+  // fix round 3: source.json is the register record as last fetched, dated by source.link.fetchedAt, not extractedAt; extractedAt
+  // moves only when a run changes the record's data or review state (data_model, sources)
+  { version: "1.3.0", sha256: "637064207e74347c5cd832788326370ab46e575cdffef03e3e30c0425348ab59" },
 ];
 
 const contentHash = () => createHash("sha256")
