@@ -382,10 +382,13 @@ describe("/review/qa API reference (§5.18 section 3)", () => {
     expect(p).toContain('<p>The result has two text blocks: the rules, then the answer of the matching endpoint as indented JSON, here the same envelope as <code class="mono">GET /api/qa/v1/batches</code>. Parse the second block\'s text as JSON.</p>');
     expect(p).toContain('<p>The QA guide tells your AI how IntelliDrugs data is built, which source to check each field against, the known traps and how to report a finding. List its topics with resources/list, then read one with resources/read and its uri, or call <code class="mono">get_qa_guide</code> with a <code class="mono">topic</code>. Each topic is Markdown, and <code class="mono">guideVersion</code> changes whenever the guide does.</p>');
     expect(strip(p)).toContain("A get_qa_guide result has the same two text blocks as any tool; the second is JSON with guideVersion, topic, title, text, related.");
-    // only the topic list: the guide's own text is never on the page (§5.18, §7.11)
+    // only the topic list: the guide's own text is never on the page (§5.18, §7.11; §11.2: a fixed 80-character excerpt of each)
+    const whole = unescape(await render());
     for (const t of GUIDE_TOPICS) {
       expect(p).toContain(GUIDE[t].summary);
-      for (const line of GUIDE[t].text.split("\n").filter((l) => l.length > 40)) expect(api).not.toContain(line);
+      expect(GUIDE[t].text.length).toBeGreaterThan(80);
+      expect(whole).not.toContain(GUIDE[t].text.slice(0, 80));
+      for (const line of GUIDE[t].text.split("\n").filter((l) => l.length > 40)) expect(whole).not.toContain(line);
     }
     const tools = rows(tableBy(p, "MCP tools"));
     expect(tools[0]).toEqual(["Tool", "Arguments", "Same data as"]);
