@@ -90,6 +90,10 @@ describe("the claims map (§7.11.7)", () => {
     }
   });
 
+  it("§7.11.8 no longer says a text-missing pair usually has no link (fix round 4, guide 1.4.0, correction 12)", () => {
+    expect(specSection("7.11.8")).not.toContain("usually has no `link`");
+  });
+
   it("each external source is an https address with the DD/MM/YYYY date it was opened", () => {
     for (const c of CLAIMS) {
       const s = c.source;

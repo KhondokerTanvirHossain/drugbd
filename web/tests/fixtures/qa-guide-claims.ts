@@ -351,12 +351,16 @@ export const CLAIMS: readonly Claim[] = [
   // guide 1.4.0: a run that finds no text deletes only the text row; an interaction id stored by an earlier
   // run stays, so a text-missing pair may still have a link (live: get_pairs BDS-000009, 4 of 12 text-missing pairs linked)
   c("checks", "A pair whose text was not found may or may not have a `link`:", code(F.links, "The DDInter pair page, only for a stored numeric interaction_id")),
+  c("checks", "A pair whose text was not found may or may not have a `link`:", spec("7.11.8", "a text-missing pair may or may not have a `link`")),
   c("checks", "the pipeline stores its DDInter interaction id only when it finds a text,", code(F.ddinter, "UPDATE curated.ddinter_pair SET interaction_id = %s")),
   c("checks", "and a later run that finds none removes the text but keeps an id stored earlier.",
     code(F.ddinter, "DELETE FROM curated.ddinter_interaction_text t USING curated.ddinter_pair p")),
   c("checks", "and a later run that finds none removes the text but keeps an id stored earlier.",
     { kind: "qa_read", requestId: "a84c04f0-a502-4587-8aba-ea2a91ccd153", checked: "20/10/2026" }),
   c("checks", "With a link, open that pair page.", spec("7.11.8", "a pair's severity and texts against its DDInter pair page")),
+  c("checks", "With a link, open that pair page.", spec("7.11.8", "with a link, open that pair page")),
+  c("checks", "Without one, open the DDInter drug page of `ddinterA` or `ddinterB` in a browser, find the partner in its interaction list and open that interaction",
+    spec("7.11.8", "without one, the partner is found from the DDInter drug page of `ddinterA` or `ddinterB`")),
   c("checks", "Without one, open the DDInter drug page of `ddinterA` or `ddinterB` in a browser, find the partner in its interaction list and open that interaction",
     code(F.ddinterClient, 'path, referer = f"/server/interact-with/{ddinter_id}/", f"/server/drug-detail/{ddinter_id}/"')),
   c("checks", "a text found there that we lack is `missing_value`.",
