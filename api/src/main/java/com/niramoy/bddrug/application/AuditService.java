@@ -35,11 +35,11 @@ public class AuditService {
     /**
      * A qa_route target (§7.9.6): an optional key label and one of the route names, so a path id or a query value can never
      * be recorded for a QA read. The label is an env label (the §7.9.1 label rule) or a DB key's {@code key.{id}} (§7.10.4);
-     * the route {@code mcp} is a hosted MCP request refused before any tool ran (§7.10.6). TARGET_ID stays unchanged for every
-     * other target type.
+     * the route {@code mcp} is a hosted MCP request refused before any tool ran (§7.10.6), and {@code guide} a hosted
+     * get_qa_guide call or resources/read (§7.11.4). TARGET_ID stays unchanged for every other target type.
      */
     private static final Pattern QA_TARGET_ID =
-        Pattern.compile("(([a-z0-9][a-z0-9_-]{0,31}|key\\.[1-9][0-9]{0,17})/)?(batches|batch|record|records|pairs|mcp)");
+        Pattern.compile("(([a-z0-9][a-z0-9_-]{0,31}|key\\.[1-9][0-9]{0,17})/)?(batches|batch|record|records|pairs|mcp|guide)");
     public static final String QA_READ = "qa_read", QA_ROUTE = "qa_route";
     private static final Pattern OUTCOME = Pattern.compile("[a-z_]{1,32}");
     private static final Pattern UUID_TEXT =
