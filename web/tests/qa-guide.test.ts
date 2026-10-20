@@ -23,6 +23,9 @@ const GUIDE_HISTORY: readonly { version: string; sha256: string }[] = [
   // fix round 1: the whitespace pitfall and the source.json key map (dgda); the textMissing shapes and the partner route
   // (ddinter); the browser-only register and RxNav pages and the two JSON endpoints the pipeline reads (sources)
   { version: "1.1.0", sha256: "4fe1385762e62a65ed10fd3f80dd9f7b9d4845ac49f4f347db57835f17a6652e" },
+  // fix round 2: a shared clinical drug's raw, strengths and dose form may be another brand's (data_model, pitfalls); RXCUI is
+  // always the ingredient (IN), compared at that level (data_model, checks, pitfalls); a re-check follows extractedAt, not runAt
+  { version: "1.2.0", sha256: "3e2146618893727d59d1f34f8585a7c66f12bf639c8b6a305fb0ad02f23235dd" },
 ];
 
 const contentHash = () => createHash("sha256")
