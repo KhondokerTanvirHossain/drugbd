@@ -489,6 +489,24 @@ describe("(a) the record example's stage evidence is what the pipeline writes (ย
       chosen: [{ bds_id: ing.bdsId, ddinter_id: chosen.ddinterId, route_scope: chosen.routeScope, route_assumed: chosen.routeAssumed }] });
     expect(ev.ddinter.text_missing).toEqual(r.stages.find((s) => s.stage === "ddinter")!.textMissing.map((t) => [t.ddinterA, t.ddinterB]));
   });
+
+  // The guide's dgda check (ยง7.11.8, guide 1.1.0) names the register keys each brand field comes from; the example's
+  // source.json must carry those keys, so the page and the guide never disagree (ocl/transform.py concept_to_product).
+  it("source.json is a register record as the pipeline reads it: its extras and mappings give the record's brand fields", () => {
+    const r = EX.RECORD_BODY;
+    const src = r.sourceJson as { extras: Record<string, string>; mappings: { map_type: string; to_concept_code: string;
+      to_concept_name: string; retired: boolean }[] };
+    const transform = ETL("ocl/transform.py");
+    for (const k of Object.keys(src.extras)) expect(transform, `extras.${k}`).toContain(`extras.get("${k}")`);
+    const clean = (s: string) => s.split(/\s+/).filter(Boolean).join(" ");
+    expect({ darNumber: clean(src.extras.dar_number), tradeName: clean(src.extras.trade_name), company: clean(src.extras.company),
+      dosageForm: clean(src.extras.dosage_form), genericContentRaw: clean(src.extras.generic_content_raw) })
+      .toEqual({ darNumber: r.brand.darNumber, tradeName: r.brand.tradeName, company: r.brand.company, dosageForm: r.brand.dosageForm,
+        genericContentRaw: r.brand.genericContentRaw });
+    expect(transform).toContain('if m.get("map_type") != "Has-active-ingredient" or m.get("retired"):');
+    expect(src.mappings.filter((m) => m.map_type === "Has-active-ingredient" && !m.retired)
+      .map((m) => ({ xmCode: m.to_concept_code, name: m.to_concept_name }))).toEqual(r.dgdaIngredients);
+  });
 });
 
 // ---- (b)

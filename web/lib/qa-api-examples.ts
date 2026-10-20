@@ -167,9 +167,12 @@ export const RECORD_BODY = {
       partners: [{ conceptId: "127-0263-018--domperidone", tradeName: "Domperidone", index: 5 }], reason: "no_data", side: "partner",
       route: "systemic" }],
   },
+  // The register record's own keys (OCL API, read 20/10/2026), as ocl/transform.py reads them; the register's two spaces in
+  // generic_content_raw are kept, since the extraction collapses whitespace (the guide's pitfalls, §7.11.8).
   sourceJson: { id: EXAMPLE_CONCEPT, display_name: "Napa", concept_class: "Drug",
-    extras: { dar_number: "186-0030-006", generic_content: "Paracetamol 500 mg", dosage_form: "Tablet",
-      company: "Beximco Pharmaceuticals Ltd." } },
+    extras: { company: "Beximco Pharmaceuticals Ltd.", dar_number: "186-0030-006", trade_name: "Napa", dosage_form: "Tablet",
+      generic_content_raw: "Paracetamol  500 mg" },
+    mappings: [{ map_type: "Has-active-ingredient", to_concept_code: "XM5DJ7", to_concept_name: "Acetaminophen", retired: false }] },
   sourceUrl: `${OCL}${EXAMPLE_CONCEPT}/`,
   history: [
     { kind: "run", at: RUN_AT },
