@@ -139,6 +139,22 @@ test("the issue record and the failed-check record carry the problem line on sea
   await axe(page, "checker problem");
 });
 
+for (const scheme of ["light", "dark"] as const) {
+  test(`combobox (${scheme}): a problem option, active, keeps its problem line and pill readable on the accent (WCAG 1.4.3)`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.goto("/check");
+    const input = page.getByRole("combobox", { name: "Add a medicine" });
+    await input.fill("clarith");
+    const option = page.getByRole("option", { name: /^Clarith/ }).first();
+    await expect(option).toContainText(PROBLEM);
+    // The first suggestion is active once they load; arrow down to Clarith if another option leads the list
+    for (let i = 0; i < 10 && (await option.getAttribute("aria-selected")) !== "true"; i++) await input.press("ArrowDown");
+    await expect(option).toHaveAttribute("aria-selected", "true");
+    await expect(input).toHaveAttribute("aria-expanded", "true");
+    await axe(page, `combobox ${scheme}, problem option active`);
+  });
+}
+
 test("checker: Napa and G Warfarin through the combobox (options show the pill); the alert card says a side is not reviewed (§6.7)", async ({ page }) => {
   await page.goto("/check");
   const input = page.getByRole("combobox", { name: "Add a medicine" });
@@ -193,6 +209,7 @@ test("Learn start, process and faq: no approved-only sentence, no Napa question,
     const text = await page.locator("main").innerText();
     expect(CLAIM.exec(text)?.[0] ?? null, slug).toBeNull();
     expect(text).not.toContain("Why can't I see Napa on the public site?");
+    for (const old of ["read only what a pharmacist has approved", "Anyone can read approved records", "listed under not reviewed"]) expect(text, slug).not.toContain(old);
     await axe(page, `learn ${slug}`);
   }
   await page.goto("/learn/start");

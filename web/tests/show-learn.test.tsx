@@ -15,7 +15,7 @@ vi.mock("next/navigation", () => ({ notFound: () => { throw new Error("NEXT_NOT_
 import LearnChapterPage from "@/app/learn/[chapter]/page";
 import { CHAPTER_SLUGS, SNAPSHOT_CHAPTERS } from "@/content/learn/chapters";
 import { P } from "@/content/learn/pilot-snapshot";
-import { PROBLEM_REPORTED, UNREVIEWED_CAUTION } from "@/lib/copy";
+import { PROBLEM_REPORTED, SHOW_COPY, UNREVIEWED_CAUTION } from "@/lib/copy";
 
 const WEB = fileURLToPath(new URL("..", import.meta.url));
 const page = async (chapter: string) => renderToStaticMarkup(await LearnChapterPage({ params: Promise.resolve({ chapter }) }));
@@ -29,7 +29,8 @@ describe("Learn in show mode (§6.8, §6.10)", () => {
     expect(CLAIM_REGEX.exec(t)?.[0] ?? null).toBeNull();
     for (const old of ["Nothing from the pilot is public yet", "so none is public.", "Your approval is what publishes a record.",
       "Approved records only", "Readers and the public API see only the id, trade name and review status", "Only these are public.",
-      "A public check today would list them as not reviewed"]) expect(t).not.toContain(old);
+      "A public check today would list them as not reviewed", "read only what a pharmacist has approved",
+      "Anyone can read approved records", "listed under not reviewed"]) expect(t).not.toContain(old);
   });
 
   it("start, process, faq: the show-mode sentences, and the FAQ's Napa question is left out", async () => {
@@ -37,6 +38,7 @@ describe("Learn in show mode (§6.8, §6.10)", () => {
     expect(start).toContain("Marked until a pharmacist approves");
     expect(start).toContain('"Not yet reviewed by a pharmacist" means no pharmacist has approved the record yet.');
     expect(start).toContain("Each record says whether a pharmacist has checked it.");
+    expect(start).toContain(SHOW_COPY.learnStartReaders);
     const process = text(await page("process"));
     expect(process).toContain("Until then the public site shows it marked \"Not yet reviewed by a pharmacist\".");
     expect(process).toContain(">Marked</span>");
@@ -44,6 +46,11 @@ describe("Learn in show mode (§6.8, §6.10)", () => {
     const faq = text(await page("faq"));
     expect(faq).not.toContain("Why can't I see Napa on the public site?");
     expect(faq).toContain("Can an engineer approve a record?");
+    // The no-alerts answer is open by default here (no Napa question): it names the checker's show-mode heading, which exists
+    expect(faq).toMatch(/<details open=""><summary>No alerts came back\. Is the combination safe\?<\/summary>/);
+    expect(faq).toContain(SHOW_COPY.learnFaqNoAlertsA);
+    expect(SHOW_COPY.learnFaqNoAlertsA.toLowerCase()).toContain(SHOW_COPY.withdrawnHeading.split(",")[0].toLowerCase());
+    expect(faq).toContain(SHOW_COPY.learnFaqReviewerA);
     const partners = text(await page("partners"));
     expect(partners).toContain("Every public record, each with its review label; withdrawn records come back as stubs.");
     expect(partners).toContain("/v1/public-mode");
@@ -68,7 +75,11 @@ describe("Learn in show mode (§6.8, §6.10)", () => {
     const start = text(await page("start"));
     expect(start).not.toContain(UNREVIEWED_CAUTION);
     expect(start).toContain("Not public until a pharmacist approves");
-    expect(text(await page("faq"))).toContain("Why can't I see Napa on the public site?");
+    expect(start).toContain("Doctors, pharmacists and partner systems read only what a pharmacist has approved.");
+    const faq = text(await page("faq"));
+    expect(faq).toContain("Why can't I see Napa on the public site?");
+    expect(faq).toContain("Check that no product is listed under not reviewed and no substance under no data");
+    expect(faq).toContain("Anyone can read approved records without signing in");
   });
 
   it("SNAPSHOT_CHAPTERS names exactly the chapters that render a snapshot block or a live pill", () => {

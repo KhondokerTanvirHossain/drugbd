@@ -50,4 +50,9 @@
 .s-opt-name { font: 600 14px/1.3 var(--font-ui); }
 .s-opt-sub { font-size: 12.5px; color: var(--fg-2); }
 .s-opt[aria-selected="true"] .s-opt-sub { color: var(--on-accent); }
+/* WCAG 1.4.3: ProblemLine.css paints .problem-line in --fg, unreadable on the active option's --accent; follow --on-accent. */
+.s-opt[aria-selected="true"] :global(.problem-line) { color: var(--on-accent); }
+.s-opt[aria-selected="true"] :global(.problem-line)::before { background: currentColor; }
+/* WCAG 1.4.3: the show-mode .rv--pending pill is --fg-2 on transparent (1.29:1 on --accent); as tokens.css .rec[aria-selected] .rv. */
+.s-opt[aria-selected="true"] :global(.rv) { background: transparent; color: var(--on-accent); border-color: var(--on-accent); }
 .s-opt-empty { padding: 10px; font-size: 13px; color: var(--fg-2); }

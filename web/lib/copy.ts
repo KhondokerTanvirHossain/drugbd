@@ -677,6 +677,12 @@ const SHOW_MODE = {
   learnGlossIssue: `A reviewer flagged a problem with a note. Until it is fixed and re-run, the public site shows the record marked ${NR} and "${PROBLEM_REPORTED}"`,
   learnFaqEngineerQ: "Can an engineer approve a record?",
   learnFaqEngineerA: `No. An engineer's "Looks correct" is recorded as Engineer checked and the record keeps ${NR}. Only a pharmacist's approval marks it approved.`,
+  // §6.10 Learn table rows added in the D74 fix round (Start "What it is"; FAQ no-alerts and reviewer answers).
+  learnStartReaders: "Doctors, pharmacists and partner systems read every loaded record, each marked with whether a pharmacist has approved it.",
+  // The checker has no "not reviewed" section in show mode: unapproved products are checked, hidden ones are listed under
+  // withdrawnHeading, so the safety advice names that heading.
+  learnFaqNoAlertsA: "Not necessarily. No alert means DDInter 2.0 records no interaction for those pairs. Check that no product is listed under withdrawn from public view and no substance under no data; those pairs were not checked at all.",
+  learnFaqReviewerA: "Anyone can read every public record, each marked with whether a pharmacist approved it, without signing in, and anyone can sign in with Google to report a problem. Reviewer roles are by invitation from the IntelliDrugs team.",
 } as const;
 
 export const NEW_COPY: Record<NewCopyState, Record<string, string>> = {

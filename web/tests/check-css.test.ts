@@ -21,3 +21,25 @@ describe("check.module.css reflows the no-data chips at 320 px (§10.4, WCAG 1.4
     expect(body).toMatch(/overflow-wrap:\s*anywhere/);
   });
 });
+
+describe("check.module.css: the active combobox option keeps its problem line and pill readable (WCAG 1.4.3)", () => {
+  // ProblemLine.css paints .problem-line in --fg; on the active option's --accent that is about 2.7:1 (light) and 1.9:1 (dark).
+  it(".s-opt[aria-selected=true] .problem-line is --on-accent, and its warn glyph follows the text colour", () => {
+    const text = css.match(/^\.s-opt\[aria-selected="true"\] :global\(\.problem-line\)\s*\{([^}]*)\}/m);
+    expect(text, '.s-opt[aria-selected="true"] :global(.problem-line) rule').not.toBeNull();
+    expect(text![1]).toMatch(/color:\s*var\(--on-accent\)/);
+    const glyph = css.match(/^\.s-opt\[aria-selected="true"\] :global\(\.problem-line\)::before\s*\{([^}]*)\}/m);
+    expect(glyph, '.s-opt[aria-selected="true"] :global(.problem-line)::before rule').not.toBeNull();
+    expect(glyph![1]).toMatch(/background:\s*currentColor/);
+  });
+
+  // The show-mode pill in the same option: tokens.css .rv--pending is --fg-2 on transparent, 1.29:1 on --accent (e2e axe).
+  // Mirrors tokens.css .rec[aria-selected="true"] .rv.
+  it(".s-opt[aria-selected=true] .rv is a hollow --on-accent pill", () => {
+    const pill = css.match(/^\.s-opt\[aria-selected="true"\] :global\(\.rv\)\s*\{([^}]*)\}/m);
+    expect(pill, '.s-opt[aria-selected="true"] :global(.rv) rule').not.toBeNull();
+    expect(pill![1]).toMatch(/background:\s*transparent/);
+    expect(pill![1]).toMatch(/color:\s*var\(--on-accent\)/);
+    expect(pill![1]).toMatch(/border-color:\s*var\(--on-accent\)/);
+  });
+});
