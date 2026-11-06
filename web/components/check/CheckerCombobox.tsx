@@ -2,14 +2,16 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
 import { suggestionSub } from "@/lib/check-summary";
-import { NOT_REVIEWED, PUBLIC_NEW, fill } from "@/lib/copy";
+import ReviewStatus from "@/components/ui/ReviewStatus";
+import "@/components/ui/ProblemLine.css";
+import { NOT_REVIEWED, PROBLEM_REPORTED, PUBLIC_NEW, fill } from "@/lib/copy";
 import { announce } from "@/lib/live-region";
 import { CHECK } from "@/lib/public-copy";
 import { checkHref } from "@/lib/public-params";
 import type { SuggestRow } from "@/lib/public-types";
 import styles from "./check.module.css";
 
-type Row = Pick<SuggestRow, "conceptId" | "tradeName" | "status" | "clinicalDisplayName" | "matched">;
+type Row = Pick<SuggestRow, "conceptId" | "tradeName" | "status" | "clinicalDisplayName" | "matched" | "review">;
 type Pending = { message: string | null; focusRemoveAt: number | null; focusInput: boolean };
 const NONE: Pending = { message: null, focusRemoveAt: null, focusInput: false };
 const DEBOUNCE_MS = 200;
@@ -196,7 +198,11 @@ export default function CheckerCombobox({ ids, max, q }: { ids: string[]; max: n
                 <li key={r.conceptId} id={`cx-opt-${i}`} role="option" aria-selected={i === active} className={`s-opt ${styles["s-opt"]}`}
                   onMouseDown={(e) => e.preventDefault()} onClick={() => add(r)}>
                   <span className={styles["s-opt-name"]}>{r.tradeName}</span>
-                  <span className={styles["s-opt-sub"]}>{r.status === "approved" ? suggestionSub(r) : NOT_REVIEWED}</span>
+                  <span className={styles["s-opt-sub"]}>{r.status === "approved" || r.review ? suggestionSub(r) : NOT_REVIEWED}</span>
+                  {/* §6.7 show mode: a visible option that is not approved adds the pill (and the problem line) inside the option,
+                      so both are part of its accessible name */}
+                  {r.review && r.review !== "approved" && <span className={styles["s-opt-sub"]}><ReviewStatus status="pending" /></span>}
+                  {r.review === "problem" && <span className="problem-line">{PROBLEM_REPORTED}</span>}
                 </li>
               ))}
           </ul>

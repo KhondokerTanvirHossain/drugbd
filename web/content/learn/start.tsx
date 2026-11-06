@@ -5,7 +5,7 @@ import { buttonClass } from "@/components/ui/Button";
 import CodeChip from "@/components/ui/CodeChip";
 import ReviewStatus from "@/components/ui/ReviewStatus";
 import Severity from "@/components/ui/Severity";
-import { NOT_REVIEWED } from "@/lib/copy";
+import { NOT_REVIEWED, SHOW_COPY } from "@/lib/copy";
 import { fmtDhakaClock, fmtUtc } from "@/lib/format";
 import { batchPill, formatCount, partlyApproved } from "@/lib/stats";
 import { P, PILOT_SNAPSHOT as S, substancesOf } from "./pilot-snapshot";
@@ -17,10 +17,12 @@ export default function StartChapter({ ctx }: { ctx: LearnContext }) {
   const st = ctx.stats;
   const napa = S.records[P.napa];
   const [acet] = substancesOf(P.napa);
-  const nothingPublic = ctx.batch !== null && ctx.batch.approved === 0;
+  // §6.8 show mode (D74): "public" sentences are evaluated against `hidden`, never against approval.
+  const nothingPublic = ctx.batch !== null && (ctx.show
+    ? ctx.batch.items.length > 0 && ctx.batch.items.every((i) => i.hidden) : ctx.batch.approved === 0);
   // §6.8 "Approval-state sentences": only while /v1/stats reports Napa as not reviewed. pending() is also true for a
   // record it does not report, which would state Napa's approval from absence (Review Focus 2).
-  const napaHidden = ctx.item(P.napa)?.status === "not_reviewed";
+  const napaHidden = ctx.show ? ctx.hidden(P.napa) : ctx.item(P.napa)?.status === "not_reviewed";
   return (
     <>
       <header className={styles.hero} id="top">
@@ -39,7 +41,7 @@ export default function StartChapter({ ctx }: { ctx: LearnContext }) {
         </p>
       </header>
 
-      <Chapter slug="start" level={2}>
+      <Chapter slug="start" level={2} show={ctx.show}>
         <Section id="start-what" h={H}>
           <div className={styles.prose}>
             {/* G3 (§1.2): this Board L sentence names Napa's substance and strength, so it shows only while Napa's example is usable (§6.8 Withdrawn examples); no replacement copy. */}
@@ -51,7 +53,7 @@ export default function StartChapter({ ctx }: { ctx: LearnContext }) {
         <Section id="start-who" h={H}>
           <div className={styles.grid3}>
             <div className={styles.card}><p className={styles.h4}>Doctors and prescribers</p><p className={styles.small}>Look up a brand, see what it contains, and check a list of medicines for DDInter interactions before you prescribe.</p></div>
-            <div className={styles.card}><p className={styles.h4}>Pharmacists</p><p className={styles.small}>Check a dispensing list, read DDInter's management text, and review records before they go public. Your approval is what publishes a record.</p></div>
+            <div className={styles.card}><p className={styles.h4}>Pharmacists</p><p className={styles.small}>{ctx.show ? SHOW_COPY.learnPharmacistsCard : "Check a dispensing list, read DDInter's management text, and review records before they go public. Your approval is what publishes a record."}</p></div>
             <div className={styles.card}><p className={styles.h4}>Partner companies</p><p className={styles.small}>EMR, pharmacy and pharma systems call the API with DGDA products and get substances, codes and interaction alerts back.</p></div>
           </div>
         </Section>
@@ -71,8 +73,8 @@ export default function StartChapter({ ctx }: { ctx: LearnContext }) {
               <p className={styles.small}>Interaction and management text is DDInter 2.0's own wording. We shorten it on screen and link the full text. We never rewrite it.</p>
             </div>
             <div className={`${styles.card} ${styles.cardLine}`}>
-              <p className={styles.h4}>Not public until a pharmacist approves</p>
-              <p className={styles.small}>A loaded record stays hidden behind "{NOT_REVIEWED}" until a pharmacist approves it. Engineer checks are recorded but do not publish.</p>
+              <p className={styles.h4}>{ctx.show ? SHOW_COPY.learnGateTitle : "Not public until a pharmacist approves"}</p>
+              <p className={styles.small}>{ctx.show ? SHOW_COPY.learnGateBody : <>A loaded record stays hidden behind "{NOT_REVIEWED}" until a pharmacist approves it. Engineer checks are recorded but do not publish.</>}</p>
             </div>
           </div>
         </Section>
@@ -121,7 +123,7 @@ export default function StartChapter({ ctx }: { ctx: LearnContext }) {
               </div>
               <ol className={styles.legend} aria-label="What each numbered part means">
                 <li><Ann n={1} /><div><b>Where you are</b><span className={styles.legendText}>Products, then the trade name. The address ends in the OCL concept id.</span></div></li>
-                <li><Ann n={2} /><div><b>Trade name and review status</b><span className={styles.legendText}>The rounded pill is review status. "{NOT_REVIEWED}" means the record is hidden from the public.</span></div></li>
+                <li><Ann n={2} /><div><b>Trade name and review status</b><span className={styles.legendText}>The rounded pill is review status. {ctx.show ? SHOW_COPY.learnLegend2 : <>"{NOT_REVIEWED}" means the record is hidden from the public.</>}</span></div></li>
                 <li><Ann n={3} /><div><b>Registration facts</b><span className={styles.legendText}>Company, dosage form and DAR number, copied from the DGDA register.</span></div></li>
                 <li><Ann n={4} /><div><b>DGDA's own text</b><span className={styles.legendText}>Shown raw, so you can compare it with what we extracted.</span></div></li>
                 <li><Ann n={5} /><div><b>Clinical drug</b><span className={styles.legendText}>Substance, strength, form and route. Every paracetamol 500 mg tablet brand shares <span className="mono">{napa.bdcId}</span>.</span></div></li>

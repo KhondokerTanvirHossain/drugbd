@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
 import ReviewStatus from "@/components/ui/ReviewStatus";
+import "@/components/ui/ProblemLine.css";
 import { CHAPTERS, sectionTitle, type ChapterSlug } from "@/content/learn/chapters";
 import { PILOT_IDS, PILOT_SNAPSHOT, type PilotId } from "@/content/learn/pilot-snapshot";
-import { LEARN_NEW, fill } from "@/lib/copy";
+import { LEARN_NEW, PROBLEM_REPORTED, SHOW_COPY, fill } from "@/lib/copy";
 import { batchPill, partlyApproved, pillStatus } from "@/lib/stats";
 import type { LearnContext } from "./context";
 import styles from "./learn.module.css";
@@ -13,14 +14,20 @@ import styles from "./learn.module.css";
  */
 
 /** One chapter: `<section>` with its numbered title (h2 on /learn/start under the hero's h1, h1 elsewhere) and lede. */
-export function Chapter({ slug, level, children }: { slug: ChapterSlug; level: 1 | 2; children: ReactNode }) {
+/** D74: the ledes that state the approved-only rule read this way in show mode. */
+const SHOW_LEDES: Partial<Record<ChapterSlug, string>> = {
+  start: SHOW_COPY.learnLedeStart, process: SHOW_COPY.learnLedeProcess, partners: SHOW_COPY.learnLedePartners,
+};
+
+export function Chapter({ slug, level, children, show = false }: { slug: ChapterSlug; level: 1 | 2; children: ReactNode; show?: boolean }) {
   const c = CHAPTERS.find((x) => x.slug === slug)!;
+  const lede = (show && SHOW_LEDES[slug]) || c.lede;
   const H = level === 1 ? "h1" : "h2";
   return (
     <section className={styles.ch} id={slug} aria-labelledby={`h-${slug}`}>
       <div className={styles.chHead}>
         <H id={`h-${slug}`}><span className={styles.chN}>{c.n}</span>{" "}{c.title}</H>
-        <p className={styles.chLede}>{c.lede}</p>
+        <p className={styles.chLede}>{lede}</p>
       </div>
       {children}
     </section>
@@ -76,9 +83,13 @@ export function GateArrow() {
   );
 }
 
-/** A pilot record's live pill (§6.8 "Status pills are live"): from /v1/stats, never from the snapshot. */
+/**
+ * A pilot record's live pill (§6.8 "Status pills are live"): from /v1/stats, never from the snapshot. In show mode a record
+ * whose stats item says `review: "problem"` adds the problem line after its pill (§6.8, D74).
+ */
 export function LivePill({ ctx, id }: { ctx: LearnContext; id: PilotId }) {
-  return <ReviewStatus status={pillStatus(ctx.item(id))} />;
+  const problem = ctx.show && ctx.item(id)?.review === "problem";
+  return <><ReviewStatus status={pillStatus(ctx.item(id))} />{problem && <span className="problem-line">{PROBLEM_REPORTED}</span>}</>;
 }
 
 /**

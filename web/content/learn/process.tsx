@@ -9,7 +9,7 @@ import Kbd from "@/components/ui/Kbd";
 import ReviewStatus from "@/components/ui/ReviewStatus";
 import Severity from "@/components/ui/Severity";
 import StageCheck from "@/components/ui/StageCheck";
-import { LEARN_BOARD, NOT_REVIEWED, NO_DATA_SENTENCE, STALE_TITLE } from "@/lib/copy";
+import { LEARN_BOARD, NOT_REVIEWED, NO_DATA_SENTENCE, SHOW_COPY, STALE_TITLE } from "@/lib/copy";
 import { fmtUtc } from "@/lib/format";
 import { BATCH_STATUS_WORD, pillStatus } from "@/lib/stats";
 import { P, PILOT_IDS, PILOT_SNAPSHOT as S } from "./pilot-snapshot";
@@ -27,10 +27,12 @@ export default function ProcessChapter({ ctx }: { ctx: LearnContext }) {
   const warf = S.records[P.warfarin];
   const [warfPair] = S.warnings[P.warfarin].textMissing;
   const batch = ctx.batch;
+  // §6.10: the gate table's "Public" column reads "Marked" for every status but approved in show mode
+  const no = ctx.show ? SHOW_COPY.learnGateMarked : "No";
   // /v1/stats lists removed records too (they carry exampleUsable: false) but leaves them out of itemCount and approved.
   const removed = batch ? batch.items.length - batch.itemCount : 0;
   return (
-    <Chapter slug="process" level={1}>
+    <Chapter slug="process" level={1} show={ctx.show}>
       <Section id="process-flow" h={H}>
         <figure className={styles.fig}>
           <ScrollHint />
@@ -134,15 +136,16 @@ export default function ProcessChapter({ ctx }: { ctx: LearnContext }) {
       </Section>
 
       <Section id="process-gate" h={H}>
-        <p className={`${styles.prose} ${styles.prose2}`}>Approval comes from the decision history. Each decision updates the record's review status, and a re-run resets it, so a decision made before the latest extraction never counts. A record is public only when a pharmacist said "Looks correct" after its latest extraction, and nobody reported an issue after that.</p>
+        <p className={`${styles.prose} ${styles.prose2}`}>Approval comes from the decision history. Each decision updates the record's review status, and a re-run resets it, so a decision made before the latest extraction never counts. {ctx.show ? SHOW_COPY.learnGateProse : <>A record is public only when a pharmacist said "Looks correct" after its latest extraction, and nobody reported an issue after that.</>}</p>
         <div className={styles.gate} role="table" aria-label="Review status changes">
           <div className={`${styles.gateRow} ${styles.gateHead}`} role="row"><span role="columnheader">From</span><span role="columnheader">What happens</span><span role="columnheader">To</span><span role="columnheader">Public</span></div>
-          <div className={styles.gateRow} role="row"><span role="cell"><ReviewStatus status="pending" /></span><span className={styles.gateEv} role="cell"><GateArrow />An engineer presses <Kbd keys="A" /> and the {LEARN_BOARD.undoWindow} closes</span><span role="cell"><ReviewStatus status="engineer_checked" /></span><span className={`${styles.gatePub} ${styles.gatePubNo}`} role="cell">No</span></div>
+          <div className={styles.gateRow} role="row"><span role="cell"><ReviewStatus status="pending" /></span><span className={styles.gateEv} role="cell"><GateArrow />An engineer presses <Kbd keys="A" /> and the {LEARN_BOARD.undoWindow} closes</span><span role="cell"><ReviewStatus status="engineer_checked" /></span><span className={`${styles.gatePub} ${styles.gatePubNo}`} role="cell">{no}</span></div>
           <div className={styles.gateRow} role="row"><span role="cell"><ReviewStatus status="pending" /></span><span className={styles.gateEv} role="cell"><GateArrow />A pharmacist presses <Kbd keys="A" /> and the {LEARN_BOARD.undoWindow} closes</span><span role="cell"><ReviewStatus status="approved" /></span><span className={styles.gatePub} role="cell">Yes</span></div>
-          <div className={styles.gateRow} role="row"><span role="cell">Any status</span><span className={styles.gateEv} role="cell"><GateArrow />A reviewer presses <Kbd keys="R" /> and sends a note</span><span role="cell"><ReviewStatus status="issue" /></span><span className={`${styles.gatePub} ${styles.gatePubNo}`} role="cell">No</span></div>
-          <div className={styles.gateRow} role="row"><span role="cell"><ReviewStatus status="approved" /></span><span className={styles.gateEv} role="cell"><GateArrow />The pipeline re-runs the record, or shared substance data it shows changes</span><span role="cell"><ReviewStatus status="back_in_review" /></span><span className={`${styles.gatePub} ${styles.gatePubNo}`} role="cell">No</span></div>
-          <div className={styles.gateRow} role="row"><span role="cell"><ReviewStatus status="issue" /></span><span className={styles.gateEv} role="cell"><GateArrow />The cause is fixed, covered by a test, and the record re-runs</span><span role="cell"><ReviewStatus status="pending" /></span><span className={`${styles.gatePub} ${styles.gatePubNo}`} role="cell">No</span></div>
+          <div className={styles.gateRow} role="row"><span role="cell">Any status</span><span className={styles.gateEv} role="cell"><GateArrow />A reviewer presses <Kbd keys="R" /> and sends a note</span><span role="cell"><ReviewStatus status="issue" /></span><span className={`${styles.gatePub} ${styles.gatePubNo}`} role="cell">{no}</span></div>
+          <div className={styles.gateRow} role="row"><span role="cell"><ReviewStatus status="approved" /></span><span className={styles.gateEv} role="cell"><GateArrow />The pipeline re-runs the record, or shared substance data it shows changes</span><span role="cell"><ReviewStatus status="back_in_review" /></span><span className={`${styles.gatePub} ${styles.gatePubNo}`} role="cell">{no}</span></div>
+          <div className={styles.gateRow} role="row"><span role="cell"><ReviewStatus status="issue" /></span><span className={styles.gateEv} role="cell"><GateArrow />The cause is fixed, covered by a test, and the record re-runs</span><span role="cell"><ReviewStatus status="pending" /></span><span className={`${styles.gatePub} ${styles.gatePubNo}`} role="cell">{no}</span></div>
         </div>
+        {ctx.show && <p className={styles.small}>{SHOW_COPY.learnGateNote}</p>}
       </Section>
 
       <Section id="process-rerun" h={H}>
@@ -150,8 +153,8 @@ export default function ProcessChapter({ ctx }: { ctx: LearnContext }) {
         <SnapshotBlock ctx={ctx} ids={[P.warfarin]} pills="inline">
           <ol className={styles.jr}>
             <li><p className={styles.jrH}><span className={styles.jrN}>1</span>Extracted</p><p className={styles.small}>{warf.tradeName} was extracted{S.warfarinExtractedAt ? ` ${fmtUtc(S.warfarinExtractedAt)}` : ""} in batch <span className="mono">{S.batchId}</span>.</p><LivePill ctx={ctx} id={P.warfarin} /></li>
-            <li><p className={styles.jrH}><span className={styles.jrN}>2</span>Approved <ExampleMarker /></p><p className={styles.small}>A pharmacist presses <Kbd keys="A" />. When the undo window closes, the record is public.</p><ReviewStatus status="approved" /></li>
-            <li><p className={styles.jrH}><span className={styles.jrN}>3</span>Re-run <ExampleMarker /></p><p className={styles.small}>An engineer re-runs the record. The approval stops counting and the record leaves public view.</p><ReviewStatus status="back_in_review" /></li>
+            <li><p className={styles.jrH}><span className={styles.jrN}>2</span>Approved <ExampleMarker /></p><p className={styles.small}>{ctx.show ? SHOW_COPY.learnJourney2 : <>A pharmacist presses <Kbd keys="A" />. When the undo window closes, the record is public.</>}</p><ReviewStatus status="approved" /></li>
+            <li><p className={styles.jrH}><span className={styles.jrN}>3</span>Re-run <ExampleMarker /></p><p className={styles.small}>{ctx.show ? SHOW_COPY.learnJourney3 : "An engineer re-runs the record. The approval stops counting and the record leaves public view."}</p><ReviewStatus status="back_in_review" /></li>
           </ol>
         </SnapshotBlock>
         <Banner tone="warn" title={STALE_TITLE}

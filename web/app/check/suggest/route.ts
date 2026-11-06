@@ -15,9 +15,12 @@ async function handle(request: Request): Promise<Response> {
   const ids = listParam(url.searchParams.getAll("ids")).filter(isPathId).slice(0, CHECK_MAX);
   const r = await suggestProducts(q, ids).catch(() => ({ ok: false as const, status: 0 }));
   if (!r.ok) return NextResponse.json([], { status: 502, headers: NO_STORE });
-  return NextResponse.json(r.data.slice(0, 10).map((x) => ({ conceptId: x.conceptId, tradeName: x.tradeName, status: x.status,
-    clinicalDisplayName: x.status === "approved" ? x.clinicalDisplayName : null, matched: x.status === "approved" ? x.matched : null })),
-    { headers: NO_STORE });
+  // A row with a label is visible and served in full (show mode, §6.10); an unlabelled unapproved row carries no clinical data.
+  return NextResponse.json(r.data.slice(0, 10).map((x) => {
+    const full = x.status === "approved" || !!x.review;
+    return { conceptId: x.conceptId, tradeName: x.tradeName, status: x.status, review: x.review ?? null,
+      clinicalDisplayName: full ? x.clinicalDisplayName : null, matched: full ? x.matched : null };
+  }), { headers: NO_STORE });
 }
 
 export const GET = withRequestLog("/check/suggest", handle);

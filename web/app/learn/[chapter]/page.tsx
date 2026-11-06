@@ -4,9 +4,10 @@ import { learnContext } from "@/components/learn/context";
 import styles from "@/components/learn/learn.module.css";
 import LearnShell from "@/components/learn/LearnShell";
 import Banner from "@/components/ui/Banner";
+import UnreviewedCaution from "@/components/ui/UnreviewedCaution";
 import { buttonClass } from "@/components/ui/Button";
 import { CHAPTER_BODIES } from "@/content/learn";
-import { chapterBySlug } from "@/content/learn/chapters";
+import { SNAPSHOT_CHAPTERS, chapterBySlug } from "@/content/learn/chapters";
 import { getStats } from "@/lib/api";
 import { LEARN_FAIL } from "@/lib/copy";
 import type { SiteStats } from "@/lib/stats";
@@ -55,8 +56,12 @@ export default async function LearnChapterPage({ params }: Props) {
   }
   const ctx = learnContext(stats);
   const Body = CHAPTER_BODIES[entry.slug];
+  // §6.8 show mode (D74): a chapter that renders a snapshot block whose live status is not approved opens with the caution
+  const caution = ctx.show && SNAPSHOT_CHAPTERS.includes(entry.slug)
+    && (ctx.batch?.items ?? []).some((i) => i.review !== null && i.review !== "approved");
   return (
     <LearnShell slug={entry.slug} ctx={ctx} theme={theme}>
+      {caution && <UnreviewedCaution />}
       <Body ctx={ctx} />
     </LearnShell>
   );

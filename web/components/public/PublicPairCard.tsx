@@ -1,10 +1,12 @@
 import type { ReactNode } from "react";
 import Expander from "@/components/Expander";
+import PairRecordLine from "@/components/ui/PairRecordLine";
 import PairReviewState from "@/components/ui/PairReviewState";
 import Severity from "@/components/ui/Severity";
 import SourceLink from "@/components/ui/SourceLink";
 import pc from "@/components/ui/PairCard.module.css";
 import { FROM_DDINTER, NO_MANAGEMENT, UNKNOWN_PAIR_LINE } from "@/lib/copy";
+import type { PairRecord } from "@/lib/public-mode";
 import type { PublicPairReview, Source } from "@/lib/public-types";
 import { CHECK } from "@/lib/public-copy";
 import { ddinterText } from "@/lib/ddinter-text";
@@ -53,17 +55,22 @@ function TextParts({ kind, body, textId, labelId }: { kind: "management" | "inte
  * placeholder (§3.6); otherwise the card is exactly the one without it. Each text and its label line are wrapped, so the
  * PairCard.module.css sibling rules swap only their own label's wording.
  */
-export default function PublicPairCard({ id, severity, names, meta, review, text, description, reviewFirst = false, extra, source, link, heading }: {
+export default function PublicPairCard({ id, severity, names, meta, review, text, description, reviewFirst = false, extra, source, link, heading, record = null }: {
   id: string; severity: string; names: ReactNode; meta?: ReactNode; review: PublicPairReview; text: PairText; description?: string | null;
   reviewFirst?: boolean; extra?: ReactNode; source: ReactNode; link?: Source | null; heading: "h3" | "h4";
+  /** D74 (§3.4 PairRecordLine): a side of the pair is not approved; null in approved-only mode and between approved records. */
+  record?: PairRecord | null;
 }) {
   const H = heading;
   const textId = `${id}-text`;
   const label = (
-    <div className={styles.label}>
-      <span>{FROM_DDINTER}</span><span aria-hidden="true">·</span>
-      <PairReviewState state={review.state} at={review.reviewedAt} mine={false} note={null} surface="public" />
-    </div>
+    <>
+      <div className={styles.label}>
+        <span>{FROM_DDINTER}</span><span aria-hidden="true">·</span>
+        <PairReviewState state={review.state} at={review.reviewedAt} mine={false} note={null} surface="public" />
+      </div>
+      {record && <PairRecordLine review={record} />}
+    </>
   );
   const desc = text?.kind === "management" ? ddinterText(description) : null;
   return (

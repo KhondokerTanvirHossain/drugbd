@@ -3,10 +3,13 @@ import CheckResults, { CheckLegend, CheckSummary } from "@/components/check/Chec
 import CheckSide, { type Selected } from "@/components/check/CheckSide";
 import styles from "@/components/check/check.module.css";
 import Banner from "@/components/ui/Banner";
+import UnreviewedCaution from "@/components/ui/UnreviewedCaution";
 import { buttonClass } from "@/components/ui/Button";
 import { checkPublic, getPublicProduct, isStub, suggestProducts } from "@/lib/api";
 import { availableScenarios } from "@/lib/check-scenarios";
 import { DESK_NEW, PUBLIC_NEW } from "@/lib/copy";
+import { rendersUnreviewed } from "@/lib/public-mode";
+import { getPublicMode } from "@/lib/public-mode-read";
 import type { CheckResult, PublicProduct, SuggestRow } from "@/lib/public-types";
 import { CHECK } from "@/lib/public-copy";
 import { CHECK_MAX, checkHref, parseCheckIds, parseQuery } from "@/lib/public-params";
@@ -20,7 +23,8 @@ export default async function CheckPage({ searchParams }: { searchParams: Promis
   const query = parseQuery(sp.q);
   if (sel.changed && (sp.q === undefined || sp.remove !== undefined || sp.clear !== undefined)) redirect(checkHref(sel.ids));
 
-  const reads = await Promise.all(sel.ids.map((id) => getPublicProduct(id).catch(() => ({ ok: false as const, status: 0 }))));
+  const [reads, mode] = await Promise.all([
+    Promise.all(sel.ids.map((id) => getPublicProduct(id).catch(() => ({ ok: false as const, status: 0 })))), getPublicMode()]);
   const unknown = sel.ids.filter((_, i) => !reads[i].ok && reads[i].status === 404);
   const selected: Selected[] = [];
   sel.ids.forEach((id, i) => {
@@ -28,7 +32,8 @@ export default async function CheckPage({ searchParams }: { searchParams: Promis
     if (!r.ok) { if (r.status !== 404) selected.push({ conceptId: id, tradeName: id, display: null, status: "unknown" }); return; }
     if (isStub(r.data)) { selected.push({ conceptId: id, tradeName: r.data.tradeName, display: null, status: "not_reviewed" }); return; }
     const p = r.data as PublicProduct;
-    selected.push({ conceptId: id, tradeName: p.tradeName, display: p.clinicalDrug?.displayName ?? p.dosageForm, status: "approved" });
+    selected.push({ conceptId: id, tradeName: p.tradeName, display: p.clinicalDrug?.displayName ?? p.dosageForm, status: "approved",
+      review: p.review ?? "approved" });
   });
   let ids = selected.map((s) => s.conceptId);
   let result: CheckResult | null = null, failed = false, dropped = unknown.length > 0;
@@ -46,20 +51,25 @@ export default async function CheckPage({ searchParams }: { searchParams: Promis
     ? await suggestProducts(query.q, ids).then((r) => (r.ok ? r.data : [])).catch(() => []) : null;
   const scenarios = await availableScenarios();
   const shown = selected.filter((s) => ids.includes(s.conceptId)).map((s) => fromCheck(s, result));
+  // §6.7 show mode: the caution when any selected product is not approved (a withdrawn one shows no clinical data)
+  const caution = rendersUnreviewed(mode, shown.filter((s) => s.status === "approved").map((s) => s.review));
   return (
+    <>
+    {caution && <UnreviewedCaution />}
     <div className={styles["s-chk"]}>
       <CheckSide ids={ids} selected={shown} matches={matches} q={query.q} scenarios={scenarios} />
       <div className={styles["s-chk-main"]}>
         {dropped && <Banner tone="info" title={PUBLIC_NEW.checker.unknownId} />}
-        <CheckSummary result={result} m={ids.length} failed={failed} />
+        <CheckSummary result={result} m={ids.length} failed={failed} mode={mode} />
         {failed && <Banner tone="crit" title={PUBLIC_NEW.checker.failTitle} body={PUBLIC_NEW.checker.failBody}
           action={<a className={buttonClass("tonal", "sm")} href={checkHref(ids)}>{DESK_NEW.reviewLists.tryAgain}</a>} />}
         {ids.length < 2 && <p className={styles["s-chk-empty"]}>{CHECK.emptyResults}</p>}
-        {result && <CheckResults result={result} />}
+        {result && <CheckResults result={result} mode={mode} />}
         <CheckLegend />
       </div>
       <p id="check-live" className="sr-only" aria-live="polite" aria-atomic="true" />
     </div>
+    </>
   );
 }
 
@@ -69,5 +79,5 @@ function fromCheck(s: Selected, result: CheckResult | null): Selected {
   const nr = result.notReviewed.find((p) => p.conceptId === s.conceptId);
   if (nr) return { ...s, tradeName: nr.tradeName, status: "not_reviewed" };
   const p = result.products.find((x) => x.conceptId === s.conceptId);
-  return p ? { ...s, tradeName: p.tradeName, status: "approved" } : s;
+  return p ? { ...s, tradeName: p.tradeName, status: "approved", review: p.review ?? "approved" } : s;
 }

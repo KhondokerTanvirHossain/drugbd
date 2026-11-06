@@ -1,7 +1,9 @@
 import CodeChip from "@/components/ui/CodeChip";
+import RecordLabel from "@/components/ui/RecordLabel";
 import ReviewStatus from "@/components/ui/ReviewStatus";
 import Severity from "@/components/ui/Severity";
-import { PUBLIC_NEW, fill } from "@/lib/copy";
+import { PUBLIC_NEW, SHOW_COPY, fill } from "@/lib/copy";
+import type { PublicMode } from "@/lib/public-mode";
 import type { ClinicalItem, Counts, ProductStub, PublicProduct } from "@/lib/public-types";
 import { LOOKUP } from "@/lib/public-copy";
 import { formatStrength } from "@/lib/format";
@@ -73,15 +75,19 @@ function CountsStep({ sum }: { sum: Counts }) {
   );
 }
 
-/** §6.1 lookup card. Not approved: trade name and NOT_REVIEWED only (§1.6 item 9). Approved: live data, no Example. */
-export default function HeroCard({ hero }: { hero: PublicProduct | ProductStub }) {
+/**
+ * §6.1 lookup card. Not approved: trade name and NOT_REVIEWED only (§1.6 item 9). Approved: live data, no Example. Show
+ * mode (§6.10, D74): a visible hero renders live with its label's pill (and ProblemLine); a hidden one is the stub card
+ * with the withdrawn line.
+ */
+export default function HeroCard({ hero, mode = "approved_only" }: { hero: PublicProduct | ProductStub; mode?: PublicMode }) {
   if (!isApproved(hero)) {
     return (
       <div className={styles["s-look"]} role="group" aria-label={fill(PUBLIC_NEW.hero.ariaLabel, { name: hero.tradeName })}>
         <Field text={hero.tradeName} />
         <div className={styles["s-look-body"]}>
           <h2 className={styles.heading}>{hero.tradeName}</h2>
-          <p className={styles["s-x"]}>{PUBLIC_NEW.hero.pendingLine}</p>
+          <p className={styles["s-x"]}>{mode === "show_unreviewed" ? SHOW_COPY.heroHidden : PUBLIC_NEW.hero.pendingLine}</p>
         </div>
         <div className={styles["s-look-foot"]}><ReviewStatus status="pending" /></div>
       </div>
@@ -123,7 +129,7 @@ export default function HeroCard({ hero }: { hero: PublicProduct | ProductStub }
           })}
         </div>
       </div>
-      <div className={styles["s-look-foot"]}><ReviewStatus status="approved" /></div>
+      <div className={styles["s-look-foot"]}><RecordLabel review={hero.review ?? "approved"} /></div>
     </div>
   );
 }

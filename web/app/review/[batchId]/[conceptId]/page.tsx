@@ -24,6 +24,7 @@ import { firstParam } from "@/lib/params";
 import { DESK } from "@/lib/review-copy";
 import type { ItemRow } from "@/lib/review-types";
 import { isReviewer } from "@/lib/reviewers";
+import { getPublicMode } from "@/lib/public-mode-read";
 import { getSession } from "@/lib/session";
 import { qaAccountView } from "@/components/review/QaAccount";
 
@@ -69,6 +70,9 @@ export default async function RecordPage({ params, searchParams }: {
   const diff = item.displayStatus === "back_in_review" && item.reopen?.diffAvailable
     ? (await getReviewDiff(batchId, conceptId, item.reopen.previousExtractedAt).catch(() => null))?.rows ?? null : null;
   const nonce = await cspNonce();
+  // D74 (§5.2): the reader-visibility line follows the API's mode; a failed read leaves the line out, never a guess
+  const publicMode = await getPublicMode().catch(() => null);
+  reg.publicMode = publicMode;
   const confirming = firstParam(sp.confirm) === conceptId;
   await logOpenOnRender(batchId, conceptId, await headers());
   return (
@@ -78,7 +82,8 @@ export default async function RecordPage({ params, searchParams }: {
       fallbackWidget={<Turnstile action="decision" nonce={nonce} />}
       confirm={confirming ? <ConfirmPanel item={item} role={session.role} x={firstParam(sp.x)}
         d={firstParam(sp.d)} r={firstParam(sp.r)} error={firstParam(sp.e) || null} nonce={nonce} /> : null}>
-      <RecordHeader item={item} tools={<DetailTools reg={reg} />} backHref={recordHref(batchId, conceptId, { show, q, pane: "list" })} />
+      <RecordHeader item={item} tools={<DetailTools reg={reg} />} backHref={recordHref(batchId, conceptId, { show, q, pane: "list" })}
+        mode={publicMode} />
       {item.displayStatus === "back_in_review" && <BackInReviewCard item={item} diff={diff} />}
       <ComparisonTable item={item} />
       <AutomatedChecks item={item} />

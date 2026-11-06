@@ -3,10 +3,19 @@
  * and pure helpers; the fetch is `getStats()` in lib/api.ts (server-only). Learn withdraws a frozen example unless the
  * API reports its record as usable (§6.8): anything the API does not report counts as not usable.
  */
-export type StatsItem = { conceptId: string; tradeName: string; status: "approved" | "not_reviewed"; exampleUsable: boolean };
+import { isLabel, isMode, type PublicLabel, type PublicMode } from "./public-mode";
+
+/**
+ * D74 (§7.4.1): `hidden` (not visible on the public site under the mode) and `review` (its public label, null when hidden)
+ * are coarse like exampleUsable; `status` is approval in both modes.
+ */
+export type StatsItem = { conceptId: string; tradeName: string; status: "approved" | "not_reviewed"; exampleUsable: boolean;
+  hidden: boolean; review: PublicLabel | null };
 export type BatchStatus = "in_review" | "approved" | "rejected";
 export type StatsBatch = { batchId: string; status: BatchStatus; itemCount: number; approved: number; items: StatsItem[] };
 export type SiteStats = {
+  /** The API's public mode (§7.4.1); Learn and the landing page read it here, never from the web's environment. */
+  publicMode: PublicMode;
   registerProducts: number; productsLoaded: number; substances: number; approvedProducts: number; inReviewProducts: number;
   batches: StatsBatch[];
 };
@@ -20,8 +29,10 @@ const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "obj
 
 function parseItem(v: unknown): StatsItem | null {
   if (!isObject(v) || !isText(v.conceptId) || !isText(v.tradeName) || typeof v.status !== "string"
-      || !ITEM_STATUSES.includes(v.status) || typeof v.exampleUsable !== "boolean") return null;
-  return { conceptId: v.conceptId, tradeName: v.tradeName, status: v.status as StatsItem["status"], exampleUsable: v.exampleUsable };
+      || !ITEM_STATUSES.includes(v.status) || typeof v.exampleUsable !== "boolean" || typeof v.hidden !== "boolean"
+      || !(v.review === null || isLabel(v.review))) return null;
+  return { conceptId: v.conceptId, tradeName: v.tradeName, status: v.status as StatsItem["status"], exampleUsable: v.exampleUsable,
+    hidden: v.hidden, review: v.review as PublicLabel | null };
 }
 
 function parseBatch(v: unknown): StatsBatch | null {
@@ -34,10 +45,11 @@ function parseBatch(v: unknown): StatsBatch | null {
 
 /** The `data` of GET /v1/stats with only its §7.4 fields, or null when any field is missing or of the wrong type. */
 export function parseStats(v: unknown): SiteStats | null {
-  if (!isObject(v) || !COUNTS.every((k) => isCount(v[k])) || !Array.isArray(v.batches)) return null;
+  if (!isObject(v) || !COUNTS.every((k) => isCount(v[k])) || !Array.isArray(v.batches) || !isMode(v.publicMode)) return null;
   const batches = v.batches.map(parseBatch);
   if (batches.some((b) => b === null)) return null;
   return {
+    publicMode: v.publicMode as PublicMode,
     registerProducts: v.registerProducts as number, productsLoaded: v.productsLoaded as number, substances: v.substances as number,
     approvedProducts: v.approvedProducts as number, inReviewProducts: v.inReviewProducts as number, batches: batches as StatsBatch[],
   };

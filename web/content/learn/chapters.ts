@@ -67,3 +67,10 @@ export function sectionTitle(id: string): string {
   for (const c of CHAPTERS) for (const x of c.sections) if (x.id === id) return x.title;
   throw new Error(`Learn: no section ${id}`);
 }
+
+/**
+ * D74 (§6.8 show mode): the chapters whose body renders a pilot snapshot block or a live pill. In show mode such a chapter
+ * opens with UnreviewedCaution while a pilot record is visible and not approved. learn-snapshot.test.ts pins the list
+ * against the chapter files.
+ */
+export const SNAPSHOT_CHAPTERS: readonly string[] = ["start", "model", "codes", "process", "why", "interactions", "reviewers", "partners", "glossary"];

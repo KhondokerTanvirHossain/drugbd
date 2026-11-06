@@ -1,9 +1,12 @@
 import Expander from "@/components/Expander";
 import NoDataBlock from "@/components/ui/NoDataBlock";
+import RecordLabel from "@/components/ui/RecordLabel";
+import UnreviewedCaution from "@/components/ui/UnreviewedCaution";
 import Severity from "@/components/ui/Severity";
 import SourceLink from "@/components/ui/SourceLink";
 import pc from "@/components/ui/PairCard.module.css";
 import { DESK_NEW, NOT_RUN, SEVERITY_NOT_CLASSIFIED, fill } from "@/lib/copy";
+import { pairRecord, rendersUnreviewed, unapproved, type PublicLabel, type PublicMode } from "@/lib/public-mode";
 import type { PublicSubstance, SeverityFilter, SubstanceInteractionItem, SubstanceInteractions } from "@/lib/public-types";
 import { PRODUCT, SUBSTANCE } from "@/lib/public-copy";
 import { ddinterText } from "@/lib/ddinter-text";
@@ -41,7 +44,11 @@ function TextLine({ id, name, severity, text: raw }: { id: string; name: string;
   );
 }
 
-function Pair({ s, item, i }: { s: PublicSubstance; item: SubstanceInteractionItem; i: number }) {
+/** A record's pill and problem line, only for a record that is not approved, in show mode (§6.6, §6.10). */
+const Label = ({ review, mode }: { review: PublicLabel | null | undefined; mode: PublicMode }) =>
+  mode === "show_unreviewed" && unapproved(review) ? <> <RecordLabel review={review} /></> : null;
+
+function Pair({ s, item, i, mode }: { s: PublicSubstance; item: SubstanceInteractionItem; i: number; mode: PublicMode }) {
   const mine = new Set(s.entries.map((e) => e.ddinterId));
   const myId = mine.has(item.ddinterA) ? item.ddinterA : item.ddinterB;
   const partnerId = myId === item.ddinterA ? item.ddinterB : item.ddinterA;
@@ -50,24 +57,31 @@ function Pair({ s, item, i }: { s: PublicSubstance; item: SubstanceInteractionIt
     <PublicPairCard id={`sp-${i}`} severity={item.severity} heading="h3" names={<>{s.preferredName} + {partner}</>}
       meta={fillNodes(SUBSTANCE.pairMeta, { a: <Mono id={myId} />, route: item.routeScope, b: <Mono id={partnerId} />, actions: item.actions.join(", ") })}
       review={item.pairReview} text={pairText(item)}
+      record={mode === "show_unreviewed" ? pairRecord(s.review, item.partnerBdsId ? item.partnerReview : null) : null}
       source={fillNodes(PRODUCT.sourceLine, { a: <Mono id={item.ddinterA} />, b: <Mono id={item.ddinterB} /> })}
       link={item.sourceUrl ? { url: item.sourceUrl, label: SUBSTANCE.fullRecord, fetchedAt: null } : null} />
   );
 }
 
 /** §6.6: built from the product-page components only. Coverage full is neutral text, never green. */
-export default function SubstanceView({ s, list, severity, page }:
-    { s: PublicSubstance; list: SubstanceInteractions | null; severity: SeverityFilter | null; page: number }) {
+export default function SubstanceView({ s, list, severity, page, mode = "approved_only" }:
+    { s: PublicSubstance; list: SubstanceInteractions | null; severity: SeverityFilter | null; page: number; mode?: PublicMode }) {
   const cov = s.coverage.coverage;
   const last = list ? Math.max(0, Math.ceil(list.total / list.size) - 1) : 0;
   const past = list !== null && list.total > 0 && page > last;   // a stale or edited ?page= past the end (Review Focus 5)
   const more = list !== null && !past && (page + 1) * list.size < list.total;
   const codes = s.codes.map((c) => ({ ...c, source: c.sourceLink }));
+  // §6.6 show mode: the caution when this substance, a listed product or clinical drug, or a pair partner is not approved
+  const caution = rendersUnreviewed(mode, [s.review, ...s.products.map((p) => p.review), ...s.clinicalDrugs.map((c) => c.review),
+    ...(list?.items ?? []).map((i) => (i.partnerBdsId ? i.partnerReview : null))]);
   return (
+    <>
+    {caution && <UnreviewedCaution />}
     <div className={styles.single}>
       <div>
         <nav aria-label={PRODUCT.crumbLabel}><p className={styles["s-crumb"]}><a href="/search">{PRODUCT.crumbRoot}</a><span aria-hidden="true">/</span><span>{s.preferredName}</span></p></nav>
         <h1 className={styles.h1}>{s.preferredName} <span className="mono">{s.bdsId}</span></h1>
+        {mode === "show_unreviewed" && unapproved(s.review) && <RecordLabel review={s.review} />}
       </div>
       {s.names.length > 0 && (
         <ul className={styles["s-names"]} aria-label={PRODUCT.namesLabel}>
@@ -109,7 +123,7 @@ export default function SubstanceView({ s, list, severity, page }:
             </p>
           </nav>
           {list && list.items.length === 0 && !past && <p>{SUBSTANCE.noneListed}</p>}
-          {list?.items.map((item, i) => <Pair key={`${item.ddinterA}|${item.ddinterB}|${i}`} s={s} item={item} i={i} />)}
+          {list?.items.map((item, i) => <Pair key={`${item.ddinterA}|${item.ddinterB}|${i}`} s={s} item={item} i={i} mode={mode} />)}
           {list && list.total > 0 && (page > 0 || more) && (
             <p className={styles.pager}>
               {page > 0 && <a href={href(s.bdsId, severity, past ? last : page - 1)}>{DESK_NEW.reviewLists.previousPage}</a>}
@@ -136,14 +150,15 @@ export default function SubstanceView({ s, list, severity, page }:
       )}
       <section className={styles["s-psec"]} aria-labelledby="products">
         <div className={styles["s-psec-h"]}><h2 id="products" className={styles.h2}>{SUBSTANCE.productsHeading}</h2></div>
-        <ul className={styles.brandList}>{s.products.map((p) => <li key={p.conceptId}><a href={`/products/${enc(p.conceptId)}`}>{p.tradeName}</a> {p.company}</li>)}</ul>
+        <ul className={styles.brandList}>{s.products.map((p) => <li key={p.conceptId}><a href={`/products/${enc(p.conceptId)}`}>{p.tradeName}</a> {p.company}<Label review={p.review} mode={mode} /></li>)}</ul>
       </section>
       {s.clinicalDrugs.length > 0 && (
         <section className={styles["s-psec"]} aria-labelledby="clinical">
           <div className={styles["s-psec-h"]}><h2 id="clinical" className={styles.h2}>{SUBSTANCE.clinicalHeading}</h2></div>
-          <ul className={styles.brandList}>{s.clinicalDrugs.map((c) => <li key={c.bdcId}>{c.displayName} <span className="mono">{c.bdcId}</span></li>)}</ul>
+          <ul className={styles.brandList}>{s.clinicalDrugs.map((c) => <li key={c.bdcId}>{c.displayName} <span className="mono">{c.bdcId}</span><Label review={c.review} mode={mode} /></li>)}</ul>
         </section>
       )}
     </div>
+    </>
   );
 }

@@ -24,6 +24,10 @@ export type LearnContext = {
   pending: (id: PilotId) => boolean;
   /** API_STUB_SHAPE, overridable in tests. */
   apiStub: boolean;
+  /** D74 (§6.8 show mode): the API's public mode, from /v1/stats, is show_unreviewed. */
+  show: boolean;
+  /** True while /v1/stats reports the record hidden from the public site (approval-state sentences in show mode, §6.10). */
+  hidden: (id: PilotId) => boolean;
 };
 
 export function learnContext(stats: SiteStats, apiStub: boolean = API_STUB_SHAPE): LearnContext {
@@ -36,5 +40,7 @@ export function learnContext(stats: SiteStats, apiStub: boolean = API_STUB_SHAPE
     tradeName: (id) => findItem(batch, id)?.tradeName ?? PILOT_SNAPSHOT.records[id].tradeName,
     pending: (id) => pillStatus(findItem(batch, id)) !== "approved",
     apiStub,
+    show: stats.publicMode === "show_unreviewed",
+    hidden: (id) => findItem(batch, id)?.hidden === true,
   };
 }

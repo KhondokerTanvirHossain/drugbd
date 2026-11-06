@@ -163,7 +163,7 @@ export default function InteractionsChapter({ ctx }: { ctx: LearnContext }) {
                   <span key={id} className={styles.chkP}>{S.records[id].tradeName} <small>{S.records[id].dosageForm}</small><LivePill ctx={ctx} id={id} /></span>
                 ))}
               </div>
-              {CHECK_IDS.every((id) => ctx.pending(id)) && (
+              {CHECK_IDS.every((id) => (ctx.show ? ctx.hidden(id) : ctx.pending(id))) && (
                 <Banner tone="info" role="note" title="Run with reviewer access"
                   body={`All three records are "${NOT_REVIEWED}". A public check today would list them as not reviewed and check nothing.`} />
               )}

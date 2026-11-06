@@ -2,6 +2,7 @@ import { createContext, useContext, type ReactNode } from "react";
 import type { DiffRow, DisplayStatus, FilterKey, ItemHint, OpenIssue, ReviewerRole, Version } from "@/lib/review-types";
 import { initialMachine, type MachineState } from "./commit-machine";
 import type { BarCtx } from "./bar-state";
+import type { PublicMode } from "@/lib/public-mode";
 
 /** One row of the record list, as the record page renders it (§5.4). `href` keeps the current filter and search. */
 export type RowRef = {
@@ -25,6 +26,8 @@ export type RecordRegistration = {
   complete: boolean;
   /** §5.10a: the counted issues the dismiss panel quotes, oldest first (roles only, never an email). */
   openIssues: OpenIssue[];
+  /** D74 (§5.2, §5.12): the API's public mode for the reader-visibility sentences; null when the read failed. */
+  publicMode?: PublicMode | null;
 };
 
 /**

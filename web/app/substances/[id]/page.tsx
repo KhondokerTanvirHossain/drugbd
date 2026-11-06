@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { SubstanceStubView } from "@/components/public/ProductStub";
 import SubstanceView from "@/components/public/SubstanceView";
 import { getPublicSubstance, getSubstanceInteractions, isStub } from "@/lib/api";
+import { getPublicMode } from "@/lib/public-mode-read";
 import type { PublicSubstance, SubstanceInteractions, SubstanceStub } from "@/lib/public-types";
 import { isPathId, parseIndex, parseSeverity } from "@/lib/public-params";
 export const dynamic = "force-dynamic";
@@ -14,12 +15,13 @@ export default async function SubstancePage({ params, searchParams }: {
   let decoded: string;
   try { decoded = decodeURIComponent(id); } catch { notFound(); }
   if (!isPathId(decoded)) notFound();   // over ID_MAX or a control character: never sent to the API (final review finding 2)
-  const r = await getPublicSubstance(decoded);
+  const [r, mode] = await Promise.all([getPublicSubstance(decoded), getPublicMode()]);
   if (!r.ok && r.status === 404) notFound();
   if (!r.ok) throw new Error(`substance read failed (${r.status})`);
-  if (isStub(r.data)) return <SubstanceStubView stub={r.data as SubstanceStub} />;
+  if (isStub(r.data)) return <SubstanceStubView stub={r.data as SubstanceStub} mode={mode} />;
   const s = r.data as PublicSubstance;
   const severity = parseSeverity(sp.severity), page = parseIndex(sp.page);
   const list = s.coverage.coverage === "full" ? await getSubstanceInteractions(s.bdsId, severity, page).catch(() => null) : null;
-  return <SubstanceView s={s} list={list?.ok && !isStub(list.data) ? (list.data as SubstanceInteractions) : null} severity={severity} page={page} />;
+  return <SubstanceView s={s} list={list?.ok && !isStub(list.data) ? (list.data as SubstanceInteractions) : null} severity={severity} page={page}
+    mode={mode} />;
 }

@@ -7,7 +7,7 @@ import ExampleMarker from "@/components/ui/ExampleMarker";
 import NoDataChip from "@/components/ui/NoDataChip";
 import ReviewStatus from "@/components/ui/ReviewStatus";
 import Severity from "@/components/ui/Severity";
-import { FULL_TEXT, LEARN_BOARD, NOT_REVIEWED, NO_DATA_SENTENCE } from "@/lib/copy";
+import { FULL_TEXT, LEARN_BOARD, NOT_REVIEWED, NO_DATA_SENTENCE, SHOW_COPY } from "@/lib/copy";
 import { P, PILOT_SNAPSHOT as S, type PilotId, substanceNamed, substancesOf } from "./pilot-snapshot";
 
 const H = 2;
@@ -28,6 +28,7 @@ export const ENDPOINTS: Endpoint[] = [
   { method: "GET", path: "/v1/clinical-drugs/{bdcId}", what: "A clinical drug, its ingredients and its approved brands", access: ["Public", "All"] },
   { method: "POST", path: "/v1/interactions/check", what: "Checks a list of products: alerts, duplicates, noData, notReviewed", access: ["Public", "All"] },
   { method: "GET", path: "/v1/stats", what: "Counts, and each batch's records by trade name and public status", access: ["Public"] },
+  { method: "GET", path: "/v1/public-mode", what: SHOW_COPY.learnApiPublicMode, access: ["Public"] },
   { method: "GET", path: "/v1/batches", what: "All batches, newest first", access: ["Reviewer"] },
   { method: "GET", path: "/v1/batches/{batchId}", what: "Every record with extracted data, raw DGDA JSON, stage results and review state", access: ["Reviewer"] },
   { method: "GET", path: "/v1/batches/{batchId}/report", what: "Stage counts, review progress, warnings, the last 5 runs, change since the previous run", access: ["Reviewer"] },
@@ -128,14 +129,27 @@ function Code({ label, value }: { label: string; value: unknown }) {
   return <pre className={styles.codePre} tabIndex={0} role="region" aria-label={label}>{json(value)}</pre>;
 }
 
+/** §6.10: the rows whose "What it returns" changes in show mode, by path. */
+const SHOW_WHAT: Record<string, string> = {
+  "/v1/products/{conceptId}": SHOW_COPY.learnApiProduct,
+  "/v1/search?q=&page=": SHOW_COPY.learnApiSearch,
+  "/v1/products/suggest?q=&exclude=": SHOW_COPY.learnApiSuggest,
+  "/v1/products/{conceptId}/interactions?page=": SHOW_COPY.learnApiPairs,
+  "/v1/clinical-drugs/{bdcId}": SHOW_COPY.learnApiClinical,
+};
+/** The endpoint table as the API's mode describes it (§6.8, §6.10); the set of rows is the same in both modes. */
+export const endpointsFor = (show: boolean): Endpoint[] => (show ? ENDPOINTS.map((e) => ({ ...e, what: SHOW_WHAT[e.path] ?? e.what })) : ENDPOINTS);
+
 /** Chapter 8 "For partners" (Board L; §1.6 items 13 and 16, §6.8). */
 export default function PartnersChapter({ ctx }: { ctx: LearnContext }) {
   // An approval-state sentence prints only for a record /v1/stats reports as not approved, never from a fallback (§6.8).
-  const said = (id: PilotId) => ctx.item(id) !== null && ctx.pending(id);
+  // In show mode (§6.10) the hidden-stub sentences are evaluated against `hidden` instead.
+  const said = (id: PilotId) => ctx.item(id) !== null && (ctx.show ? ctx.hidden(id) : ctx.pending(id));
   const napaCaption = ctx.apiStub && said(P.napa);
+  const napaShown = ctx.show && ctx.item(P.napa) !== null && !ctx.hidden(P.napa) && ctx.pending(P.napa);
   const noneApproved = CHECK_IDS.every(said);
   return (
-    <Chapter slug="partners" level={1}>
+    <Chapter slug="partners" level={1} show={ctx.show}>
       <Section id="api-status" h={H}>
         <Banner tone="info" title="The API runs on the internal network today"
           body="The website calls it privately. Partner API keys, usage metering, OpenAPI docs and monthly releases are planned. The endpoint paths below come from the API controllers; the response bodies shown on this page are illustrative and their field names may change." />
@@ -147,7 +161,7 @@ export default function PartnersChapter({ ctx }: { ctx: LearnContext }) {
             <caption>All endpoints under /v1, from the API controllers</caption>
             <thead><tr><th scope="col">Method and path</th><th scope="col">What it returns</th><th scope="col">Access</th></tr></thead>
             <tbody>
-              {ENDPOINTS.map((e) => (
+              {endpointsFor(ctx.show).map((e) => (
                 <tr key={`${e.method} ${e.path}`}>
                   <td><span className={styles.method}>{e.method}</span> <span className="mono">{e.path}</span></td>
                   <td>{e.what}</td>
@@ -158,9 +172,9 @@ export default function PartnersChapter({ ctx }: { ctx: LearnContext }) {
           </table>
         </ScrollRegion>
         <dl className={styles.dgRead}>
-          <div><dt>Public</dt><dd>The default. Approved records only; anything else is reported as not reviewed.</dd></div>
+          <div><dt>Public</dt><dd>{ctx.show ? SHOW_COPY.learnAccessPublic : "The default. Approved records only; anything else is reported as not reviewed."}</dd></div>
           <div><dt>All</dt><dd><span className="mono">scope=all</span> with the internal token, used only by integration tests. Reviewers read unreviewed data through <span className="mono">/v1/review/*</span>.</dd></div>
-          <div><dt>Reviewer</dt><dd>Batch evidence, including extracted data no pharmacist has checked yet, is readable only by signed-in reviewers. Reviewer emails are never shown on public pages or in public API answers. Readers and the public API see only the id, trade name and review status of an unapproved product.</dd></div>
+          <div><dt>Reviewer</dt><dd>Batch evidence, including extracted data no pharmacist has checked yet, is readable only by signed-in reviewers. Reviewer emails are never shown on public pages or in public API answers. {ctx.show ? SHOW_COPY.learnAccessReviewer : "Readers and the public API see only the id, trade name and review status of an unapproved product."}</dd></div>
           <div><dt>Token</dt><dd>Writes need the internal token. A wrong token is refused with 401.</dd></div>
         </dl>
       </Section>
@@ -185,6 +199,7 @@ export default function PartnersChapter({ ctx }: { ctx: LearnContext }) {
         </div>
         <div id="prod-public">
           <Code label="Public response for Napa" value={PRODUCT_PUBLIC} />
+          {napaShown && <p className={styles.figcap}>{SHOW_COPY.learnNapaCaption}</p>}
           {napaCaption && <p className={styles.figcap}>Napa is not approved yet, so a public caller gets its id, trade name and status "not_reviewed", with <span className="mono">hidden: true</span>. Show "{NOT_REVIEWED}". Never show "not found".</p>}
         </div>
         <div id="prod-all">

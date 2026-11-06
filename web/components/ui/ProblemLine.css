@@ -1,0 +1,26 @@
+/* §3.4 ProblemLine (D74): plain text in --fg, weight 600, with a decorative warn glyph (--i-warn in --warn). Never a pill,
+   a chip, green or the hatch; the sentence carries the meaning, so no new colour pair is added (S4 unchanged). */
+.problem-line {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  margin: 4px 0 0;
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.problem-line::before {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  background: var(--warn);
+  content: "";
+  mask: var(--i-warn) center/contain no-repeat;
+}
+
+/* §3.4 PairRecordLine (D74): plain text like PairReviewState, never green, a pill or a chip. */
+.pair-record {
+  margin: 0;
+  color: var(--fg-2);
+}

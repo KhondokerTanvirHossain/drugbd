@@ -6,7 +6,7 @@ import CodeChip from "@/components/ui/CodeChip";
 import NoDataChip from "@/components/ui/NoDataChip";
 import ReviewStatus from "@/components/ui/ReviewStatus";
 import Severity from "@/components/ui/Severity";
-import { NO_DATA_SENTENCE } from "@/lib/copy";
+import { NO_DATA_SENTENCE, SHOW_COPY, fill } from "@/lib/copy";
 import { formatCount } from "@/lib/stats";
 import { CHAPTERS } from "./chapters";
 import { P, PILOT_SNAPSHOT as S, substanceNamed } from "./pilot-snapshot";
@@ -58,9 +58,9 @@ export default function WhyChapter({ ctx }: { ctx: LearnContext }) {
           </SnapshotBlock>
         </Rule>
         <Rule id="why-pharmacist">
-          <p>Saying a brand contains a substance, and that the substance carries these interactions, is a clinical claim. Engineers check the extraction and their check is recorded, but only a pharmacist's approval reaches the public site and the API.</p>
+          <p>{ctx.show ? SHOW_COPY.learnWhyReview : "Saying a brand contains a substance, and that the substance carries these interactions, is a clinical claim. Engineers check the extraction and their check is recorded, but only a pharmacist's approval reaches the public site and the API."}</p>
           {batch && (batch.approved === 0
-            ? <p className={styles.ev}>Pilot: <ReviewStatus status="pending" /> on all {batch.itemCount} records, so none is public.</p>
+            ? <p className={styles.ev}>Pilot: <ReviewStatus status="pending" /> {ctx.show ? fill(SHOW_COPY.learnWhyPilot, { n: batch.itemCount }) : `on all ${batch.itemCount} records, so none is public.`}</p>
             : <p className={styles.ev}>Pilot: <ReviewStatus status="approved" /> on {batch.approved} of {batch.itemCount} records.</p>)}
         </Rule>
       </ul>
