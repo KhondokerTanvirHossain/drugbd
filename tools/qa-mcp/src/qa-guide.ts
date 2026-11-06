@@ -13,7 +13,7 @@
  */
 
 /** §7.11.5: semver, independent of the server version. */
-export const GUIDE_VERSION = "1.6.0";
+export const GUIDE_VERSION = "1.7.0";
 export const GUIDE_TITLE = "IntelliDrugs QA guide";
 export const GUIDE_TOPICS = ["overview", "data_model", "sources", "checks", "pitfalls", "reporting"] as const;
 export type GuideTopic = (typeof GUIDE_TOPICS)[number];
@@ -30,7 +30,7 @@ const OVERVIEW = md(
   "",
   "## The review gate",
   "",
-  "- Nothing is public until a pharmacist approves the record (`displayStatus` `approved`).",
+  "- A record is approved only when a pharmacist approves it (`displayStatus` `approved`). A server setting decides whether the public site shows approved records only, or every record with a label saying whether a pharmacist approved it; QA reads are the same either way.",
   "- An engineer can check a record (`engineer_checked`), but an engineer's check never publishes it.",
   "- Senior pharmacists review substances and DDInter interaction pairs across all batches at once; a pair's `review` state shows that review.",
   "- QA accounts and QA keys cannot record review decisions.",
