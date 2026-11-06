@@ -43,6 +43,38 @@ describe("deploy configuration (§12.4)", () => {
   });
 });
 
+describe("public mode (D74, §7.4.1, §12.4)", () => {
+  const apiService = () => {
+    const c = repo("deploy/docker-compose.yml");
+    return c.slice(c.indexOf("\n  api:"), c.indexOf("\n  web:"));
+  };
+  it("the API gets PUBLIC_SHOWS_UNREVIEWED, on by default in production; the web never does", () => {
+    expect(apiService()).toContain("PUBLIC_SHOWS_UNREVIEWED: ${PUBLIC_SHOWS_UNREVIEWED:-true}\n");
+    expect(webService()).not.toContain("PUBLIC_SHOWS_UNREVIEWED");
+    expect(repo("deploy/docker-compose.override.yml")).not.toContain("PUBLIC_SHOWS_UNREVIEWED");
+    expect(repo("deploy/docker-compose.ci.yml")).not.toContain("PUBLIC_SHOWS_UNREVIEWED");
+  });
+  it(".env.example documents the off switch, and the runbook names the procedure", () => {
+    expect(repo("deploy/.env.example")).toContain("# PUBLIC_SHOWS_UNREVIEWED=false turns show mode off (approved records only); unset or true shows unreviewed records, labelled (spec §7.4.1).");
+    const runbook = repo("docs/runbooks/public-mode.md");
+    expect(runbook).toContain("PUBLIC_SHOWS_UNREVIEWED=false");
+    expect(runbook).toContain("docker-compose up -d --no-deps api web");
+  });
+  it("the API's code default is approved-only: application.yml binds the variable with an empty default", () => {
+    expect(repo("api/src/main/resources/application.yml")).toContain("bddrug.public-shows-unreviewed: ${PUBLIC_SHOWS_UNREVIEWED:}");
+  });
+  it("CI runs the main e2e in show mode, then @approved-only against the same web with the api recreated, then show mode again", () => {
+    const yml = repo(".github/workflows/ci.yml");
+    const main = yml.indexOf("npx playwright test --grep-invert @approved-only"), off = yml.indexOf("PUBLIC_SHOWS_UNREVIEWED=false $COMPOSE up -d --no-deps api");
+    const only = yml.indexOf("npx playwright test --grep @approved-only"), back = yml.indexOf("$COMPOSE up -d --no-deps api\n", only);
+    expect(main).toBeGreaterThan(0);
+    expect(off).toBeGreaterThan(main);
+    expect(only).toBeGreaterThan(off);
+    expect(back).toBeGreaterThan(only);
+    expect(yml.indexOf("npx lhci autorun")).toBeGreaterThan(back);
+  });
+});
+
 describe("CI-only compose override (§11.4)", () => {
   it("builds api and web from source, runs web in e2e mode on localhost, and makes edge a local network", () => {
     const ci = repo("deploy/docker-compose.ci.yml");

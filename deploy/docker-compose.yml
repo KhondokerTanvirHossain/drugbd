@@ -32,6 +32,10 @@ services:
       DB_PASSWORD: ${DB_PASSWORD}
       # Required (>= 32 chars): the API refuses to start without it. Only the web server sends it.
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
+      # Spec §7.4.1 (D74): true = the public site shows every record, labelled; false = approved records only. The release
+      # ships with it on; set PUBLIC_SHOWS_UNREVIEWED=false in the host .env to turn it off (docs/runbooks/public-mode.md).
+      # The API owns it: never pass it to the web, which reads the mode from the API.
+      PUBLIC_SHOWS_UNREVIEWED: ${PUBLIC_SHOWS_UNREVIEWED:-true}
       JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=70
     depends_on: {flyway: {condition: service_completed_successfully}}
     mem_limit: 448m
