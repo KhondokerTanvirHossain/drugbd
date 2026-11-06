@@ -25,13 +25,20 @@ public final class PublicProducts {
                         Map<String, String> entryNames, Map<String, String> pairSeverity, Set<String> publicEntryIds,
                         int otherBrandsCount, List<IngredientSummary> summaries) {}
 
+    /**
+     * The public detail of a visible product, with its label {@code p.review()} (§7.4.1). The verification line is sent only
+     * for an approved product (D49 as amended by D74): a visible product that is not approved gets {@code null}, never a
+     * hard-coded approval. Source links are sent for every visible product (D58 superseded in show mode).
+     */
     public static PublicProduct assemble(Product p, Facts f) {
+        PublicProduct.Verification verification = PublicReview.approved(p.review())
+            ? new PublicProduct.Verification("approved", "pharmacist", f.approvedAt()) : null;
         return new PublicProduct(p.conceptId(), p.darNumber(), p.tradeName(), p.company(), p.dosageForm(), p.genericContentRaw(),
             p.qualityFlag(), p.ingredients(), p.parseStatus(), p.parseNote(), clinical(p.clinicalDrug(), f.summaries()),
-            new PublicProduct.Verification("approved", "pharmacist", f.approvedAt()),
+            verification,
             new PublicProduct.Provenance(f.batchId(), f.extractedAt(), SOURCE, SourceLinks.brand(p.conceptId(), f.oclFetchedAt()),
                 stages(f)),
-            f.otherBrandsCount());
+            f.otherBrandsCount(), p.review());
     }
 
     /**

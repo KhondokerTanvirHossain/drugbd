@@ -10,6 +10,7 @@ import com.niramoy.bddrug.domain.CheckResult.*;
 import com.niramoy.bddrug.domain.DdinterCode;
 import com.niramoy.bddrug.domain.PairContent;
 import com.niramoy.bddrug.domain.PairReviewRule;
+import com.niramoy.bddrug.domain.PublicReview;
 import com.niramoy.bddrug.domain.RouteRule;
 import com.niramoy.bddrug.domain.Scope;
 import com.niramoy.bddrug.domain.Severity;
@@ -18,8 +19,9 @@ import reactor.core.publisher.Mono;
 import java.util.*;
 
 /**
- * The interaction checker (§6.7.2, §7.4). Under public scope a product no pharmacist has approved is listed in
- * notReviewed (id and trade name) and takes no other part. Every substance pair of two different approved products is
+ * The interaction checker (§6.7.2, §7.4, §7.4.1). Under public scope a hidden product (no public label) is listed in
+ * notReviewed (id and trade name) and takes no other part; every visible product is checked and carries its label. Every
+ * substance pair of two different checked products is
  * either checked (an alert per stored row, or "no interaction listed") or not checked with a reason; same-product and
  * same-BDS pairs are listed and never counted. Nothing is silently dropped, so "no data" is never shown as "no
  * interactions".
@@ -68,14 +70,14 @@ public class InteractionCheckService {
         List<Prod> prods = new ArrayList<>();
         for (String id : ids) {
             ProductRow p = products.get(id);
-            if (scope == Scope.PUBLIC && !"ok".equals(p.reviewStatus())) {
+            if (scope == Scope.PUBLIC && p.review() == null) {
                 notReviewed.add(new NotReviewed(id, p.tradeName()));
                 continue;
             }
             List<Sub> subs = substances(p, ingredients.getOrDefault(id, List.of()), data);
             prods.add(new Prod(p, subs));
             checkedProducts.add(new CheckedProduct(id, p.tradeName(), p.route(), subs.stream().filter(Sub::listed)
-                .map(s -> new SubstanceCoverage(s.bdsId(), s.name(), s.coverage(), chosen(s, data))).toList()));
+                .map(s -> new SubstanceCoverage(s.bdsId(), s.name(), s.coverage(), chosen(s, data))).toList(), p.review()));
             for (Sub s : subs) if (s.reason() != null) noData.add(new NoData(id, s.bdsId(), s.name()));
         }
 
@@ -139,8 +141,9 @@ public class InteractionCheckService {
         });
         int[] sev = new int[4];
         for (Alert a : alerts) sev[Severity.rank(a.severity())]++;
+        int notApproved = (int) checkedProducts.stream().filter(c -> !PublicReview.approved(c.review())).count();
         Summary summary = new Summary(ids.size(), total, checked, alerted, checked - alerted, total - checked, notReviewed.size(),
-            new BySeverity(sev[0], sev[1], sev[2], sev[3]));
+            new BySeverity(sev[0], sev[1], sev[2], sev[3]), notApproved);
         return new CheckResult(summary, checkedProducts, alerts, none, notChecked, duplicates, noData, notReviewed);
     }
 
@@ -188,7 +191,7 @@ public class InteractionCheckService {
 
     private static Side side(Prod p, Sub s) {
         String scope = s.reason() == null && s.choice() != null ? s.choice().codes().get(0).routeScope() : null;
-        return new Side(p.row().conceptId(), p.row().tradeName(), s.bdsId(), s.name(), scope);
+        return new Side(p.row().conceptId(), p.row().tradeName(), s.bdsId(), s.name(), scope, p.row().review());
     }
 
     private static void alertsFor(Prod pa, Sub a, Prod pb, Sub b, Map<String, PairRow> pairs,
@@ -205,8 +208,8 @@ public class InteractionCheckService {
                 String hash = PairContent.hash(pair.ddinterA(), pair.ddinterB(),
                     new PairContent.Content(pair.severity(), pair.actions(), pair.interaction(), pair.management()));
                 out.add(new Alert(pair.severity(),
-                    new Side(pa.row().conceptId(), pa.row().tradeName(), a.bdsId(), a.name(), ca.routeScope()),
-                    new Side(pb.row().conceptId(), pb.row().tradeName(), b.bdsId(), b.name(), cb.routeScope()),
+                    new Side(pa.row().conceptId(), pa.row().tradeName(), a.bdsId(), a.name(), ca.routeScope(), pa.row().review()),
+                    new Side(pb.row().conceptId(), pb.row().tradeName(), b.bdsId(), b.name(), cb.routeScope(), pb.row().review()),
                     pair.actions(), pair.interaction(), pair.management(), assumed, pair.ddinterA(), pair.ddinterB(),
                     pair.interactionId(), SOURCE,
                     PairReviewRule.publicReview(reviews.getOrDefault(pair.ddinterA() + "|" + pair.ddinterB(), List.of()), hash)));

@@ -74,7 +74,11 @@ class StatsApiIntegrationTest {
     @Test void exampleUsableIsFalseOnlyForAReportedIssueOrARemovedRecord() {
         web.get().uri("/v1/stats").exchange().expectStatus().isOk()
             .expectBody()
-            .jsonPath("$.data.batches[0].items[0].length()").isEqualTo(4)
+            // D74 (§7.4.1): hidden and review are additive; approved-only mode sends no unapproved item's label
+            .jsonPath("$.data.batches[0].items[0].length()").isEqualTo(6)
+            .jsonPath("$.data.batches[0].items[0].hidden").isEqualTo(true)
+            .jsonPath("$.data.batches[0].items[0].review").isEmpty()
+            .jsonPath("$.data.publicMode").isEqualTo("approved_only")
             .jsonPath("$.data.batches[0].items[0].conceptId").isEqualTo("A-1")
             .jsonPath("$.data.batches[0].items[0].tradeName").isEqualTo("Ecosprin")
             .jsonPath("$.data.batches[0].items[0].status").isEqualTo("not_reviewed")

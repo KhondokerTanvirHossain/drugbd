@@ -8,16 +8,29 @@ import java.util.List;
  */
 public record CheckResult(Summary summary, List<CheckedProduct> products, List<Alert> alerts, List<NoInteraction> noInteraction,
                           List<NotChecked> notChecked, List<Duplicate> duplicates, List<NoData> noData, List<NotReviewed> notReviewed) {
+    /** notApproved (§7.4.1): the checked products that are not approved; 0 in approved-only mode. */
     public record Summary(int medicines, int totalPairs, int checkedPairs, int alertPairs, int noInteractionPairs, int notCheckedPairs,
-                          int notReviewed, BySeverity bySeverity) {}
+                          int notReviewed, BySeverity bySeverity, int notApproved) {
+        public Summary(int medicines, int totalPairs, int checkedPairs, int alertPairs, int noInteractionPairs, int notCheckedPairs,
+                       int notReviewed, BySeverity bySeverity) {
+            this(medicines, totalPairs, checkedPairs, alertPairs, noInteractionPairs, notCheckedPairs, notReviewed, bySeverity, 0);
+        }
+    }
     public record BySeverity(int major, int moderate, int minor, int unknown) {}
     /** route: the clinical drug's route, null when the product has none (the checker's route-assumed lines name it). */
-    public record CheckedProduct(String conceptId, String tradeName, String route, List<SubstanceCoverage> substances) {}
+    public record CheckedProduct(String conceptId, String tradeName, String route, List<SubstanceCoverage> substances, String review) {}
     /** ddinter: the chosen entries (the Chloramphenicol fix), empty when the substance cannot be checked. */
     public record SubstanceCoverage(String bdsId, String name, String coverage, List<Chosen> ddinter) {}
     public record Chosen(String ddinterId, String name, String routeScope, boolean routeAssumed) {}
-    /** routeScope: the side's chosen entry's route; null when it has none. bdsId null: no substance mapping. */
-    public record Side(String conceptId, String tradeName, String bdsId, String name, String routeScope) {}
+    /**
+     * routeScope: the side's chosen entry's route; null when it has none. bdsId null: no substance mapping. review: the
+     * product's public label (§7.4.1); the five-argument form is approved.
+     */
+    public record Side(String conceptId, String tradeName, String bdsId, String name, String routeScope, String review) {
+        public Side(String conceptId, String tradeName, String bdsId, String name, String routeScope) {
+            this(conceptId, tradeName, bdsId, name, routeScope, PublicReview.APPROVED);
+        }
+    }
     public record Alert(String severity, Side a, Side b, List<String> actions, String interaction, String management,
                         boolean routeAssumed, String ddinterA, String ddinterB, String interactionId, String source,
                         PairReviewRule.PublicReview pairReview) {
@@ -33,6 +46,9 @@ public record CheckResult(Summary summary, List<CheckedProduct> products, List<A
     public record NotChecked(Side a, Side b, String reason, String side) {}
     public record Duplicate(String bdsId, String name, List<String> conceptIds) {}
     public record NoData(String conceptId, String bdsId, String name) {}
-    /** A product left out because no pharmacist has approved it (public scope). Never "not found", never dropped. */
+    /**
+     * A product left out under public scope because it is hidden: not approved in approved-only mode; in show mode only a
+     * withdrawn one (removed, a DGDA load failure, in no batch, §7.4.1). Never "not found", never dropped.
+     */
     public record NotReviewed(String conceptId, String tradeName) {}
 }

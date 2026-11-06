@@ -3,6 +3,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.niramoy.bddrug.application.port.ProductDetailPort;
 import com.niramoy.bddrug.domain.IngredientSummary;
+import com.niramoy.bddrug.domain.PublicMode;
 import com.niramoy.bddrug.domain.PublicProducts;
 import com.niramoy.bddrug.domain.PublicProducts.Facts;
 import com.niramoy.bddrug.domain.PublicProducts.StageRow;
@@ -15,8 +16,8 @@ import java.time.OffsetDateTime;
 import java.util.*;
 
 /**
- * Facts for an approved product's public detail. Public status is read only through ReviewSql.LATEST_PUBLIC (§7.4); the
- * latest item is read in ReviewSql.statusOf order, and only its decisions date the verification line
+ * Facts for a visible product's public detail. Visibility is read only through ReviewSql.latest (§7.4.1); the latest item
+ * is read in the same order, and only its decisions date the verification line
  * (PublicProducts.approvedAt). Eight queries, none per row. Decision notes and emails are never selected.
  */
 @Component
@@ -26,9 +27,11 @@ public class R2dbcProductDetailAdapter implements ProductDetailPort {
 
     private final DatabaseClient db;
     private final IngredientSummaryReader summaries;
-    public R2dbcProductDetailAdapter(DatabaseClient db, IngredientSummaryReader summaries) {
+    private final PublicMode mode;
+    public R2dbcProductDetailAdapter(DatabaseClient db, IngredientSummaryReader summaries, PublicMode mode) {
         this.db = db;
         this.summaries = summaries;
+        this.mode = mode;
     }
 
     @Override public Mono<Facts> facts(String conceptId, String bdcId, String route) {
@@ -43,7 +46,7 @@ public class R2dbcProductDetailAdapter implements ProductDetailPort {
             : decisions(l.batchId(), conceptId).map(ds -> Optional.ofNullable(PublicProducts.approvedAt(ds, l.extractedAt()))));
         Mono<Optional<Instant>> fetched = db.sql("SELECT max(fetched_at) AS at FROM raw.ocl_concept WHERE concept_id = :c")
             .bind("c", conceptId).map(r -> Optional.ofNullable(instant(r.get("at", OffsetDateTime.class)))).one();
-        Mono<Integer> others = bdcId == null ? Mono.just(0) : db.sql("WITH " + ReviewSql.LATEST_PUBLIC + " " +
+        Mono<Integer> others = bdcId == null ? Mono.just(0) : db.sql("WITH " + ReviewSql.latest(mode) + " " +
                 "SELECT count(*) AS n FROM curated.brand_product bp JOIN latest l ON l.concept_id = bp.concept_id " +
                 "WHERE l.pub AND bp.bdc_id = :bdc AND bp.concept_id <> :c")
             .bind("bdc", bdcId).bind("c", conceptId).map(r -> r.get("n", Long.class).intValue()).one();
@@ -106,10 +109,10 @@ public class R2dbcProductDetailAdapter implements ProductDetailPort {
             .all().collectMap(Map.Entry::getKey, Map.Entry::getValue);
     }
 
-    /** The given DDInter ids that belong to a substance a public product carries (§7.4: a substance is public then). */
+    /** The given DDInter ids that belong to a substance a visible product carries (§7.4.1: a substance is visible then). */
     private Mono<Set<String>> publicIds(Set<String> ids) {
         if (ids.isEmpty()) return Mono.just(Set.of());
-        return db.sql("WITH " + ReviewSql.LATEST_PUBLIC + " " + """
+        return db.sql("WITH " + ReviewSql.latest(mode) + " " + """
                 SELECT DISTINCT c.code
                 FROM curated.brand_product bp
                 JOIN latest l ON l.concept_id = bp.concept_id AND l.pub

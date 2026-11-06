@@ -19,12 +19,13 @@ import static com.niramoy.bddrug.TestSupport.*;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Review Focus 1 at API level: an anonymous (scope=public) request never sees an unapproved record.
+ * Review Focus 1 at API level, approved-only mode (§7.4.1, D74: the switch off): an anonymous (scope=public) request never
+ * sees an unapproved record. VisibilityShowUnreviewedIntegrationTest runs the same fixtures with the switch on.
  * Approved here: W-1, N-1 and C-CAP (C-CAP's latest batch item is ok). Hidden: A-1 (pending), C-EYE (issue),
  * W-2 (approved in an older batch, pending in the newer one) and every product without a batch item. D-1 (Motigut) was approved and then removed from its batch file: its latest item is ok and marked removed (PO D7).
  */
 @Testcontainers
-@SpringBootTest
+@SpringBootTest(properties = "bddrug.public-shows-unreviewed=false")
 @AutoConfigureWebTestClient
 class VisibilityApiIntegrationTest {
     @Container static PostgreSQLContainer<?> pg = new PostgreSQLContainer<>("postgres:16");
@@ -55,7 +56,7 @@ class VisibilityApiIntegrationTest {
 
     @Autowired WebTestClient web;
 
-    private static String str(byte[] body) { return new String(body, StandardCharsets.UTF_8); }
+    static String str(byte[] body) { return new String(body, StandardCharsets.UTF_8); }
 
     // ---- search
 
@@ -99,7 +100,7 @@ class VisibilityApiIntegrationTest {
 
     // ---- product detail
 
-    private void expectHidden(String conceptId, String tradeName, String status, String batchId) {
+    void expectHidden(String conceptId, String tradeName, String status, String batchId) {
         String body = str(web.get().uri("/v1/products/{id}", conceptId).exchange().expectStatus().isOk()
             .expectBody()
             .jsonPath("$.success").isEqualTo(true)
@@ -127,6 +128,7 @@ class VisibilityApiIntegrationTest {
             .expectBody()
             .jsonPath("$.data.hidden").doesNotExist()
             .jsonPath("$.data.verification.status").isEqualTo("approved").jsonPath("$.data.reviewStatus").doesNotExist()
+            .jsonPath("$.data.review").isEqualTo("approved")
             .jsonPath("$.data.genericContentRaw").isEqualTo("Warfarin Sodium 5 mg")
             .jsonPath("$.data.ingredients[0].xmCode").isEqualTo("XM5S93")
             .jsonPath("$.data.clinicalDrug.bdcId").isEqualTo("BDC-000001");
@@ -192,7 +194,7 @@ class VisibilityApiIntegrationTest {
 
     // ---- checker
 
-    private WebTestClient.ResponseSpec check(WebTestClient client, String scope, String... ids) {
+    WebTestClient.ResponseSpec check(WebTestClient client, String scope, String... ids) {
         return client.post().uri(scope == null ? "/v1/interactions/check" : "/v1/interactions/check?scope=" + scope)
             .contentType(MediaType.APPLICATION_JSON).bodyValue(Map.of("conceptIds", List.of(ids))).exchange();
     }
@@ -249,7 +251,8 @@ class VisibilityApiIntegrationTest {
             .jsonPath("$.data[0].conceptId").isEqualTo("C-CAP")
             .jsonPath("$.data[0].tradeName").isEqualTo("Chloramex")
             .jsonPath("$.data[0].dosageForm").isEqualTo("Capsule")
-            .jsonPath("$.data[0].length()").isEqualTo(3)
+            .jsonPath("$.data[0].review").isEqualTo("approved")
+            .jsonPath("$.data[0].length()").isEqualTo(4)
             .jsonPath("$.data[1].tradeName").isEqualTo("Napa")
             .jsonPath("$.data[2].tradeName").isEqualTo("Warin");
         web.get().uri("/v1/products/loaded?scope=public").exchange().expectStatus().isOk()
@@ -292,6 +295,14 @@ class VisibilityApiIntegrationTest {
             .returnResult().getResponseBody());
         assertThat(body).doesNotContain("Warfarin", "Test Pharma", "BDS-", "BDC-", "XM5S93", "DDInter", "genericContentRaw",
             "reviewStatus", "\"issue\"", "company", "strength");
+    }
+
+    @Test void statsCarryTheMode() {
+        web.get().uri("/v1/stats").exchange().expectStatus().isOk().expectBody()
+            .jsonPath("$.data.publicMode").isEqualTo("approved_only")
+            .jsonPath("$.data.batches[?(@.batchId == 'V-1')].items[?(@.conceptId == 'C-EYE')].review").isEqualTo(java.util.Collections.singletonList(null))
+            .jsonPath("$.data.batches[?(@.batchId == 'V-1')].items[?(@.conceptId == 'C-EYE')].hidden").isEqualTo(List.of(true))
+            .jsonPath("$.data.batches[?(@.batchId == 'V-1')].items[?(@.conceptId == 'W-1')].review").isEqualTo(List.of("approved"));
     }
 
     // ---- PO D7 (§7.4, §11.3): the approved-then-removed fixture on every public endpoint of the matrix

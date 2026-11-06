@@ -2,7 +2,9 @@ package com.niramoy.bddrug.adapter.persistence;
 import com.niramoy.bddrug.application.port.SubstanceQueryPort;
 import com.niramoy.bddrug.domain.DdinterCode;
 import com.niramoy.bddrug.domain.IngredientSummary;
+import com.niramoy.bddrug.domain.PublicMode;
 import com.niramoy.bddrug.domain.PublicPairReviews;
+import com.niramoy.bddrug.domain.PublicReview;
 import com.niramoy.bddrug.domain.SourceLinks;
 import com.niramoy.bddrug.domain.Substance;
 import com.niramoy.bddrug.domain.SubstanceCode;
@@ -28,7 +30,7 @@ public class R2dbcSubstanceAdapter implements SubstanceQueryPort {
     private static final String MINE =
         "WITH mine AS (SELECT code, route_scope FROM curated.substance_code WHERE bds_id = :id AND system = 'DDINTER') ";
     private static final String MINE_CTE = "mine AS (SELECT code, route_scope FROM curated.substance_code WHERE bds_id = :id AND system = 'DDINTER')";
-    /** Substances carried by a public product (§7.4: "a substance is public only when at least one public product carries it"). */
+    /** Substances carried by a visible product (§7.4.1: "a substance is visible when at least one visible product carries it"). */
     static final String PUBLIC_SUBSTANCES = """
         pubsub AS (SELECT DISTINCT x.bds_id FROM curated.brand_product bp
                    JOIN latest l ON l.concept_id = bp.concept_id AND l.pub
@@ -55,22 +57,28 @@ public class R2dbcSubstanceAdapter implements SubstanceQueryPort {
     /** The per-entry count rule (IngredientSummaryReader.entries); a stateless reader over the same client. */
     private final IngredientSummaryReader entryReader;
     private final PairReviewReader pairReviews;
-    public R2dbcSubstanceAdapter(DatabaseClient db, PairReviewReader pairReviews) {
+    private final PublicMode mode;
+    public R2dbcSubstanceAdapter(DatabaseClient db, PairReviewReader pairReviews, PublicMode mode) {
         this.db = db;
         this.entryReader = new IngredientSummaryReader(db);
         this.pairReviews = pairReviews;
+        this.mode = mode;
     }
 
-    @Override public Mono<Substance> find(String bdsId, boolean approvedOnly) {
+    @Override public Mono<Substance> find(String bdsId, boolean publicOnly) {
         return db.sql("SELECT bds_id, preferred_name FROM curated.substance WHERE bds_id = :id")
             .bind("id", bdsId)
             .map(r -> new String[]{r.get("bds_id", String.class), r.get("preferred_name", String.class)})
             .one()
-            .flatMap(s -> Mono.zip(List.of(names(bdsId), codes(bdsId), coverage(bdsId), products(bdsId, approvedOnly),
-                    interactions(bdsId, approvedOnly), diseases(bdsId), foods(bdsId), entries(bdsId), clinicalDrugs(bdsId, approvedOnly)),
+            .flatMap(s -> Mono.zip(List.of(names(bdsId), codes(bdsId), coverage(bdsId), products(bdsId, publicOnly),
+                    interactions(bdsId, publicOnly), diseases(bdsId), foods(bdsId), entries(bdsId), clinicalDrugs(bdsId, publicOnly)),
                     a -> a)
-                .map(a -> new Substance(s[0], s[1], cast(a[0]), cast(a[1]), (Substance.Coverage) a[2], cast(a[3]), cast(a[4]),
-                    cast(a[5]), cast(a[6]), cast(a[7]), cast(a[8]))));
+                .map(a -> {
+                    List<Substance.ProductRef> products = cast(a[3]);
+                    return new Substance(s[0], s[1], cast(a[0]), cast(a[1]), (Substance.Coverage) a[2], products, cast(a[4]),
+                        cast(a[5]), cast(a[6]), cast(a[7]), cast(a[8]),
+                        PublicReview.carried(products.stream().map(Substance.ProductRef::review).toList()));
+                }));
     }
 
     @Override public Mono<String> preferredName(String bdsId) {
@@ -79,7 +87,7 @@ public class R2dbcSubstanceAdapter implements SubstanceQueryPort {
     }
 
     @Override public Mono<Boolean> isPublic(String bdsId) {
-        return db.sql("WITH " + ReviewSql.LATEST_PUBLIC + ", " + PUBLIC_SUBSTANCES + " SELECT EXISTS (SELECT 1 FROM pubsub WHERE bds_id = :id) AS pub")
+        return db.sql("WITH " + ReviewSql.latest(mode) + ", " + PUBLIC_SUBSTANCES + " SELECT EXISTS (SELECT 1 FROM pubsub WHERE bds_id = :id) AS pub")
             .bind("id", bdsId).map(r -> Boolean.TRUE.equals(r.get("pub", Boolean.class))).one();
     }
 
@@ -87,7 +95,7 @@ public class R2dbcSubstanceAdapter implements SubstanceQueryPort {
                            List<String> actions, String interactionId, String interaction, String management) {}
 
     @Override public Mono<InteractionsPage> interactionsPage(String bdsId, String severity, int limit, int offset, boolean publicOnly) {
-        String sides = "WITH " + ReviewSql.LATEST_PUBLIC + ", " + PUBLIC_SUBSTANCES + ", " + MINE_CTE + SIDES_CTE;
+        String sides = "WITH " + ReviewSql.latest(mode) + ", " + PUBLIC_SUBSTANCES + ", " + MINE_CTE + SIDES_CTE;
         String where = " WHERE (CAST(:sev AS text) IS NULL OR s.severity = :sev) ";
         DatabaseClient.GenericExecuteSpec count = db.sql(sides + "SELECT count(*) AS n FROM sides s" + where).bind("id", bdsId);
         count = severity == null ? count.bindNull("sev", String.class) : count.bind("sev", severity);
@@ -105,7 +113,11 @@ public class R2dbcSubstanceAdapter implements SubstanceQueryPort {
                 r.get("severity", String.class), list(r, "actions"), r.get("interaction_id", String.class),
                 r.get("interaction", String.class), r.get("management", String.class)))
             .all().collectList();
-        return Mono.zip(total, entries(bdsId), rows).flatMap(t -> {
+        return Mono.zip(total, entries(bdsId), rows).flatMap(t -> labels(java.util.stream.Stream.concat(java.util.stream.Stream.of(bdsId),
+                t.getT3().stream().map(PairRow::partnerBdsId)).toList()).map(l -> java.util.Map.entry(t, l)))
+            .flatMap(e -> {
+            var t = e.getKey();
+            Map<String, String> labels = e.getValue();
             // §7.4: a pair review is served only for pairs between public products. Under public scope a pair whose partner
             // substance is not public (partnerBdsId null) is not even read, and reads not_reviewed with no date.
             List<PublicPairReviews.Pair> pairs = t.getT3().stream().filter(p -> !publicOnly || p.partnerBdsId() != null)
@@ -118,7 +130,8 @@ public class R2dbcSubstanceAdapter implements SubstanceQueryPort {
                     p.interaction(), p.management(),
                     publicOnly && p.partnerBdsId() == null ? PublicPairReviews.NONE
                         : rv.getOrDefault(p.ddinterA() + "|" + p.ddinterB(), PublicPairReviews.NONE),
-                    SourceLinks.pair(p.interactionId()).map(SourceLinks.Source::url).orElse(null))).toList()));
+                    SourceLinks.pair(p.interactionId()).map(SourceLinks.Source::url).orElse(null),
+                    p.partnerBdsId() == null ? null : labels.get(p.partnerBdsId()))).toList(), labels.get(bdsId)));
         });
     }
 
@@ -158,20 +171,27 @@ public class R2dbcSubstanceAdapter implements SubstanceQueryPort {
             .defaultIfEmpty(new Substance.Coverage("not_run", Substance.NOT_LOADED_NOTE));   // §7.3: no row = never ran
     }
 
-    private Mono<List<Substance.ProductRef>> products(String id, boolean approvedOnly) {
+    /**
+     * The products carrying the substance with their public label (ReviewSql.publicLabelOf, §7.4.1); publicOnly keeps the
+     * visible ones. reviewStatus is the coarse P1 form: "ok" when approved, otherwise "pending", never the internal "issue".
+     */
+    private Mono<List<Substance.ProductRef>> products(String id, boolean publicOnly) {
         return db.sql("""
-                SELECT p.concept_id, p.trade_name, p.company, %s AS review_status
+                SELECT p.concept_id, p.trade_name, p.company, %s AS review
                 FROM (SELECT DISTINCT bp.concept_id, bp.trade_name, bp.company
                       FROM curated.substance_code c
                       JOIN curated.brand_product_ingredient bpi ON bpi.xm_code = c.code
                       JOIN curated.brand_product bp ON bp.concept_id = bpi.concept_id
                       WHERE c.bds_id = :id AND c.system = 'ICD11_XM') p
-                ORDER BY p.trade_name, p.concept_id""".formatted(ReviewSql.statusOf("p.concept_id")))
+                ORDER BY p.trade_name, p.concept_id""".formatted(ReviewSql.publicLabelOf("p.concept_id", mode)))
             .bind("id", id)
-            .map(r -> new Substance.ProductRef(r.get("concept_id", String.class), r.get("trade_name", String.class),
-                r.get("company", String.class), r.get("review_status", String.class)))
+            .map(r -> {
+                String review = r.get("review", String.class);
+                return new Substance.ProductRef(r.get("concept_id", String.class), r.get("trade_name", String.class),
+                    r.get("company", String.class), PublicReview.approved(review) ? "ok" : "pending", review);
+            })
             .all()
-            .filter(p -> !approvedOnly || "ok".equals(p.reviewStatus()))
+            .filter(p -> !publicOnly || p.review() != null)
             .collectList();
     }
 
@@ -188,7 +208,7 @@ public class R2dbcSubstanceAdapter implements SubstanceQueryPort {
 
     /** The substance detail's pair list: SIDES_CTE with the partner looked up by partnerBdsIdSql (§7.4). */
     private Mono<List<Substance.Interaction>> interactions(String id, boolean publicOnly) {
-        return db.sql("WITH " + ReviewSql.LATEST_PUBLIC + ", " + PUBLIC_SUBSTANCES + ", " + MINE_CTE + SIDES_CTE + """
+        return db.sql("WITH " + ReviewSql.latest(mode) + ", " + PUBLIC_SUBSTANCES + ", " + MINE_CTE + SIDES_CTE + """
                 SELECT s.partner_name, s.severity, s.actions, s.interaction_id, s.route_scope,\s""" + partnerBdsIdSql(publicOnly) + """
                  AS partner_bds_id
                 FROM sides s
@@ -197,8 +217,12 @@ public class R2dbcSubstanceAdapter implements SubstanceQueryPort {
             .bind("id", id)
             .map(r -> new Substance.Interaction(r.get("partner_name", String.class), r.get("partner_bds_id", String.class),
                 r.get("severity", String.class), list(r, "actions"), r.get("interaction_id", String.class),
-                r.get("route_scope", String.class)))
-            .all().collectList();
+                r.get("route_scope", String.class), null))
+            .all().collectList()
+            .flatMap(list -> labels(list.stream().map(Substance.Interaction::partnerBdsId).toList()).map(labels -> list.stream()
+                .map(i -> i.partnerBdsId() == null ? i : new Substance.Interaction(i.partnerName(), i.partnerBdsId(), i.severity(),
+                    i.actions(), i.interactionId(), i.routeScope(), labels.get(i.partnerBdsId())))
+                .toList()));
     }
 
     private Mono<List<Substance.Disease>> diseases(String id) {
@@ -249,18 +273,40 @@ public class R2dbcSubstanceAdapter implements SubstanceQueryPort {
             SourceLinks.code("DDINTER", c.code(), row.fetchedAt()).orElse(null));
     }
 
+    /** The clinical drugs that contain the substance, each with the label it carries from its visible brands (§7.4.1). */
     private Mono<List<Substance.ClinicalDrugRef>> clinicalDrugs(String id, boolean publicOnly) {
-        return db.sql("WITH " + ReviewSql.LATEST_PUBLIC + " " + """
-                SELECT DISTINCT cd.bdc_id, cd.display_name
-                FROM curated.clinical_drug_ingredient i
+        return db.sql("WITH " + ReviewSql.latest(mode) + " SELECT cd.bdc_id, cd.display_name, " +
+                ReviewSql.carriedLabel("v.lab") + " AS review" + """
+                 FROM curated.clinical_drug_ingredient i
                 JOIN curated.clinical_drug cd ON cd.bdc_id = i.bdc_id
-                WHERE i.bds_id = :id AND (NOT :pub OR EXISTS (
-                  SELECT 1 FROM curated.brand_product bp JOIN latest l ON l.concept_id = bp.concept_id AND l.pub
-                  WHERE bp.bdc_id = cd.bdc_id))
+                LEFT JOIN LATERAL (SELECT\s""" + ReviewSql.label("l") + """
+                 AS lab FROM curated.brand_product bp JOIN latest l ON l.concept_id = bp.concept_id AND l.pub
+                  WHERE bp.bdc_id = cd.bdc_id) v ON true
+                WHERE i.bds_id = :id
+                GROUP BY cd.bdc_id, cd.display_name
+                HAVING NOT :pub OR count(v.lab) > 0
                 ORDER BY cd.display_name, cd.bdc_id""")
             .bind("id", id).bind("pub", publicOnly)
-            .map(r -> new Substance.ClinicalDrugRef(r.get("bdc_id", String.class), r.get("display_name", String.class)))
+            .map(r -> new Substance.ClinicalDrugRef(r.get("bdc_id", String.class), r.get("display_name", String.class),
+                r.get("review", String.class)))
             .all().collectList();
+    }
+
+    /**
+     * The carried label (ReviewSql.carriedLabel, §7.4.1) of each given substance over the visible products that carry it,
+     * in one query; a substance no visible product carries is absent. Nulls in the list are ignored.
+     */
+    Mono<Map<String, String>> labels(List<String> bdsIds) {
+        String[] ids = bdsIds.stream().filter(java.util.Objects::nonNull).distinct().toArray(String[]::new);
+        if (ids.length == 0) return Mono.just(Map.of());
+        return db.sql("WITH " + ReviewSql.latest(mode) + " SELECT x.bds_id, " + ReviewSql.carriedLabel(ReviewSql.label("l")) +
+                " AS review FROM curated.substance_code x " +
+                "JOIN curated.brand_product_ingredient bpi ON bpi.xm_code = x.code " +
+                "JOIN latest l ON l.concept_id = bpi.concept_id AND l.pub " +
+                "WHERE x.system = 'ICD11_XM' AND x.bds_id = ANY(:ids) GROUP BY x.bds_id")
+            .bind("ids", ids)
+            .map(r -> Map.entry(r.get("bds_id", String.class), r.get("review", String.class)))
+            .all().collectMap(Map.Entry::getKey, Map.Entry::getValue);
     }
 
     static List<String> list(Readable r, String column) {

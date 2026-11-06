@@ -1,17 +1,23 @@
 package com.niramoy.bddrug.adapter.persistence;
 import com.niramoy.bddrug.application.port.ClinicalDrugQueryPort;
 import com.niramoy.bddrug.domain.ClinicalDrugView;
+import com.niramoy.bddrug.domain.PublicMode;
+import com.niramoy.bddrug.domain.PublicReview;
 import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 import java.math.BigDecimal;
 
-/** P8 reads. Public status only through ReviewSql.LATEST_PUBLIC (§7.4, PO D7). */
+/** P8 reads. Visibility and labels only through ReviewSql.latest and ReviewSql.label (§7.4.1, PO D7). */
 @Component
 public class R2dbcClinicalDrugAdapter implements ClinicalDrugQueryPort {
     private record Head(String bdcId, String displayName, String doseForm, String route) {}
     private final DatabaseClient db;
-    public R2dbcClinicalDrugAdapter(DatabaseClient db) { this.db = db; }
+    private final PublicMode mode;
+    public R2dbcClinicalDrugAdapter(DatabaseClient db, PublicMode mode) {
+        this.db = db;
+        this.mode = mode;
+    }
 
     @Override public Mono<ClinicalDrugView> find(String bdcId, boolean publicOnly) {
         Mono<Head> head = db.sql("SELECT bdc_id, display_name, dose_form, route FROM curated.clinical_drug WHERE bdc_id = :id")
@@ -29,15 +35,17 @@ public class R2dbcClinicalDrugAdapter implements ClinicalDrugQueryPort {
                     ClinicalDrugReader.plain(r.get("strength_value", BigDecimal.class)), r.get("strength_unit", String.class),
                     ClinicalDrugReader.plain(r.get("per_value", BigDecimal.class)), r.get("per_unit", String.class)))
                 .all().collectList(),
-            db.sql("WITH " + ReviewSql.LATEST_PUBLIC + " " +
-                   "SELECT bp.concept_id, bp.trade_name, bp.company, bp.dar_number FROM curated.brand_product bp " +
+            db.sql("WITH " + ReviewSql.latest(mode) + " " +
+                   "SELECT bp.concept_id, bp.trade_name, bp.company, bp.dar_number, " +
+                   "CASE WHEN l.pub THEN " + ReviewSql.label("l") + " END AS review FROM curated.brand_product bp " +
                    "LEFT JOIN latest l ON l.concept_id = bp.concept_id " +
                    "WHERE bp.bdc_id = :id AND (NOT :pub OR coalesce(l.pub, false)) " +
                    "ORDER BY lower(bp.trade_name), bp.concept_id")
                 .bind("id", bdcId).bind("pub", publicOnly)
                 .map(r -> new ClinicalDrugView.ProductRef(r.get("concept_id", String.class), r.get("trade_name", String.class),
-                    r.get("company", String.class), r.get("dar_number", String.class)))
+                    r.get("company", String.class), r.get("dar_number", String.class), r.get("review", String.class)))
                 .all().collectList())
-            .map(t -> new ClinicalDrugView(h.bdcId(), h.displayName(), h.doseForm(), h.route(), t.getT1(), t.getT2())));
+            .map(t -> new ClinicalDrugView(h.bdcId(), h.displayName(), h.doseForm(), h.route(), t.getT1(), t.getT2(),
+                PublicReview.carried(t.getT2().stream().map(ClinicalDrugView.ProductRef::review).toList()))));
     }
 }

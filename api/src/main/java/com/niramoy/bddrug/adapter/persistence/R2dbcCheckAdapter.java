@@ -1,19 +1,25 @@
 package com.niramoy.bddrug.adapter.persistence;
 import com.niramoy.bddrug.application.port.CheckQueryPort;
 import com.niramoy.bddrug.domain.DdinterCode;
+import com.niramoy.bddrug.domain.PublicMode;
 import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 import java.util.*;
 
-/** Four set-based queries per check: products, ingredients, DDInter codes (with their ddinter_drug row), then pairs among those codes. */
+/**
+ * Four set-based queries per check: products (with their public label, ReviewSql.publicLabelOf, §7.4.1), ingredients,
+ * DDInter codes (with their ddinter_drug row), then pairs among those codes.
+ */
 @Component
 public class R2dbcCheckAdapter implements CheckQueryPort {
     private final DatabaseClient db;
     private final PairReviewReader pairReviews;
-    public R2dbcCheckAdapter(DatabaseClient db, PairReviewReader pairReviews) {
+    private final PublicMode mode;
+    public R2dbcCheckAdapter(DatabaseClient db, PairReviewReader pairReviews, PublicMode mode) {
         this.db = db;
         this.pairReviews = pairReviews;
+        this.mode = mode;
     }
 
     private record CodeRow(String bdsId, DdinterCode code, boolean listed, String name) {}
@@ -22,13 +28,13 @@ public class R2dbcCheckAdapter implements CheckQueryPort {
     @Override public Mono<CheckData> load(List<String> conceptIds) {
         String[] ids = conceptIds.toArray(String[]::new);
         Mono<List<ProductRow>> products = db.sql("""
-                SELECT bp.concept_id, bp.trade_name, bp.generic_content_raw, cd.route, %s AS review_status
+                SELECT bp.concept_id, bp.trade_name, bp.generic_content_raw, cd.route, %s AS review
                 FROM curated.brand_product bp LEFT JOIN curated.clinical_drug cd ON cd.bdc_id = bp.bdc_id
-                WHERE bp.concept_id = ANY(:ids)""".formatted(ReviewSql.statusOf("bp.concept_id")))
+                WHERE bp.concept_id = ANY(:ids)""".formatted(ReviewSql.publicLabelOf("bp.concept_id", mode)))
             .bind("ids", ids)
             .map(r -> new ProductRow(r.get("concept_id", String.class), r.get("trade_name", String.class),
                 r.get("generic_content_raw", String.class), r.get("route", String.class),
-                r.get("review_status", String.class)))
+                r.get("review", String.class)))
             .all().collectList();
         Mono<List<IngredientRow>> ingredients = db.sql("""
                 SELECT bpi.concept_id, bpi.xm_code, bpi.ingredient_name, s.bds_id, s.preferred_name, ic.coverage

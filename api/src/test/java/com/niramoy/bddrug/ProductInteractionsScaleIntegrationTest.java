@@ -20,7 +20,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * and a page under 200 KB. The p95 is Latency's (20 timed calls after untimed warm-ups, held to the §10.6 300 ms off CI).
  */
 @Testcontainers
-@SpringBootTest
+// D74 (§7.4.1, §10.6): measured in show mode, the heavier mode: half the partners are not approved, a tenth of those failed a
+// check, so the label's stage lookup runs for every unapproved brand.
+@SpringBootTest(properties = "bddrug.public-shows-unreviewed=true")
 @AutoConfigureWebTestClient
 class ProductInteractionsScaleIntegrationTest {
     @Container static PostgreSQLContainer<?> pg = new PostgreSQLContainer<>("postgres:16").withCommand("postgres", "-c", "fsync=off");
@@ -45,7 +47,11 @@ class ProductInteractionsScaleIntegrationTest {
               SELECT 'L-' || i, 'XML' || (1 + i % 200), 'Scalol' FROM generate_series(1, 40000) i;
             INSERT INTO ops.batch (batch_id, item_count, run_at) SELECT 'LB-' || b, 2000, now() FROM generate_series(1, 20) b;
             INSERT INTO ops.batch_item (batch_id, source, concept_id, review, extracted_at)
-              SELECT 'LB-' || (1 + (i - 1) / 2000), 'DGDA-Drugs', 'L-' || i, 'ok', now() FROM generate_series(1, 40000) i;
+              SELECT 'LB-' || (1 + (i - 1) / 2000), 'DGDA-Drugs', 'L-' || i, CASE WHEN i % 2 = 0 THEN 'ok' ELSE 'pending' END, now()
+              FROM generate_series(1, 40000) i;
+            INSERT INTO ops.stage_result (batch_id, concept_id, stage, status, note)
+              SELECT 'LB-' || (1 + (i - 1) / 2000), 'L-' || i, 'clinical', CASE WHEN i % 20 = 1 THEN 'fail' ELSE 'ok' END, ''
+              FROM generate_series(1, 40000) i;
             INSERT INTO ops.batch (batch_id, item_count, run_at) VALUES ('LN', 1, now());
             INSERT INTO ops.batch_item (batch_id, source, concept_id, review, extracted_at) VALUES ('LN','DGDA-Drugs','N-1','ok', now());
             ANALYZE;

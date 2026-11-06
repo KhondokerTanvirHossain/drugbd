@@ -8,7 +8,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  * is never sent, so no public response names "issue".
  */
 public sealed interface HiddenRecord {
-    String NOT_REVIEWED = "not_reviewed", REMOVED = "removed";
+    /** UNAVAILABLE (show mode only, §7.4.1): the latest item is a DGDA load failure. */
+    String NOT_REVIEWED = "not_reviewed", REMOVED = "removed", UNAVAILABLE = "unavailable";
 
     /** batchId is null only for a product that is in no batch at all. */
     record Product(String conceptId, String tradeName, String status, String batchId) implements HiddenRecord {
