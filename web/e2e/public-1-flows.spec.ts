@@ -8,17 +8,21 @@ import { installTurnstileFake } from "./turnstile-fake";
 /*
  * Public flows (§11.4 "Public", "Public scope for reviewers") on the production build and the pilot seed. Serial: later
  * tests build on the products earlier ones publish. resetPublic() restores the seed. D74: tests tagged @approved-only
- * assert approved-only behaviour and run in CI's second pass, with the api recreated with PUBLIC_SHOWS_UNREVIEWED=false;
- * the others run in the main (show mode) pass, and public-4-show-mode.spec.ts holds the show-mode flows. The §11.4 "Sign-in return path"
+ * assert approved-only behaviour and run in CI's first pass, on the seed, with the api recreated with
+ * PUBLIC_SHOWS_UNREVIEWED=false; the others run in the main (show mode) pass that follows, and public-4-show-mode.spec.ts holds the show-mode flows. The §11.4 "Sign-in return path"
  * case stays in foundation.spec.ts (P1A), which Task 33 leaves passing: the island's props are unchanged.
  */
 test.describe.configure({ mode: "serial", timeout: 120_000 });
+/** §3.6 UNREVIEWED_CAUTION: never shown in approved-only mode (§11.4 D74 @approved-only). */
+const CAUTION = "Some of this information has not yet been reviewed by a pharmacist. Check it before relying on it.";
 test.afterAll(() => resetPublic());
 
 test("landing: one h1, the four bands, and the lookup card shows only the brand and the pill while Napa is unapproved (§6.1, D26) @approved-only", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("h1")).toHaveCount(1);
   await expect(page.locator("h1")).toHaveText("Bangladesh's medicines, traced from brand to substance and checked by a pharmacist.");
+  await expect(page.locator("main")).toContainText("A record goes public only after a pharmacist approves it.");
+  await expect(page.locator("main")).not.toContainText(CAUTION);
   for (const h of ["One record, three kinds of work", "How a record becomes trustworthy", "Three promises", "For partners: the same records, by API"])
     await expect(page.getByRole("heading", { name: h })).toBeVisible();
   const card = page.getByRole("group", { name: "Lookup for Napa" });
@@ -44,6 +48,7 @@ test("the stub page: the trade name, the pill and the batch, and nothing of the 
   await expect(page.getByText(/This is not the same as "not found" or "no data"\. The record exists and is in review in batch /)).toBeVisible();
   for (const hidden of ["Warfarin Sodium", "DDInter1951", "BDS-000003", "What's in it"])
     await expect(page.locator("main")).not.toContainText(hidden);
+  await expect(page.locator("main")).not.toContainText(CAUTION);
 });
 
 test("an unknown product id is a 404 with the not-found sentence (§6.4)", async ({ page }) => {
@@ -95,6 +100,9 @@ test("public scope for reviewers: a pharmacist sees the stub on /products and 'n
   await expect(page.getByRole("heading", { name: "What's in it" })).toHaveCount(0);
   await page.goto(`/check?ids=${P.napa}&ids=${P.domperidone}`);
   await expect(page.getByText(/Not yet reviewed by a pharmacist, 1 product/)).toBeVisible();
+  await expect(page.locator("main")).not.toContainText(CAUTION);
+  await page.goto("/search?q=warfarin");
+  await expect(page.locator("main")).not.toContainText(CAUTION);
   await ctx.close();
 });
 

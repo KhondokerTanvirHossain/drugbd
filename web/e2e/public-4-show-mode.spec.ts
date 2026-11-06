@@ -9,7 +9,8 @@ import { signInAs } from "./session";
  * Show mode on the public site (spec §6.10, §7.4.1, §11.4 D74 "Public, show mode"). The CI stack runs the api with the
  * production compose default, PUBLIC_SHOWS_UNREVIEWED=true, and the pilot seed has nothing approved. On the test DB:
  * Clarith gets an open reviewer issue, Simvastatin a failed check, and Amlodipine-5 is removed from its batch file; every
- * row changed here is restored in afterAll, so the @approved-only pass starts from the seed.
+ * row changed here is restored in afterAll. The spec relies on the order files run in (§11.4): it runs on the seed, before
+ * the review specs approve pilot records in the e2e batches.
  */
 test.describe.configure({ mode: "serial", timeout: 180_000 });
 
@@ -68,6 +69,34 @@ test("landing: the live hero card with the not-reviewed pill, the show-mode lede
   await expect(card).toContainText(NOT_REVIEWED);
   expect(CLAIM.exec(await main(page).innerText())).toBeNull();
   await axe(page, "landing");
+});
+
+test("S11: landing, search, Napa's page, Check Napa with other medicines, add G Warfarin: labelled and cautioned all the way (§1.4)", async ({ page }) => {
+  await page.goto("/");
+  await opensWithCaution(page);
+  await main(page).getByRole("link", { name: "Search medicines" }).first().click();
+  await expect(page).toHaveURL(/\/search$/);
+  const box = page.getByRole("searchbox", { name: "Search medicines" }).first();
+  await box.fill("napa");
+  await box.press("Enter");
+  await expect(page).toHaveURL(/\/search\?q=napa/);
+  await opensWithCaution(page);
+  await main(page).locator(`a[href="/products/${P.napa}"]`).first().click();
+  await expect(page.locator("h1")).toHaveText("Napa");
+  await opensWithCaution(page);
+  await expect(main(page)).toContainText(NOT_REVIEWED);
+  await page.getByRole("link", { name: "Check Napa with other medicines" }).click();
+  await expect(page).toHaveURL(new RegExp(`/check\\?ids=${P.napa}`));
+  await opensWithCaution(page);
+  const input = page.getByRole("combobox", { name: "Add a medicine" });
+  await input.fill("warf");
+  const option = page.getByRole("option", { name: /^G Warfarin/ });
+  await expect(option).toContainText(NOT_REVIEWED);
+  await option.click();
+  await expect(page.locator('ul[aria-labelledby="sel-h"] > li')).toHaveCount(2);
+  await opensWithCaution(page);
+  await expect(main(page).locator("article.pair").first()).toContainText(PAIR_UNREVIEWED);
+  expect(CLAIM.exec(await main(page).innerText())).toBeNull();
 });
 
 test("search 'paracetamol': Napa is a full hit with the pill, and the page opens with the caution (§6.3)", async ({ page }) => {

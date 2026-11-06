@@ -63,15 +63,19 @@ describe("public mode (D74, §7.4.1, §12.4)", () => {
   it("the API's code default is approved-only: application.yml binds the variable with an empty default", () => {
     expect(repo("api/src/main/resources/application.yml")).toContain("bddrug.public-shows-unreviewed: ${PUBLIC_SHOWS_UNREVIEWED:}");
   });
-  it("CI runs the main e2e in show mode, then @approved-only against the same web with the api recreated, then show mode again", () => {
+  it("CI runs @approved-only first on the seed with the api recreated off, then the main e2e in show mode against the same web, then Lighthouse", () => {
     const yml = repo(".github/workflows/ci.yml");
-    const main = yml.indexOf("npx playwright test --grep-invert @approved-only"), off = yml.indexOf("PUBLIC_SHOWS_UNREVIEWED=false $COMPOSE up -d --no-deps api");
+    const seed = yml.indexOf("$COMPOSE run --rm seed"), off = yml.indexOf("PUBLIC_SHOWS_UNREVIEWED=false $COMPOSE up -d --no-deps api");
     const only = yml.indexOf("npx playwright test --grep @approved-only"), back = yml.indexOf("$COMPOSE up -d --no-deps api\n", only);
-    expect(main).toBeGreaterThan(0);
-    expect(off).toBeGreaterThan(main);
+    const main = yml.indexOf("npx playwright test --grep-invert @approved-only");
+    expect(seed).toBeGreaterThan(0);
+    expect(off).toBeGreaterThan(seed);
     expect(only).toBeGreaterThan(off);
     expect(back).toBeGreaterThan(only);
-    expect(yml.indexOf("npx lhci autorun")).toBeGreaterThan(back);
+    expect(main).toBeGreaterThan(back);
+    expect(yml.indexOf("npx lhci autorun")).toBeGreaterThan(main);
+    // the web is never recreated between the passes: it reads the mode from the API
+    expect(yml.slice(off, main)).not.toMatch(/up -d[^\n]*\bweb\b/);
   });
 });
 

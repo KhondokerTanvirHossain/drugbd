@@ -68,15 +68,17 @@ jobs:
       - run: $COMPOSE up -d --build db flyway api web
       - run: $COMPOSE run --rm seed
       - run: curl -fsS --retry 30 --retry-delay 2 --retry-all-errors http://localhost:3000/healthz
-      # D74 (§11.4): the stack runs in show mode (the compose default); the @approved-only specs run next against the same web
-      # with the api alone recreated in approved-only mode, which proves the web takes the mode from the API; then show mode
-      # again for Lighthouse.
-      - run: cd web && E2E_BASE_URL=http://localhost:3000 npx playwright test --grep-invert @approved-only
+      # D74 (§11.4): the @approved-only specs run first, on the untouched seed, with the api alone recreated in approved-only
+      # mode; the main run follows against the same web with the api recreated in show mode (the compose default), which
+      # proves the web takes the mode from the API with no restart. The order matters: the review specs approve pilot
+      # records in the e2e batches, so an approved-only pass after the main run would no longer start from the seed.
+      # Lighthouse then measures show mode.
       - run: PUBLIC_SHOWS_UNREVIEWED=false $COMPOSE up -d --no-deps api
       - run: curl -fsS --retry 30 --retry-delay 2 --retry-all-errors "http://localhost:3000/search?q=napa" -o /dev/null
       - run: cd web && E2E_BASE_URL=http://localhost:3000 npx playwright test --grep @approved-only
       - run: $COMPOSE up -d --no-deps api
       - run: curl -fsS --retry 30 --retry-delay 2 --retry-all-errors "http://localhost:3000/search?q=napa" -o /dev/null
+      - run: cd web && E2E_BASE_URL=http://localhost:3000 npx playwright test --grep-invert @approved-only
       - run: cd web && npx lhci autorun
       - run: cd web && npx lhci autorun --config=./lighthouserc.review.json
       - run: cd web && npx lhci autorun --config=./lighthouserc.senior.json
