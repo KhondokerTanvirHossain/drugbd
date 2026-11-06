@@ -30,7 +30,28 @@ describe("Learn in show mode (§6.8, §6.10)", () => {
     for (const old of ["Nothing from the pilot is public yet", "so none is public.", "Your approval is what publishes a record.",
       "Approved records only", "Readers and the public API see only the id, trade name and review status", "Only these are public.",
       "A public check today would list them as not reviewed", "read only what a pharmacist has approved",
-      "Anyone can read approved records", "listed under not reviewed"]) expect(t).not.toContain(old);
+      "Anyone can read approved records", "listed under not reviewed", "Why only a pharmacist can publish",
+      "the simpler choice would put a wrong or unchecked fact in front of a prescriber.", "Hidden from public", "approved only",
+      "leaves the record hidden", "the record becomes public on the site"]) expect(t).not.toContain(old);
+  });
+
+  it("process: the swimlane diagram's lane, box and description read the show-mode way, SVG text and <desc> included", async () => {
+    const html = await page("process");
+    const svg = text(html.match(/<svg[^>]*dg-swim-t[\s\S]*?<\/svg>/)?.[0] ?? "");
+    expect(svg).toContain(`<text x="14" y="440"`);
+    expect(svg).toContain(`>${SHOW_COPY.learnSwimPublicSub}</text>`);
+    expect(svg).toContain(`>${SHOW_COPY.learnSwimMarked}</text>`);
+    const desc = svg.match(/<desc id="dg-swim-d">([\s\S]*?)<\/desc>/)?.[1] ?? "";
+    expect(desc).toContain('An engineer check is recorded but keeps the record marked "Not yet reviewed by a pharmacist".');
+    expect(desc).toContain('the record shows "Approved by a pharmacist" on the site, checker and API.');
+    expect(CLAIM_REGEX.exec(svg)?.[0] ?? null).toBeNull();
+  });
+
+  it("why: the pharmacist rule's heading (page and rail) and the chapter lede read the show-mode way", async () => {
+    const t = text(await page("why"));
+    expect(t).toContain(`<h2>${SHOW_COPY.learnWhyPharmacistTitle}</h2>`);
+    expect(t).toContain(`<a href="#why-pharmacist">${SHOW_COPY.learnWhyPharmacistTitle}</a>`);
+    expect(t).toContain(SHOW_COPY.learnLedeWhy);
   });
 
   it("start, process, faq: the show-mode sentences, and the FAQ's Napa question is left out", async () => {
@@ -82,6 +103,14 @@ describe("Learn in show mode (§6.8, §6.10)", () => {
     expect(faq).toContain("Why can't I see Napa on the public site?");
     expect(faq).toContain("Check that no product is listed under not reviewed and no substance under no data");
     expect(faq).toContain("Anyone can read approved records without signing in");
+    const process = text(await page("process"));
+    expect(process).toContain(">Hidden from public</text>");
+    expect(process).toContain(">approved only</text>");
+    expect(process).toContain("leaves the record hidden as Not yet reviewed by a pharmacist");
+    const why = text(await page("why"));
+    expect(why).toContain("<h2>Why only a pharmacist can publish</h2>");
+    expect(why).toContain('<a href="#why-pharmacist">Why only a pharmacist can publish</a>');
+    expect(why).toContain("the simpler choice would put a wrong or unchecked fact in front of a prescriber.");
   });
 
   it("SNAPSHOT_CHAPTERS names exactly the chapters that render a snapshot block or a live pill", () => {

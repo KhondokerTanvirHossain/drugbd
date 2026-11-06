@@ -672,9 +672,16 @@ const SHOW_MODE = {
   learnGlossNotReviewed: "A record no pharmacist has approved. Public pages and public API answers show it with this label.",
   // Not in the §6.10 Learn table: Board L's "Issue reported" definition says the record "stays hidden", which the §6.10
   // claim guard forbids in show mode, so show mode reads it this way (recorded as a spec gap in the D74 PR).
-  // Not in the §6.10 Learn table either: three Board L chapter ledes state the approved-only rule (spec gap, D74 PR).
+  // The start, process and partners ledes: §6.10 Learn table rows recorded in fix round 4 (07/11/2026).
   learnLedeStart: "IntelliDrugs links every medicine registered in Bangladesh to the substances inside it, to the codes other systems use, and to published interaction data. Each record says whether a pharmacist has checked it.",
   learnLedeProcess: "Records enter in small batches. A pipeline runs four checks on each one and keeps every source response. People then compare the source with what we extracted, and only a pharmacist's approval marks a record approved.",
+  // §6.10 Learn table rows added in the D74 fix round 4: chapter 5's lede and its pharmacist rule heading (page and rail),
+  // and chapter 4's swimlane diagram (the Public lane's sub, the box an engineer check leads to, and the <desc>).
+  learnLedeWhy: `Each rule below exists because the simpler choice would put a wrong or unchecked fact in front of a prescriber without saying so. Records a pharmacist has not approved yet are shown, marked ${NR}.`,
+  learnWhyPharmacistTitle: "Why only a pharmacist can approve",
+  learnSwimPublicSub: "every record, labelled",
+  learnSwimMarked: "Public, marked",
+  learnSwimDesc: `A batch file of 10 concept ids enters the pipeline. Four stages run in order: DGDA load reads the DGDA register, Substances reads NLM RxNav, Clinical drug parses, DDInter reads DDInter 2.0. Every stage keeps its evidence, which signed-in reviewers see on the batch page. An engineer check is recorded but keeps the record marked ${NR}. A pharmacist presses A and after an {undoWindow} the record shows ${APPR} on the site, checker and API. An issue or a re-run sends the record back to the pipeline and back to review.`,
   learnLedePartners: "The REST API serves the same records as the website. Each public record carries its review label, so a caller always knows whether a pharmacist has approved it.",
   learnGlossIssue: `A reviewer flagged a problem with a note. Until it is fixed and re-run, the public site shows the record marked ${NR} and "${PROBLEM_REPORTED}"`,
   learnFaqEngineerQ: "Can an engineer approve a record?",

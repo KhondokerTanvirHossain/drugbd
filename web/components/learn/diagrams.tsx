@@ -1,5 +1,6 @@
 import { P, PILOT_SNAPSHOT as S, substancesOf } from "@/content/learn/pilot-snapshot";
 import s from "./learn.module.css";
+import { SHOW_COPY, fill } from "@/lib/copy";
 
 /**
  * Board L's SVG diagrams as inline React components (§6.8): `role="img"`, `<title>` and `<desc>` verbatim. Pilot
@@ -167,11 +168,14 @@ function Lane({ x, y, w, title, sub, keyBox = false }: { x: number; y: number; w
  * Chapter 4: from batch file to public record (Board L `#dg-swim`). §1.6 item 14 changes the description's
  * "8-second undo window"; the "A, 8 s undo" box is a picture of the desk default and keeps it.
  */
-export function SwimlaneDiagram({ notReviewed, undoWindow }: { notReviewed: string; undoWindow: string }) {
+export function SwimlaneDiagram({ notReviewed, undoWindow, show = false }: { notReviewed: string; undoWindow: string; show?: boolean }) {
+  // D74 (§6.10): in show mode a loaded record is public, marked, so the Public lane, its marked box and the description say so
+  const desc = show ? fill(SHOW_COPY.learnSwimDesc, { undoWindow })
+    : `A batch file of 10 concept ids enters the pipeline. Four stages run in order: DGDA load reads the DGDA register, Substances reads NLM RxNav, Clinical drug parses, DDInter reads DDInter 2.0. Every stage keeps its evidence, which signed-in reviewers see on the batch page. An engineer check is recorded but leaves the record hidden as ${notReviewed}. A pharmacist presses A and after an ${undoWindow} the record becomes public on the site, checker and API. An issue or a re-run sends the record back to the pipeline and back to review.`;
   return (
     <svg className={s.dgSwim} viewBox="0 0 840 520" role="img" aria-labelledby="dg-swim-t dg-swim-d">
       <title id="dg-swim-t">From batch file to public record</title>
-      <desc id="dg-swim-d">{`A batch file of 10 concept ids enters the pipeline. Four stages run in order: DGDA load reads the DGDA register, Substances reads NLM RxNav, Clinical drug parses, DDInter reads DDInter 2.0. Every stage keeps its evidence, which signed-in reviewers see on the batch page. An engineer check is recorded but leaves the record hidden as ${notReviewed}. A pharmacist presses A and after an ${undoWindow} the record becomes public on the site, checker and API. An issue or a re-run sends the record back to the pipeline and back to review.`}</desc>
+      <desc id="dg-swim-d">{desc}</desc>
       <Arrowhead id="ah-s" />
       <rect x="0" y="0" width="840" height="520" className={s.svgBg} />
       <rect x="0" y="0" width="840" height="90" className={s.svgBand} />
@@ -191,7 +195,7 @@ export function SwimlaneDiagram({ notReviewed, undoWindow }: { notReviewed: stri
       <rect x="0" y="380" width="840" height="90" className={s.svgBand} />
       <path d="M0 470H840" className={s.svgSep} />
       <text x="14" y="423" className={s.svgLt}>Public</text>
-      <text x="14" y="440" className={s.svgS}>approved only</text>
+      <text x="14" y="440" className={s.svgS}>{show ? SHOW_COPY.learnSwimPublicSub : "approved only"}</text>
       <path d="M106 0V470" className={s.svgSep} />
       <Lane x={222} y={22} w={96} title="DGDA register" sub="via OCL" />
       <Lane x={332} y={22} w={96} title="NLM RxNav" sub="RxCUI, codes" />
@@ -213,7 +217,7 @@ export function SwimlaneDiagram({ notReviewed, undoWindow }: { notReviewed: stri
       <Lane x={661} y={307} w={118} title="Pharmacist" sub="A, 8 s undo" keyBox />
       <path d="M720 258V307" className={s.svgE} markerEnd="url(#ah-s)" />
       <path d="M690 258V284H596V307" className={s.svgE} markerEnd="url(#ah-s)" />
-      <Lane x={270} y={402} w={220} title="Hidden from public" sub={notReviewed} />
+      <Lane x={270} y={402} w={220} title={show ? SHOW_COPY.learnSwimMarked : "Hidden from public"} sub={notReviewed} />
       <Lane x={661} y={402} w={118} title="Public record" sub="site, checker, API" keyBox />
       <path d="M596 353V425H490" className={s.svgE} markerEnd="url(#ah-s)" />
       <text x="588" y="398" className={s.svgS} textAnchor="end">engineer OK alone</text>

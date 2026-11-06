@@ -2,7 +2,7 @@ import * as copy from "@/lib/copy";
 import { LANDING, SEARCH, STUB } from "@/lib/public-copy";
 
 /** §6.10 "Show-mode claim guard": the approved-only claims no page may carry in show mode (outside a hidden record's stub). */
-export const CLAIM_REGEX = /Nothing is public until|goes public only after|Public only after|pharmacist-approved (records|data) only|leaves public view|hidden from the public|stays hidden|Approved records only|before they go public/;
+export const CLAIM_REGEX = /Nothing is public until|goes public only after|Public only after|pharmacist-approved (records|data) only|leaves public view|[Hh]idden from (the )?public|stays hidden|Approved records only|before they go public|[Aa]pproved only(?! when)/;
 
 /** The left column of §6.10's tables that a show-mode page must not render (strings that are prefixes of their show variant excluded). */
 export const APPROVED_ONLY_STRINGS: string[] = [

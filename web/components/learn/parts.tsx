@@ -13,10 +13,18 @@ import styles from "./learn.module.css";
  * whether a frozen pilot example may show.
  */
 
+/** D74 (§6.10): the section headings that state the approved-only rule read this way in show mode (page and rail). */
+const SHOW_SECTION_TITLES: Readonly<Record<string, string>> = { "why-pharmacist": SHOW_COPY.learnWhyPharmacistTitle };
+
+/** A section heading by its id, in the public mode the page renders (the rail and the page use this one function). */
+export function learnSectionTitle(id: string, show: boolean): string {
+  return (show && SHOW_SECTION_TITLES[id]) || sectionTitle(id);
+}
+
 /** One chapter: `<section>` with its numbered title (h2 on /learn/start under the hero's h1, h1 elsewhere) and lede. */
 /** D74: the ledes that state the approved-only rule read this way in show mode. */
 const SHOW_LEDES: Partial<Record<ChapterSlug, string>> = {
-  start: SHOW_COPY.learnLedeStart, process: SHOW_COPY.learnLedeProcess, partners: SHOW_COPY.learnLedePartners,
+  start: SHOW_COPY.learnLedeStart, process: SHOW_COPY.learnLedeProcess, why: SHOW_COPY.learnLedeWhy, partners: SHOW_COPY.learnLedePartners,
 };
 
 export function Chapter({ slug, level, children, show = false }: { slug: ChapterSlug; level: 1 | 2; children: ReactNode; show?: boolean }) {

@@ -37,7 +37,7 @@ export default function ProcessChapter({ ctx }: { ctx: LearnContext }) {
         <figure className={styles.fig}>
           <ScrollHint />
           <ScrollRegion label="Swimlane diagram of the review process, scrolls sideways">
-            <SwimlaneDiagram notReviewed={NOT_REVIEWED} undoWindow={LEARN_BOARD.undoWindow} />
+            <SwimlaneDiagram notReviewed={NOT_REVIEWED} undoWindow={LEARN_BOARD.undoWindow} show={ctx.show} />
           </ScrollRegion>
           <figcaption className={styles.figcap}>Each lane is one party. Data moves left to right; the dashed line is the loop back when a record has an issue or is re-run.</figcaption>
         </figure>

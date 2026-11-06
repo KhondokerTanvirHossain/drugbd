@@ -20,7 +20,7 @@ const PROBLEM = "A problem has been reported with this record; it may be wrong."
 const CAUTION = "Some of this information has not yet been reviewed by a pharmacist. Check it before relying on it.";
 const PAIR_UNREVIEWED = "This pair involves a medicine not yet reviewed by a pharmacist.";
 const PAIR_PROBLEM = "This pair involves a medicine with a reported problem; it may be wrong.";
-const CLAIM = /Nothing is public until|goes public only after|Public only after|pharmacist-approved (records|data) only|leaves public view|hidden from the public|stays hidden|Approved records only|before they go public/;
+const CLAIM = /Nothing is public until|goes public only after|Public only after|pharmacist-approved (records|data) only|leaves public view|[Hh]idden from (the )?public|stays hidden|Approved records only|before they go public|[Aa]pproved only(?! when)/;
 const WCAG = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 const SHOW_REVIEWER = "show.mode@e2e.test";
 const lit = (s: string) => `'${s.replace(/'/g, "''")}'`;
@@ -207,10 +207,12 @@ test("public scope for reviewers, show mode: a pharmacist sees the same labelled
   await ctx.close();
 });
 
-test("Learn start, process and faq: no approved-only sentence, no Napa question, and axe is clean (§6.8)", async ({ page }) => {
-  for (const slug of ["start", "process", "faq"]) {
+test("Learn start, process, why and faq: no approved-only sentence, no Napa question, and axe is clean (§6.8)", async ({ page }) => {
+  for (const slug of ["start", "process", "why", "faq"]) {
     await page.goto(`/learn/${slug}`);
-    const text = await page.locator("main").innerText();
+    // innerText leaves out an SVG's <title> and <desc>, and the "On this page" rail is outside <main>: read them too
+    const text = [await page.locator("main").innerText(), ...await page.locator("main svg title, main svg desc").allTextContents(),
+      await page.locator("[data-learn-rail]").innerText()].join("\n");
     expect(CLAIM.exec(text)?.[0] ?? null, slug).toBeNull();
     expect(text).not.toContain("Why can't I see Napa on the public site?");
     for (const old of ["read only what a pharmacist has approved", "Anyone can read approved records", "listed under not reviewed"]) expect(text, slug).not.toContain(old);
