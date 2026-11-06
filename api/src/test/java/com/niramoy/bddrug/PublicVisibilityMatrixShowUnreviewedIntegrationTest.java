@@ -28,6 +28,7 @@ class PublicVisibilityMatrixShowUnreviewedIntegrationTest extends PublicVisibili
         for (String m : HIDDEN_MARKERS) assertThat(body).as(where + " leaks " + m).doesNotContain(m);
         for (String m : ALWAYS_SECRET) assertThat(body).as(where + " leaks " + m).doesNotContain(m);
         assertThat(body).as(where).doesNotContain("\"issue\"", "\"changed\"", "dismiss", "decidedAt", "reviewerRole");
+        assertThat(body).as(where).doesNotContain("\"status\":\"fail\"", "no clinical drug for the strength");
     }
 
     @Test @Override void search() {
@@ -68,6 +69,14 @@ class PublicVisibilityMatrixShowUnreviewedIntegrationTest extends PublicVisibili
             showClean(p10, "interactions " + id);
             assertThat(p10).contains("\"review\":\"" + label + "\"");
         });
+        // §7.4.1 Privacy, §11.3: a problem record's stage results are withheld whole, so nothing says a check failed or names
+        // the stage; a not-reviewed record keeps its stage notes (§6.10)
+        for (String id : List.of("M-FAIL", "M-ISS")) {
+            String detail = get("/v1/products/{id}", id);
+            assertThat(detail).as(id).contains("\"stages\":[]")
+                .doesNotContain("\"status\":\"fail\"", "no clinical drug for the strength", "\"stage\":");
+        }
+        assertThat(get("/v1/products/{id}", "M-PEND")).contains("\"stage\":\"clinical\"", "route assumed");
         assertThat(get("/v1/products/{id}", "M-REM")).contains("\"status\":\"removed\"", "\"hidden\":true");
         assertThat(get("/v1/products/{id}", "M-NF")).contains("\"status\":\"unavailable\"", "\"hidden\":true", "\"batchId\":\"M-1\"");
         assertThat(get("/v1/products/{id}", "M-NOB")).contains("\"status\":\"not_reviewed\"", "\"hidden\":true", "\"batchId\":null");

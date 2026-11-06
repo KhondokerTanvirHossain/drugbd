@@ -629,6 +629,8 @@ const SHOW_MODE = {
   substanceStub: "No public medicine carries this substance yet, so IntelliDrugs hides its codes and interactions.",
   // product page (§6.5)
   notVerified: "A pharmacist has not yet compared this record with the DGDA register.",
+  checksWithheld: "Not shown while a problem is reported with this record.",
+  checksValueWithheld: "Not shown",
   verificationRerun: `If the pipeline changes data this approval covered, {brand} goes back to review and shows ${NR} until it is approved again.`,
   noOtherBrand: "No other brand maps to {bdcId} yet. Other DGDA brands of this clinical drug appear here as later batches load them.",
   otherHeading: "With other medicines",

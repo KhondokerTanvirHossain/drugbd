@@ -66,7 +66,7 @@ export default function ProductAside({ product: p, brands, session, flag, siteKe
           <dt>{PRODUCT.dlConcept}</dt><dd className="mono">{p.conceptId}</dd>
           {p.provenance.extractedAt && <><dt>{PRODUCT.dlExtracted}</dt><dd>{fmtDhakaTime(p.provenance.extractedAt)}</dd></>}
           {p.provenance.batchId && <><dt>{PRODUCT.dlBatch}</dt><dd className="mono">{p.provenance.batchId}</dd></>}
-          <dt>{PRODUCT.dlChecks}</dt><dd>{fill(PRODUCT.checksValue, { ok, w })}</dd>
+          <dt>{PRODUCT.dlChecks}</dt><dd>{show && p.review === "problem" ? SHOW_COPY.checksValueWithheld : fill(PRODUCT.checksValue, { ok, w })}</dd>
         </dl>
       </div>
       <a className={buttonClass("primary")} href={`/check?${new URLSearchParams({ ids: p.conceptId })}`}>{fill(PRODUCT.checkWith, { brand: p.tradeName })}</a>

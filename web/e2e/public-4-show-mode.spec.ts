@@ -131,6 +131,10 @@ test("the issue record and the failed-check record carry the problem line on sea
     await page.goto(`/products/${id}`);
     await expect(main(page).getByText(PROBLEM).first()).toBeVisible();
     await expect(main(page)).not.toContainText("E2E show mode: strength looks wrong");   // never a note
+    // §7.4.1 Privacy: a problem record's check results are withheld whole, so nothing says which check failed
+    await expect(main(page)).toContainText("Not shown while a problem is reported with this record.");
+    await expect(main(page).locator(".stage")).toHaveCount(0);
+    await expect(main(page)).not.toContainText("Failed");
   }
   await page.goto(`/check?ids=${P.clarith}&ids=${P.simvastatin}`);
   await opensWithCaution(page);

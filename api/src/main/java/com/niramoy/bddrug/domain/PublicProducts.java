@@ -28,7 +28,9 @@ public final class PublicProducts {
     /**
      * The public detail of a visible product, with its label {@code p.review()} (§7.4.1). The verification line is sent only
      * for an approved product (D49 as amended by D74): a visible product that is not approved gets {@code null}, never a
-     * hard-coded approval. Source links are sent for every visible product (D58 superseded in show mode).
+     * hard-coded approval. Source links are sent for every visible product (D58 superseded in show mode). A {@code problem}
+     * product's stage results are withheld whole (§7.4.1 Privacy): a failed stage, its name or its note would say a check
+     * failed rather than a reviewer reported an issue, so no stage is sent for either cause.
      */
     public static PublicProduct assemble(Product p, Facts f) {
         PublicProduct.Verification verification = PublicReview.approved(p.review())
@@ -37,7 +39,7 @@ public final class PublicProducts {
             p.qualityFlag(), p.ingredients(), p.parseStatus(), p.parseNote(), clinical(p.clinicalDrug(), f.summaries()),
             verification,
             new PublicProduct.Provenance(f.batchId(), f.extractedAt(), SOURCE, SourceLinks.brand(p.conceptId(), f.oclFetchedAt()),
-                stages(f)),
+                PublicReview.PROBLEM.equals(p.review()) ? List.of() : stages(f)),
             f.otherBrandsCount(), p.review());
     }
 

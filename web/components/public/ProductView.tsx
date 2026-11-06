@@ -49,7 +49,7 @@ export default function ProductView(props: ProductViewProps) {
               subject={crumb(product)?.label ?? product.tradeName} brand={product.tradeName} mode={mode} review={product.review} />}
           </section>
         )}
-        <AutomatedChecks stages={product.provenance.stages} />
+        <AutomatedChecks stages={product.provenance.stages} withheld={mode === "show_unreviewed" && product.review === "problem"} />
       </div>
       <ProductAside product={product} brands={props.brands} session={props.session} flag={props.flag} siteKey={props.siteKey} nonce={props.nonce}
         mode={mode} />

@@ -2,12 +2,13 @@ import { Fragment, type ReactNode } from "react";
 import CodeChip from "@/components/ui/CodeChip";
 import NoDataChip from "@/components/ui/NoDataChip";
 import ProblemLine from "@/components/ui/ProblemLine";
+import RecordLabel from "@/components/ui/RecordLabel";
 import ReviewStatus from "@/components/ui/ReviewStatus";
 import UnreviewedCaution from "@/components/ui/UnreviewedCaution";
 import { buttonClass } from "@/components/ui/Button";
 import { joinAnd } from "@/lib/check-summary";
 import { DESK_NEW, NOT_RUN, NO_DATA_SENTENCE, PUBLIC_NEW, SHOW_COPY, fill } from "@/lib/copy";
-import { pillOf, rendersUnreviewed, type PublicMode } from "@/lib/public-mode";
+import { rendersUnreviewed, type PublicMode } from "@/lib/public-mode";
 import type { SearchProduct, SearchResult, SearchStub, SearchSubstance } from "@/lib/public-types";
 import { SEARCH, SYSTEM_NAMES, plural } from "@/lib/public-copy";
 import { SEARCH_PAGE_MAX } from "@/lib/public-params";
@@ -83,9 +84,8 @@ function ProductHit({ p, q }: { p: SearchProduct; q: string }) {
           <p className={styles["s-hit"]}>{fillNodes(SEARCH.filedAs, { raw: <Marked text={p.genericContentRaw} q={q} />,
             display: p.clinicalDrug.displayName, bdc: <Mono>{p.clinicalDrug.bdcId}</Mono> })}</p>
         )}
-        {p.review === "problem" && <ProblemLine />}
       </div>
-      <div className={styles["s-res-side"]}><ReviewStatus status={pillOf(p.review ?? "approved")} /></div>
+      <div className={styles["s-res-side"]}><RecordLabel review={p.review ?? "approved"} /></div>
     </article>
   );
 }

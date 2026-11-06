@@ -22,6 +22,8 @@ describe("SHOW_COPY (§6.10), verbatim", () => {
     expect(S.searchStub).toBe("This record is withdrawn from public view, so its substance, codes and interactions are hidden.");
     expect(S.stubNoBatch).toBe("This record is in no review batch yet, so IntelliDrugs hides its clinical drug, codes and interactions.");
     expect(S.notVerified).toBe("A pharmacist has not yet compared this record with the DGDA register.");
+    expect(S.checksWithheld).toBe("Not shown while a problem is reported with this record.");
+    expect(S.checksValueWithheld).toBe("Not shown");
     expect(S.otherHeading).toBe("With other medicines");
     expect(S.otherEmpty).toBe("No other medicine on IntelliDrugs has an interaction with {substance} listed in DDInter 2.0 yet. Other medicines appear here as later batches load them.");
     expect(S.checkerWithdrawn).toBe(" · {nr} withdrawn {medicines} not checked");

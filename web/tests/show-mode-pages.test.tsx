@@ -83,6 +83,13 @@ describe("search in show mode (§6.3, §6.10)", () => {
     expect(claims(html)).toEqual([]);
   });
 
+  it("a problem hit shows the pill, then the problem line (§3.4, §6.10), in DOM order", async () => {
+    const html = renderToStaticMarkup(await SearchPage({ searchParams: Promise.resolve({ q: "para" }) }));
+    expect(text(html)).toMatch(new RegExp(`${PILL}</span><p class="problem-line">${PROBLEM_REPORTED}`));
+    const hit = html.slice(html.indexOf("Probpara"));
+    expect(hit.indexOf(PILL)).toBeLessThan(hit.indexOf(PROBLEM_REPORTED));
+  });
+
   it("no caution when every hit is approved", async () => {
     api.searchMedicines.mockResolvedValue({ ok: true, data: { ...search, products: [search.products[0]], counts: { substances: 1, products: 1 }, total: 2 } });
     const html = renderToStaticMarkup(await SearchPage({ searchParams: Promise.resolve({ q: "para" }) }));
@@ -124,6 +131,30 @@ describe("product page in show mode (§6.5, §6.10)", () => {
     const html = await render();
     expect(count(html, PROBLEM_REPORTED)).toBeGreaterThanOrEqual(2);
     expect(text(html)).toMatch(new RegExp(`${PILL}</span><p class="problem-line">${PROBLEM_REPORTED}`));
+  });
+
+  // §7.4.1 Privacy: the API withholds a problem record's stage results (stages: []), so nothing says a check failed. The page
+  // says the checks are not shown, never reassuring counts; a failed stage that still arrives is never rendered.
+  it("a problem product shows no check results or counts, only the withheld line, even with a failed stage in the data", async () => {
+    const failed = { ...product("problem"), provenance: { ...NAPA.provenance, stages: [
+      { stage: "dgda" as const, status: "ok" as const, notes: [], textMissing: [] },
+      { stage: "clinical" as const, status: "fail" as const, notes: [{ kind: "other", text: "no clinical drug for the strength" }], textMissing: [] }] } };
+    for (const data of [{ ...product("problem"), provenance: { ...NAPA.provenance, stages: [] } }, failed]) {
+      api.getPublicProduct.mockResolvedValue({ ok: true, data });
+      const t = text(await render());
+      expect(t).toContain("Automated checks");
+      expect(t).toContain("Not shown while a problem is reported with this record.");
+      expect(t).toContain("<dd>Not shown</dd>");
+      expect(t).not.toMatch(/\d OK, \d|Failed|no clinical drug for the strength|No pipeline note\./);
+    }
+  });
+
+  it("a not-reviewed product keeps its stage cards and counts (§6.10)", async () => {
+    api.getPublicProduct.mockResolvedValue({ ok: true, data: product("not_reviewed") });
+    const t = text(await render());
+    expect(t).toContain("3 OK, 1 Warning. Notes are the pipeline's own.");
+    expect(t).toContain("<dd>3 OK, 1 Warning</dd>");
+    expect(t).not.toContain("Not shown while a problem is reported with this record.");
   });
 
   it("an approved product with an unapproved partner keeps its verification line and opens with the caution", async () => {

@@ -75,6 +75,24 @@ class PublicProductsTest {
             .extracting(StageNotes.Note::kind).containsExactly(StageNotes.NAME_ONLY);
     }
 
+    // §7.4.1 Privacy (D74): a problem label never says whether a check failed or a reviewer reported an issue, so a problem
+    // product's stage results are withheld whole: no stage name, status, note or text-missing pair. A not-reviewed product
+    // keeps them (it has no failed stage, ReviewSql.label).
+    @Test void aProblemProductWithholdsEveryStageResult() {
+        List<StageRow> failed = List.of(new StageRow("clinical", "fail", "no clinical drug for the strength", List.of()),
+            new StageRow("dgda", "ok", "", List.of()), STAGES.get(0));
+        Product problem = new Product(NAPA.conceptId(), NAPA.darNumber(), NAPA.tradeName(), NAPA.company(), NAPA.dosageForm(),
+            NAPA.genericContentRaw(), null, NAPA.ingredients(), "parsed", null, CD, "pending", PublicReview.PROBLEM);
+        PublicProduct p = PublicProducts.assemble(problem, facts(failed, Set.of("DDInter14", "DDInter1951")));
+        assertThat(p.provenance().stages()).isEmpty();
+        assertThat(p.toString()).doesNotContain("fail", "no clinical drug for the strength", "Warfarin");
+        assertThat(p.review()).isEqualTo(PublicReview.PROBLEM);
+        assertThat(p.verification()).isNull();
+        Product unreviewed = new Product(NAPA.conceptId(), NAPA.darNumber(), NAPA.tradeName(), NAPA.company(), NAPA.dosageForm(),
+            NAPA.genericContentRaw(), null, NAPA.ingredients(), "parsed", null, CD, "pending", PublicReview.NOT_REVIEWED);
+        assertThat(PublicProducts.assemble(unreviewed, facts(STAGES, Set.of("DDInter14"))).provenance().stages()).hasSize(4);
+    }
+
     @Test void eachClinicalIngredientCarriesItsSummary() {
         PublicProduct p = PublicProducts.assemble(NAPA, facts(STAGES, Set.of()));
         assertThat(p.clinicalDrug().bdcId()).isEqualTo("BDC-000001");
