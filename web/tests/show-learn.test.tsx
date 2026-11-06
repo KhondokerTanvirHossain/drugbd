@@ -67,6 +67,8 @@ describe("Learn in show mode (§6.8, §6.10)", () => {
     const html = await page("model");
     expect(text(html)).toContain(UNREVIEWED_CAUTION);
     expect(text(html)).toContain(PROBLEM_REPORTED);
+    // §7.4.1 Privacy: the API withdraws every problem item alike, so Napa's examples are stubs, with the problem line
+    expect(html).toContain("data-withdrawn");
     expect(text(await page("faq"))).not.toContain(UNREVIEWED_CAUTION);
   });
 

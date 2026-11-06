@@ -6,6 +6,7 @@ import com.niramoy.bddrug.application.port.StatsQueryPort.ItemRow;
 import com.niramoy.bddrug.application.port.StatsQueryPort.Totals;
 import com.niramoy.bddrug.domain.ApprovalRule;
 import com.niramoy.bddrug.domain.PublicMode;
+import com.niramoy.bddrug.domain.PublicReview;
 import com.niramoy.bddrug.domain.ReviewDecision;
 import com.niramoy.bddrug.domain.SiteStats;
 import com.niramoy.bddrug.domain.SiteStats.BatchStats;
@@ -37,8 +38,10 @@ public class StatsQueryService {
 
     /**
      * Pure. {@code exampleUsable} is false when the item is removed from the batch file or its display status (§5.2,
-     * {@link ApprovalRule#displayStatus}) is issue; Learn withdraws such an example (§6.8). status, approved and the
-     * counts follow approval, never visibility, so they mean the same in both modes (§7.4.1).
+     * {@link ApprovalRule#displayStatus}) is issue; Learn withdraws such an example (§6.8). In show mode it is also false
+     * for every item labelled {@code problem}, whatever the cause: §7.4.1 Privacy says the label must not tell a reviewer's
+     * issue from a failed check, and a split exampleUsable would. status, approved and the counts follow approval, never
+     * visibility, so they mean the same in both modes (§7.4.1).
      */
     public static SiteStats assemble(PublicMode mode, Totals totals, List<BatchRow> batches, List<ItemRow> items, List<DecisionRow> decisions) {
         Map<String, List<ReviewDecision>> byItem = new HashMap<>();
@@ -51,7 +54,8 @@ public class StatsQueryService {
             List<ItemStats> listed = rows.stream().map(i -> new ItemStats(i.conceptId(), i.tradeName(),
                 i.productApproved() ? SiteStats.APPROVED : SiteStats.NOT_REVIEWED,
                 !i.removed() && !ApprovalRule.ISSUE.equals(ApprovalRule.displayStatus(
-                    byItem.getOrDefault(key(i.batchId(), i.conceptId()), List.of()), i.extractedAt(), i.review())),
+                    byItem.getOrDefault(key(i.batchId(), i.conceptId()), List.of()), i.extractedAt(), i.review()))
+                    && !(mode.showsUnreviewed() && PublicReview.PROBLEM.equals(i.productReview())),
                 i.productReview() == null, i.productReview())).toList();
             int current = (int) rows.stream().filter(i -> !i.removed()).count();
             int approved = (int) rows.stream().filter(i -> !i.removed() && i.productApproved()).count();

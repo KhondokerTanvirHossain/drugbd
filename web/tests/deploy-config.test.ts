@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const repo = (p: string) => readFileSync(new URL(`../../${p}`, import.meta.url), "utf8");
@@ -51,7 +51,9 @@ describe("public mode (D74, §7.4.1, §12.4)", () => {
   it("the API gets PUBLIC_SHOWS_UNREVIEWED, on by default in production; the web never does", () => {
     expect(apiService()).toContain("PUBLIC_SHOWS_UNREVIEWED: ${PUBLIC_SHOWS_UNREVIEWED:-true}\n");
     expect(webService()).not.toContain("PUBLIC_SHOWS_UNREVIEWED");
-    expect(repo("deploy/docker-compose.override.yml")).not.toContain("PUBLIC_SHOWS_UNREVIEWED");
+    // The override is gitignored (local only, .gitignore): CI's checkout has none, so check it only where it exists
+    const override = new URL("../../deploy/docker-compose.override.yml", import.meta.url);
+    if (existsSync(override)) expect(readFileSync(override, "utf8")).not.toContain("PUBLIC_SHOWS_UNREVIEWED");
     expect(repo("deploy/docker-compose.ci.yml")).not.toContain("PUBLIC_SHOWS_UNREVIEWED");
   });
   it(".env.example documents the off switch, and the runbook names the procedure", () => {

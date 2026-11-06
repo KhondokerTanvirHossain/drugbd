@@ -6,16 +6,19 @@ import type { SiteStats, StatsItem } from "@/lib/stats";
  * `approved`, `withdrawn` and `missing` take concept ids; `batchId` renames the reported batch.
  */
 export function pilotStats(o: { approved?: string[]; withdrawn?: string[]; missing?: string[]; batchId?: string;
-    /** D74: the API's mode; in show mode every listed record is visible (labelled), `problem` and `hidden` take concept ids. */
+    /**
+     * D74: the API's mode; in show mode every listed record is visible (labelled), `problem` and `hidden` take concept ids.
+     * As the API does (§7.4.1 Privacy), a show-mode `problem` item is never exampleUsable, whatever the cause.
+     */
     mode?: "approved_only" | "show_unreviewed"; problem?: string[]; hidden?: string[] } = {}): SiteStats {
   const show = o.mode === "show_unreviewed";
   const items: StatsItem[] = PILOT_IDS.filter((id) => !o.missing?.includes(id)).map((id) => {
     const approved = o.approved?.includes(id) ?? false;
     const hidden = show ? (o.hidden?.includes(id) ?? false) : !approved;
+    const review = hidden ? null : approved ? "approved" : o.problem?.includes(id) ? "problem" : "not_reviewed";
     return {
       conceptId: id, tradeName: PILOT_SNAPSHOT.records[id].tradeName,
-      status: approved ? "approved" : "not_reviewed", exampleUsable: !o.withdrawn?.includes(id), hidden,
-      review: hidden ? null : approved ? "approved" : o.problem?.includes(id) ? "problem" : "not_reviewed",
+      status: approved ? "approved" : "not_reviewed", exampleUsable: !o.withdrawn?.includes(id) && review !== "problem", hidden, review,
     };
   });
   const approved = items.filter((i) => i.status === "approved").length;

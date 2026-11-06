@@ -92,4 +92,27 @@ class StatsQueryServiceTest {
         assertThat(StatsQueryService.assemble(PublicMode.APPROVED_ONLY, TOTALS, List.of(), List.of(), List.of()).publicMode())
             .isEqualTo("approved_only");
     }
+
+    /**
+     * §7.4.1 Privacy (D74): in show mode `problem` must not tell a reviewer's issue from a failed check, so every visible
+     * problem item is withdrawn from Learn's examples alike; exampleUsable would otherwise split the two causes.
+     */
+    @Test void showModeWithdrawsEveryProblemItemWhateverTheCause() {
+        List<ItemRow> rows = List.of(
+            new ItemRow("B", "issue", "Trade i", "issue", RUN, false, false, "problem"),     // a reviewer reported an issue
+            new ItemRow("B", "stage", "Trade s", "pending", RUN, false, false, "problem"),   // a check failed, no decision
+            new ItemRow("B", "plain", "Trade p", "pending", RUN, false, false, "not_reviewed"),
+            new ItemRow("B", "ok", "Trade o", "ok", RUN, false, true, "approved"));
+        List<DecisionRow> decisions = List.of(decision("B", "issue", 1, "issue", "pharmacist", RUN.plusSeconds(60)));
+        List<ItemStats> show = StatsQueryService.assemble(PublicMode.SHOW_UNREVIEWED, TOTALS, List.of(new BatchRow("B", "in_review")), rows, decisions)
+            .batches().get(0).items();
+        assertThat(show).extracting(ItemStats::review).containsExactly("problem", "problem", "not_reviewed", "approved");
+        assertThat(show.get(0).exampleUsable()).isEqualTo(show.get(1).exampleUsable());
+        assertThat(show).extracting(ItemStats::exampleUsable).containsExactly(false, false, true, true);
+        // approved-only mode sends no unapproved label, so its rule is the display status alone, as before
+        List<ItemRow> approvedOnly = rows.stream().map(r -> new ItemRow(r.batchId(), r.conceptId(), r.tradeName(), r.review(), r.extractedAt(),
+            r.removed(), r.productApproved(), r.productApproved() ? "approved" : null)).toList();
+        assertThat(StatsQueryService.assemble(PublicMode.APPROVED_ONLY, TOTALS, List.of(new BatchRow("B", "in_review")), approvedOnly, decisions)
+            .batches().get(0).items()).extracting(ItemStats::exampleUsable).containsExactly(false, true, true, true);
+    }
 }
