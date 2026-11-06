@@ -76,6 +76,9 @@ describe("Learn in show mode (§6.8, §6.10)", () => {
     expect(partners).toContain("Every public record, each with its review label; withdrawn records come back as stubs.");
     expect(partners).toContain("/v1/public-mode");
     expect(partners).toContain("While the public site shows unreviewed records, a public caller gets Napa in full");
+    expect(partners).toContain("While the public site shows unreviewed records, a public check returns all three in products");
+    expect(partners).not.toContain("None of the three is approved, so a public check lists all three");
+    expect(partners).toContain(SHOW_COPY.learnMustReview);
   });
 
   it("a hidden pilot record keeps its hidden-state sentences in show mode (evaluated against hidden)", async () => {

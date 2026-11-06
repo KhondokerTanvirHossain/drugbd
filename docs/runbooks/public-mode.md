@@ -61,3 +61,5 @@ Turning show mode off changes no image and no data. Rolling the images back belo
 - Never put `PUBLIC_SHOWS_UNREVIEWED` in the web service's environment.
 - Never change the mode on a running container by any other means; there is no endpoint, header or flag for it.
 - Never run these commands on another stack on the shared host (medscribe, baymax, medioo, n8n): `--no-deps api web` recreates only the IntelliDrugs api and web.
+- Never treat the mode as a secret. It is visible in the compose file and in `GET /v1/public-mode`.
+- Never drop `--no-deps`: it keeps the db and flyway containers running untouched while api and web are recreated.

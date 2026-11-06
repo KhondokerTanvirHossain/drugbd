@@ -150,6 +150,7 @@ export default function PartnersChapter({ ctx }: { ctx: LearnContext }) {
   const napaCaption = ctx.apiStub && said(P.napa);
   const napaShown = ctx.show && ctx.item(P.napa) !== null && !ctx.hidden(P.napa) && ctx.pending(P.napa);
   const noneApproved = CHECK_IDS.every(said);
+  const checkShown = ctx.show && CHECK_IDS.every((id) => ctx.item(id) !== null && !ctx.hidden(id) && ctx.pending(id));
   return (
     <Chapter slug="partners" level={1} show={ctx.show}>
       <Section id="api-status" h={H}>
@@ -221,6 +222,7 @@ export default function PartnersChapter({ ctx }: { ctx: LearnContext }) {
         <Code label="Request body" value={CHECK_REQUEST} />
         <div id="chk-public">
           <Code label="Public check response" value={CHECK_PUBLIC} />
+          {checkShown && <p className={styles.figcap}>{SHOW_COPY.learnCheckCaption}</p>}
           {noneApproved && <p className={styles.figcap}>None of the three is approved, so a public check lists all three in <span className="mono">notReviewed</span> and checks nothing. An empty <span className="mono">alerts</span> here does not mean the medicines are safe together.</p>}
         </div>
         <div id="chk-all">
@@ -237,6 +239,7 @@ export default function PartnersChapter({ ctx }: { ctx: LearnContext }) {
           <li><code>coverage: "none"</code><br /><code>noData[]</code><div className={styles.show}><NoDataChip label="No interaction data" /><span>Show in full: "{NO_DATA_SENTENCE}" Count its pairs as not checked.</span></div></li>
           <li><code>severity: "unknown"</code><div className={styles.show}><Severity level="unknown" /><span>{LEARN_BOARD.unclassifiedMust}</span></div></li>
           <li><code>hidden: true</code>, <code>status "not_reviewed"</code> or <code>"removed"</code><br /><code>notReviewed[]</code><div className={styles.show}><ReviewStatus status="pending" /><span>Never "not found", never "no data".</span></div></li>
+          {ctx.show && <li><code>review: "not_reviewed"</code> or <code>"problem"</code><div className={styles.show}><ReviewStatus status="pending" /><span>{SHOW_COPY.learnMustReview}</span></div></li>}
           <li><code>routeAssumed: true</code><div className={styles.show}><span>Say the route was assumed: the product's own route had no DDInter entry, so the systemic entry was used.</span></div></li>
           <li><code>interaction: null</code><br /><code>management: null</code><div className={styles.show}><span>DDInter has no text for this part. Leave it out; never print "None".</span></div></li>
           <li><code>source: "DDInter 2.0"</code><div className={styles.show}><span>Attribute the text. If you shorten it, say "{FULL_TEXT}" and link to it.</span></div></li>

@@ -666,6 +666,8 @@ const SHOW_MODE = {
   learnAccessPublic: "The default. Every public record, each with its review label; withdrawn records come back as stubs.",
   learnAccessReviewer: `Readers and the public API see an unapproved product in full, labelled ${NR}.`,
   learnNapaCaption: `While the public site shows unreviewed records, a public caller gets Napa in full, with "review": "not_reviewed", instead of this stub.`,
+  learnCheckCaption: `While the public site shows unreviewed records, a public check returns all three in products, each with "review": "not_reviewed", and checks them, instead of this answer.`,
+  learnMustReview: `Show "not_reviewed" as ${NR}. Show "problem" as ${NR} followed by "${PROBLEM_REPORTED}"`,
   learnGlossApproved: `A record a pharmacist marked "Looks correct" after its latest extraction, with no issue since. Only these show ${APPR}.`,
   learnGlossBack: `An approved record that was re-run, or whose shared substance data changed. It shows ${NR} until a pharmacist approves it again.`,
   learnGlossEngineer: "An engineer marked the extraction correct. Recorded, but it does not approve the record.",

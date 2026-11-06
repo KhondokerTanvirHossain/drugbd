@@ -29,6 +29,8 @@ describe("SHOW_COPY (§6.10), verbatim", () => {
     expect(S.checkerWithdrawn).toBe(" · {nr} withdrawn {medicines} not checked");
     expect(S.withdrawnHeading).toBe("Withdrawn from public view, {k} {products}");
     expect(S.deskVisPending).toBe("Readers see this record marked “Not yet reviewed by a pharmacist” until a pharmacist approves it.");
+    expect(S.learnCheckCaption).toBe('While the public site shows unreviewed records, a public check returns all three in products, each with "review": "not_reviewed", and checks them, instead of this answer.');
+    expect(S.learnMustReview).toBe('Show "not_reviewed" as "Not yet reviewed by a pharmacist". Show "problem" as "Not yet reviewed by a pharmacist" followed by "A problem has been reported with this record; it may be wrong."');
     expect(S.learnApiPublicMode).toBe("Which records the public site shows: approved records only, or every record with its review label");
   });
 
