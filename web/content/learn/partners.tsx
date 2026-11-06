@@ -70,7 +70,7 @@ const napa = S.records[P.napa];
 const [acet] = substancesOf(P.napa);
 const warfS = substanceNamed("Warfarin"), aspS = substanceNamed("Acetylsalicylic acid"), dompS = substanceNamed("Domperidone");
 const side = (id: typeof P.warfarin | typeof P.aspirin | typeof P.domperidone, s: typeof warfS) =>
-  ({ conceptId: id, tradeName: S.records[id].tradeName, bdsId: s.bdsId, name: s.name, routeScope: s.entries[0]?.route ?? null });
+  ({ conceptId: id, tradeName: S.records[id].tradeName, bdsId: s.bdsId, name: s.name, routeScope: s.entries[0]?.route ?? null, review: null });
 const ref = (s: typeof warfS) => s.entries.map((e) => ({ ddinterId: e.id, name: s.name, routeScope: e.route, routeAssumed: false }));
 const CHECK_IDS = [P.warfarin, P.aspirin, P.domperidone] as const;
 const synergy = S.actionExamples.find((e) => e.action === "synergy")!;
@@ -87,16 +87,18 @@ export const PRODUCT_REVIEWER = envelope({
 export const CHECK_REQUEST = { conceptIds: [...CHECK_IDS] };
 const NONE = { major: 0, moderate: 0, minor: 0, unknown: 0 };
 export const CHECK_PUBLIC = envelope({
-  summary: { medicines: 3, totalPairs: 0, checkedPairs: 0, alertPairs: 0, noInteractionPairs: 0, notCheckedPairs: 0, notReviewed: 3, bySeverity: NONE },
+  summary: { medicines: 3, totalPairs: 0, checkedPairs: 0, alertPairs: 0, noInteractionPairs: 0, notCheckedPairs: 0, notReviewed: 3, bySeverity: NONE,
+    notApproved: 0 },
   products: [], alerts: [], noInteraction: [], notChecked: [], duplicates: [], noData: [],
   notReviewed: CHECK_IDS.map((id) => ({ conceptId: id, tradeName: S.records[id].tradeName })),
 });
 export const CHECK_REVIEWER = envelope({
   summary: { medicines: 3, totalPairs: 3, checkedPairs: 1, alertPairs: 1, noInteractionPairs: 0, notCheckedPairs: 2, notReviewed: 0,
-    bySeverity: { ...NONE, major: 1 } },
+    bySeverity: { ...NONE, major: 1 }, notApproved: 3 },
   products: CHECK_IDS.map((id, i) => {
     const s = [warfS, aspS, dompS][i];
-    return { conceptId: id, tradeName: S.records[id].tradeName, substances: [{ bdsId: s.bdsId, name: s.name, coverage: s.coverage, ddinter: ref(s) }] };
+    return { conceptId: id, tradeName: S.records[id].tradeName, substances: [{ bdsId: s.bdsId, name: s.name, coverage: s.coverage, ddinter: ref(s) }],
+      review: null };
   }),
   alerts: [{
     severity: "major", a: side(P.warfarin, warfS), b: side(P.aspirin, aspS), actions: ["synergy"],

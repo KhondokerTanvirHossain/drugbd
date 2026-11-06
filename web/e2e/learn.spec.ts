@@ -63,14 +63,14 @@ test("every chapter: one h1, its nav link current, no withdrawn example, Board L
   expect(violations).toEqual([]);
 });
 
-test("/learn/start shows the live numbers from /v1/stats (§6.8)", async ({ page }) => {
+test("/learn/start shows the live numbers from /v1/stats (§6.8) @approved-only", async ({ page }) => {
   await page.goto("/learn/start");
   await expect(page.getByRole("heading", { level: 1, name: "Learn IntelliDrugs" })).toBeVisible();
   await expect(page.locator('[role="listitem"] b')).toHaveText(["39,196", "10", "11", "0 of 10"]);
   await expect(main(page)).toContainText("Pilot run 11/10/2026 21:27 UTC, which is 12/10/2026 03:27 in Dhaka. Nothing from the pilot is public yet.");
 });
 
-test("the §1.6 Learn corrections are on the pages (§12.1 phase 3 exit)", async ({ page }) => {
+test("the §1.6 Learn corrections are on the pages (§12.1 phase 3 exit) @approved-only", async ({ page }) => {
   const has = async (slug: string, ...texts: string[]) => {
     await page.goto(`/learn/${slug}`);
     for (const t of texts) await expect(main(page), `${slug}: ${t}`).toContainText(t);

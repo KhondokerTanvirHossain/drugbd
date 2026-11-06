@@ -82,7 +82,7 @@ test("remove and Clear all: announced, and focus lands on the field, never on <b
   await expect(page.getByText("No medicines yet.")).toBeVisible();
 });
 
-test("a scenario link loads its products; a not-reviewed product is listed by name, not checked (§6.7.1, §6.7.3 item 6)", async ({ page }) => {
+test("a scenario link loads its products; a not-reviewed product is listed by name, not checked (§6.7.1, §6.7.3 item 6) @approved-only", async ({ page }) => {
   await page.goto("/check");
   await page.getByRole("link", { name: "G Warfarin + Aspirin + Domperidone" }).click();
   await expect(live(page)).toHaveText(`Scenario loaded: G Warfarin + Aspirin + Domperidone. ${SCENARIO_1}`);
