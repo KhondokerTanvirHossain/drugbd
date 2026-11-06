@@ -92,6 +92,7 @@ test("the substance page from the product page: entries, products and source lin
 });
 
 test("public scope for reviewers: a pharmacist sees the stub on /products and 'not yet reviewed' on /check (§2.2, §11.4) @approved-only", async ({ browser }) => {
+  publish(P.napa);   // the @approved-only pass skips the show-mode test that publishes it; afterAll resets it
   const ctx = await browser.newContext();
   await signInAs(ctx, "pharmacist");
   const page = await ctx.newPage();
