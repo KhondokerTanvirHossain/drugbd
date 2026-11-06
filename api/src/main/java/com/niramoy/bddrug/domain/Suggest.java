@@ -22,7 +22,8 @@ public final class Suggest {
         return d[n][m];
     }
 
-    /** The single closest name at distance 1 or 2; ties by distance, then name; null when none. */
+    /** The single closest name at distance 1 or 2; ties by distance, then name ignoring case, then the capitalised
+     *  spelling (order-independent); null when none. */
     public static String closest(String term, Collection<String> names) {
         String t = term.toLowerCase(Locale.ROOT);
         String best = null;
@@ -31,7 +32,10 @@ public final class Suggest {
             String l = name.toLowerCase(Locale.ROOT);
             if (l.equals(t) || Math.abs(l.length() - t.length()) > MAX_DISTANCE) continue;
             int d = distance(t, l);
-            if (d <= MAX_DISTANCE && (d < bestD || (d == bestD && name.compareToIgnoreCase(best) < 0))) {
+            // A case-only tie ("Warfarin" / the rxnorm "warfarin") goes to the capitalised spelling, so the
+            // answer never depends on the order the name list arrives in.
+            int c = best == null ? -1 : name.compareToIgnoreCase(best);
+            if (d <= MAX_DISTANCE && (d < bestD || (d == bestD && (c < 0 || (c == 0 && name.compareTo(best) < 0))))) {
                 best = name;
                 bestD = d;
             }
