@@ -43,7 +43,8 @@ describe("getPublicMode() (§7.4.1, §6.10)", () => {
     function* files(dir: string): Generator<string> {
       for (const n of readdirSync(dir)) {
         const p = join(dir, n);
-        if (n === "node_modules" || n === ".next" || n === "tests" || n === "test-results") continue;
+        // tests and e2e are test code (e2e documents the CI pass that sets it), not web source
+        if (n === "node_modules" || n === ".next" || n === "tests" || n === "e2e" || n === "test-results") continue;
         if (statSync(p).isDirectory()) yield* files(p); else if (/\.(ts|tsx|mjs|js)$/.test(n)) yield relative(WEB, p);
       }
     }
