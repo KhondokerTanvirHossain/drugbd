@@ -13,7 +13,7 @@ Hidden in both modes: a product removed from its batch file, a DGDA load failure
 ## Where it is set
 
 - `deploy/docker-compose.yml` passes `PUBLIC_SHOWS_UNREVIEWED: ${PUBLIC_SHOWS_UNREVIEWED:-true}` to the **api** service only. The web never reads it: every public page asks the API (`GET /v1/public-mode`, or `publicMode` in `/v1/stats`), so the two can never disagree, and a recreated API changes the site on the next request.
-- The host `.env` (`~/drugdb/deploy/.env`) may override it. The deploy workflow copies `deploy/docker-compose.yml` to the host on every deploy and then runs `docker-compose up -d --remove-orphans`; it never writes the host `.env`, so an operator's `PUBLIC_SHOWS_UNREVIEWED=false` survives every later deploy.
+- The host `.env` (`~/drugdb/deploy/.env`, that is `$APP_DIR/deploy/.env` with `APP_DIR=/home/ec2-user/drugdb` in `.github/workflows/deploy.yml`) may override it. The deploy workflow copies `deploy/docker-compose.yml` to the host on every deploy and then runs `docker-compose up -d --remove-orphans`; it changes only the `IMAGE_TAG` line of the host `.env`, so an operator's `PUBLIC_SHOWS_UNREVIEWED=false` survives every later deploy.
 - Any value other than `true` or `false` (in any case) stops the API at start with `PUBLIC_SHOWS_UNREVIEWED must be true or false`, so a typo never picks a mode.
 
 ## Turn show mode off (approved records only)
@@ -42,6 +42,9 @@ cd ~/drugdb/deploy && docker-compose up -d --no-deps api web
 
 ```sh
 docker-compose logs --tail 50 api | grep 'Public mode:'      # "Public mode: show_unreviewed" or "Public mode: approved_only"
+# the API's own answer, from inside the web container (the api is not published on the host)
+docker-compose exec -T web node -e "fetch('http://api:8080/v1/public-mode').then(r => r.text()).then(console.log)"
+#   {"success":true,"data":{"mode":"show_unreviewed"},...}
 curl -fsS https://drugdb.eliooo.org/search?q=napa -o /dev/null && echo up
 ```
 

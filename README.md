@@ -66,8 +66,10 @@ cd ~/drugdb/deploy && docker-compose --profile jobs run --rm etl --batch /app/ba
 What it does to review state:
 - every re-processed item gets a new `extracted_at`, its review goes back to `pending`, the batch goes back to
   `in_review`, and a snapshot is written (`ops.item_snapshot`, one `run_id` for the whole command);
-- a decision made at or before the new stamp stops counting: an approved record is back in review and leaves public
-  view until a pharmacist approves it again; a record with an issue returns to "Not yet reviewed by a pharmacist";
+- a decision made at or before the new stamp stops counting: an approved record is back in review and loses its
+  approved label until a pharmacist approves it again (in approved-only mode it leaves public view; in show mode,
+  spec D74, readers see it marked "Not yet reviewed by a pharmacist"); a record with an issue returns to "Not yet
+  reviewed by a pharmacist";
 - a reviewer page open during the run must be reloaded before its decision is accepted (the API answers 409).
 
 Prefer `--concept ID` (repeatable) for later re-runs, so approved records are not re-opened needlessly. Only the
@@ -80,7 +82,7 @@ Notes:
 
 ## Reviewer sign-in setup
 
-Pharmacists and engineers sign in with Google (Firebase Auth) to review batch records; any other Google account can sign in to flag problems. Write actions also need a Cloudflare Turnstile check. Until this is set up, `/signin` says "Reviewer sign-in is not configured." and anonymous visitors see only pharmacist-approved records, so the pilot stays hidden until a pharmacist approves it.
+Pharmacists and engineers sign in with Google (Firebase Auth) to review batch records; any other Google account can sign in to flag problems. Write actions also need a Cloudflare Turnstile check. Until this is set up, `/signin` says "Reviewer sign-in is not configured." and anonymous visitors see what the public mode allows (`docs/runbooks/public-mode.md`): in show mode every loaded record, marked "Not yet reviewed by a pharmacist" until a pharmacist approves it; in approved-only mode only pharmacist-approved records.
 
 Where each value lives:
 
@@ -126,6 +128,8 @@ docker-compose up -d --no-deps web     # recreates only web with the new list; a
 To invite a new pharmacist or engineer (the email template and the exact host steps), follow [`docs/runbooks/reviewer-invite.md`](docs/runbooks/reviewer-invite.md). Reviewers work on `/review`; the old `/batches` and `/flags` addresses redirect there.
 
 To read and answer partner access requests (the read-only reply-address query), follow [`docs/runbooks/partner-requests.md`](docs/runbooks/partner-requests.md).
+
+The public site shows every loaded record, each marked whether a pharmacist approved it ("show mode", spec §7.4.1, D74): the API's `PUBLIC_SHOWS_UNREVIEWED` setting, which `deploy/docker-compose.yml` defaults to `true`. To turn it off (approved records only) or on again, follow [`docs/runbooks/public-mode.md`](docs/runbooks/public-mode.md).
 
 The read-only QA API (`/api/qa/v1/*`, spec §7.9) answers 401 to any request no key authenticates. QA team members (role `qa` in `REVIEWERS`), engineers and senior pharmacists create and revoke their own keys on `/review/qa` (spec §7.10). To create, hand over, rotate or revoke an env key (only its SHA-256 hash goes into `QA_API_KEYS` in the host `.env`), or to revoke a self-service key for its owner, follow [`docs/runbooks/qa-api-keys.md`](docs/runbooks/qa-api-keys.md). A key holder reads it through the hosted QA MCP server at `https://drugdb.eliooo.org/api/qa/mcp` (MCP Streamable HTTP with `Authorization: Bearer <key>`, spec §7.10.6; setup on `/review/qa`), or through the local stdio server in [`tools/qa-mcp/`](tools/qa-mcp/README.md) (`npm ci && npm run build && node dist/index.js`). OAuth-only connectors (claude.ai, ChatGPT) cannot connect.
 
