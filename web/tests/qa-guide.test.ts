@@ -38,6 +38,9 @@ const GUIDE_HISTORY: readonly { version: string; sha256: string }[] = [
   // 1.6.0: the RxNav name lookup and approximate match the pipeline makes (sources, checks, pitfalls); properties.json gives
   // any tty, and the pipeline keeps only an IN or a PIN that resolves to one IN (sources)
   { version: "1.6.0", sha256: "8401b71cd95b6111509cb53371ae5d371953b0d75cf4bebb03a82515cdceabcb" },
+  // 1.7.0 (D74): the overview's gate line is mode-neutral; a server setting decides whether the public site shows approved
+  // records only or every record with its label, and QA reads are the same either way (§7.4.1, §7.11)
+  { version: "1.7.0", sha256: "8a9c82438f65536591b8b87a2c150d270193cd1de096fd3b218386baa0589b15" },
 ];
 
 const contentHash = () => createHash("sha256")

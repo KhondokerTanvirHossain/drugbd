@@ -17,8 +17,15 @@ describe("/check/suggest (§4.3, §6.7.1)", () => {
     expect(suggestProducts).toHaveBeenCalledWith("na", ["A", "B"]);
     expect(res.status).toBe(200);
     expect(res.headers.get("Cache-Control")).toBe("private, no-store");
-    expect(await res.json()).toEqual([{ conceptId: "N", tradeName: "Napa", status: "approved", clinicalDisplayName: "Acetaminophen 500 mg tablet", matched: null },
-      { conceptId: "S", tradeName: "Secretol", status: "not_reviewed", clinicalDisplayName: null, matched: null }]);
+    expect(await res.json()).toEqual([{ conceptId: "N", tradeName: "Napa", status: "approved", review: null, clinicalDisplayName: "Acetaminophen 500 mg tablet", matched: null },
+      { conceptId: "S", tradeName: "Secretol", status: "not_reviewed", review: null, clinicalDisplayName: null, matched: null }]);
+  });
+
+  it("D74 show mode: a labelled row is visible and keeps its clinical data and label (§6.7, §6.10)", async () => {
+    suggestProducts.mockResolvedValue({ ok: true, data: [{ conceptId: "W", tradeName: "G Warfarin", dosageForm: "Tablet", status: "not_reviewed",
+      review: "problem", clinicalDisplayName: "Warfarin 5 mg tablet", matched: { name: "warfarin", substance: "Warfarin" } }] });
+    expect(await (await call("?q=wa")).json()).toEqual([{ conceptId: "W", tradeName: "G Warfarin", status: "not_reviewed", review: "problem",
+      clinicalDisplayName: "Warfarin 5 mg tablet", matched: { name: "warfarin", substance: "Warfarin" } }]);
   });
   it("answers at most 10 rows (§4.3)", async () => {
     suggestProducts.mockResolvedValue({ ok: true, data: Array.from({ length: 12 }, (_, i) => ({ conceptId: `P${i}`, tradeName: `Trade ${i}`,

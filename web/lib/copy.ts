@@ -50,6 +50,16 @@ export const PAIR_REVIEWED = "Pair reviewed by a senior pharmacist on {date}";
 /** Never hides the pair or its text (G3); the copy test allows it next to NOT_REVIEWED: it is not a paraphrase of it. */
 export const PAIR_NOT_REVIEWED = "Pair not yet reviewed by a senior pharmacist";
 
+// ---- §3.6 D74 additions (show mode, §6.10; each pinned by copy.test.ts and guarded against paraphrase) ----
+/** Right after the NOT_REVIEWED pill of a public record whose label is `problem` (ProblemLine, §3.4). Show mode only. */
+export const PROBLEM_REPORTED = "A problem has been reported with this record; it may be wrong.";
+/** Once, first in <main>, on a public page that renders a record that is not approved (UnreviewedCaution). Show mode only. */
+export const UNREVIEWED_CAUTION = "Some of this information has not yet been reviewed by a pharmacist. Check it before relying on it.";
+/** A public pair card or alert with a side that is not approved and no side `problem` (PairRecordLine). Not a paraphrase of NOT_REVIEWED. */
+export const PAIR_UNREVIEWED = "This pair involves a medicine not yet reviewed by a pharmacist.";
+/** As PAIR_UNREVIEWED, when either side is `problem`. */
+export const PAIR_PROBLEM = "This pair involves a medicine with a reported problem; it may be wrong.";
+
 /** P0 (spec §12.1): what anonymous and `user` sessions see on /batches and /batches/[id]. Both pages import it. */
 export const BATCHES_REVIEWERS_ONLY = "Only pharmacists and engineers can see batches.";
 
@@ -124,6 +134,8 @@ export const NEW_COPY_ROWS = {
   qaReference: "QA tools page: the API reference (every request and answer, the endpoint panels with their parameters, examples, key fields and errors, MCP over HTTP)",
   // QA guide (the spec's "*(QA guide)* " marker removed, as for P1C)
   qaGuide: "QA tools page: the six-tools line and the MCP panel's QA guide part (its heading, lead and result line, the resource error fix, and the amended arguments line and MCP fixes)",
+  // D74 (the spec's "*(D74)* " marker removed, as for P1C)
+  showMode: "Show mode: the problem line, the page caution line, the two pair lines, and the show-mode variants of the landing page, hero card, search, stubs, product page, substance page, checker, Learn sentences and the desk's reader-visibility lines",
 } as const;
 export type NewCopyState = (typeof NEW_COPY_ROWS)[keyof typeof NEW_COPY_ROWS];
 
@@ -583,6 +595,107 @@ const QA_GUIDE_ROW = (typeof window === "undefined" ? {
 } : {}) as Record<string, string>;
 
 /** Strings per §1.7 state. Empty records are filled by the plan that builds that state (P1B, P2, P3; the QA portal page). */
+// ---- D74 §1.7 row (§6.10): show-mode variants. SHOW_COPY (below) is the typed view; approved-only strings stay where they are. ----
+const NR = `"${NOT_REVIEWED}"`;
+const APPR = `"${APPROVED}"`;
+const SHOW_MODE = {
+  // landing (§6.1, §6.10)
+  landingH1: "Bangladesh's medicines, traced from brand to substance, each marked with whether a pharmacist has approved it.",
+  landingLede: `IntelliDrugs maps every DGDA-registered brand to its clinical drug and active substances, with ICD-11, RxNorm, ATC, DrugBank and SNOMED CT codes and DDInter 2.0 interactions. Records a pharmacist has not approved yet are shown, marked ${NR}.`,
+  landingLedeNarrow: "Every DGDA-registered brand mapped to its clinical drug, active substances, international codes and DDInter 2.0 interactions. Records a pharmacist has not approved yet are marked.",
+  audSub: "The same record serves the prescriber at the desk, the pharmacist at the counter and the systems that move prescriptions around, and says whether a pharmacist has approved it.",
+  pharmacistTick: "Invited pharmacists review records. Their approval marks them approved.",
+  pharmacistTickBold: "Their approval marks them approved.",
+  partnerTick3: "An interaction check that labels every record a pharmacist has not approved.",
+  partnerTick3Bold: "labels every record",
+  howSub: `Every product follows the same path. Until a pharmacist approves a record, it is shown marked ${NR}, and a change to what an approval covered sends it back to that person.`,
+  stepApproval: "A pharmacist compares the register with the result and approves it. An engineer's check is recorded but never approves.",
+  stepPublic: `Search, product pages, the checker and the partner API show the record, marked ${NR} before step 4 and ${APPR} after it.`,
+  loopText: `The record shows ${NR} until a pharmacist approves it again.`,
+  promiseApproval: "Every record shows whether a pharmacist has approved it",
+  promiseApprovalNote: `A record no pharmacist has approved carries ${NR}. An engineer's check never changes that, and a change to what an approval covered sends the record back to review.`,
+  partnersSub: "EMR, pharmacy and pharma systems get what the site shows: every record with its review label, permanent ids and crosswalk codes, in one response envelope.",
+  partnerTick2: "No-data substances and withdrawn products are listed by name, ",
+  responseNoneApproved: `None of the three is approved by a pharmacist yet, so each carries "review": "not_reviewed", and all three are checked. An empty alerts list does not mean they are safe together.`,
+  heroHidden: "This record is withdrawn from public view.",
+  // search (§6.3)
+  searchStub: "This record is withdrawn from public view, so its substance, codes and interactions are hidden.",
+  searchSubstanceOne: "{n} product, {k} approved by a pharmacist",
+  searchSubstanceMany: "{n} products, {k} approved by a pharmacist",
+  // stubs (§6.4)
+  stubUnavailable: "The DGDA register did not return this record in its latest run, so IntelliDrugs hides its clinical drug, codes and interactions.",
+  stubUnavailableBatch: 'This is not the same as "not found" or "no data". The record exists in batch {batchId}.',
+  stubNoBatch: "This record is in no review batch yet, so IntelliDrugs hides its clinical drug, codes and interactions.",
+  substanceStub: "No public medicine carries this substance yet, so IntelliDrugs hides its codes and interactions.",
+  // product page (§6.5)
+  notVerified: "A pharmacist has not yet compared this record with the DGDA register.",
+  checksWithheld: "Not shown while a problem is reported with this record.",
+  checksValueWithheld: "Not shown",
+  verificationRerun: `If the pipeline changes data this approval covered, {brand} goes back to review and shows ${NR} until it is approved again.`,
+  noOtherBrand: "No other brand maps to {bdcId} yet. Other DGDA brands of this clinical drug appear here as later batches load them.",
+  otherHeading: "With other medicines",
+  otherMeta: "With {k} {brands}: {list}. Action: {actions}",
+  otherMetaMore: "With {k} {brands}: {list} and {n} more. Action: {actions}",
+  otherNotCheckedIn: "Not checked: {substance} + {partner}, in {k} {brands}",
+  otherEmpty: "No other medicine on IntelliDrugs has an interaction with {substance} listed in DDInter 2.0 yet. Other medicines appear here as later batches load them.",
+  // checker (§6.7)
+  checkerWithdrawn: " · {nr} withdrawn {medicines} not checked",
+  withdrawnHeading: "Withdrawn from public view, {k} {products}",
+  withdrawnNote: "These products were not checked. They are withdrawn from public view.",
+  // desk (§5.2, §5.12)
+  deskVisPending: `Readers see this record marked “${NOT_REVIEWED}” until a pharmacist approves it.`,
+  deskDoneBody: `Each record was approved by a pharmacist. If the pipeline changes data a record's approval covered, it goes back in review and readers see it marked “${NOT_REVIEWED}” until a pharmacist approves it again.`,
+  // Learn (§6.8, §6.10)
+  learnPharmacistsCard: `Check a dispensing list, read DDInter's management text, and review records. Your approval is what marks a record ${APPR}.`,
+  learnGateTitle: "Marked until a pharmacist approves",
+  learnGateBody: `A loaded record is public, marked ${NR}, until a pharmacist approves it. Engineer checks are recorded but never change that mark.`,
+  learnLegend2: `${NR} means no pharmacist has approved the record yet.`,
+  learnGateProse: `A record shows ${APPR} only when a pharmacist said "Looks correct" after its latest extraction, and nobody reported an issue after that. Until then the public site shows it marked ${NR}.`,
+  learnGateMarked: "Marked",
+  learnGateNote: `Marked: shown on the public site with ${NR}. An issue reported also shows "${PROBLEM_REPORTED}"`,
+  learnJourney2: `A pharmacist presses A. When the undo window closes, the record shows ${APPR}.`,
+  learnJourney3: `An engineer re-runs the record. The approval stops counting and the record shows ${NR} again.`,
+  learnWhyReview: `Saying a brand contains a substance, and that the substance carries these interactions, is a clinical claim. Engineers check the extraction and their check is recorded, but only a pharmacist's approval marks a record ${APPR} on the public site and in the API.`,
+  learnWhyPilot: "on all {n} records, so none is approved.",
+  learnApiProduct: "One product with ingredients, clinical drug and DDInter entries, and its review label. Withdrawn: a hidden stub.",
+  learnApiSearch: "Search by brand, substance or DAR number: every public record with its review label, and stubs for withdrawn ones",
+  learnApiSuggest: "Up to 10 suggestions for the checker, each with its review label.",
+  learnApiPairs: "Pairs with public products of every batch, by partner substance, 20 a page",
+  learnApiClinical: "A clinical drug, its ingredients and its public brands",
+  learnApiPublicMode: "Which records the public site shows: approved records only, or every record with its review label",
+  learnAccessPublic: "The default. Every public record, each with its review label; withdrawn records come back as stubs.",
+  learnAccessReviewer: `Readers and the public API see an unapproved product in full, labelled ${NR}.`,
+  learnNapaCaption: `While the public site shows unreviewed records, a public caller gets Napa in full, with "review": "not_reviewed", instead of this stub.`,
+  learnCheckCaption: `While the public site shows unreviewed records, a public check returns all three in products, each with "review": "not_reviewed", and checks them, instead of this answer.`,
+  learnMustReview: `Show "not_reviewed" as ${NR}. Show "problem" as ${NR} followed by "${PROBLEM_REPORTED}"`,
+  learnGlossApproved: `A record a pharmacist marked "Looks correct" after its latest extraction, with no issue since. Only these show ${APPR}.`,
+  learnGlossBack: `An approved record that was re-run, or whose shared substance data changed. It shows ${NR} until a pharmacist approves it again.`,
+  learnGlossEngineer: "An engineer marked the extraction correct. Recorded, but it does not approve the record.",
+  learnGlossNotReviewed: "A record no pharmacist has approved. Public pages and public API answers show it with this label.",
+  // Not in the §6.10 Learn table: Board L's "Issue reported" definition says the record "stays hidden", which the §6.10
+  // claim guard forbids in show mode, so show mode reads it this way (recorded as a spec gap in the D74 PR).
+  // The start, process and partners ledes: §6.10 Learn table rows recorded in fix round 4 (07/11/2026).
+  learnLedeStart: "IntelliDrugs links every medicine registered in Bangladesh to the substances inside it, to the codes other systems use, and to published interaction data. Each record says whether a pharmacist has checked it.",
+  learnLedeProcess: "Records enter in small batches. A pipeline runs four checks on each one and keeps every source response. People then compare the source with what we extracted, and only a pharmacist's approval marks a record approved.",
+  // §6.10 Learn table rows added in the D74 fix round 4: chapter 5's lede and its pharmacist rule heading (page and rail),
+  // and chapter 4's swimlane diagram (the Public lane's sub, the box an engineer check leads to, and the <desc>).
+  learnLedeWhy: `Each rule below exists because the simpler choice would put a wrong or unchecked fact in front of a prescriber without saying so. Records a pharmacist has not approved yet are shown, marked ${NR}.`,
+  learnWhyPharmacistTitle: "Why only a pharmacist can approve",
+  learnSwimPublicSub: "every record, labelled",
+  learnSwimMarked: "Public, marked",
+  learnSwimDesc: `A batch file of 10 concept ids enters the pipeline. Four stages run in order: DGDA load reads the DGDA register, Substances reads NLM RxNav, Clinical drug parses, DDInter reads DDInter 2.0. Every stage keeps its evidence, which signed-in reviewers see on the batch page. An engineer check is recorded but keeps the record marked ${NR}. A pharmacist presses A and after an {undoWindow} the record shows ${APPR} on the site, checker and API. An issue or a re-run sends the record back to the pipeline and back to review.`,
+  learnLedePartners: "The REST API serves the same records as the website. Each public record carries its review label, so a caller always knows whether a pharmacist has approved it.",
+  learnGlossIssue: `A reviewer flagged a problem with a note. Until it is fixed and re-run, the public site shows the record marked ${NR} and "${PROBLEM_REPORTED}"`,
+  learnFaqEngineerQ: "Can an engineer approve a record?",
+  learnFaqEngineerA: `No. An engineer's "Looks correct" is recorded as Engineer checked and the record keeps ${NR}. Only a pharmacist's approval marks it approved.`,
+  // §6.10 Learn table rows added in the D74 fix round (Start "What it is"; FAQ no-alerts and reviewer answers).
+  learnStartReaders: "Doctors, pharmacists and partner systems read every loaded record, each marked with whether a pharmacist has approved it.",
+  // The checker has no "not reviewed" section in show mode: unapproved products are checked, hidden ones are listed under
+  // withdrawnHeading, so the safety advice names that heading.
+  learnFaqNoAlertsA: "Not necessarily. No alert means DDInter 2.0 records no interaction for those pairs. Check that no product is listed under withdrawn from public view and no substance under no data; those pairs were not checked at all.",
+  learnFaqReviewerA: "Anyone can read every public record, each marked with whether a pharmacist approved it, without signing in, and anyone can sign in with Google to report a problem. Reviewer roles are by invitation from the IntelliDrugs team.",
+} as const;
+
 export const NEW_COPY: Record<NewCopyState, Record<string, string>> = {
   [NEW_COPY_ROWS.decisionUnconfirmed]: {
     bannerTitle: "Couldn't confirm your decision.",
@@ -814,6 +927,7 @@ export const NEW_COPY: Record<NewCopyState, Record<string, string>> = {
   [NEW_COPY_ROWS.qaKeys]: QA_KEYS,
   [NEW_COPY_ROWS.qaReference]: QA_REFERENCE_ROW,
   [NEW_COPY_ROWS.qaGuide]: QA_GUIDE_ROW,
+  [NEW_COPY_ROWS.showMode]: SHOW_MODE,
 };
 /** Typed shortcut for the sign-in row. */
 export const SIGN_IN_STATES = NEW_COPY[NEW_COPY_ROWS.signIn] as {
@@ -862,6 +976,9 @@ export const DESK_NEW = {
 export const P1C_COPY = {
   senior: SENIOR_ROLE, review: SENIOR_REVIEW, pair: PAIR_LINES, other: OTHER_MEDICINES, dismiss: DISMISS, sources: SOURCE_LINKS,
 } as const;
+
+/** Typed view of the D74 row (§6.10): the show-mode variants. Each replaces an approved-only string in show mode only. */
+export const SHOW_COPY = SHOW_MODE;
 
 /** Typed views of the QA portal rows (§1.7), so modules never index NEW_COPY by row text. */
 export const QA_COPY = { role: QA_ROLE, account: QA_ACCOUNT, page: QA_PAGE, keys: QA_KEYS, reference: QA_REFERENCE_ROW } as const;

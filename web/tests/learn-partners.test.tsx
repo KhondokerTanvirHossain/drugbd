@@ -79,7 +79,8 @@ describe("chapter 8: both example bodies match the §7.4 shapes (§11.2)", () =>
 
   it("the check bodies carry every §7.4 CheckResult field; notReviewed[] items carry tradeName", () => {
     const top = ["alerts", "duplicates", "noData", "noInteraction", "notChecked", "notReviewed", "products", "summary"];
-    const summary = ["alertPairs", "bySeverity", "checkedPairs", "medicines", "noInteractionPairs", "notCheckedPairs", "notReviewed", "totalPairs"];
+    // D74 (§7.4.1): summary.notApproved, products[].review and Side.review are sent in both modes
+    const summary = ["alertPairs", "bySeverity", "checkedPairs", "medicines", "noInteractionPairs", "notApproved", "notCheckedPairs", "notReviewed", "totalPairs"];
     for (const body of [CHECK_PUBLIC, CHECK_REVIEWER]) {
       expect(keys(body.data)).toEqual(top);
       expect(keys(body.data.summary)).toEqual(summary);
@@ -94,7 +95,7 @@ describe("chapter 8: both example bodies match the §7.4 shapes (§11.2)", () =>
     const d = CHECK_REVIEWER.data;
     const [alert] = d.alerts;
     expect(keys(alert)).toEqual(["a", "actions", "b", "ddinterA", "ddinterB", "interaction", "interactionId", "management", "routeAssumed", "severity", "source"]);
-    for (const s of [alert.a, alert.b, ...d.notChecked.flatMap((n) => [n.a, n.b])]) expect(keys(s)).toEqual(["bdsId", "conceptId", "name", "routeScope", "tradeName"]);
+    for (const s of [alert.a, alert.b, ...d.notChecked.flatMap((n) => [n.a, n.b])]) expect(keys(s)).toEqual(["bdsId", "conceptId", "name", "review", "routeScope", "tradeName"]);
     for (const p of d.products) for (const s of p.substances) {
       expect(keys(s)).toEqual(["bdsId", "coverage", "ddinter", "name"]);
       for (const r of s.ddinter) expect(keys(r)).toEqual(["ddinterId", "name", "routeAssumed", "routeScope"]);

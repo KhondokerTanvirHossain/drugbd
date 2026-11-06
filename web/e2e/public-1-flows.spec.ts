@@ -7,16 +7,22 @@ import { installTurnstileFake } from "./turnstile-fake";
 
 /*
  * Public flows (§11.4 "Public", "Public scope for reviewers") on the production build and the pilot seed. Serial: later
- * tests build on the products earlier ones publish. resetPublic() restores the seed. The §11.4 "Sign-in return path"
+ * tests build on the products earlier ones publish. resetPublic() restores the seed. D74: tests tagged @approved-only
+ * assert approved-only behaviour and run in CI's first pass, on the seed, with the api recreated with
+ * PUBLIC_SHOWS_UNREVIEWED=false; the others run in the main (show mode) pass that follows, and public-4-show-mode.spec.ts holds the show-mode flows. The §11.4 "Sign-in return path"
  * case stays in foundation.spec.ts (P1A), which Task 33 leaves passing: the island's props are unchanged.
  */
 test.describe.configure({ mode: "serial", timeout: 120_000 });
+/** §3.6 UNREVIEWED_CAUTION: never shown in approved-only mode (§11.4 D74 @approved-only). */
+const CAUTION = "Some of this information has not yet been reviewed by a pharmacist. Check it before relying on it.";
 test.afterAll(() => resetPublic());
 
-test("landing: one h1, the four bands, and the lookup card shows only the brand and the pill while Napa is unapproved (§6.1, D26)", async ({ page }) => {
+test("landing: one h1, the four bands, and the lookup card shows only the brand and the pill while Napa is unapproved (§6.1, D26) @approved-only", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("h1")).toHaveCount(1);
   await expect(page.locator("h1")).toHaveText("Bangladesh's medicines, traced from brand to substance and checked by a pharmacist.");
+  await expect(page.locator("main")).toContainText("A record goes public only after a pharmacist approves it.");
+  await expect(page.locator("main")).not.toContainText(CAUTION);
   for (const h of ["One record, three kinds of work", "How a record becomes trustworthy", "Three promises", "For partners: the same records, by API"])
     await expect(page.getByRole("heading", { name: h })).toBeVisible();
   const card = page.getByRole("group", { name: "Lookup for Napa" });
@@ -27,7 +33,7 @@ test("landing: one h1, the four bands, and the lookup card shows only the brand 
   await expect(card).not.toContainText("BDS-");
 });
 
-test("search: 'warfarin' finds the G Warfarin stub with no data from the record (§6.3, D16)", async ({ page }) => {
+test("search: 'warfarin' finds the G Warfarin stub with no data from the record (§6.3, D16) @approved-only", async ({ page }) => {
   await page.goto("/search?q=warfarin");
   await expect(page.locator("h1")).toHaveText('Results for "warfarin"');
   await expect(page.getByText("A pharmacist hasn't approved this record yet, so its substance, codes and interactions are hidden.")).toBeVisible();
@@ -35,13 +41,14 @@ test("search: 'warfarin' finds the G Warfarin stub with no data from the record 
   await expect(page.locator("main")).not.toContainText("BDS-000003");
 });
 
-test("the stub page: the trade name, the pill and the batch, and nothing of the record (§6.4)", async ({ page }) => {
+test("the stub page: the trade name, the pill and the batch, and nothing of the record (§6.4) @approved-only", async ({ page }) => {
   await page.goto(`/products/${P.warfarin}`);
   await expect(page.locator("h1")).toHaveText("G Warfarin");
   await expect(page.getByText("Not yet reviewed by a pharmacist").first()).toBeVisible();
   await expect(page.getByText(/This is not the same as "not found" or "no data"\. The record exists and is in review in batch /)).toBeVisible();
   for (const hidden of ["Warfarin Sodium", "DDInter1951", "BDS-000003", "What's in it"])
     await expect(page.locator("main")).not.toContainText(hidden);
+  await expect(page.locator("main")).not.toContainText(CAUTION);
 });
 
 test("an unknown product id is a 404 with the not-found sentence (§6.4)", async ({ page }) => {
@@ -59,13 +66,15 @@ test("approved: 'paracetamol' finds Napa through the DGDA name, and the product 
   await expect(page.locator("h1")).toHaveText("Napa");
   await expect(page.getByText("Approved by a pharmacist").first()).toBeVisible();
   await expect(page.getByRole("heading", { name: "What's in it" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "With other approved medicines" })).toBeVisible();
+  // "With other approved medicines" in approved-only mode, "With other medicines" in show mode (§6.10)
+  await expect(page.getByRole("heading", { name: /^With other (approved )?medicines$/ })).toBeVisible();
   await expect(page.getByText("From DDInter 2.0").first()).toBeVisible();
   // a pair card says "Pair not yet reviewed…"; the unclassified panel's bracket says "(pair not yet reviewed…)"
   await expect(page.getByText(/pair not yet reviewed by a senior pharmacist/i).first()).toBeVisible();
 });
 
-test("'warfrin' suggests Warfarin once G Warfarin is public (§6.3, §7.4 P4)", async ({ page }) => {
+test("'warfrin' suggests Warfarin once G Warfarin is public (§6.3, §7.4 P4) @approved-only", async ({ page }) => {
+  publish(P.warfarin);   // the @approved-only pass skips the show-mode test that publishes it
   await page.goto("/search?q=warfrin");
   await expect(page.locator("h1")).toHaveText('No medicines match "warfrin"');
   const link = page.getByRole("link", { name: "Search for Warfarin" });
@@ -82,7 +91,8 @@ test("the substance page from the product page: entries, products and source lin
   await expect(page.locator(`a[href="/products/${P.napa}"]`).first()).toBeVisible();
 });
 
-test("public scope for reviewers: a pharmacist sees the stub on /products and 'not yet reviewed' on /check (§2.2, §11.4)", async ({ browser }) => {
+test("public scope for reviewers: a pharmacist sees the stub on /products and 'not yet reviewed' on /check (§2.2, §11.4) @approved-only", async ({ browser }) => {
+  publish(P.napa);   // the @approved-only pass skips the show-mode test that publishes it; afterAll resets it
   const ctx = await browser.newContext();
   await signInAs(ctx, "pharmacist");
   const page = await ctx.newPage();
@@ -91,6 +101,9 @@ test("public scope for reviewers: a pharmacist sees the stub on /products and 'n
   await expect(page.getByRole("heading", { name: "What's in it" })).toHaveCount(0);
   await page.goto(`/check?ids=${P.napa}&ids=${P.domperidone}`);
   await expect(page.getByText(/Not yet reviewed by a pharmacist, 1 product/)).toBeVisible();
+  await expect(page.locator("main")).not.toContainText(CAUTION);
+  await page.goto("/search?q=warfarin");
+  await expect(page.locator("main")).not.toContainText(CAUTION);
   await ctx.close();
 });
 
@@ -177,12 +190,13 @@ test("an approved no-data product lists each approved partner as not checked, ne
   await page.goto(`/products/${P.domperidone}`);
   await expect(page.locator("h1")).toHaveText("Domperidone");
   const other = page.locator("div:has(> #with-other)");
-  await expect(other.getByRole("heading", { name: "With other approved medicines" })).toBeVisible();
+  await expect(other.getByRole("heading", { name: /^With other (approved )?medicines$/ })).toBeVisible();
   await expect(other).not.toContainText("No other approved medicine has an interaction");
+  await expect(other).not.toContainText("No other medicine on IntelliDrugs has an interaction");
   const block = other.locator(".nodata-block.hatch");
   await expect(block).toHaveCount(1);
   await expect(block.locator(".nodata-title")).toContainText("Domperidone");
-  await expect(block).toContainText("Not checked: Domperidone + Acetaminophen, in 1 approved brand");
+  await expect(block).toContainText(/Not checked: Domperidone \+ Acetaminophen, in 1 (approved )?brand/);
   expect(await block.locator(".nodata-pairs").filter({ hasText: /^Not checked: Domperidone \+ / }).count()).toBeGreaterThanOrEqual(3);
 });
 

@@ -2,6 +2,8 @@
  * Client-safe types of the §7.4 public API (P2a). A field the API may send as null is typed `| null`. Islands may import
  * these types; the fetches are in lib/api.ts (server-only).
  */
+import type { PublicLabel } from "./public-mode";
+
 export type Source = { url: string; label: string; fetchedAt: string | null };
 export type PublicPairReview = { state: "reviewed" | "not_reviewed"; reviewedAt: string | null };
 export type Coverage = "full" | "none" | "not_run";
@@ -10,7 +12,8 @@ export type StageKey = "dgda" | "substances" | "clinical" | "ddinter";
 export type StageNote = { kind: string; text: string; ddinterId: string | null; route: string | null };
 export type Counts = { major: number; moderate: number; minor: number; unknown: number; total: number };
 
-export type ProductStub = { conceptId: string; tradeName: string; status: "not_reviewed" | "removed"; batchId: string | null; hidden: true };
+/** status "unavailable" (show mode only, §7.4.1): the latest item is a DGDA load failure. */
+export type ProductStub = { conceptId: string; tradeName: string; status: "not_reviewed" | "removed" | "unavailable"; batchId: string | null; hidden: true };
 export type SubstanceStub = { bdsId: string; preferredName: string; hidden: true };
 
 export type ChosenEntry = { ddinterId: string; name: string | null; routeScope: string; routeAssumed: boolean };
@@ -33,26 +36,30 @@ export type PublicProduct = {
   conceptId: string; darNumber: string; tradeName: string; company: string; dosageForm: string; genericContentRaw: string;
   qualityFlag: string | null; ingredients: { xmCode: string; name: string }[]; parseStatus: string | null; parseNote: string | null;
   clinicalDrug: { bdcId: string; displayName: string; doseForm: string; route: string; ingredients: ClinicalItem[] } | null;
-  verification: { status: "approved"; role: "pharmacist"; approvedAt: string | null };
+  /** null for a visible record that is not approved (§7.4.1, D74): the line is never shown without it. */
+  verification: { status: "approved"; role: "pharmacist"; approvedAt: string | null } | null;
   provenance: { batchId: string | null; extractedAt: string | null; source: string; sourceLink: Source | null; stages: PublicStage[] };
   otherBrandsCount: number;
+  /** The public label (§7.4.1); "approved" for every record approved-only mode serves. */
+  review?: PublicLabel;
 };
 
 export type SubstanceRef = { bdsId: string | null; name: string };
-export type Brand = { conceptId: string; tradeName: string };
+export type Brand = { conceptId: string; tradeName: string; review?: PublicLabel };
 export type InteractionPair = { substance: SubstanceRef; partnerSubstance: SubstanceRef; severity: string; actions: string[];
   interaction: string | null; management: string | null; ddinterA: string; ddinterB: string; routeAssumed: boolean; source: string;
-  pairReview: PublicPairReview; brands: Brand[]; brandCount: number };
+  pairReview: PublicPairReview; brands: Brand[]; brandCount: number; partnerReview?: PublicLabel | null };
 export type InteractionNotChecked = { substance: SubstanceRef; partnerSubstance: SubstanceRef;
   reason: "no_data" | "not_run" | "no_route" | "unmapped"; route: string | null; brands: Brand[]; brandCount: number;
   /** Whose reason it is (§6.7.2 REASON_ORDER, this side on a tie): this product's substance, or the partner brands'. */
-  side: "this" | "partner" };
+  side: "this" | "partner"; partnerReview?: PublicLabel | null };
 export type ProductInteractions = { conceptId: string; page: number; totalPartners: number; partners: InteractionPair[];
-  notChecked: InteractionNotChecked[] };
+  notChecked: InteractionNotChecked[]; review?: PublicLabel | null };
 
 export type ClinicalDrugView = { bdcId: string; displayName: string; doseForm: string; route: string;
   ingredients: { bdsId: string; name: string; strengthValue: number | null; strengthUnit: string | null; perValue: number | null; perUnit: string | null }[];
-  products: { conceptId: string; tradeName: string; company: string; darNumber: string }[] };
+  products: { conceptId: string; tradeName: string; company: string; darNumber: string; review?: PublicLabel | null }[];
+  review?: PublicLabel | null };
 
 export type SubstanceEntry = { ddinterId: string; name: string | null; routeScope: string; counts: Counts; diseaseCount: number;
   foodCount: number; sourceLink: Source | null };
@@ -61,39 +68,46 @@ export type PublicSubstance = {
   names: { name: string; nameType: string; source: string }[];
   codes: { system: string; code: string; routeScope: string; source: string; method: string; confidence: number; sourceLink: Source | null }[];
   coverage: { coverage: Coverage; note: string };
-  products: { conceptId: string; tradeName: string; company: string }[];
+  products: { conceptId: string; tradeName: string; company: string; review?: PublicLabel | null }[];
   diseases: { diseaseName: string; severity: string; text: string | null; interactionId: string; routeScope: string }[];
   foods: { food: string; severity: string; description: string | null; management: string | null; interactionId: string; routeScope: string }[];
   entries: SubstanceEntry[];
-  clinicalDrugs: { bdcId: string; displayName: string }[];
+  clinicalDrugs: { bdcId: string; displayName: string; review?: PublicLabel | null }[];
+  interactions?: { partnerBdsId: string | null; partnerReview?: PublicLabel | null }[];
+  review?: PublicLabel | null;
 };
 export type SubstanceInteractionItem = { partnerName: string; partnerBdsId: string | null; ddinterA: string; ddinterB: string;
   routeScope: string; severity: string; actions: string[]; interaction: string | null; management: string | null;
-  pairReview: PublicPairReview; sourceUrl: string | null };
+  pairReview: PublicPairReview; sourceUrl: string | null; partnerReview?: PublicLabel | null };
 export type SubstanceInteractions = { bdsId: string; counts: SubstanceEntry[]; total: number; page: number; size: number;
-  items: SubstanceInteractionItem[] };
+  items: SubstanceInteractionItem[]; review?: PublicLabel | null };
 
 export type SearchSubstance = { bdsId: string; preferredName: string; matchedName: string;
   matchedNameType: "preferred" | "dgda_content" | "rxnorm" | "ddinter" | "icd11"; otherNameTypes: string[]; coverage: Coverage;
-  ddinterIds: string[]; keyCodes: { atc: string[]; rxcui: string[] }; approvedProductCount: number };
+  ddinterIds: string[]; keyCodes: { atc: string[]; rxcui: string[] }; approvedProductCount: number;
+  productCount?: number; review?: PublicLabel | null };
 export type SearchProduct = { conceptId: string; tradeName: string; darNumber: string; company: string; dosageForm: string;
   genericContentRaw: string; clinicalDrug: { bdcId: string; displayName: string } | null;
-  matchedOn: "trade_name" | "dar" | "generic" | "substance"; matchedName: string | null; status: "approved" };
-export type SearchStub = { conceptId: string; tradeName: string; status: "not_reviewed"; hidden: true };
+  matchedOn: "trade_name" | "dar" | "generic" | "substance"; matchedName: string | null; status: "approved" | "not_reviewed";
+  review?: PublicLabel };
+export type SearchStub = { conceptId: string; tradeName: string; status: "not_reviewed" | "removed" | "unavailable"; hidden: true };
 export type SearchResult = { query: string; total: number; hasMore: boolean; counts: { substances: number; products: number };
   substances: SearchSubstance[]; products: (SearchProduct | SearchStub)[]; suggestion: string | null };
 
 export type SuggestRow = { conceptId: string; tradeName: string; dosageForm: string; status: "approved" | "not_reviewed";
-  clinicalDisplayName: string | null; matched: { name: string; substance: string } | null };
+  clinicalDisplayName: string | null; matched: { name: string; substance: string } | null; review?: PublicLabel | null };
 
-export type Side = { conceptId: string; tradeName: string; bdsId: string | null; name: string; routeScope: string | null };
+export type Side = { conceptId: string; tradeName: string; bdsId: string | null; name: string; routeScope: string | null;
+  review?: PublicLabel | null };
 export type CheckAlert = { severity: string; a: Side; b: Side; actions: string[]; interaction: string | null; management: string | null;
   routeAssumed: boolean; ddinterA: string; ddinterB: string; interactionId: string | null; source: string; pairReview: PublicPairReview };
 export type NotCheckedReason = "no_data" | "not_run" | "no_route" | "unmapped" | "same_product";
 export type CheckResult = {
   summary: { medicines: number; totalPairs: number; checkedPairs: number; alertPairs: number; noInteractionPairs: number;
-    notCheckedPairs: number; notReviewed: number; bySeverity: { major: number; moderate: number; minor: number; unknown: number } };
-  products: { conceptId: string; tradeName: string; route: string | null;
+    notCheckedPairs: number; notReviewed: number; bySeverity: { major: number; moderate: number; minor: number; unknown: number };
+    /** D74: the checked products that are not approved (0 in approved-only mode). */
+    notApproved?: number };
+  products: { conceptId: string; tradeName: string; route: string | null; review?: PublicLabel | null;
     substances: { bdsId: string | null; name: string; coverage: Coverage; ddinter: ChosenEntry[] }[] }[];
   alerts: CheckAlert[];
   noInteraction: { a: Side; b: Side; ddinterA: string; ddinterB: string }[];

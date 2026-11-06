@@ -24,4 +24,9 @@ class SuggestTest {
     @Test void tiesGoToTheAlphabeticallyFirstName() {
         assertThat(Suggest.closest("napax", List.of("Napay", "Napaa"))).isEqualTo("Napaa");
     }
+
+    @Test void aCaseOnlyTieGoesToTheCapitalisedSpellingWhateverTheOrder() {
+        assertThat(Suggest.closest("warfrin", List.of("warfarin", "Warfarin"))).isEqualTo("Warfarin");
+        assertThat(Suggest.closest("warfrin", List.of("Warfarin", "warfarin"))).isEqualTo("Warfarin");
+    }
 }

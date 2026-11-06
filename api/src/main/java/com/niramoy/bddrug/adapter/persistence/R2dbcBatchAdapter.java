@@ -83,7 +83,7 @@ public class R2dbcBatchAdapter implements BatchQueryPort {
             .bind("id", batchId)
             .map(r -> new ItemRow(r.get("item_id", String.class), r.get("review", String.class),
                 r.get("review_note", String.class), r.get("source_json", String.class),
-                r.get("concept_id", String.class) == null ? null : R2dbcProductAdapter.rowWithReview(r, null),
+                r.get("concept_id", String.class) == null ? null : R2dbcProductAdapter.rowWithReview(r, null, null),
                 instant(r.get("extracted_at", OffsetDateTime.class)), r.get("last_decision_id", Long.class)))
             .all().collectList();
         return Mono.zip(ingredients, stages, rows).flatMap(t -> {

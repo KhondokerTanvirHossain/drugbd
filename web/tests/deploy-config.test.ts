@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const repo = (p: string) => readFileSync(new URL(`../../${p}`, import.meta.url), "utf8");
@@ -40,6 +40,44 @@ describe("deploy configuration (§12.4)", () => {
     expect(d).toContain('"$PUBLIC_URL/healthz"');
     expect(d).not.toContain('"$PUBLIC_URL/batches"');
     expect(d).toContain('source: "deploy/docker-compose.yml,db/migrations,batches"');
+  });
+});
+
+describe("public mode (D74, §7.4.1, §12.4)", () => {
+  const apiService = () => {
+    const c = repo("deploy/docker-compose.yml");
+    return c.slice(c.indexOf("\n  api:"), c.indexOf("\n  web:"));
+  };
+  it("the API gets PUBLIC_SHOWS_UNREVIEWED, on by default in production; the web never does", () => {
+    expect(apiService()).toContain("PUBLIC_SHOWS_UNREVIEWED: ${PUBLIC_SHOWS_UNREVIEWED:-true}\n");
+    expect(webService()).not.toContain("PUBLIC_SHOWS_UNREVIEWED");
+    // The override is gitignored (local only, .gitignore): CI's checkout has none, so check it only where it exists
+    const override = new URL("../../deploy/docker-compose.override.yml", import.meta.url);
+    if (existsSync(override)) expect(readFileSync(override, "utf8")).not.toContain("PUBLIC_SHOWS_UNREVIEWED");
+    expect(repo("deploy/docker-compose.ci.yml")).not.toContain("PUBLIC_SHOWS_UNREVIEWED");
+  });
+  it(".env.example documents the off switch, and the runbook names the procedure", () => {
+    expect(repo("deploy/.env.example")).toContain("# PUBLIC_SHOWS_UNREVIEWED=false turns show mode off (approved records only); unset or true shows unreviewed records, labelled (spec §7.4.1).");
+    const runbook = repo("docs/runbooks/public-mode.md");
+    expect(runbook).toContain("PUBLIC_SHOWS_UNREVIEWED=false");
+    expect(runbook).toContain("docker-compose up -d --no-deps api web");
+  });
+  it("the API's code default is approved-only: application.yml binds the variable with an empty default", () => {
+    expect(repo("api/src/main/resources/application.yml")).toContain("bddrug.public-shows-unreviewed: ${PUBLIC_SHOWS_UNREVIEWED:}");
+  });
+  it("CI runs @approved-only first on the seed with the api recreated off, then the main e2e in show mode against the same web, then Lighthouse", () => {
+    const yml = repo(".github/workflows/ci.yml");
+    const seed = yml.indexOf("$COMPOSE run --rm seed"), off = yml.indexOf("PUBLIC_SHOWS_UNREVIEWED=false $COMPOSE up -d --no-deps api");
+    const only = yml.indexOf("npx playwright test --grep @approved-only"), back = yml.indexOf("$COMPOSE up -d --no-deps api\n", only);
+    const main = yml.indexOf("npx playwright test --grep-invert @approved-only");
+    expect(seed).toBeGreaterThan(0);
+    expect(off).toBeGreaterThan(seed);
+    expect(only).toBeGreaterThan(off);
+    expect(back).toBeGreaterThan(only);
+    expect(main).toBeGreaterThan(back);
+    expect(yml.indexOf("npx lhci autorun")).toBeGreaterThan(main);
+    // the web is never recreated between the passes: it reads the mode from the API
+    expect(yml.slice(off, main)).not.toMatch(/up -d[^\n]*\bweb\b/);
   });
 });
 

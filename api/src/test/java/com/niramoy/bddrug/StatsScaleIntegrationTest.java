@@ -20,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Coarse bounds only: p95 under 300 ms over 20 calls (§10.6) and a body under 1 MB (the web container has 256 MB).
  */
 @Testcontainers
-@SpringBootTest
+@SpringBootTest(properties = "bddrug.public-shows-unreviewed=true")   // D74: measured in show mode, the heavier mode (§10.6)
 @AutoConfigureWebTestClient
 class StatsScaleIntegrationTest {
     @Container static PostgreSQLContainer<?> pg = new PostgreSQLContainer<>("postgres:16");

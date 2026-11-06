@@ -20,14 +20,17 @@ import static com.niramoy.bddrug.TestSupport.exec;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * §11.3 VisibilityApiIntegrationTest matrix (D28, G3, PO D7) for every public endpoint, with a fixture in each non-public
- * state: pending (Hushpend), engineer checked (Husheng), issue (Hushiss), back in review (Hushback), approved then
- * removed from the batch file (Hushrem), and approved, reported, then dismissed by a senior (Hushdis, P1C D57: pending).
+ * §11.3 VisibilityApiIntegrationTest matrix (D28, G3, PO D7) for every public endpoint, approved-only mode (the switch off,
+ * §7.4.1), with a fixture in each non-public state: pending (Hushpend), engineer checked (Husheng), issue (Hushiss), back
+ * in review (Hushback), approved then removed from the batch file (Hushrem), approved, reported, then dismissed by a
+ * senior (Hushdis, P1C D57: pending), and (D74) a DGDA load failure that still has curated rows (Hushnf, "not found at
+ * source"), a failed stage with no issue (Hushfail) and a product in no batch (Hushnob).
+ * PublicVisibilityMatrixShowUnreviewedIntegrationTest runs the same fixtures with the switch on.
  * Pubol is approved and pairs with every hidden substance's DDInter entry; its pair with Secretolin-P has a current
  * senior review that must never be served (the partner is not public, §7.4).
  */
 @Testcontainers
-@SpringBootTest
+@SpringBootTest(properties = "bddrug.public-shows-unreviewed=false")
 @AutoConfigureWebTestClient
 class PublicVisibilityMatrixIntegrationTest {
     @Container static PostgreSQLContainer<?> pg = new PostgreSQLContainer<>("postgres:16");
@@ -35,11 +38,23 @@ class PublicVisibilityMatrixIntegrationTest {
 
     /** Our data for hidden records: substance names, BDS/BDC ids, XM codes, strengths, DDInter texts, notes. */
     static final List<String> MARKERS = List.of("Secretolin", "BDS-000902", "BDS-000903", "BDS-000904", "BDS-000905", "BDS-000906",
-        "BDS-000907", "BDC-000902", "BDC-000903", "BDC-000904", "BDC-000905", "BDC-000906", "BDC-000907", "XM9M0", "77.77",
+        "BDS-000907", "BDS-000908", "BDS-000909", "BDS-00090a", "BDC-000902", "BDC-000903", "BDC-000904", "BDC-000905", "BDC-000906",
+        "BDC-000907", "BDC-000908", "BDC-000909", "BDC-00090a", "XM9M0", "77.77",
         "SECRET-TEXT", "SECRET-MGMT", "PAIR-NOTE-SECRET", "ISSUE-NOTE-SECRET", "DISMISS-NOTE-SECRET", "Hush Pharma");
-    static final List<String> HIDDEN = List.of("M-PEND", "M-ENG", "M-ISS", "M-BACK", "M-REM", "M-DIS");
+    /** Never served in either mode: decision and pair-review notes, emails, roles. */
+    static final List<String> ALWAYS_SECRET = List.of("PAIR-NOTE-SECRET", "ISSUE-NOTE-SECRET", "DISMISS-NOTE-SECRET", "Strength looks wrong",
+        "@example.org", "senior", "engineer");
+    static final List<String> HIDDEN = List.of("M-PEND", "M-ENG", "M-ISS", "M-BACK", "M-REM", "M-DIS", "M-NF", "M-FAIL", "M-NOB");
+    /** Every fixture's id and its digit n (BDS-00090n, BDC-00090n, XM9M0n, DDInter990n, TXT-n). */
+    static final String[][] FIXTURES = {{"2", "M-PEND", "Hushpend"}, {"3", "M-ENG", "Husheng"}, {"4", "M-ISS", "Hushiss"},
+        {"5", "M-BACK", "Hushback"}, {"6", "M-REM", "Hushrem"}, {"7", "M-DIS", "Hushdis"}, {"8", "M-NF", "Hushnf"},
+        {"9", "M-FAIL", "Hushfail"}, {"a", "M-NOB", "Hushnob"}};
+    static final String SUFFIX = "PEIBRDNFO";
 
-    @BeforeAll static void seed() throws Exception {
+    @BeforeAll static void seed() throws Exception { seedFixtures(pg); }
+
+    /** The matrix fixtures, shared with PublicLabelIntegrationTest. */
+    static void seedFixtures(PostgreSQLContainer<?> pg) throws Exception {
         PilotSeed.migrateAndSeed(pg);
         StringBuilder sql = new StringBuilder("""
             INSERT INTO curated.substance (bds_id, preferred_name) VALUES ('BDS-000901','Pubolin');
@@ -57,9 +72,8 @@ class PublicVisibilityMatrixIntegrationTest {
             INSERT INTO ops.batch (batch_id, item_count, run_at) VALUES ('M-1', 7, now() - interval '2 hour');
             INSERT INTO ops.batch_item (batch_id, source, concept_id, review, extracted_at) VALUES ('M-1','DGDA-Drugs','M-PUB','ok', now() - interval '2 hour');
             """);
-        String[][] hidden = {{"2", "M-PEND", "Hushpend"}, {"3", "M-ENG", "Husheng"}, {"4", "M-ISS", "Hushiss"}, {"5", "M-BACK", "Hushback"},
-            {"6", "M-REM", "Hushrem"}, {"7", "M-DIS", "Hushdis"}};
-        String suffix = "PEIBRD";
+        String[][] hidden = FIXTURES;
+        String suffix = SUFFIX;
         for (int k = 0; k < hidden.length; k++) {
             String n = hidden[k][0], id = hidden[k][1], trade = hidden[k][2], name = "Secretolin-" + suffix.charAt(k);
             sql.append("""
@@ -90,7 +104,13 @@ class PublicVisibilityMatrixIntegrationTest {
              ('M-1','DGDA-Drugs','M-ISS','issue',NULL, now() - interval '2 hour'),
              ('M-1','DGDA-Drugs','M-BACK','pending',NULL, now() - interval '2 hour'),
              ('M-1','DGDA-Drugs','M-REM','ok','removed from batch file', now() - interval '2 hour'),
-             ('M-1','DGDA-Drugs','M-DIS','pending',NULL, now() - interval '2 hour');
+             ('M-1','DGDA-Drugs','M-DIS','pending',NULL, now() - interval '2 hour'),
+             ('M-1','DGDA-Drugs','M-NF','issue','not found at source', now() - interval '2 hour'),
+             ('M-1','DGDA-Drugs','M-FAIL','pending',NULL, now() - interval '2 hour');
+            INSERT INTO ops.stage_result (batch_id, concept_id, stage, status, note) VALUES
+             ('M-1','M-NF','dgda','fail','not found at source'),
+             ('M-1','M-FAIL','clinical','fail','no clinical drug for the strength'),
+             ('M-1','M-PEND','clinical','warn','route assumed');
             INSERT INTO ops.review_decision (batch_id, concept_id, decision, note, reviewer_email, reviewer_role, decided_at) VALUES
              ('M-1','M-ENG','ok','','eng@example.org','engineer', now() - interval '1 hour'),
              ('M-1','M-ISS','issue','Strength looks wrong','pharm@example.org','pharmacist', now() - interval '1 hour'),
@@ -109,11 +129,11 @@ class PublicVisibilityMatrixIntegrationTest {
 
     @Autowired WebTestClient web;
 
-    private String get(String uri, Object... vars) {
+    String get(String uri, Object... vars) {
         return new String(web.get().uri(uri, vars).exchange().expectStatus().isOk().expectBody().returnResult().getResponseBody(),
             StandardCharsets.UTF_8);
     }
-    private static void clean(String body, String where) {
+    static void clean(String body, String where) {
         for (String m : MARKERS) assertThat(body).as(where + " leaks " + m).doesNotContain(m);
         assertThat(body).as(where).doesNotContain("reviewStatus", "\"issue\"", "\"changed\"", "dismiss", "@example.org");
     }
@@ -124,7 +144,7 @@ class PublicVisibilityMatrixIntegrationTest {
         clean(get("/v1/search?q={q}", "secretolinp"), "search suggestion");
         web.get().uri("/v1/search?q={q}", "hush").exchange().expectBody()
             .jsonPath("$.data.counts.substances").isEqualTo(0)
-            .jsonPath("$.data.products.length()").isEqualTo(6)
+            .jsonPath("$.data.products.length()").isEqualTo(9)
             .jsonPath("$.data.products[*].hidden").value(v -> assertThat(v.toString()).doesNotContain("false"));
         // no hidden record is ever an approved search row; Hushdis (dismissed) is a stub like the others
         assertThat(get("/v1/search?q={q}", "hush")).doesNotContain("\"status\":\"approved\"");
@@ -136,7 +156,7 @@ class PublicVisibilityMatrixIntegrationTest {
         for (String id : HIDDEN) {
             String detail = get("/v1/products/{id}", id);
             clean(detail, "product " + id);
-            assertThat(detail).contains("\"hidden\":true", "\"batchId\":\"M-1\"");
+            assertThat(detail).contains("\"hidden\":true", id.equals("M-NOB") ? "\"batchId\":null" : "\"batchId\":\"M-1\"");
             clean(get("/v1/products/{id}/interactions", id), "interactions " + id);
         }
         assertThat(get("/v1/products/{id}", "M-REM")).contains("\"status\":\"removed\"");
@@ -151,13 +171,14 @@ class PublicVisibilityMatrixIntegrationTest {
     }
 
     @Test void clinicalDrugs() {
-        for (int n = 2; n <= 7; n++)
-            web.get().uri("/v1/clinical-drugs/BDC-00090" + n).exchange().expectStatus().isNotFound();
+        for (String[] f : FIXTURES)
+            web.get().uri("/v1/clinical-drugs/BDC-00090" + f[0]).exchange().expectStatus().isNotFound();
         clean(get("/v1/clinical-drugs/{id}", "BDC-000901"), "BDC-000901");
     }
 
     @Test void substancesAndTheirInteractions() {
-        for (int n = 2; n <= 7; n++) {
+        for (String[] f : FIXTURES) {
+            String n = f[0];
             String stub = get("/v1/substances/{id}", "BDS-00090" + n);
             assertThat(stub).contains("\"hidden\":true").doesNotContain("reviewStatus", "codes", "products", "DDInter", "XM9M0");
             String list = get("/v1/substances/{id}/interactions", "BDS-00090" + n);
@@ -169,10 +190,10 @@ class PublicVisibilityMatrixIntegrationTest {
             .jsonPath("$.data.products[*].reviewStatus").value(v -> assertThat((List<?>) v).isNotEmpty().allMatch("ok"::equals));
         clean(pubolin.replace("\"reviewStatus\":\"ok\"", ""), "Pubolin");
         String items = get("/v1/substances/{id}/interactions", "BDS-000901");
-        clean(items.replaceAll("SECRET-(TEXT|MGMT)-\\d", "DDINTER-OWN-TEXT"), "Pubolin's pairs");   // DDInter's own text for DDInter's own pairs is public (P9)
+        clean(items.replaceAll("SECRET-(TEXT|MGMT)-\\w", "DDINTER-OWN-TEXT"), "Pubolin's pairs");   // DDInter's own text for DDInter's own pairs is public (P9)
         assertThat(items).doesNotContain("\"state\":\"reviewed\"");
         web.get().uri("/v1/substances/BDS-000901/interactions").exchange().expectBody()
-            .jsonPath("$.data.items.length()").isEqualTo(6)
+            .jsonPath("$.data.items.length()").isEqualTo(9)
             .jsonPath("$.data.items[*].partnerBdsId").value(v -> assertThat(v.toString()).doesNotContain("BDS-"))
             .jsonPath("$.data.items[*].pairReview.state").value(v -> assertThat(v.toString()).doesNotContain("issue"))
             // §7.4: Pubolin + Secretolin-P has a current senior review, but its partner is not public: never served
@@ -198,13 +219,15 @@ class PublicVisibilityMatrixIntegrationTest {
 
     @Test void checker() {
         String body = new String(web.post().uri("/v1/interactions/check").contentType(MediaType.APPLICATION_JSON)
-            .bodyValue(Map.of("conceptIds", List.of("M-PUB", "M-PEND", "M-ENG", "M-ISS", "M-BACK", "M-REM", "M-DIS"))).exchange()
+            .bodyValue(Map.of("conceptIds", List.of("M-PUB", "M-PEND", "M-ENG", "M-ISS", "M-BACK", "M-REM", "M-DIS", "M-NF", "M-FAIL",
+                "M-NOB"))).exchange()
             .expectStatus().isOk().expectBody()
             .jsonPath("$.data.products.length()").isEqualTo(1)
             .jsonPath("$.data.alerts.length()").isEqualTo(0)
-            .jsonPath("$.data.notReviewed.length()").isEqualTo(6)
+            .jsonPath("$.data.notReviewed.length()").isEqualTo(9)
             .jsonPath("$.data.notReviewed[5].conceptId").isEqualTo("M-DIS")
-            .jsonPath("$.data.summary.medicines").isEqualTo(7)
+            .jsonPath("$.data.summary.medicines").isEqualTo(10)
+            .jsonPath("$.data.summary.notApproved").isEqualTo(0)
             .returnResult().getResponseBody(), StandardCharsets.UTF_8);
         clean(body, "checker");
     }

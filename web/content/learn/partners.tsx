@@ -7,7 +7,7 @@ import ExampleMarker from "@/components/ui/ExampleMarker";
 import NoDataChip from "@/components/ui/NoDataChip";
 import ReviewStatus from "@/components/ui/ReviewStatus";
 import Severity from "@/components/ui/Severity";
-import { FULL_TEXT, LEARN_BOARD, NOT_REVIEWED, NO_DATA_SENTENCE } from "@/lib/copy";
+import { FULL_TEXT, LEARN_BOARD, NOT_REVIEWED, NO_DATA_SENTENCE, SHOW_COPY } from "@/lib/copy";
 import { P, PILOT_SNAPSHOT as S, type PilotId, substanceNamed, substancesOf } from "./pilot-snapshot";
 
 const H = 2;
@@ -28,6 +28,7 @@ export const ENDPOINTS: Endpoint[] = [
   { method: "GET", path: "/v1/clinical-drugs/{bdcId}", what: "A clinical drug, its ingredients and its approved brands", access: ["Public", "All"] },
   { method: "POST", path: "/v1/interactions/check", what: "Checks a list of products: alerts, duplicates, noData, notReviewed", access: ["Public", "All"] },
   { method: "GET", path: "/v1/stats", what: "Counts, and each batch's records by trade name and public status", access: ["Public"] },
+  { method: "GET", path: "/v1/public-mode", what: SHOW_COPY.learnApiPublicMode, access: ["Public"] },
   { method: "GET", path: "/v1/batches", what: "All batches, newest first", access: ["Reviewer"] },
   { method: "GET", path: "/v1/batches/{batchId}", what: "Every record with extracted data, raw DGDA JSON, stage results and review state", access: ["Reviewer"] },
   { method: "GET", path: "/v1/batches/{batchId}/report", what: "Stage counts, review progress, warnings, the last 5 runs, change since the previous run", access: ["Reviewer"] },
@@ -69,7 +70,7 @@ const napa = S.records[P.napa];
 const [acet] = substancesOf(P.napa);
 const warfS = substanceNamed("Warfarin"), aspS = substanceNamed("Acetylsalicylic acid"), dompS = substanceNamed("Domperidone");
 const side = (id: typeof P.warfarin | typeof P.aspirin | typeof P.domperidone, s: typeof warfS) =>
-  ({ conceptId: id, tradeName: S.records[id].tradeName, bdsId: s.bdsId, name: s.name, routeScope: s.entries[0]?.route ?? null });
+  ({ conceptId: id, tradeName: S.records[id].tradeName, bdsId: s.bdsId, name: s.name, routeScope: s.entries[0]?.route ?? null, review: null });
 const ref = (s: typeof warfS) => s.entries.map((e) => ({ ddinterId: e.id, name: s.name, routeScope: e.route, routeAssumed: false }));
 const CHECK_IDS = [P.warfarin, P.aspirin, P.domperidone] as const;
 const synergy = S.actionExamples.find((e) => e.action === "synergy")!;
@@ -86,16 +87,18 @@ export const PRODUCT_REVIEWER = envelope({
 export const CHECK_REQUEST = { conceptIds: [...CHECK_IDS] };
 const NONE = { major: 0, moderate: 0, minor: 0, unknown: 0 };
 export const CHECK_PUBLIC = envelope({
-  summary: { medicines: 3, totalPairs: 0, checkedPairs: 0, alertPairs: 0, noInteractionPairs: 0, notCheckedPairs: 0, notReviewed: 3, bySeverity: NONE },
+  summary: { medicines: 3, totalPairs: 0, checkedPairs: 0, alertPairs: 0, noInteractionPairs: 0, notCheckedPairs: 0, notReviewed: 3, bySeverity: NONE,
+    notApproved: 0 },
   products: [], alerts: [], noInteraction: [], notChecked: [], duplicates: [], noData: [],
   notReviewed: CHECK_IDS.map((id) => ({ conceptId: id, tradeName: S.records[id].tradeName })),
 });
 export const CHECK_REVIEWER = envelope({
   summary: { medicines: 3, totalPairs: 3, checkedPairs: 1, alertPairs: 1, noInteractionPairs: 0, notCheckedPairs: 2, notReviewed: 0,
-    bySeverity: { ...NONE, major: 1 } },
+    bySeverity: { ...NONE, major: 1 }, notApproved: 3 },
   products: CHECK_IDS.map((id, i) => {
     const s = [warfS, aspS, dompS][i];
-    return { conceptId: id, tradeName: S.records[id].tradeName, substances: [{ bdsId: s.bdsId, name: s.name, coverage: s.coverage, ddinter: ref(s) }] };
+    return { conceptId: id, tradeName: S.records[id].tradeName, substances: [{ bdsId: s.bdsId, name: s.name, coverage: s.coverage, ddinter: ref(s) }],
+      review: null };
   }),
   alerts: [{
     severity: "major", a: side(P.warfarin, warfS), b: side(P.aspirin, aspS), actions: ["synergy"],
@@ -128,14 +131,28 @@ function Code({ label, value }: { label: string; value: unknown }) {
   return <pre className={styles.codePre} tabIndex={0} role="region" aria-label={label}>{json(value)}</pre>;
 }
 
+/** §6.10: the rows whose "What it returns" changes in show mode, by path. */
+const SHOW_WHAT: Record<string, string> = {
+  "/v1/products/{conceptId}": SHOW_COPY.learnApiProduct,
+  "/v1/search?q=&page=": SHOW_COPY.learnApiSearch,
+  "/v1/products/suggest?q=&exclude=": SHOW_COPY.learnApiSuggest,
+  "/v1/products/{conceptId}/interactions?page=": SHOW_COPY.learnApiPairs,
+  "/v1/clinical-drugs/{bdcId}": SHOW_COPY.learnApiClinical,
+};
+/** The endpoint table as the API's mode describes it (§6.8, §6.10); the set of rows is the same in both modes. */
+export const endpointsFor = (show: boolean): Endpoint[] => (show ? ENDPOINTS.map((e) => ({ ...e, what: SHOW_WHAT[e.path] ?? e.what })) : ENDPOINTS);
+
 /** Chapter 8 "For partners" (Board L; §1.6 items 13 and 16, §6.8). */
 export default function PartnersChapter({ ctx }: { ctx: LearnContext }) {
   // An approval-state sentence prints only for a record /v1/stats reports as not approved, never from a fallback (§6.8).
-  const said = (id: PilotId) => ctx.item(id) !== null && ctx.pending(id);
+  // In show mode (§6.10) the hidden-stub sentences are evaluated against `hidden` instead.
+  const said = (id: PilotId) => ctx.item(id) !== null && (ctx.show ? ctx.hidden(id) : ctx.pending(id));
   const napaCaption = ctx.apiStub && said(P.napa);
+  const napaShown = ctx.show && ctx.item(P.napa) !== null && !ctx.hidden(P.napa) && ctx.pending(P.napa);
   const noneApproved = CHECK_IDS.every(said);
+  const checkShown = ctx.show && CHECK_IDS.every((id) => ctx.item(id) !== null && !ctx.hidden(id) && ctx.pending(id));
   return (
-    <Chapter slug="partners" level={1}>
+    <Chapter slug="partners" level={1} show={ctx.show}>
       <Section id="api-status" h={H}>
         <Banner tone="info" title="The API runs on the internal network today"
           body="The website calls it privately. Partner API keys, usage metering, OpenAPI docs and monthly releases are planned. The endpoint paths below come from the API controllers; the response bodies shown on this page are illustrative and their field names may change." />
@@ -147,7 +164,7 @@ export default function PartnersChapter({ ctx }: { ctx: LearnContext }) {
             <caption>All endpoints under /v1, from the API controllers</caption>
             <thead><tr><th scope="col">Method and path</th><th scope="col">What it returns</th><th scope="col">Access</th></tr></thead>
             <tbody>
-              {ENDPOINTS.map((e) => (
+              {endpointsFor(ctx.show).map((e) => (
                 <tr key={`${e.method} ${e.path}`}>
                   <td><span className={styles.method}>{e.method}</span> <span className="mono">{e.path}</span></td>
                   <td>{e.what}</td>
@@ -158,9 +175,9 @@ export default function PartnersChapter({ ctx }: { ctx: LearnContext }) {
           </table>
         </ScrollRegion>
         <dl className={styles.dgRead}>
-          <div><dt>Public</dt><dd>The default. Approved records only; anything else is reported as not reviewed.</dd></div>
+          <div><dt>Public</dt><dd>{ctx.show ? SHOW_COPY.learnAccessPublic : "The default. Approved records only; anything else is reported as not reviewed."}</dd></div>
           <div><dt>All</dt><dd><span className="mono">scope=all</span> with the internal token, used only by integration tests. Reviewers read unreviewed data through <span className="mono">/v1/review/*</span>.</dd></div>
-          <div><dt>Reviewer</dt><dd>Batch evidence, including extracted data no pharmacist has checked yet, is readable only by signed-in reviewers. Reviewer emails are never shown on public pages or in public API answers. Readers and the public API see only the id, trade name and review status of an unapproved product.</dd></div>
+          <div><dt>Reviewer</dt><dd>Batch evidence, including extracted data no pharmacist has checked yet, is readable only by signed-in reviewers. Reviewer emails are never shown on public pages or in public API answers. {ctx.show ? SHOW_COPY.learnAccessReviewer : "Readers and the public API see only the id, trade name and review status of an unapproved product."}</dd></div>
           <div><dt>Token</dt><dd>Writes need the internal token. A wrong token is refused with 401.</dd></div>
         </dl>
       </Section>
@@ -185,6 +202,7 @@ export default function PartnersChapter({ ctx }: { ctx: LearnContext }) {
         </div>
         <div id="prod-public">
           <Code label="Public response for Napa" value={PRODUCT_PUBLIC} />
+          {napaShown && <p className={styles.figcap}>{SHOW_COPY.learnNapaCaption}</p>}
           {napaCaption && <p className={styles.figcap}>Napa is not approved yet, so a public caller gets its id, trade name and status "not_reviewed", with <span className="mono">hidden: true</span>. Show "{NOT_REVIEWED}". Never show "not found".</p>}
         </div>
         <div id="prod-all">
@@ -204,6 +222,7 @@ export default function PartnersChapter({ ctx }: { ctx: LearnContext }) {
         <Code label="Request body" value={CHECK_REQUEST} />
         <div id="chk-public">
           <Code label="Public check response" value={CHECK_PUBLIC} />
+          {checkShown && <p className={styles.figcap}>{SHOW_COPY.learnCheckCaption}</p>}
           {noneApproved && <p className={styles.figcap}>None of the three is approved, so a public check lists all three in <span className="mono">notReviewed</span> and checks nothing. An empty <span className="mono">alerts</span> here does not mean the medicines are safe together.</p>}
         </div>
         <div id="chk-all">
@@ -220,6 +239,7 @@ export default function PartnersChapter({ ctx }: { ctx: LearnContext }) {
           <li><code>coverage: "none"</code><br /><code>noData[]</code><div className={styles.show}><NoDataChip label="No interaction data" /><span>Show in full: "{NO_DATA_SENTENCE}" Count its pairs as not checked.</span></div></li>
           <li><code>severity: "unknown"</code><div className={styles.show}><Severity level="unknown" /><span>{LEARN_BOARD.unclassifiedMust}</span></div></li>
           <li><code>hidden: true</code>, <code>status "not_reviewed"</code> or <code>"removed"</code><br /><code>notReviewed[]</code><div className={styles.show}><ReviewStatus status="pending" /><span>Never "not found", never "no data".</span></div></li>
+          {ctx.show && <li><code>review: "not_reviewed"</code> or <code>"problem"</code><div className={styles.show}><ReviewStatus status="pending" /><span>{SHOW_COPY.learnMustReview}</span></div></li>}
           <li><code>routeAssumed: true</code><div className={styles.show}><span>Say the route was assumed: the product's own route had no DDInter entry, so the systemic entry was used.</span></div></li>
           <li><code>interaction: null</code><br /><code>management: null</code><div className={styles.show}><span>DDInter has no text for this part. Leave it out; never print "None".</span></div></li>
           <li><code>source: "DDInter 2.0"</code><div className={styles.show}><span>Attribute the text. If you shorten it, say "{FULL_TEXT}" and link to it.</span></div></li>

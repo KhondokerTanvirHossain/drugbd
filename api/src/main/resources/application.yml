@@ -8,3 +8,6 @@ server.port: 8080
 management.endpoints.web.exposure.include: health
 # Shared with the web server; writes and scope=all reads need it. Unset or shorter than 32 characters: the API won't start.
 bddrug.internal-api-token: ${INTERNAL_API_TOKEN:}
+# Spec §7.4.1 (D74): true shows every visible record with its review label; unset, empty or false shows approved records
+# only. Any other value stops the API at start.
+bddrug.public-shows-unreviewed: ${PUBLIC_SHOWS_UNREVIEWED:}

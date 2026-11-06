@@ -3,6 +3,8 @@ import com.niramoy.bddrug.application.port.NameIndexPort;
 import com.niramoy.bddrug.application.port.SearchPort;
 import com.niramoy.bddrug.application.port.SuggestPort;
 import com.niramoy.bddrug.domain.DdinterCode;
+import com.niramoy.bddrug.domain.PublicMode;
+import com.niramoy.bddrug.domain.PublicReview;
 import com.niramoy.bddrug.domain.SearchResult;
 import com.niramoy.bddrug.domain.SuggestRow;
 import org.springframework.r2dbc.core.DatabaseClient;
@@ -12,24 +14,29 @@ import reactor.core.publisher.Mono;
 import java.util.*;
 
 /**
- * Search SQL (§7.4). Public status only through ReviewSql.LATEST_PUBLIC. Every LIKE escapes %, _ and \ (likePattern), so
- * a query is a literal, case-insensitive substring (DAR: a prefix). Stubs match trade name and DAR only (D16).
- * Also the spelling index's names (§7.4 "Suggestion"): public trade names and public substances' names, never a stub's.
+ * Search SQL (§7.4). Visibility only through ReviewSql.latest under the public mode (§7.4.1), labels through ReviewSql.label.
+ * Every LIKE escapes %, _ and \ (likePattern), so a query is a literal, case-insensitive substring (DAR: a prefix). Stubs
+ * (hidden products) match trade name and DAR only (D16). Also the spelling index's names (§7.4 "Suggestion"): visible
+ * trade names and visible substances' names, never a stub's.
  */
 @Component
 public class R2dbcSearchAdapter implements SearchPort, NameIndexPort, SuggestPort {
     /** Java " ESCAPE '\\'" is the SQL text ESCAPE '\', as in R2dbcProductAdapter (standard_conforming_strings on). */
     static final String ESC = " ESCAPE '\\'";
-    /** Public substances with their public product count (§7.4: "a substance is public only when at least one public product carries it"). */
+    /**
+     * Visible substances with their visible (n) and approved (a) product counts (§7.4.1: "a substance is visible when at
+     * least one visible product carries it").
+     */
     static final String PUBSUB = """
-        pubsub AS (SELECT x.bds_id, count(DISTINCT bp.concept_id) AS n FROM curated.brand_product bp
+        pubsub AS (SELECT x.bds_id, count(DISTINCT bp.concept_id) AS n,
+                          count(DISTINCT bp.concept_id) FILTER (WHERE l.approved) AS a FROM curated.brand_product bp
                    JOIN latest l ON l.concept_id = bp.concept_id AND l.pub
                    JOIN curated.brand_product_ingredient bpi ON bpi.concept_id = bp.concept_id
                    JOIN curated.substance_code x ON x.system = 'ICD11_XM' AND x.code = bpi.xm_code
                    GROUP BY x.bds_id)""";
     static final String SUBSTANCE_MATCH = "(lower(s.preferred_name) LIKE :p" + ESC +
         " OR EXISTS (SELECT 1 FROM curated.substance_name sn WHERE sn.bds_id = s.bds_id AND lower(sn.name) LIKE :p" + ESC + "))";
-    static final String SHITS = "shits AS (SELECT s.bds_id, s.preferred_name, ps.n FROM curated.substance s " +
+    static final String SHITS = "shits AS (SELECT s.bds_id, s.preferred_name, ps.n, ps.a FROM curated.substance s " +
         "JOIN pubsub ps ON ps.bds_id = s.bds_id WHERE " + SUBSTANCE_MATCH + ")";
     static final String PRODUCT_MATCH = "(lower(bp.trade_name) LIKE :p" + ESC + " OR lower(bp.dar_number) LIKE :prefix" + ESC +
         " OR lower(bp.generic_content_raw) LIKE :p" + ESC +
@@ -38,27 +45,34 @@ public class R2dbcSearchAdapter implements SearchPort, NameIndexPort, SuggestPor
         " JOIN curated.substance s ON s.bds_id = x.bds_id WHERE bpi.concept_id = bp.concept_id AND " + SUBSTANCE_MATCH + "))";
     static final String PHITS = "phits AS (SELECT bp.* FROM curated.brand_product bp JOIN latest l ON l.concept_id = bp.concept_id AND l.pub " +
         "WHERE " + PRODUCT_MATCH + ")";
-    static final String STUBS = "stubs AS (SELECT bp.concept_id, bp.trade_name FROM curated.brand_product bp " +
+    static final String STUBS = "stubs AS (SELECT bp.concept_id, bp.trade_name, l.note FROM curated.brand_product bp " +
         "LEFT JOIN latest l ON l.concept_id = bp.concept_id WHERE NOT coalesce(l.pub, false) " +
         "AND (lower(bp.trade_name) LIKE :p" + ESC + " OR lower(bp.dar_number) LIKE :prefix" + ESC + "))";
     static final String NAME_RANK = "coalesce(array_position(ARRAY['dgda_content','rxnorm','ddinter','icd11'], sn.name_type), 5)";
     static final List<String> OTHER_ORDER = List.of("rxnorm", "icd11", "ddinter");
 
     private final DatabaseClient db;
-    public R2dbcSearchAdapter(DatabaseClient db) { this.db = db; }
+    private final PublicMode mode;
+    /** "WITH latest AS (…)" under the mode. */
+    private final String with;
+    public R2dbcSearchAdapter(DatabaseClient db, PublicMode mode) {
+        this.db = db;
+        this.mode = mode;
+        this.with = "WITH " + ReviewSql.latest(mode);
+    }
 
-    /** Publicly visible names: public products' trade names, public substances' preferred names and synonyms (§7.4). */
+    /** Publicly visible names: visible products' trade names, visible substances' preferred names and synonyms (§7.4.1). */
     private static final String PUBLIC_NAMES = " SELECT bp.trade_name AS name FROM curated.brand_product bp" +
         " JOIN latest l ON l.concept_id = bp.concept_id AND l.pub" +
         " UNION SELECT s.preferred_name FROM curated.substance s JOIN pubsub ps ON ps.bds_id = s.bds_id" +
         " UNION SELECT sn.name FROM curated.substance_name sn JOIN pubsub ps ON ps.bds_id = sn.bds_id";
 
     @Override public Flux<String> publicNames() {
-        return db.sql("WITH " + ReviewSql.LATEST_PUBLIC + ", " + PUBSUB + PUBLIC_NAMES).map(r -> r.get("name", String.class)).all();
+        return db.sql(with + ", " + PUBSUB + PUBLIC_NAMES).map(r -> r.get("name", String.class)).all();
     }
 
     @Override public Mono<Boolean> stillPublic(String name) {
-        return db.sql("WITH " + ReviewSql.LATEST_PUBLIC + ", " + PUBSUB + ", names AS (" + PUBLIC_NAMES + ")" +
+        return db.sql(with + ", " + PUBSUB + ", names AS (" + PUBLIC_NAMES + ")" +
                       " SELECT EXISTS (SELECT 1 FROM names WHERE lower(name) = lower(:n)) AS pub")
             .bind("n", name).map(r -> Boolean.TRUE.equals(r.get("pub", Boolean.class))).one();
     }
@@ -68,23 +82,27 @@ public class R2dbcSearchAdapter implements SearchPort, NameIndexPort, SuggestPor
     }
 
     @Override public Mono<Counts> counts(String term) {
-        return db.sql("WITH " + ReviewSql.LATEST_PUBLIC + ", " + PUBSUB + ", " + SHITS + ", " + PHITS + ", " + STUBS +
+        return db.sql(with + ", " + PUBSUB + ", " + SHITS + ", " + PHITS + ", " + STUBS +
                       " SELECT (SELECT count(*) FROM shits) AS s, (SELECT count(*) FROM phits) AS a, (SELECT count(*) FROM stubs) AS h")
             .bind("p", R2dbcProductAdapter.likePattern(term)).bind("prefix", prefix(term))
             .map(r -> new Counts(r.get("s", Long.class), r.get("a", Long.class), r.get("h", Long.class))).one();
     }
 
-    private record SubRow(String bdsId, String preferredName, long n, String alt) {}
+    private record SubRow(String bdsId, String preferredName, long n, long a, String alt, String review) {}
 
     @Override public Flux<SearchResult.SubstanceHit> substances(String term, int limit, int offset) {
         if (limit == 0) return Flux.empty();
-        return db.sql("WITH " + ReviewSql.LATEST_PUBLIC + ", " + PUBSUB + ", " + SHITS +
-                      " SELECT h.bds_id, h.preferred_name, h.n, (SELECT sn.name || chr(1) || sn.name_type FROM curated.substance_name sn" +
-                      " WHERE sn.bds_id = h.bds_id AND lower(sn.name) LIKE :p" + ESC + " ORDER BY " + NAME_RANK + ", sn.name LIMIT 1) AS alt" +
+        return db.sql(with + ", " + PUBSUB + ", " + SHITS +
+                      " SELECT h.bds_id, h.preferred_name, h.n, h.a, (SELECT sn.name || chr(1) || sn.name_type FROM curated.substance_name sn" +
+                      " WHERE sn.bds_id = h.bds_id AND lower(sn.name) LIKE :p" + ESC + " ORDER BY " + NAME_RANK + ", sn.name LIMIT 1) AS alt," +
+                      " (SELECT " + ReviewSql.carriedLabel(ReviewSql.label("l")) + " FROM curated.substance_code x" +
+                      "  JOIN curated.brand_product_ingredient bpi ON bpi.xm_code = x.code" +
+                      "  JOIN latest l ON l.concept_id = bpi.concept_id AND l.pub" +
+                      "  WHERE x.system = 'ICD11_XM' AND x.bds_id = h.bds_id) AS review" +
                       " FROM shits h ORDER BY lower(h.preferred_name), h.bds_id LIMIT :limit OFFSET :offset")
             .bind("p", R2dbcProductAdapter.likePattern(term)).bind("limit", limit).bind("offset", offset)
             .map(r -> new SubRow(r.get("bds_id", String.class), r.get("preferred_name", String.class), r.get("n", Long.class),
-                r.get("alt", String.class)))
+                r.get("a", Long.class), r.get("alt", String.class), r.get("review", String.class)))
             .all().collectList()
             .flatMapMany(rows -> rows.isEmpty() ? Flux.empty() : details(rows, term));
     }
@@ -118,13 +136,13 @@ public class R2dbcSearchAdapter implements SearchPort, NameIndexPort, SuggestPor
             dd.sort(DdinterCode.ID_ORDER);
             return new SearchResult.SubstanceHit(row.bdsId(), row.preferredName(), matchedName, matchedType, List.copyOf(others),
                 t.getT3().getOrDefault(row.bdsId(), "not_run"), List.copyOf(dd), new SearchResult.KeyCodes(List.copyOf(atc), List.copyOf(rxcui)),
-                row.n());
+                row.a(), row.n(), row.review());
         }));
     }
 
     @Override public Flux<SearchResult.ProductHit> approved(String term, int limit, int offset) {
         if (limit == 0) return Flux.empty();
-        return db.sql("WITH " + ReviewSql.LATEST_PUBLIC + ", " + PHITS +
+        return db.sql(with + ", " + PHITS +
                       " SELECT bp.concept_id, bp.trade_name, bp.dar_number, bp.company, bp.dosage_form, bp.generic_content_raw, bp.bdc_id," +
                       " cd.display_name, CASE WHEN lower(bp.trade_name) LIKE :p" + ESC + " THEN 'trade_name'" +
                       " WHEN lower(bp.dar_number) LIKE :prefix" + ESC + " THEN 'dar'" +
@@ -132,9 +150,10 @@ public class R2dbcSearchAdapter implements SearchPort, NameIndexPort, SuggestPor
                       " (SELECT s.preferred_name FROM curated.brand_product_ingredient bpi" +
                       "  JOIN curated.substance_code x ON x.system = 'ICD11_XM' AND x.code = bpi.xm_code" +
                       "  JOIN curated.substance s ON s.bds_id = x.bds_id WHERE bpi.concept_id = bp.concept_id AND " + SUBSTANCE_MATCH +
-                      "  ORDER BY s.preferred_name LIMIT 1) AS via" +
-                      " FROM phits bp LEFT JOIN curated.clinical_drug cd ON cd.bdc_id = bp.bdc_id" +
-                      " ORDER BY lower(bp.trade_name), bp.concept_id LIMIT :limit OFFSET :offset")
+                      "  ORDER BY s.preferred_name LIMIT 1) AS via, " + ReviewSql.label("l") + " AS review" +
+                      " FROM phits bp JOIN latest l ON l.concept_id = bp.concept_id" +
+                      " LEFT JOIN curated.clinical_drug cd ON cd.bdc_id = bp.bdc_id" +
+                      " ORDER BY NOT l.approved, lower(bp.trade_name), bp.concept_id LIMIT :limit OFFSET :offset")
             .bind("p", R2dbcProductAdapter.likePattern(term)).bind("prefix", prefix(term)).bind("limit", limit).bind("offset", offset)
             .map(r -> {
                 String on = r.get("matched_on", String.class);
@@ -144,29 +163,32 @@ public class R2dbcSearchAdapter implements SearchPort, NameIndexPort, SuggestPor
                     case "generic" -> r.get("generic_content_raw", String.class);
                     default -> r.get("via", String.class);
                 };
-                String bdc = r.get("bdc_id", String.class);
+                String bdc = r.get("bdc_id", String.class), review = r.get("review", String.class);
                 return new SearchResult.ProductHit(r.get("concept_id", String.class), r.get("trade_name", String.class),
                     r.get("dar_number", String.class), r.get("company", String.class), r.get("dosage_form", String.class),
                     r.get("generic_content_raw", String.class),
-                    bdc == null ? null : new SearchResult.ClinicalRef(bdc, r.get("display_name", String.class)), on, name, "approved");
+                    bdc == null ? null : new SearchResult.ClinicalRef(bdc, r.get("display_name", String.class)), on, name,
+                    PublicReview.approved(review) ? "approved" : "not_reviewed", review);
             })
             .all();
     }
 
     @Override public Flux<SearchResult.StubHit> stubs(String term, int limit, int offset) {
         if (limit == 0) return Flux.empty();
-        return db.sql("WITH " + ReviewSql.LATEST_PUBLIC + ", " + STUBS +
-                      " SELECT concept_id, trade_name FROM stubs ORDER BY lower(trade_name), concept_id LIMIT :limit OFFSET :offset")
+        return db.sql(with + ", " + STUBS +
+                      " SELECT concept_id, trade_name, " + ReviewSql.stubStatus("stubs", mode) + " AS status FROM stubs" +
+                      " ORDER BY lower(trade_name), concept_id LIMIT :limit OFFSET :offset")
             .bind("p", R2dbcProductAdapter.likePattern(term)).bind("prefix", prefix(term)).bind("limit", limit).bind("offset", offset)
-            .map(r -> new SearchResult.StubHit(r.get("concept_id", String.class), r.get("trade_name", String.class), "not_reviewed"))
+            .map(r -> new SearchResult.StubHit(r.get("concept_id", String.class), r.get("trade_name", String.class),
+                r.get("status", String.class)))
             .all();
     }
 
     @Override public Flux<SuggestRow> suggest(String term, List<String> exclude, int limit) {
         String[] ex = exclude.toArray(String[]::new);
         String p = R2dbcProductAdapter.likePattern(term), pre = prefix(term);
-        Flux<Object[]> approved = db.sql("WITH " + ReviewSql.LATEST_PUBLIC +
-                " SELECT bp.concept_id, bp.trade_name, bp.dosage_form, cd.display_name," +
+        Flux<Object[]> approved = db.sql(with +
+                " SELECT bp.concept_id, bp.trade_name, bp.dosage_form, cd.display_name, " + ReviewSql.label("l") + " AS review," +
                 " (lower(bp.trade_name) LIKE :p" + ESC + " OR lower(bp.dar_number) LIKE :prefix" + ESC + ") AS direct," +
                 " lower(bp.trade_name) LIKE :prefix" + ESC + " AS starts," +
                 " (SELECT n.name || chr(1) || s.preferred_name FROM curated.brand_product_ingredient bpi" +
@@ -179,27 +201,38 @@ public class R2dbcSearchAdapter implements SearchPort, NameIndexPort, SuggestPor
                 " FROM curated.brand_product bp JOIN latest l ON l.concept_id = bp.concept_id AND l.pub" +
                 " LEFT JOIN curated.clinical_drug cd ON cd.bdc_id = bp.bdc_id" +
                 " WHERE NOT (bp.concept_id = ANY(:ex)) AND " + PRODUCT_MATCH +
-                " ORDER BY starts DESC, lower(bp.trade_name), bp.concept_id LIMIT :limit")
+                " ORDER BY starts DESC, NOT l.approved, lower(bp.trade_name), bp.concept_id LIMIT :limit")
             .bind("p", p).bind("prefix", pre).bind("ex", ex).bind("limit", limit)
             .map(r -> {
                 String via = Boolean.TRUE.equals(r.get("direct", Boolean.class)) ? null : r.get("via", String.class);
                 String[] v = via == null ? null : via.split("\u0001", 2);
-                return new Object[]{Boolean.TRUE.equals(r.get("starts", Boolean.class)), 0,
+                String review = r.get("review", String.class);
+                boolean ok = PublicReview.approved(review);
+                return new Object[]{Boolean.TRUE.equals(r.get("starts", Boolean.class)), ok ? 0 : 1,
                     new SuggestRow(r.get("concept_id", String.class), r.get("trade_name", String.class), r.get("dosage_form", String.class),
-                        "approved", r.get("display_name", String.class), v == null ? null : new SuggestRow.Matched(v[0], v[1]))};
+                        ok ? "approved" : "not_reviewed", r.get("display_name", String.class),
+                        v == null ? null : new SuggestRow.Matched(v[0], v[1]), review)};
             }).all();
-        Flux<Object[]> hidden = db.sql("WITH " + ReviewSql.LATEST_PUBLIC +
+        // Approved-only mode lists hidden rows by trade name and DAR only, with no clinical data and no label (D16). Show mode
+        // never suggests a hidden product (§7.4.1): every row it suggests is visible and in full.
+        if (mode.showsUnreviewed()) return sorted(approved, limit);
+        Flux<Object[]> hidden = db.sql(with +
                 " SELECT bp.concept_id, bp.trade_name, bp.dosage_form, lower(bp.trade_name) LIKE :prefix" + ESC + " AS starts" +
                 " FROM curated.brand_product bp LEFT JOIN latest l ON l.concept_id = bp.concept_id" +
                 " WHERE NOT coalesce(l.pub, false) AND NOT (bp.concept_id = ANY(:ex))" +
                 " AND (lower(bp.trade_name) LIKE :p" + ESC + " OR lower(bp.dar_number) LIKE :prefix" + ESC + ")" +
                 " ORDER BY starts DESC, lower(bp.trade_name), bp.concept_id LIMIT :limit")
             .bind("p", p).bind("prefix", pre).bind("ex", ex).bind("limit", limit)
-            .map(r -> new Object[]{Boolean.TRUE.equals(r.get("starts", Boolean.class)), 1,
+            .map(r -> new Object[]{Boolean.TRUE.equals(r.get("starts", Boolean.class)), 2,
                 new SuggestRow(r.get("concept_id", String.class), r.get("trade_name", String.class), r.get("dosage_form", String.class),
-                    "not_reviewed", null, null)})
+                    "not_reviewed", null, null, null)})
             .all();
-        return Flux.concat(approved, hidden).collectList().flatMapMany(rows -> Flux.fromStream(rows.stream()
+        return sorted(Flux.concat(approved, hidden), limit);
+    }
+
+    /** Trade-name prefix first, then approved, then other visible, then hidden rows, then by name (SuggestPort). */
+    private static Flux<SuggestRow> sorted(Flux<Object[]> all, int limit) {
+        return all.collectList().flatMapMany(rows -> Flux.fromStream(rows.stream()
             .sorted(Comparator.comparing((Object[] o) -> !(Boolean) o[0]).thenComparingInt(o -> (Integer) o[1])
                 .thenComparing(o -> ((SuggestRow) o[2]).tradeName().toLowerCase(Locale.ROOT)))
             .limit(limit).map(o -> (SuggestRow) o[2])));

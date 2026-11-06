@@ -5,7 +5,9 @@ import ReviewStatus from "@/components/ui/ReviewStatus";
 import Severity from "@/components/ui/Severity";
 import { PUBLIC_BOARD, PUBLIC_NEW, fill } from "@/lib/copy";
 import type { CheckResult } from "@/lib/public-types";
-import { LANDING } from "@/lib/public-copy";
+import type { PublicMode } from "@/lib/public-mode";
+import UnreviewedCaution from "@/components/ui/UnreviewedCaution";
+import { landingCopy } from "./landing-copy";
 import { fillNodes } from "@/lib/review-copy";
 import { formatCount, type SiteStats } from "@/lib/stats";
 import { REGISTER_PRODUCTS } from "@/content/site";
@@ -14,7 +16,7 @@ import styles from "./landing.module.css";
 const Mono = ({ children }: { children: ReactNode }) => <span className="mono">{children}</span>;
 
 /** The live pilot stat (§6.1): one batch in review names it; several give their count; none leaves the stat out. */
-function PilotStat({ stats }: { stats: SiteStats }) {
+function PilotStat({ stats, LANDING }: { stats: SiteStats; LANDING: ReturnType<typeof landingCopy> }) {
   const inReview = stats.batches.filter((b) => b.status === "in_review");
   if (stats.inReviewProducts === 0 || inReview.length === 0) return null;
   return (
@@ -32,11 +34,22 @@ function responseBody(result: CheckResult): string {
   return JSON.stringify({ success: true, data: result, message: "OK", errors: [], metadata: { timestamp: "…", requestId: "…" } }, null, 2);
 }
 
-export default function Landing({ stats, hero, sample }:
-    { stats: SiteStats | null; hero: ReactNode; sample: { ids: string[]; result: CheckResult | null } }) {
-  const noneApproved = sample.result !== null && sample.result.products.length === 0 && sample.result.notReviewed.length === sample.ids.length;
+/**
+ * §6.1. `mode` is the API's (from /v1/stats, else GET /v1/public-mode); `caution` is true when the hero card renders a
+ * visible record that is not approved (§6.10), so the page opens with UnreviewedCaution.
+ */
+export default function Landing({ stats, hero, sample, mode = "approved_only", caution = false }:
+    { stats: SiteStats | null; hero: ReactNode; sample: { ids: string[]; result: CheckResult | null }; mode?: PublicMode; caution?: boolean }) {
+  const LANDING = landingCopy(mode);
+  // The caption names the sample's state only while it is true: approved-only, all three withheld; show mode, all three
+  // visible and none approved (§6.10).
+  const noneApproved = sample.result !== null && (mode === "show_unreviewed"
+    ? sample.result.notReviewed.length === 0 && sample.result.products.length === sample.ids.length
+      && sample.result.products.every((p) => p.review !== undefined && p.review !== null && p.review !== "approved")
+    : sample.result.products.length === 0 && sample.result.notReviewed.length === sample.ids.length);
   return (
     <>
+      {caution && <UnreviewedCaution />}
       <section className={styles["s-hero"]} aria-labelledby="landing-h1">
         <div>
           {stats && stats.inReviewProducts > 0 && <p className={styles["s-pilot"]}>{fill(LANDING.pilot, { n: formatCount(stats.inReviewProducts) })}</p>}
@@ -56,7 +69,7 @@ export default function Landing({ stats, hero, sample }:
         <div className={styles["s-stat"]}><b>{formatCount(REGISTER_PRODUCTS)}</b><span>{LANDING.statRegister}</span></div>
         <div className={styles["s-stat"]}><b>{LANDING.statCodesN}</b><span>{LANDING.statCodes}</span></div>
         <div className={styles["s-stat"]}><b>{LANDING.statKindsN}</b><span>{LANDING.statKinds}</span></div>
-        {stats && <PilotStat stats={stats} />}
+        {stats && <PilotStat stats={stats} LANDING={LANDING} />}
       </section>
 
       <section className={styles["s-band"]} aria-labelledby="band-aud">

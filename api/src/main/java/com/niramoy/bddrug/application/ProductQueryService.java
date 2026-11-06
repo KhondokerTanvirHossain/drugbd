@@ -9,9 +9,11 @@ import com.niramoy.bddrug.domain.HiddenRecord;
 import com.niramoy.bddrug.domain.LoadedProduct;
 import com.niramoy.bddrug.domain.Product;
 import com.niramoy.bddrug.domain.PublicPairs;
+import com.niramoy.bddrug.domain.PublicMode;
 import com.niramoy.bddrug.domain.PublicProducts;
 import com.niramoy.bddrug.domain.Scope;
 import com.niramoy.bddrug.domain.SuggestRow;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -28,12 +30,19 @@ public class ProductQueryService {
     private final ProductDetailPort details;
     private final ProductInteractionsPort interactions;
     private final SuggestPort suggestions;
+    private final PublicMode mode;
+    @Autowired
     public ProductQueryService(ProductQueryPort port, ProductDetailPort details, ProductInteractionsPort interactions,
-                               SuggestPort suggestions) {
+                               SuggestPort suggestions, PublicMode mode) {
         this.port = port;
         this.details = details;
         this.interactions = interactions;
         this.suggestions = suggestions;
+        this.mode = mode;
+    }
+    public ProductQueryService(ProductQueryPort port, ProductDetailPort details, ProductInteractionsPort interactions,
+                               SuggestPort suggestions) {
+        this(port, details, interactions, suggestions, PublicMode.APPROVED_ONLY);
     }
 
     public Flux<Product> search(String q, int page, Scope scope) {
@@ -45,13 +54,16 @@ public class ProductQueryService {
         return port.search(term, PAGE_SIZE, page * PAGE_SIZE, scope == Scope.PUBLIC);
     }
 
-    /** Public: the PublicProduct, or the §7.4 stub; scope=all: the internal Product. Empty when unknown. */
+    /**
+     * Public: the PublicProduct of a visible product with its label, or the §7.4 stub of a hidden one (decided from the label
+     * alone, §7.4.1); scope=all: the internal Product. Empty when unknown.
+     */
     public Mono<Object> get(String conceptId, Scope scope) {
         return port.findByConceptId(conceptId).flatMap(p -> {
             if (scope != Scope.PUBLIC) return Mono.just((Object) p);
-            if (!"ok".equals(p.reviewStatus()))
+            if (p.review() == null)
                 return port.latestItem(conceptId).map(Optional::of).defaultIfEmpty(Optional.empty())
-                    .map(item -> (Object) stub(p, item.orElse(null)));
+                    .map(item -> (Object) stub(p, item.orElse(null), mode));
             ClinicalDrug cd = p.clinicalDrug();
             return details.facts(conceptId, cd == null ? null : cd.bdcId(), cd == null ? null : cd.route())
                 .map(f -> (Object) PublicProducts.assemble(p, f));
@@ -63,21 +75,30 @@ public class ProductQueryService {
         if (page < 0 || page > INTERACTIONS_PAGE_MAX)
             return Mono.error(new InvalidQueryException("page", "page must be 0-" + INTERACTIONS_PAGE_MAX));
         return port.findByConceptId(conceptId).flatMap(p -> {
-            if (scope == Scope.PUBLIC && !"ok".equals(p.reviewStatus()))
+            if (scope == Scope.PUBLIC && p.review() == null)
                 return port.latestItem(conceptId).map(Optional::of).defaultIfEmpty(Optional.empty())
-                    .map(item -> (Object) stub(p, item.orElse(null)));
+                    .map(item -> (Object) stub(p, item.orElse(null), mode));
             return interactions.facts(conceptId).map(f -> (Object) PublicPairs.computeGroups(conceptId, f.route(), f.mine(), f.partners(),
-                f.rows(), f.complete(), f.reviews(), page));
+                f.rows(), f.complete(), f.reviews(), page).withReview(p.review()));
         });
     }
 
-    /** §6.4: "removed" whatever the last decision when the latest item left the batch file; otherwise "not_reviewed". */
-    public static HiddenRecord.Product stub(Product p, LatestItem item) {
-        String status = item != null && item.removed() ? HiddenRecord.REMOVED : HiddenRecord.NOT_REVIEWED;
+    /**
+     * §6.4: "removed" whatever the last decision when the latest item left the batch file; in show mode "unavailable" when it
+     * is a DGDA load failure (§7.4.1); otherwise "not_reviewed". Approved-only stubs never say "unavailable".
+     */
+    public static HiddenRecord.Product stub(Product p, LatestItem item, PublicMode mode) {
+        String status = item != null && item.removed() ? HiddenRecord.REMOVED
+            : item != null && item.loadFailure() && mode.showsUnreviewed() ? HiddenRecord.UNAVAILABLE : HiddenRecord.NOT_REVIEWED;
         return new HiddenRecord.Product(p.conceptId(), p.tradeName(), status, item == null ? null : item.batchId());
     }
 
-    /** §7.4 P16. Unapproved rows match on trade name and DAR only and carry no clinical data. */
+    public static HiddenRecord.Product stub(Product p, LatestItem item) { return stub(p, item, PublicMode.APPROVED_ONLY); }
+
+    /**
+     * §7.4 P16. Approved-only mode: unapproved rows match on trade name and DAR only and carry no clinical data. Show mode:
+     * visible rows only, each in full with its label (§7.4.1).
+     */
     public Flux<SuggestRow> suggest(String q, List<String> exclude) {
         if (Validate.hasControl(q)) return Flux.error(new InvalidQueryException("q", "q must not contain control characters"));
         String query = q == null ? "" : q.strip();

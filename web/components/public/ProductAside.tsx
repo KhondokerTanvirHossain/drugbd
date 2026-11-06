@@ -1,7 +1,10 @@
 import { buttonClass } from "@/components/ui/Button";
+import ProblemLine from "@/components/ui/ProblemLine";
+import RecordLabel from "@/components/ui/RecordLabel";
 import ReviewStatus from "@/components/ui/ReviewStatus";
 import SourceLink from "@/components/ui/SourceLink";
-import { PUBLIC_NEW, fill } from "@/lib/copy";
+import { PUBLIC_NEW, SHOW_COPY, fill } from "@/lib/copy";
+import { unapproved, type PublicMode } from "@/lib/public-mode";
 import { fmtDhakaDate, fmtDhakaTime } from "@/lib/format";
 import type { ClinicalDrugView, PublicProduct } from "@/lib/public-types";
 import { PRODUCT } from "@/lib/public-copy";
@@ -11,13 +14,18 @@ import ReportProblem from "./ReportProblem";
 import styles from "./product.module.css";
 
 const enc = encodeURIComponent;
+/** ProblemLine on the not-verified card (§6.5 show mode), without a second pill. */
+const RecordLabelProblem = () => <ProblemLine />;
 
 /** §6.5 aside: verification, other brands of the clinical drug, where the record comes from, the checker link, Report a problem. */
-export default function ProductAside({ product: p, brands, session, flag, siteKey, nonce }: {
+export default function ProductAside({ product: p, brands, session, flag, siteKey, nonce, mode = "approved_only" }: {
   product: PublicProduct; brands: ClinicalDrugView["products"] | null; session: Session | null; flag?: string; siteKey: string | null; nonce?: string;
+  mode?: PublicMode;
 }) {
+  const show = mode === "show_unreviewed";
   // The card says "on {DD/MM/YYYY}" (§6.5); the line under the h1 keeps the time.
-  const approvedDate = p.verification.approvedAt ? fmtDhakaDate(p.verification.approvedAt) : null;
+  const approvedDate = p.verification?.approvedAt ? fmtDhakaDate(p.verification.approvedAt) : null;
+  const approved = p.verification !== null && (p.review ?? "approved") === "approved";
   const others = (brands ?? []).filter((b) => b.conceptId !== p.conceptId);
   const stages = p.provenance.stages;
   const ok = stages.filter((s) => s.status === "ok").length, w = stages.filter((s) => s.status === "warn").length;
@@ -25,19 +33,26 @@ export default function ProductAside({ product: p, brands, session, flag, siteKe
     <aside className={styles["s-aside"]} aria-label={PRODUCT.asideLabel}>
       <div className={styles["s-card"]}>
         <h2>{PRODUCT.verification}</h2>
-        <span className={styles.fit}><ReviewStatus status="approved" /></span>
-        {approvedDate && <p>{fill(PRODUCT.verifiedText, { date: approvedDate })}</p>}
-        <p>{fill(PUBLIC_NEW.productPage.verificationRerun, { brand: p.tradeName })}</p>
+        {approved || !show ? <>
+          <span className={styles.fit}><ReviewStatus status="approved" /></span>
+          {approvedDate && <p>{fill(PRODUCT.verifiedText, { date: approvedDate })}</p>}
+          <p>{fill(show ? SHOW_COPY.verificationRerun : PUBLIC_NEW.productPage.verificationRerun, { brand: p.tradeName })}</p>
+        </> : <>
+          <span className={styles.fit}><ReviewStatus status="pending" /></span>
+          <p>{SHOW_COPY.notVerified}</p>
+          {p.review === "problem" && <RecordLabelProblem />}
+        </>}
       </div>
       {p.clinicalDrug && (
         <div className={styles["s-card"]}>
           <h2>{fill(PRODUCT.otherBrands, { name: p.clinicalDrug.displayName })}</h2>
           {others.length > 0 ? (
             <ul className={styles.brandList}>
-              {others.map((b) => <li key={b.conceptId}><a href={`/products/${enc(b.conceptId)}`}>{b.tradeName}</a> {b.company} <span className="mono">DAR {b.darNumber}</span></li>)}
+              {others.map((b) => <li key={b.conceptId}><a href={`/products/${enc(b.conceptId)}`}>{b.tradeName}</a> {b.company} <span className="mono">DAR {b.darNumber}</span>
+                {show && unapproved(b.review) && <> <RecordLabel review={b.review} /></>}</li>)}
             </ul>
           ) : (
-            <p>{fillNodes(PUBLIC_NEW.productPage.noOtherBrand, { bdcId: <span className="mono">{p.clinicalDrug.bdcId}</span> })}</p>
+            <p>{fillNodes(show ? SHOW_COPY.noOtherBrand : PUBLIC_NEW.productPage.noOtherBrand, { bdcId: <span className="mono">{p.clinicalDrug.bdcId}</span> })}</p>
           )}
         </div>
       )}
@@ -51,7 +66,7 @@ export default function ProductAside({ product: p, brands, session, flag, siteKe
           <dt>{PRODUCT.dlConcept}</dt><dd className="mono">{p.conceptId}</dd>
           {p.provenance.extractedAt && <><dt>{PRODUCT.dlExtracted}</dt><dd>{fmtDhakaTime(p.provenance.extractedAt)}</dd></>}
           {p.provenance.batchId && <><dt>{PRODUCT.dlBatch}</dt><dd className="mono">{p.provenance.batchId}</dd></>}
-          <dt>{PRODUCT.dlChecks}</dt><dd>{fill(PRODUCT.checksValue, { ok, w })}</dd>
+          <dt>{PRODUCT.dlChecks}</dt><dd>{show && p.review === "problem" ? SHOW_COPY.checksValueWithheld : fill(PRODUCT.checksValue, { ok, w })}</dd>
         </dl>
       </div>
       <a className={buttonClass("primary")} href={`/check?${new URLSearchParams({ ids: p.conceptId })}`}>{fill(PRODUCT.checkWith, { brand: p.tradeName })}</a>

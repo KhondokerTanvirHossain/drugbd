@@ -8,9 +8,12 @@ import java.time.Instant;
 public interface StatsQueryPort {
     record Totals(long productsLoaded, long substances, long approvedProducts, long inReviewProducts) {}
     record BatchRow(String batchId, String status) {}
-    /** One batch item. {@code productPublic}: the product's latest item is ok and not removed from the batch file (§7.4). */
+    /**
+     * One batch item. {@code productApproved}: the product's latest item is ok and not removed from the batch file (§7.4);
+     * {@code productReview}: the product's public label under the mode, null when it is hidden (§7.4.1).
+     */
     record ItemRow(String batchId, String conceptId, String tradeName, String review, Instant extractedAt,
-                   boolean removed, boolean productPublic) {}
+                   boolean removed, boolean productApproved, String productReview) {}
     /** A decision without its note or email: the stats need only the decision, the role and the time. */
     record DecisionRow(String batchId, String conceptId, ReviewDecision decision) {}
 

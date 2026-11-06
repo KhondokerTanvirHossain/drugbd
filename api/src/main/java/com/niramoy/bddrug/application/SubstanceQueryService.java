@@ -7,7 +7,10 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 import java.util.Set;
 
-/** A substance is public once at least one public product carries it (§7.4); otherwise public reads get the stub. */
+/**
+ * A substance is visible once at least one visible product carries it (§7.4, §7.4.1: the mode decides which products are
+ * visible); otherwise public reads get the stub.
+ */
 @Service
 public class SubstanceQueryService {
     public static final Set<String> SEVERITIES = Set.of("major", "moderate", "minor", "unknown");
@@ -33,7 +36,7 @@ public class SubstanceQueryService {
             .switchIfEmpty(Mono.error(() -> new NotFoundException("bdsId", "Substance not found")))
             .flatMap(name -> (pub ? port.isPublic(bdsId) : Mono.just(true)).flatMap(visible -> visible
                 ? port.interactionsPage(bdsId, severity, size, page * size, pub)
-                    .map(p -> (Object) new SubstanceInteractions(bdsId, p.counts(), p.total(), page, size, p.items()))
+                    .map(p -> (Object) new SubstanceInteractions(bdsId, p.counts(), p.total(), page, size, p.items(), p.review()))
                 : Mono.just((Object) new HiddenRecord.Substance(bdsId, name))));
     }
 }

@@ -1,4 +1,5 @@
-import { PUBLIC_NEW, fill } from "./copy";
+import { PUBLIC_NEW, SHOW_COPY, fill } from "./copy";
+import type { PublicMode } from "./public-mode";
 import type { CheckResult, Side, SuggestRow } from "./public-types";
 import { CHECK, plural } from "./public-copy";
 
@@ -57,7 +58,11 @@ export function noDataBlocks(r: CheckResult): NoDataBlockItem[] {
   return [...blocks.values()];
 }
 
-export function summarySentence(r: CheckResult | null, m: number): string {
+/**
+ * The summary sentence (§6.7.2). In show mode (§6.10) the "not yet reviewed" segment counts the checked products that are not
+ * approved (`summary.notApproved`), and the products the API withdrew follow as " · {nr} withdrawn medicine[s] not checked".
+ */
+export function summarySentence(r: CheckResult | null, m: number, mode: PublicMode = "approved_only"): string {
   if (m < 2 || r === null) return CHECK.empty;
   const s = r.summary;
   let out = fill(N.summary, { m, medicines: medicines(m), checked: s.checkedPairs, total: s.totalPairs, pairs: pairs(s.totalPairs),
@@ -72,6 +77,12 @@ export function summarySentence(r: CheckResult | null, m: number): string {
       out += fill(N.nc, { nc: s.notCheckedPairs, pairs: pairs(s.notCheckedPairs) });
     }
   }
+  if (mode === "show_unreviewed") {
+    const nu = s.notApproved ?? 0;
+    if (nu > 0) out += fill(N.nr, { nr: nu, medicines: medicines(nu) });
+    if (s.notReviewed > 0) out += fill(SHOW_COPY.checkerWithdrawn, { nr: s.notReviewed, medicines: medicines(s.notReviewed) });
+    return out;
+  }
   if (s.notReviewed > 0) out += fill(N.nr, { nr: s.notReviewed, medicines: medicines(s.notReviewed) });
   return out;
 }
@@ -83,8 +94,9 @@ export function countChips(r: CheckResult) {
 }
 
 /** §6.7.1 sub line of an approved suggestion or no-JS match: "{clinical display}[. Matches {synonym}, a name for {substance} | . Matches {substance}]". */
-export function suggestionSub(r: Pick<SuggestRow, "status" | "clinicalDisplayName" | "matched">): string {
-  if (r.status !== "approved" || !r.clinicalDisplayName) return "";
+export function suggestionSub(r: Pick<SuggestRow, "status" | "clinicalDisplayName" | "matched" | "review">): string {
+  // A labelled row is visible (show mode serves every visible row in full, §6.10); an unlabelled one is approved-only data.
+  if ((r.status !== "approved" && !r.review) || !r.clinicalDisplayName) return "";
   if (!r.matched) return r.clinicalDisplayName;
   return r.clinicalDisplayName + (r.matched.name.toLowerCase() === r.matched.substance.toLowerCase()
     ? fill(CHECK.matches, { name: r.matched.substance }) : fill(CHECK.matchesFor, { name: r.matched.name, substance: r.matched.substance }));

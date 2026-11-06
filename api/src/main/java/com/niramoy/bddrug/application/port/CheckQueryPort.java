@@ -12,9 +12,10 @@ public interface CheckQueryPort {
 
     /**
      * route is the clinical drug's route, or null when the product has no clinical drug.
-     * reviewStatus is the product's current review: ok, pending or issue.
+     * review is the product's public label under the public mode (§7.4.1: approved, not_reviewed or problem), null when the
+     * product is hidden; the checker decides from it alone.
      */
-    record ProductRow(String conceptId, String tradeName, String genericContentRaw, String route, String reviewStatus) {}
+    record ProductRow(String conceptId, String tradeName, String genericContentRaw, String route, String review) {}
     /** bdsId/preferredName are null when the XM code has no substance; coverage is null without a coverage row. */
     record IngredientRow(String conceptId, String xmCode, String ingredientName, String bdsId, String preferredName,
                          String coverage) {}

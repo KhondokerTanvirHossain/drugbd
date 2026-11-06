@@ -2,6 +2,7 @@ import SearchResults from "@/components/public/SearchResults";
 import styles from "@/components/public/search.module.css";
 import { getStats, searchMedicines } from "@/lib/api";
 import { PUBLIC_NEW } from "@/lib/copy";
+import { getPublicMode } from "@/lib/public-mode-read";
 import { NAV } from "@/lib/public-copy";
 import { parseQuery, parseSearchPage } from "@/lib/public-params";
 export const dynamic = "force-dynamic";
@@ -20,8 +21,8 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
     );
   }
   const { page, capped } = parseSearchPage(sp.page);
-  const r = await searchMedicines(q, page);
+  const [r, mode] = await Promise.all([searchMedicines(q, page), getPublicMode()]);
   if (!r.ok) throw new Error(`search failed (${r.status})`);
   const stats = r.data.total === 0 ? await getStats().catch(() => null) : null;
-  return <SearchResults result={r.data} q={q} page={page} capped={capped} inReview={stats?.inReviewProducts ?? 0} />;
+  return <SearchResults result={r.data} q={q} page={page} capped={capped} inReview={stats?.inReviewProducts ?? 0} mode={mode} />;
 }

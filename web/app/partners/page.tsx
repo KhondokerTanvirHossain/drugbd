@@ -6,7 +6,9 @@ import { ORG_MAX, ORG_MIN, PARTNER_KINDS, PARTNER_VOLUMES, USE_MAX, USE_MIN } fr
 import { NO_PHI_HELP, PUBLIC_NEW, fill } from "@/lib/copy";
 import { cspNonce } from "@/lib/nonce";
 import { firstParam } from "@/lib/params";
-import { LANDING, NAV, PARTNERS } from "@/lib/public-copy";
+import { NAV, PARTNERS } from "@/lib/public-copy";
+import { landingCopy } from "@/components/public/landing-copy";
+import { getPublicMode } from "@/lib/public-mode-read";
 import { getSession } from "@/lib/session";
 import { turnstileSiteKey } from "@/lib/turnstile";
 import styles from "./page.module.css";
@@ -24,7 +26,8 @@ const P = PUBLIC_NEW.partner;
  */
 export default async function PartnersPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const sp = await searchParams;
-  const session = await getSession();
+  const [session, mode] = await Promise.all([getSession(), getPublicMode()]);
+  const LANDING = landingCopy(mode);   // §6.9: the band strings follow the landing page's mode (§6.10)
   const outcome = firstParam(sp.partner);
   const siteKey = turnstileSiteKey();
   // Own keys only: an unknown code (or "constructor", "toString") shows nothing, never the code itself.

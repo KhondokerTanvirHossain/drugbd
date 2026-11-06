@@ -56,6 +56,8 @@ const SPEC_ROWS = [
   "QA tools page: the API reference (every request and answer, the endpoint panels with their parameters, examples, key fields and errors, MCP over HTTP)",
   // QA guide row (the spec's "*(QA guide)* " marker removed, as for P1C)
   "QA tools page: the six-tools line and the MCP panel's QA guide part (its heading, lead and result line, the resource error fix, and the amended arguments line and MCP fixes)",
+  // D74 row (the spec's "*(D74)* " marker removed, as for P1C)
+  "Show mode: the problem line, the page caution line, the two pair lines, and the show-mode variants of the landing page, hero card, search, stubs, product page, substance page, checker, Learn sentences and the desk's reader-visibility lines",
 ];
 
 describe("§3.6 fixed safety strings", () => {
@@ -79,6 +81,11 @@ describe("§3.6 fixed safety strings", () => {
     ["FROM_DDINTER", "From DDInter 2.0"],
     ["PAIR_REVIEWED", "Pair reviewed by a senior pharmacist on {date}"],
     ["PAIR_NOT_REVIEWED", "Pair not yet reviewed by a senior pharmacist"],
+    // D74 (§3.6): the show-mode lines
+    ["PROBLEM_REPORTED", "A problem has been reported with this record; it may be wrong."],
+    ["UNREVIEWED_CAUTION", "Some of this information has not yet been reviewed by a pharmacist. Check it before relying on it."],
+    ["PAIR_UNREVIEWED", "This pair involves a medicine not yet reviewed by a pharmacist."],
+    ["PAIR_PROBLEM", "This pair involves a medicine with a reported problem; it may be wrong."],
   ])("%s is exactly its literal", (name, literal) => {
     expect((copy as unknown as Record<string, unknown>)[name]).toBe(literal);
   });
@@ -221,7 +228,7 @@ function retypes(src: string, value: string): boolean {
 describe("no paraphrase or retyping of the safety sentences", () => {
   it("no source file retypes a safety sentence instead of importing it", () => {
     const safety = [copy.NO_DATA_SENTENCE, copy.NOT_REVIEWED, copy.SEVERITY_NOT_CLASSIFIED, copy.UNKNOWN_PAIR_LINE,
-      copy.UNKNOWN_PAIRS_LINE, copy.NOT_RUN];
+      copy.UNKNOWN_PAIRS_LINE, copy.NOT_RUN, copy.PROBLEM_REPORTED, copy.UNREVIEWED_CAUTION, copy.PAIR_UNREVIEWED, copy.PAIR_PROBLEM];
     const hits = scanned().flatMap((f) => safety.filter((s) => text(f).includes(s)).map((s) => `${f}: ${s}`));
     expect(hits).toEqual([]);
   });

@@ -11,7 +11,7 @@ import MatchRelation from "@/components/ui/MatchRelation";
 import NoDataChip from "@/components/ui/NoDataChip";
 import ReviewStatus from "@/components/ui/ReviewStatus";
 import Severity from "@/components/ui/Severity";
-import { APPROVED, DESK_NEW, LEARN_BOARD, NOT_REVIEWED, NO_DATA_SENTENCE, SEVERITY_NOT_CLASSIFIED, STALE_TITLE } from "@/lib/copy";
+import { APPROVED, DESK_NEW, LEARN_BOARD, NOT_REVIEWED, NO_DATA_SENTENCE, SEVERITY_NOT_CLASSIFIED, SHOW_COPY, STALE_TITLE } from "@/lib/copy";
 import { fmtUtc } from "@/lib/format";
 import { BATCH_STATUS_WORD, batchPill, formatCount } from "@/lib/stats";
 import { P, PILOT_IDS, PILOT_SNAPSHOT as S, severityCounts, substanceNamed, type PilotId } from "./pilot-snapshot";
@@ -38,12 +38,12 @@ function terms(ctx: LearnContext): Term[] {
   return [
     { term: "Action", def: "DDInter's label for how two drugs interact, such as synergy or metabolism.", ex: <>Simvastatin + Clarithromycin, metabolism</>, ids: [P.simvastatin, P.clarith] },
     // With a > 0 the pill is "Approved by a pharmacist": the batch's pending pill after "2 of 10" would read "2 of 10 not yet reviewed".
-    { term: "Approved record", small: APPROVED, def: <>A record a pharmacist marked "Looks correct" after its latest extraction, with no issue since. Only these are public.</>,
+    { term: "Approved record", small: APPROVED, def: ctx.show ? SHOW_COPY.learnGlossApproved : <>A record a pharmacist marked "Looks correct" after its latest extraction, with no issue since. Only these are public.</>,
       ex: b && <>{a === 0 ? "none yet, " : ""}{a} of {n} <ReviewStatus status={a === 0 ? batchPill(b) : "approved"} /></> },
     { term: "ATC", small: "Anatomical Therapeutic Chemical", def: "WHO's classification of drugs by organ system and therapeutic use. One substance can have several codes.",
       ex: <>{asp.name} {asp.codes.atc.map((x) => <CodeChip key={x} system="ATC" code={x} />)}</>, ids: [P.aspirin] },
     { term: "BAN", small: "British Approved Name", def: "The UK's official name for a substance. Often the same as the INN.", ex: <>Paracetamol, the name DGDA uses for Napa's ingredient</>, ids: [P.napa] },
-    { term: "Back in review", def: "An approved record that was re-run, or whose shared substance data changed. It leaves public view until a pharmacist approves it again.",
+    { term: "Back in review", def: ctx.show ? SHOW_COPY.learnGlossBack : "An approved record that was re-run, or whose shared substance data changed. It leaves public view until a pharmacist approves it again.",
       ex: <><ReviewStatus status="back_in_review" /> {none(S.review.backInReview)}<AsStored /></> },
     { term: "Batch", def: "A committed list of DGDA concept ids that the pipeline runs and people review together.",
       ex: b && <><span className="mono">{S.batchId}</span>, {n} records, {BATCH_STATUS_WORD[b.status]}</> },
@@ -66,7 +66,7 @@ function terms(ctx: LearnContext): Term[] {
     { term: "DrugBank", def: "A drug database whose accession numbers we use to confirm DDInter matches.", ex: <><CodeChip system="DRUGBANK" code={warf.codes.drugbank} /> {warf.name}</>, ids: [P.warfarin] },
     { term: "Drug–disease", def: "A DDInter record warning about a substance in a patient with a condition.", ex: <>{asp.name}, {asp.disease} records</>, ids: [P.aspirin] },
     { term: "Drug–food", def: "A DDInter record about a substance taken with a food.", ex: <>{warf.name}, {warf.food} records</>, ids: [P.warfarin] },
-    { term: "Engineer checked", def: "An engineer marked the extraction correct. Recorded, but it does not publish.",
+    { term: "Engineer checked", def: ctx.show ? SHOW_COPY.learnGlossEngineer : "An engineer marked the extraction correct. Recorded, but it does not publish.",
       ex: <><ReviewStatus status="engineer_checked" /> {none(S.review.engineerChecked)}<AsStored /></> },
     { term: "Evidence snapshot", def: "A source response stored exactly as it arrived, so every value can be traced back.",
       ex: <>{S.evidence.oclConcept} DGDA records, plus every RxNav and DDInter response</> },
@@ -74,7 +74,7 @@ function terms(ctx: LearnContext): Term[] {
     { term: "INN", small: "International Nonproprietary Name", def: "WHO's official generic name for a substance.", ex: <>Paracetamol is the INN; DDInter uses the USAN Acetaminophen</>, ids: [P.napa] },
     { term: "Interaction pair", def: "Two substances DDInter records together, stored once with its severity, actions and text.",
       ex: <>{warf.name} + {asp.name} <Severity level="major" /></>, ids: [P.warfarin, P.aspirin] },
-    { term: "Issue reported", def: "A reviewer flagged a problem with a note. The record stays hidden until it is fixed and re-run.",
+    { term: "Issue reported", def: ctx.show ? SHOW_COPY.learnGlossIssue : "A reviewer flagged a problem with a note. The record stays hidden until it is fixed and re-run.",
       ex: <><ReviewStatus status="issue" /> {none(S.review.issueReported)}<AsStored /></> },
     { term: "Major", def: "DDInter's most serious severity grade.", ex: <><Severity level="major" /> {simva.name} + {clar.name}</>, ids: [P.simvastatin, P.clarith] },
     { term: "Management text", def: "DDInter's advice for a pair. Shown truncated with a link to the full text, never rewritten.", ex: <>{simva.name} + {warf.name} has none in DDInter</>, ids: [P.simvastatin, P.warfarin] },
@@ -84,7 +84,7 @@ function terms(ctx: LearnContext): Term[] {
     { term: "Moderate", def: "DDInter's middle severity grade.", ex: <><Severity level="moderate" /> {metf.name} + {warf.name}</>, ids: [P.metformin, P.warfarin] },
     { term: "No interaction data", def: NO_DATA_SENTENCE, ex: <><NoDataChip label="No interaction data" /> {domp.name}</>, ids: [P.domperidone] },
     { term: "Not checked", def: "A pair involving a substance with no DDInter data. Never counted as checked.", ex: <>{domp.name} + {metf.name}</>, ids: [P.domperidone, P.metformin] },
-    { term: NOT_REVIEWED, def: "A record no pharmacist has approved. Hidden from public pages and from public API answers.",
+    { term: NOT_REVIEWED, def: ctx.show ? SHOW_COPY.learnGlossNotReviewed : "A record no pharmacist has approved. Hidden from public pages and from public API answers.",
       ex: b && <>{a === 0 ? `all ${n} records` : `${n - a} of ${n} records`}</> },
     { term: "OCL", small: "Open Concept Lab", def: "The terminology server the pipeline reads the DGDA register from.", ex: <>each record's raw DGDA JSON comes from it</> },
     { term: "Re-run", def: "Running the pipeline again for a record. Its earlier approvals stop counting.",

@@ -3,10 +3,11 @@ import { getStats } from "@/lib/api";
 import { BATCH_STATUS_WORD, batchPill, exampleUsable, findBatch, findItem, formatCount, parseStats, partlyApproved, pillStatus } from "@/lib/stats";
 
 const STATS = {
+  publicMode: "approved_only",
   registerProducts: 39196, productsLoaded: 10, substances: 11, approvedProducts: 1, inReviewProducts: 9,
   batches: [{ batchId: "0001-pilot", status: "in_review", itemCount: 2, approved: 1, items: [
-    { conceptId: "186-0030-006--napa", tradeName: "Napa", status: "approved", exampleUsable: true },
-    { conceptId: "185-0138-012--g-warfarin", tradeName: "G Warfarin", status: "not_reviewed", exampleUsable: false },
+    { conceptId: "186-0030-006--napa", tradeName: "Napa", status: "approved", exampleUsable: true, hidden: false, review: "approved" },
+    { conceptId: "185-0138-012--g-warfarin", tradeName: "G Warfarin", status: "not_reviewed", exampleUsable: false, hidden: true, review: null },
   ] }],
 };
 const ITEM = STATS.batches[0].items[0];
@@ -23,7 +24,10 @@ describe("parseStats (§7.4 shape)", () => {
     const bad: unknown[] = [null, undefined, [], "stats", {}, { ...STATS, substances: "11" }, { ...STATS, approvedProducts: -1 },
       { ...STATS, productsLoaded: 1.5 }, { ...STATS, batches: "x" }, withBatch({ status: "open" }), withBatch({ itemCount: undefined }),
       withBatch({ items: null }), withItem({ exampleUsable: "true" }), withItem({ status: "issue" }), withItem({ tradeName: "" }),
-      withItem({ conceptId: 7 })];
+      withItem({ conceptId: 7 }),
+      // D74 (§7.4.1): the mode and each item's hidden and review are required, so a page never guesses the mode
+      { ...STATS, publicMode: undefined }, { ...STATS, publicMode: "show" }, withItem({ hidden: "false" }), withItem({ review: "issue" }),
+      withItem({ hidden: undefined })];
     for (const b of bad) expect(parseStats(b)).toBeNull();
   });
 });

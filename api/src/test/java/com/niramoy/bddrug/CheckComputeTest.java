@@ -19,18 +19,21 @@ import static org.assertj.core.api.Assertions.assertThat;
 /** §6.7.2 counting rule and the §7.4 CheckResult (§11.1 check-summary cases at the API, §11.3 CheckApiIntegrationTest cases in pure form). */
 class CheckComputeTest {
     static final List<ProductRow> PRODUCTS = List.of(
-        new ProductRow("EYE", "Chloramex Eye", "Chloramphenicol 0.5%", "ophthalmic", "ok"),
-        new ProductRow("CAP", "Chloramex", "Chloramphenicol 250 mg", "systemic", "ok"),
-        new ProductRow("W", "Warin", "Warfarin 5 mg", "systemic", "ok"),
-        new ProductRow("W2", "Coumarol", "Warfarin 5 mg", "systemic", "ok"),
-        new ProductRow("A", "Asprin", "Aspirin 75 mg", "systemic", "ok"),
-        new ProductRow("D", "Motigut", "Domperidone 10 mg", "systemic", "ok"),
-        new ProductRow("OTIC", "Otimol", "Oticmol 5 mg", "systemic", "ok"),
-        new ProductRow("NR", "Newrun", "Newrunmol 5 mg", "systemic", "ok"),
-        new ProductRow("UNM", "Newdrug", "Newmol 10 mg", "systemic", "ok"),
-        new ProductRow("AMC", "Moxaclav", "Amoxicillin 500 mg + Clavulanic Acid 125 mg", "systemic", "ok"),
-        new ProductRow("BARE", "Herbex", "Herbal mix", null, "ok"),
-        new ProductRow("HID", "Hidasprin", "Aspirin 75 mg", "systemic", "pending"));
+        new ProductRow("EYE", "Chloramex Eye", "Chloramphenicol 0.5%", "ophthalmic", "approved"),
+        new ProductRow("CAP", "Chloramex", "Chloramphenicol 250 mg", "systemic", "approved"),
+        new ProductRow("W", "Warin", "Warfarin 5 mg", "systemic", "approved"),
+        new ProductRow("W2", "Coumarol", "Warfarin 5 mg", "systemic", "approved"),
+        new ProductRow("A", "Asprin", "Aspirin 75 mg", "systemic", "approved"),
+        new ProductRow("D", "Motigut", "Domperidone 10 mg", "systemic", "approved"),
+        new ProductRow("OTIC", "Otimol", "Oticmol 5 mg", "systemic", "approved"),
+        new ProductRow("NR", "Newrun", "Newrunmol 5 mg", "systemic", "approved"),
+        new ProductRow("UNM", "Newdrug", "Newmol 10 mg", "systemic", "approved"),
+        new ProductRow("AMC", "Moxaclav", "Amoxicillin 500 mg + Clavulanic Acid 125 mg", "systemic", "approved"),
+        new ProductRow("BARE", "Herbex", "Herbal mix", null, "approved"),
+        new ProductRow("HID", "Hidasprin", "Aspirin 75 mg", "systemic", null),
+        // §7.4.1 (D74): visible products that are not approved, as show mode serves them
+        new ProductRow("NOTREV", "Unrevasprin", "Aspirin 75 mg", "systemic", "not_reviewed"),
+        new ProductRow("PROB", "Probwarin", "Warfarin 5 mg", "systemic", "problem"));
     static final List<IngredientRow> INGREDIENTS = List.of(
         new IngredientRow("EYE", "XMC", "Chloramphenicol", "BDS-3", "Chloramphenicol", "full"),
         new IngredientRow("CAP", "XMC", "Chloramphenicol", "BDS-3", "Chloramphenicol", "full"),
@@ -38,6 +41,8 @@ class CheckComputeTest {
         new IngredientRow("W2", "XMW", "Warfarin", "BDS-1", "Warfarin", "full"),
         new IngredientRow("A", "XMA", "Aspirin", "BDS-2", "Aspirin", "full"),
         new IngredientRow("HID", "XMA", "Aspirin", "BDS-2", "Aspirin", "full"),
+        new IngredientRow("NOTREV", "XMA", "Aspirin", "BDS-2", "Aspirin", "full"),
+        new IngredientRow("PROB", "XMW", "Warfarin", "BDS-1", "Warfarin", "full"),
         new IngredientRow("D", "XMD", "Domperidone", "BDS-4", "Domperidone", "none"),
         new IngredientRow("OTIC", "XMO", "Oticmol", "BDS-7", "Oticmol", "full"),
         new IngredientRow("NR", "XMN", "Newrunmol", "BDS-6", "Newrunmol", null),
@@ -193,8 +198,8 @@ class CheckComputeTest {
     /** Two BDS ids the mapping resolves to one DDInter entry (a salt and its base): DDInter never assesses an entry against itself. */
     static CheckResult sameEntry(List<DdinterCode> besilateCodes, List<PairRow> pairs, String... ids) {
         CheckQueryPort port = q -> Mono.just(new CheckData(
-            List.of(new ProductRow("AMB", "Amlobes", "Amlodipine besilate 5 mg", "systemic", "ok"),
-                new ProductRow("AML", "Amlonor", "Amlodipine 5 mg", "systemic", "ok")),
+            List.of(new ProductRow("AMB", "Amlobes", "Amlodipine besilate 5 mg", "systemic", "approved"),
+                new ProductRow("AML", "Amlonor", "Amlodipine 5 mg", "systemic", "approved")),
             List.of(new IngredientRow("AMB", "XMAB", "Amlodipine besilate", "BDS-1", "Amlodipine besilate", "full"),
                 new IngredientRow("AML", "XMAL", "Amlodipine", "BDS-2", "Amlodipine", "full")),
             Map.of("BDS-1", besilateCodes, "BDS-2", List.of(new DdinterCode("DDInter100", "systemic"))),
@@ -223,5 +228,26 @@ class CheckComputeTest {
         assertThat(r.duplicates()).isEmpty();
         assertThat(r.noInteraction()).isEmpty();
         assertThat(r.summary()).isEqualTo(new Summary(2, 1, 1, 1, 0, 0, 0, new BySeverity(0, 1, 0, 0)));
+    }
+
+    /** §7.4.1 (D74): every visible product is checked whatever its label; the label rides on products, sides and the summary. */
+    @Test void visibleUnapprovedProductsAreCheckedAndLabelled() {
+        CheckResult r = run(Scope.PUBLIC, "PROB", "NOTREV", "HID");
+        assertThat(r.notReviewed()).containsExactly(new NotReviewed("HID", "Hidasprin"));
+        assertThat(r.products()).extracting(CheckedProduct::conceptId, CheckedProduct::review)
+            .containsExactly(org.assertj.core.groups.Tuple.tuple("PROB", "problem"), org.assertj.core.groups.Tuple.tuple("NOTREV", "not_reviewed"));
+        assertThat(r.alerts()).hasSize(1);
+        assertThat(r.alerts().get(0).a().review()).isEqualTo("problem");
+        assertThat(r.alerts().get(0).b().review()).isEqualTo("not_reviewed");
+        assertThat(r.summary().notApproved()).isEqualTo(2);
+        assertThat(r.summary().notReviewed()).isEqualTo(1);
+        assertThat(r.summary().medicines()).isEqualTo(3);
+    }
+
+    @Test void approvedProductsCountNoneAsNotApproved() {
+        CheckResult r = run(Scope.PUBLIC, "W", "A");
+        assertThat(r.summary().notApproved()).isZero();
+        assertThat(r.products()).extracting(CheckedProduct::review).containsOnly("approved");
+        assertThat(r.alerts().get(0).a().review()).isEqualTo("approved");
     }
 }

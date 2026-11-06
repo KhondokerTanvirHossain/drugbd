@@ -55,7 +55,7 @@ export default function DeskRecordContext({ reg, filters, evidence, fallbackWidg
           <div className={styles.dScroll} tabIndex={-1} inert={desk.drawerOpen || undefined}>
             {stale && <StaleBanner name={reg.tradeName} reason={stale} />}
             {confirm}
-            {desk.complete ? <CompleteView /> : shown.detail}
+            {desk.complete ? <CompleteView publicMode={reg.publicMode ?? null} /> : shown.detail}
             {!desk.ready && (
               <details id="evidence" className={styles.evidenceFallback}><summary>{DESK.evidence}</summary><div className="drawer-b">{shown.evidence}</div></details>
             )}

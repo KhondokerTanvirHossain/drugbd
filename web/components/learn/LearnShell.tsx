@@ -12,7 +12,7 @@ import type { LearnContext } from "./context";
 import { LEARN_LIVE_ATTR } from "./glossary-filter";
 import LearnRail from "./LearnRail";
 import learn from "./learn.module.css";
-import { BatchNote } from "./parts";
+import { BatchNote, learnSectionTitle } from "./parts";
 import styles from "./LearnShell.module.css";
 
 /**
@@ -67,7 +67,7 @@ export default function LearnShell({ slug, ctx, theme, children }: { slug: Chapt
             <p className={styles.railCh}>{chapter.title}</p>
             <ol>
               {/* No aria-current here: LearnRail's scroll-spy sets it on mount, so without JavaScript nothing is wrongly "current". */}
-              {chapter.sections.map((s) => <li key={s.id}><a href={`#${s.id}`}>{s.title}</a></li>)}
+              {chapter.sections.map((s) => <li key={s.id}><a href={`#${s.id}`}>{learnSectionTitle(s.id, ctx.show)}</a></li>)}
             </ol>
             <LearnRail />
           </aside>

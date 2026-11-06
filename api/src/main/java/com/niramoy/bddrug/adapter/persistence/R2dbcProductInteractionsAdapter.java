@@ -8,15 +8,15 @@ import java.util.*;
 import java.util.stream.Stream;
 
 /**
- * P10 reads, set-based (§7.3 "never one query per batch"): this product's ingredients, and every other public product
- * (through ReviewSql.LATEST_PUBLIC) grouped in SQL by partner substance and route, one row per group with its first
+ * P10 reads, set-based (§7.3 "never one query per batch"): this product's ingredients, and every other visible product
+ * (through ReviewSql.latest, §7.4.1) grouped in SQL by partner substance and route, one row per group with its first
  * BRANDS_MAX brands and its count, so a call never carries the public catalogue into the JVM; then one code query, one
  * pair query restricted to this product's chosen entries, and P1C's one pair-review query (PairReviewReader).
  */
 @Component
 public class R2dbcProductInteractionsAdapter implements ProductInteractionsPort {
     private record Line(String route, String xmCode, String ingredient, String bdsId, String preferredName, String coverage) {}
-    private record Group(String bdsId, String name, String coverage, String route, List<PublicPairs.Brand> brands, int count) {}
+    private record Group(String bdsId, String name, String coverage, String route, List<PublicPairs.Brand> brands, int count, String worst) {}
     private record Code(String bdsId, DdinterCode code, boolean listed) {}
 
     /**
@@ -26,37 +26,47 @@ public class R2dbcProductInteractionsAdapter implements ProductInteractionsPort 
      * (BRANDS_MAX) in PublicPairs' brand order: lower-case trade name, then concept id, under COLLATE "C", which compares by
      * code point as String.compareTo does for every name in the Basic Multilingual Plane; PublicPairs re-sorts them. The
      * groups come in the order PublicPairs.compute would first meet them (by concept id, then XM code). The rows that are
-     * sorted stay narrow, and names and coverage join only the groups, so the sort fits in memory at 40,000 products.
+     * sorted stay narrow, and names and coverage join only the groups, so the sort stays small (about 3 MB with 40,000
+     * visible products). Each brand carries its public label and each group the worst of all its brands' labels (§7.4.1).
+     * The read labels every visible product, so it takes the label's set-based form (one join to the failed items, never a
+     * stage lookup per row: §10.6 holds in show mode, where half the catalogue may be unapproved).
      */
-    private static final String GROUPS = "WITH " + ReviewSql.LATEST_PUBLIC + """
+    static String groups(PublicMode mode) {
+        return "WITH " + ReviewSql.latest(mode) + ", vis AS (SELECT l.concept_id, " + ReviewSql.labelJoined("l", "f") + " AS lab " +
+            "FROM latest l " + ReviewSql.failedJoin("l", "f") + " WHERE l.pub AND l.concept_id <> :c)" + """
             , subs AS (
                 SELECT bp.concept_id, bp.trade_name, cd.route COLLATE "C" AS route, x.bds_id COLLATE "C" AS bds_id,
-                       CASE WHEN x.bds_id IS NULL THEN bpi.ingredient_name END COLLATE "C" AS unmapped, min(bpi.xm_code) AS xm
-                FROM latest l
-                JOIN curated.brand_product bp ON bp.concept_id = l.concept_id
+                       CASE WHEN x.bds_id IS NULL THEN bpi.ingredient_name END COLLATE "C" AS unmapped, min(bpi.xm_code) AS xm, v.lab
+                FROM vis v
+                JOIN curated.brand_product bp ON bp.concept_id = v.concept_id
                 LEFT JOIN curated.clinical_drug cd ON cd.bdc_id = bp.bdc_id
                 JOIN curated.brand_product_ingredient bpi ON bpi.concept_id = bp.concept_id
                 LEFT JOIN curated.substance_code x ON x.system = 'ICD11_XM' AND x.code = bpi.xm_code
-                WHERE l.pub AND l.concept_id <> :c
-                GROUP BY bp.concept_id, 3, 4, 5)
+                GROUP BY bp.concept_id, 3, 4, 5, v.lab)
             , g AS (
                 SELECT bds_id, unmapped, route, count(*) AS n,
                        (array_agg(concept_id ORDER BY lower(trade_name) COLLATE "C", concept_id COLLATE "C"))[1 : :max] AS ids,
                        (array_agg(trade_name ORDER BY lower(trade_name) COLLATE "C", concept_id COLLATE "C"))[1 : :max] AS names,
+                       (array_agg(lab ORDER BY lower(trade_name) COLLATE "C", concept_id COLLATE "C"))[1 : :max] AS labs,
+                       CASE WHEN bool_or(lab = 'problem') THEN 'problem' WHEN bool_or(lab = 'not_reviewed') THEN 'not_reviewed'
+                            ELSE 'approved' END AS worst,
                        min(ARRAY[concept_id, xm]) AS first
                 FROM subs
                 GROUP BY bds_id, unmapped, route)
-            SELECT g.bds_id, coalesce(s.preferred_name, g.unmapped) AS name, ic.coverage, g.route, g.n, g.ids, g.names
+            SELECT g.bds_id, coalesce(s.preferred_name, g.unmapped) AS name, ic.coverage, g.route, g.n, g.ids, g.names, g.labs, g.worst
             FROM g
             LEFT JOIN curated.substance s ON s.bds_id = g.bds_id
             LEFT JOIN curated.interaction_coverage ic ON ic.bds_id = g.bds_id
             ORDER BY g.first""";
+    }
 
     private final DatabaseClient db;
     private final PairReviewReader pairReviews;
-    public R2dbcProductInteractionsAdapter(DatabaseClient db, PairReviewReader pairReviews) {
+    private final String groupsSql;
+    public R2dbcProductInteractionsAdapter(DatabaseClient db, PairReviewReader pairReviews, PublicMode mode) {
         this.db = db;
         this.pairReviews = pairReviews;
+        this.groupsSql = groups(mode);
     }
 
     @Override public Mono<Facts> facts(String conceptId) {
@@ -74,15 +84,15 @@ public class R2dbcProductInteractionsAdapter implements ProductInteractionsPort 
             .map(r -> new Line(r.get("route", String.class), r.get("xm_code", String.class), r.get("ingredient_name", String.class),
                 r.get("bds_id", String.class), r.get("preferred_name", String.class), r.get("coverage", String.class)))
             .all().collectList();
-        Mono<List<Group>> groups = db.sql(GROUPS)
+        Mono<List<Group>> groups = db.sql(groupsSql)
             .bind("c", conceptId)
             .bind("max", PublicPairs.BRANDS_MAX)
             .map(r -> {
-                String[] ids = r.get("ids", String[].class), names = r.get("names", String[].class);
+                String[] ids = r.get("ids", String[].class), names = r.get("names", String[].class), labs = r.get("labs", String[].class);
                 List<PublicPairs.Brand> brands = new ArrayList<>(ids.length);
-                for (int i = 0; i < ids.length; i++) brands.add(new PublicPairs.Brand(ids[i], names[i]));
+                for (int i = 0; i < ids.length; i++) brands.add(new PublicPairs.Brand(ids[i], names[i], labs[i]));
                 return new Group(r.get("bds_id", String.class), r.get("name", String.class), r.get("coverage", String.class),
-                    r.get("route", String.class), brands, r.get("n", Long.class).intValue());
+                    r.get("route", String.class), brands, r.get("n", Long.class).intValue(), r.get("worst", String.class));
             })
             .all().collectList();
         return Mono.zip(mine, groups).flatMap(t -> {
@@ -120,7 +130,7 @@ public class R2dbcProductInteractionsAdapter implements ProductInteractionsPort 
         List<BatchPairs.Substance> mine = List.copyOf(subs.values());
         List<PublicPairs.PartnerGroup> partners = groups.stream().map(g -> new PublicPairs.PartnerGroup(new BatchPairs.Substance(g.bdsId(),
             g.name(), g.coverage(), g.bdsId() == null ? List.of() : byBds.getOrDefault(g.bdsId(), List.of())), g.route(), g.brands(),
-            g.count())).toList();
+            g.count(), g.worst())).toList();
         Set<String> chosen = new TreeSet<>();
         for (BatchPairs.Substance s : mine)
             RouteRule.choose(s.codes(), route).ifPresent(c -> c.codes().forEach(x -> chosen.add(x.code())));

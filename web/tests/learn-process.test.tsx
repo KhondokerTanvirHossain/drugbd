@@ -57,7 +57,7 @@ describe("chapter 4, The process", () => {
 
   it("says how many listed records were removed from the batch file, so 11 pills never sit under '10 of 10'", () => {
     const stats = pilotStats();
-    stats.batches[0].items.push({ conceptId: "999-0000-000--old-brand", tradeName: "Old Brand", status: "not_reviewed", exampleUsable: false });
+    stats.batches[0].items.push({ conceptId: "999-0000-000--old-brand", tradeName: "Old Brand", status: "not_reviewed", exampleUsable: false, hidden: true, review: null });
     const html = render(stats);
     expect(html).toContain("0 of 10 approved.</b> 1 record was removed from the batch file. Batch");
     expect(render()).not.toContain("removed from the batch file.");

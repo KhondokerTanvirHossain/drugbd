@@ -25,20 +25,20 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class InteractionCheckServiceTest {
     static final List<ProductRow> PRODUCTS = List.of(
-        new ProductRow("W", "Warin", "Warfarin 5 mg", "systemic", "ok"),
-        new ProductRow("EYE", "Optimycin", "Chloramphenicol 0.5%", "ophthalmic", "ok"),
-        new ProductRow("CAP", "Chloramex", "Chloramphenicol 250 mg", "systemic", "ok"),
-        new ProductRow("NOBDC", "Asprin Plus", "Aspirin 75 mg + herb", null, "ok"),
-        new ProductRow("D", "Motigut", "Domperidone 10 mg", "systemic", "ok"),
-        new ProductRow("NOCOV", "Newcov", "Newcovmol 5 mg", "systemic", "ok"),
-        new ProductRow("OTIC", "Otimol", "Oticmol 5 mg", "systemic", "ok"),
-        new ProductRow("AMC", "Moxaclav", "Amoxicillin 500 mg + Clavulanic Acid 125 mg", "systemic", "ok"),
-        new ProductRow("W2", "Coumarol", "Warfarin 5 mg", "systemic", "ok"),
-        new ProductRow("HID", "Hidasprin", "Aspirin 75 mg", "systemic", "pending"),
-        new ProductRow("ISS", "Issueprin", "Aspirin 75 mg", "systemic", "issue"),
-        new ProductRow("NEW", "Newentrol", "Newentol 5 mg", "systemic", "ok"),
-        new ProductRow("OFEYE", "Oflox Eye", "Ofloxacin 0.3%", "ophthalmic", "ok"),
-        new ProductRow("OFTAB", "Oflox", "Ofloxacin 200 mg", "systemic", "ok"));
+        new ProductRow("W", "Warin", "Warfarin 5 mg", "systemic", "approved"),
+        new ProductRow("EYE", "Optimycin", "Chloramphenicol 0.5%", "ophthalmic", "approved"),
+        new ProductRow("CAP", "Chloramex", "Chloramphenicol 250 mg", "systemic", "approved"),
+        new ProductRow("NOBDC", "Asprin Plus", "Aspirin 75 mg + herb", null, "approved"),
+        new ProductRow("D", "Motigut", "Domperidone 10 mg", "systemic", "approved"),
+        new ProductRow("NOCOV", "Newcov", "Newcovmol 5 mg", "systemic", "approved"),
+        new ProductRow("OTIC", "Otimol", "Oticmol 5 mg", "systemic", "approved"),
+        new ProductRow("AMC", "Moxaclav", "Amoxicillin 500 mg + Clavulanic Acid 125 mg", "systemic", "approved"),
+        new ProductRow("W2", "Coumarol", "Warfarin 5 mg", "systemic", "approved"),
+        new ProductRow("HID", "Hidasprin", "Aspirin 75 mg", "systemic", null),
+        new ProductRow("ISS", "Issueprin", "Aspirin 75 mg", "systemic", null),
+        new ProductRow("NEW", "Newentrol", "Newentol 5 mg", "systemic", "approved"),
+        new ProductRow("OFEYE", "Oflox Eye", "Ofloxacin 0.3%", "ophthalmic", "approved"),
+        new ProductRow("OFTAB", "Oflox", "Ofloxacin 200 mg", "systemic", "approved"));
     static final List<IngredientRow> INGREDIENTS = List.of(
         new IngredientRow("W", "XMW", "Warfarin", "BDS-1", "Warfarin", "full"),
         new IngredientRow("W2", "XMW", "Warfarin", "BDS-1", "Warfarin", "full"),

@@ -44,7 +44,7 @@ class SearchApiIntegrationTest {
 
     @Autowired WebTestClient web;
 
-    private String body(String uri) {
+    String body(String uri) {
         return new String(web.get().uri(uri).exchange().expectStatus().isOk().expectBody().returnResult().getResponseBody(),
             StandardCharsets.UTF_8);
     }

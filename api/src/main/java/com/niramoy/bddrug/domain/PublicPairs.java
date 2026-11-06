@@ -14,7 +14,12 @@ public final class PublicPairs {
     public static final int PAGE_SIZE = 20, BRANDS_MAX = 50;
     public static final String SOURCE = "DDInter 2.0";
 
-    public record Partner(String conceptId, String tradeName, String route, List<BatchPairs.Substance> substances) {}
+    /** review: the partner product's public label (§7.4.1); the four-argument form is approved. */
+    public record Partner(String conceptId, String tradeName, String route, List<BatchPairs.Substance> substances, String review) {
+        public Partner(String conceptId, String tradeName, String route, List<BatchPairs.Substance> substances) {
+            this(conceptId, tradeName, route, substances, PublicReview.APPROVED);
+        }
+    }
     public record Row(String ddinterA, String ddinterB, String severity, List<String> actions, String interaction, String management) {
         public Row {
             interaction = DdinterText.clean(interaction);
@@ -22,31 +27,51 @@ public final class PublicPairs {
         }
     }
     public record SubstanceRef(String bdsId, String name) {}
-    public record Brand(String conceptId, String tradeName) {}
+    /** review: the brand's public label (§7.4.1). The two-argument form is an approved brand (approved-only mode). */
+    public record Brand(String conceptId, String tradeName, String review) {
+        public Brand(String conceptId, String tradeName) { this(conceptId, tradeName, PublicReview.APPROVED); }
+    }
     /**
      * The public products (other than this one) that carry one partner substance at one route: they all pair, or fail to,
      * alike. {@code brands} holds at least the first BRANDS_MAX of them in brand order (lower-case trade name, then concept
      * id); {@code brandCount} counts them all. No product is in two groups of one substance.
      */
-    public record PartnerGroup(BatchPairs.Substance substance, String route, List<Brand> brands, int brandCount) {
+    public record PartnerGroup(BatchPairs.Substance substance, String route, List<Brand> brands, int brandCount, String review) {
         public PartnerGroup { brands = List.copyOf(brands); }
+        /** review: PublicReview.worst over the brands listed (the adapter passes the whole group's worst, §7.4.1). */
+        public PartnerGroup(BatchPairs.Substance substance, String route, List<Brand> brands, int brandCount) {
+            this(substance, route, brands, brandCount, PublicReview.worst(brands.stream().map(Brand::review).toList()));
+        }
     }
     public record Pair(SubstanceRef substance, SubstanceRef partnerSubstance, String severity, List<String> actions, String interaction,
                        String management, String ddinterA, String ddinterB, boolean routeAssumed, String source,
-                       PairReviewRule.PublicReview pairReview, List<Brand> brands, int brandCount) {}
+                       PairReviewRule.PublicReview pairReview, List<Brand> brands, int brandCount, String partnerReview) {}
     /**
      * route: for no_route, the route of the side the reason is on (this product's, or the partner brands', which they
      * share), else null. side: "this" when the reason is this product's substance's (§6.7.2 REASON_ORDER, this side on a
      * tie, as BatchPairs), else "partner". brands are always the partner brands the line covers.
      */
     public record NotChecked(SubstanceRef substance, SubstanceRef partnerSubstance, String reason, String route, List<Brand> brands,
-                             int brandCount, String side) {
+                             int brandCount, String side, String partnerReview) {
+        public NotChecked(SubstanceRef substance, SubstanceRef partnerSubstance, String reason, String route, List<Brand> brands,
+                          int brandCount, String side) {
+            this(substance, partnerSubstance, reason, route, brands, brandCount, side, PublicReview.worst(brands.stream().map(Brand::review).toList()));
+        }
         public NotChecked(SubstanceRef substance, SubstanceRef partnerSubstance, String reason, String route, List<Brand> brands,
                           int brandCount) {
             this(substance, partnerSubstance, reason, route, brands, brandCount, "partner");
         }
     }
-    public record Result(String conceptId, int page, int totalPartners, List<Pair> partners, List<NotChecked> notChecked) {}
+    /**
+     * review: this product's public label (§7.4.1); each pair's and line's partnerReview is PublicReview.worst over every
+     * partner brand it covers, not only the listed ones.
+     */
+    public record Result(String conceptId, int page, int totalPartners, List<Pair> partners, List<NotChecked> notChecked, String review) {
+        public Result(String conceptId, int page, int totalPartners, List<Pair> partners, List<NotChecked> notChecked) {
+            this(conceptId, page, totalPartners, partners, notChecked, null);
+        }
+        public Result withReview(String label) { return new Result(conceptId, page, totalPartners, partners, notChecked, label); }
+    }
 
     private static final Comparator<Brand> BRAND_ORDER = Comparator
         .comparing((Brand b) -> b.tradeName().toLowerCase(Locale.ROOT)).thenComparing(Brand::conceptId);
@@ -56,9 +81,11 @@ public final class PublicPairs {
         final Map<String, Brand> byId = new LinkedHashMap<>();
         final Set<PartnerGroup> groups = Collections.newSetFromMap(new IdentityHashMap<>());
         int count;
+        String worst;
         void add(PartnerGroup q) {
             if (!groups.add(q)) return;
             count += q.brandCount();
+            worst = PublicReview.worst(java.util.Arrays.asList(worst, q.review()));
             for (Brand b : q.brands()) byId.putIfAbsent(b.conceptId(), b);
         }
         List<Brand> capped() { return byId.values().stream().sorted(BRAND_ORDER).limit(BRANDS_MAX).toList(); }
@@ -96,11 +123,12 @@ public final class PublicPairs {
             if (q.conceptId().equals(conceptId)) continue;
             for (BatchPairs.Substance t : q.substances())
                 byGroup.computeIfAbsent(Arrays.asList(t, q.route()), k -> new LinkedHashMap<>())
-                    .putIfAbsent(q.conceptId(), new Brand(q.conceptId(), q.tradeName()));
+                    .putIfAbsent(q.conceptId(), new Brand(q.conceptId(), q.tradeName(), q.review()));
         }
         List<PartnerGroup> groups = new ArrayList<>();
         byGroup.forEach((k, brands) -> groups.add(new PartnerGroup((BatchPairs.Substance) k.get(0), (String) k.get(1),
-            brands.values().stream().sorted(BRAND_ORDER).limit(BRANDS_MAX).toList(), brands.size())));
+            brands.values().stream().sorted(BRAND_ORDER).limit(BRANDS_MAX).toList(), brands.size(),
+            PublicReview.worst(brands.values().stream().map(Brand::review).toList()))));
         return computeGroups(conceptId, route, mine, groups, rows, complete, reviews, page);
     }
 
@@ -154,12 +182,12 @@ public final class PublicPairs {
                 .forEach(p -> pairs.add(new Pair(g.substance, g.partner, p.row.severity(), p.row.actions(), p.row.interaction(),
                     p.row.management(), p.row.ddinterA(), p.row.ddinterB(), p.assumed, SOURCE,
                     reviews.getOrDefault(p.row.ddinterA() + "|" + p.row.ddinterB(), PublicPairReviews.NONE),
-                    p.brands.capped(), p.brands.count)));
+                    p.brands.capped(), p.brands.count, p.brands.worst)));
             g.notChecked.values().stream()
                 .sorted(Comparator.comparingInt((NcAcc n) -> BatchPairs.REASON_ORDER.indexOf(n.reason))
                     .thenComparing(n -> n.side).thenComparing(n -> String.valueOf(n.route)))
                 .forEach(n -> notChecked.add(new NotChecked(g.substance, g.partner, n.reason, n.route, n.brands.capped(),
-                    n.brands.count, n.side)));
+                    n.brands.count, n.side, n.brands.worst)));
         }
         return new Result(conceptId, page, ordered.size(), List.copyOf(pairs), List.copyOf(notChecked));
     }
