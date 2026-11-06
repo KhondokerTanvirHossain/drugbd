@@ -9,8 +9,8 @@ import java.util.stream.Collectors;
  * given in an older batch no longer covers them. A product that is in no batch is 'pending' and never visible.
  *
  * <p>Every public read decides visibility through {@link #latest(PublicMode)} or {@link #publicLabelOf(String, PublicMode)}
- * and names a record's label through {@link #label(String)}; {@link #statusOf(String)} is for the internal scope=all read
- * and the reviewer adapters only (PublicStatusGuardTest).
+ * and names a record's label through {@link #label(String)} (or its set-based form, {@link #labelJoined(String, String)});
+ * {@link #statusOf(String)} is for the internal scope=all read and the reviewer adapters only (PublicStatusGuardTest).
  */
 final class ReviewSql {
     private ReviewSql() {}
@@ -71,6 +71,23 @@ final class ReviewSql {
     static String label(String a) {
         return "CASE WHEN " + a + ".approved THEN 'approved' WHEN " + a + ".review = 'issue' OR EXISTS (SELECT 1 FROM ops.stage_result sr " +
                "WHERE sr.batch_id = " + a + ".batch_id AND sr.concept_id = " + a + ".concept_id AND sr.status = 'fail') " +
+               "THEN 'problem' ELSE 'not_reviewed' END";
+    }
+
+    /**
+     * The set-based form of {@link #label(String)} for a read that labels many rows at once (P10 over the whole public
+     * catalogue, §10.6): {@code failedJoin(a, f)} joins each {@code latest} row (alias {@code a}) to its failed stages once,
+     * as alias {@code f}, and {@code labelJoined(a, f)} reads the same three rules from it, so the statement does one hash
+     * join instead of one stage lookup per unapproved row.
+     */
+    static String failedJoin(String a, String f) {
+        return "LEFT JOIN (SELECT DISTINCT batch_id, concept_id FROM ops.stage_result WHERE status = 'fail') " + f + " ON " + f +
+               ".batch_id = " + a + ".batch_id AND " + f + ".concept_id = " + a + ".concept_id";
+    }
+
+    /** {@link #label(String)} over a {@link #failedJoin(String, String)}: approved, else problem, else not_reviewed. */
+    static String labelJoined(String a, String f) {
+        return "CASE WHEN " + a + ".approved THEN 'approved' WHEN " + a + ".review = 'issue' OR " + f + ".concept_id IS NOT NULL " +
                "THEN 'problem' ELSE 'not_reviewed' END";
     }
 

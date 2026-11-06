@@ -21,7 +21,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @Testcontainers
 // D74 (§7.4.1, §10.6): measured in show mode, the heavier mode: half the partners are not approved, a tenth of those failed a
-// check, so the label's stage lookup runs for every unapproved brand.
+// check, so every unapproved brand is labelled through the failed-stage join (ReviewSql.failedJoin).
 @SpringBootTest(properties = "bddrug.public-shows-unreviewed=true")
 @AutoConfigureWebTestClient
 class ProductInteractionsScaleIntegrationTest {

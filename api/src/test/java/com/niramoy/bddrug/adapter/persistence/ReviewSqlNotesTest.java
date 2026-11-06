@@ -38,4 +38,19 @@ class ReviewSqlNotesTest {
         assertThat(ReviewSql.stubStatus("s", PublicMode.APPROVED_ONLY)).isEqualTo("'not_reviewed'");
         assertThat(ReviewSql.stubStatus("s", PublicMode.SHOW_UNREVIEWED)).contains("'removed'", "'unavailable'");
     }
+
+    /**
+     * §10.6 at 40,000 products: P10 labels every visible product in one statement, so its label is set-based (one join to
+     * the failed items) and never the per-row EXISTS of ReviewSql.label; both forms read the same three rules.
+     */
+    @Test void p10LabelsEveryVisibleProductWithOneJoin() {
+        for (PublicMode mode : PublicMode.values()) {
+            String sql = R2dbcProductInteractionsAdapter.groups(mode);
+            assertThat(sql).as(mode.name()).doesNotContain("EXISTS").contains(ReviewSql.failedJoin("l", "f"));
+        }
+        assertThat(ReviewSql.failedJoin("l", "f")).isEqualTo("LEFT JOIN (SELECT DISTINCT batch_id, concept_id FROM ops.stage_result " +
+            "WHERE status = 'fail') f ON f.batch_id = l.batch_id AND f.concept_id = l.concept_id");
+        assertThat(ReviewSql.labelJoined("l", "f")).isEqualTo("CASE WHEN l.approved THEN 'approved' WHEN l.review = 'issue' OR " +
+            "f.concept_id IS NOT NULL THEN 'problem' ELSE 'not_reviewed' END");
+    }
 }

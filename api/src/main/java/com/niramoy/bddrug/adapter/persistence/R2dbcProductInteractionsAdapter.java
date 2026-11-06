@@ -26,13 +26,14 @@ public class R2dbcProductInteractionsAdapter implements ProductInteractionsPort 
      * (BRANDS_MAX) in PublicPairs' brand order: lower-case trade name, then concept id, under COLLATE "C", which compares by
      * code point as String.compareTo does for every name in the Basic Multilingual Plane; PublicPairs re-sorts them. The
      * groups come in the order PublicPairs.compute would first meet them (by concept id, then XM code). The rows that are
-     * sorted stay narrow, and names and coverage join only the groups, so the sort fits in memory at 40,000 products. Each
-     * brand carries its public label and each group the worst of all its brands' labels (§7.4.1); an approved row never
-     * evaluates the label's stage lookup.
+     * sorted stay narrow, and names and coverage join only the groups, so the sort stays small (about 3 MB with 40,000
+     * visible products). Each brand carries its public label and each group the worst of all its brands' labels (§7.4.1).
+     * The read labels every visible product, so it takes the label's set-based form (one join to the failed items, never a
+     * stage lookup per row: §10.6 holds in show mode, where half the catalogue may be unapproved).
      */
-    private static String groups(PublicMode mode) {
-        return "WITH " + ReviewSql.latest(mode) + ", vis AS (SELECT l.concept_id, " + ReviewSql.label("l") + " AS lab " +
-            "FROM latest l WHERE l.pub AND l.concept_id <> :c)" + """
+    static String groups(PublicMode mode) {
+        return "WITH " + ReviewSql.latest(mode) + ", vis AS (SELECT l.concept_id, " + ReviewSql.labelJoined("l", "f") + " AS lab " +
+            "FROM latest l " + ReviewSql.failedJoin("l", "f") + " WHERE l.pub AND l.concept_id <> :c)" + """
             , subs AS (
                 SELECT bp.concept_id, bp.trade_name, cd.route COLLATE "C" AS route, x.bds_id COLLATE "C" AS bds_id,
                        CASE WHEN x.bds_id IS NULL THEN bpi.ingredient_name END COLLATE "C" AS unmapped, min(bpi.xm_code) AS xm, v.lab
