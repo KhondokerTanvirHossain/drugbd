@@ -2,6 +2,7 @@ package com.niramoy.bddrug.presentation;
 import com.niramoy.bddrug.application.ProductQueryService;
 import com.niramoy.bddrug.domain.LoadedProduct;
 import com.niramoy.bddrug.domain.Product;
+import com.niramoy.bddrug.domain.ProductBrowse;
 import com.niramoy.bddrug.domain.SuggestRow;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
@@ -42,6 +43,18 @@ public class ProductController {
                                                        @RequestHeader(value = InternalAuth.HEADER, required = false) String token) {
         auth.present(token);
         return service.suggest(q, exclude).collectList().map(ApiResponse::ok);
+    }
+
+    /**
+     * §6.11.3 P17: the A–Z list of visible products, 50 a page (page 0–9). Public data only; a present token must still match.
+     * The literal path wins over "/{conceptId}".
+     */
+    @GetMapping("/browse")
+    public Mono<ApiResponse<ProductBrowse>> browse(@RequestParam(required = false) String letter,
+                                                   @RequestParam(defaultValue = "0") int page,
+                                                   @RequestHeader(value = InternalAuth.HEADER, required = false) String token) {
+        auth.present(token);
+        return service.browse(letter, page).map(ApiResponse::ok);
     }
 
     /** An unapproved product under public scope is 200 with {conceptId, tradeName, reviewStatus, hidden: true}. */

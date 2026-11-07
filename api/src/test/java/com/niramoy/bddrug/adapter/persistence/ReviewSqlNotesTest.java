@@ -53,4 +53,24 @@ class ReviewSqlNotesTest {
         assertThat(ReviewSql.labelJoined("l", "f")).isEqualTo("CASE WHEN l.approved THEN 'approved' WHEN l.review = 'issue' OR " +
             "f.concept_id IS NOT NULL THEN 'problem' ELSE 'not_reviewed' END");
     }
+
+    /**
+     * §6.11.3 P17 (D75): the A–Z list may scan the whole visible catalogue, so its page labels with the set-based form as P10
+     * does, and its counts are one grouped read on the rule; the letter is always a bind, never part of the SQL text.
+     */
+    @Test void p17LabelsWithOneJoinAndBindsTheLetter() {
+        for (PublicMode mode : PublicMode.values()) {
+            for (boolean byLetter : new boolean[]{false, true}) {
+                String sql = R2dbcProductAdapter.browsePage(mode, byLetter);
+                assertThat(sql).as(mode + " " + byLetter).doesNotContain("EXISTS").contains(ReviewSql.latest(mode),
+                    ReviewSql.failedJoin("l", "f"), ReviewSql.labelJoined("l", "f"), "AND l.pub",
+                    "ORDER BY lower(bp.trade_name), bp.trade_name, bp.concept_id LIMIT :limit OFFSET :offset");
+                assertThat(sql.contains(R2dbcProductAdapter.FIRST_LETTER + " = :letter")).isEqualTo(byLetter);
+            }
+            assertThat(R2dbcProductAdapter.browseCounts(mode)).doesNotContain("EXISTS", "stage_result")
+                .contains(ReviewSql.latest(mode), "AND l.pub GROUP BY 1");
+        }
+        assertThat(R2dbcProductAdapter.FIRST_LETTER)
+            .isEqualTo("CASE WHEN bp.trade_name ~ '^[A-Za-z]' THEN upper(left(bp.trade_name, 1)) ELSE '0-9' END");
+    }
 }

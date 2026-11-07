@@ -8,9 +8,13 @@ import com.niramoy.bddrug.application.port.ProductQueryPort.LatestItem;
 import com.niramoy.bddrug.domain.HiddenRecord;
 import com.niramoy.bddrug.domain.LoadedProduct;
 import com.niramoy.bddrug.domain.Product;
+import com.niramoy.bddrug.domain.ProductBrowse;
 import com.niramoy.bddrug.domain.PublicProduct;
 import com.niramoy.bddrug.domain.PublicProducts;
 import com.niramoy.bddrug.domain.Scope;
+import com.niramoy.bddrug.presentation.InternalAuth;
+import com.niramoy.bddrug.presentation.ProductController;
+import com.niramoy.bddrug.presentation.UnauthorizedException;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -19,6 +23,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ProductQueryServiceTest {
     static final ProductDetailPort DETAILS = (c, bdc, route) -> Mono.just(new PublicProducts.Facts("B-1", null, null, null,
@@ -49,6 +54,12 @@ class ProductQueryServiceTest {
         static final Map<String, LatestItem> ITEMS = Map.of(
             "PEND", new LatestItem("B-2", false), "ISS", new LatestItem("B-2", false), "REM", new LatestItem("B-3", true));
         public Mono<LatestItem> latestItem(String id) { return Mono.justOrEmpty(ITEMS.get(id)); }
+        public Mono<Map<String, Long>> browseCounts() {
+            calls.add(new Object[]{"counts"}); return Mono.just(Map.of("B", 120L, "N", 3L, ProductBrowse.DIGITS, 2L));
+        }
+        public Flux<ProductBrowse.Row> browse(String letter, int limit, int offset) {
+            calls.add(new Object[]{"browse", letter, limit, offset}); return Flux.empty();
+        }
     }
 
     @Test void rejectsTooShortQuery() {
@@ -122,5 +133,89 @@ class ProductQueryServiceTest {
         StepVerifier.create(service.suggest(" \u0995 ", List.of()))
             .expectErrorSatisfies(e -> assertThat(((InvalidQueryException) e).field()).isEqualTo("q")).verify();
         assertThat(calls).hasSize(3);
+    }
+
+    // ---- §6.11.3 P17 browse
+
+    static ProductQueryService browseService(FakePort port) {
+        return new ProductQueryService(port, DETAILS, c -> Mono.empty(), (t, e, l) -> Flux.empty());
+    }
+
+    static Object[] browseCall(FakePort port) {
+        return port.calls.stream().filter(c -> "browse".equals(c[0])).findFirst().orElseThrow();
+    }
+
+    @Test void browseRejectsAnyLetterButAToZOr09() {
+        FakePort port = new FakePort();
+        for (String bad : List.of("AB", "1", "5", "-", "0", "09", "0-9 ", " A", "\u00c4", "\u00e9", "\u0995", "0\u20139", "a\u0000", "%", "all"))
+            StepVerifier.create(browseService(port).browse(bad, 0))
+                .expectErrorSatisfies(e -> assertThat(((InvalidQueryException) e).field()).as(bad).isEqualTo("letter")).verify();
+        assertThat(port.calls).isEmpty();
+    }
+
+    @Test void browseRejectsAPageOutside0To9() {
+        FakePort port = new FakePort();
+        for (int bad : new int[]{-1, 10, 500})
+            StepVerifier.create(browseService(port).browse("A", bad))
+                .expectErrorSatisfies(e -> assertThat(((InvalidQueryException) e).field()).isEqualTo("page")).verify();
+        assertThat(port.calls).isEmpty();
+        StepVerifier.create(browseService(port).browse(null, 9)).expectNextCount(1).verifyComplete();
+        assertThat(browseCall(port)).containsExactly("browse", null, 50, 450);
+    }
+
+    @Test void browseReadsALowerCaseLetterUpperCaseAndABlankOneAsNoLetter() {
+        FakePort port = new FakePort();
+        StepVerifier.create(browseService(port).browse("b", 2))
+            .assertNext(b -> assertThat(b.letter()).isEqualTo("B")).verifyComplete();
+        assertThat(browseCall(port)).containsExactly("browse", "B", 50, 100);
+        for (String none : java.util.Arrays.asList(null, "", "  ")) {
+            FakePort p = new FakePort();
+            StepVerifier.create(browseService(p).browse(none, 0))
+                .assertNext(b -> assertThat(b.letter()).isNull()).verifyComplete();
+            assertThat(browseCall(p)).containsExactly("browse", null, 50, 0);
+        }
+        FakePort digits = new FakePort();
+        StepVerifier.create(browseService(digits).browse("0-9", 0))
+            .assertNext(b -> assertThat(b.letter()).isEqualTo("0-9")).verifyComplete();
+        assertThat(browseCall(digits)).containsExactly("browse", "0-9", 50, 0);
+        assertThat(ProductBrowse.key("z")).isEqualTo("Z");
+        assertThat(ProductBrowse.key("Z")).isEqualTo("Z");
+        assertThat(ProductBrowse.key("[")).isNull();
+        assertThat(ProductBrowse.key("@")).isNull();
+        assertThat(ProductBrowse.key("{")).isNull();
+        assertThat(ProductBrowse.key("`")).isNull();
+    }
+
+    @Test void browseListsAll27LettersWithZerosAndCountsTheTotalOfTheLetter() {
+        FakePort port = new FakePort();
+        StepVerifier.create(browseService(port).browse(null, 0)).assertNext(b -> {
+            assertThat(b.letters()).hasSize(27);
+            assertThat(b.letters().get(0)).isEqualTo(new ProductBrowse.LetterCount("A", 0));
+            assertThat(b.letters().get(1)).isEqualTo(new ProductBrowse.LetterCount("B", 120));
+            assertThat(b.letters().get(25).letter()).isEqualTo("Z");
+            assertThat(b.letters().get(26)).isEqualTo(new ProductBrowse.LetterCount("0-9", 2));
+            assertThat(b.total()).isEqualTo(125);
+            assertThat(b.page()).isZero();
+            assertThat(b.hasMore()).isTrue();
+        }).verifyComplete();
+        StepVerifier.create(browseService(port).browse("B", 1))
+            .assertNext(b -> { assertThat(b.total()).isEqualTo(120); assertThat(b.hasMore()).isTrue(); }).verifyComplete();
+        StepVerifier.create(browseService(port).browse("B", 2))
+            .assertNext(b -> { assertThat(b.total()).isEqualTo(120); assertThat(b.hasMore()).isFalse(); }).verifyComplete();
+        StepVerifier.create(browseService(port).browse("Q", 0))
+            .assertNext(b -> { assertThat(b.total()).isZero(); assertThat(b.hasMore()).isFalse(); }).verifyComplete();
+        assertThat(ProductBrowse.KEYS).hasSize(27).startsWith("A", "B").endsWith("Y", "Z", "0-9");
+    }
+
+    /** §6.11.3: public data only, but a present internal token must still match (as P16); the port is never reached. */
+    @Test void browseRefusesATokenThatDoesNotMatch() {
+        FakePort port = new FakePort();
+        ProductController controller = new ProductController(browseService(port), new InternalAuth(TestSupport.TOKEN));
+        assertThatThrownBy(() -> controller.browse(null, 0, "not-the-token")).isInstanceOf(UnauthorizedException.class);
+        assertThat(port.calls).isEmpty();
+        StepVerifier.create(controller.browse("a", 0, TestSupport.TOKEN))
+            .assertNext(r -> assertThat(r.data().letter()).isEqualTo("A")).verifyComplete();
+        StepVerifier.create(controller.browse("a", 0, null))
+            .assertNext(r -> assertThat(r.data().letter()).isEqualTo("A")).verifyComplete();
     }
 }

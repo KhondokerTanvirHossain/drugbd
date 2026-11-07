@@ -8,6 +8,7 @@ import com.niramoy.bddrug.domain.ClinicalDrug;
 import com.niramoy.bddrug.domain.HiddenRecord;
 import com.niramoy.bddrug.domain.LoadedProduct;
 import com.niramoy.bddrug.domain.Product;
+import com.niramoy.bddrug.domain.ProductBrowse;
 import com.niramoy.bddrug.domain.PublicPairs;
 import com.niramoy.bddrug.domain.PublicMode;
 import com.niramoy.bddrug.domain.PublicProducts;
@@ -26,6 +27,8 @@ public class ProductQueryService {
     public static final int PAGE_SIZE = 20, MAX_PAGE = 500, MIN_LEN = 2, MAX_LEN = 100;
     public static final int INTERACTIONS_PAGE_MAX = 10_000;
     public static final int SUGGEST_LIMIT = 10, EXCLUDE_MAX = 20;
+    /** §6.11.3 P17: 50 rows a page, page index 0–9 (the §6.3 public page cap). */
+    public static final int BROWSE_PAGE_SIZE = 50, BROWSE_PAGE_MAX = 9;
     private final ProductQueryPort port;
     private final ProductDetailPort details;
     private final ProductInteractionsPort interactions;
@@ -112,4 +115,18 @@ public class ProductQueryService {
     }
 
     public Flux<LoadedProduct> loaded(Scope scope) { return port.loaded(scope == Scope.PUBLIC); }
+
+    /**
+     * §6.11.3 P17: one page of the A–Z list of visible products under the public mode. {@code letter}: absent or blank for
+     * every letter, else A–Z in either case (read upper-case) or 0-9; anything else is a 400, as is a page outside 0–9.
+     */
+    public Mono<ProductBrowse> browse(String letter, int page) {
+        String key = letter == null || letter.isBlank() ? null : ProductBrowse.key(letter);
+        if (key == null && letter != null && !letter.isBlank())
+            return Mono.error(new InvalidQueryException("letter", "letter must be A-Z or 0-9"));
+        if (page < 0 || page > BROWSE_PAGE_MAX)
+            return Mono.error(new InvalidQueryException("page", "page must be 0-" + BROWSE_PAGE_MAX));
+        return Mono.zip(port.browseCounts(), port.browse(key, BROWSE_PAGE_SIZE, page * BROWSE_PAGE_SIZE).collectList())
+            .map(t -> ProductBrowse.assemble(key, page, BROWSE_PAGE_SIZE, t.getT1(), t.getT2()));
+    }
 }
