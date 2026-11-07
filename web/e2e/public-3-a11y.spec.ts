@@ -15,7 +15,7 @@ async function axe(page: Page, state: string): Promise<void> {
 
 /** Napa, Aspirin, G Warfarin, Domperidone and the eye drop are public; G-Metformin stays a stub. */
 const ANONYMOUS = [
-  "/", "/search?q=paracetamol", "/search?q=warfarin", "/search?q=zzzzzz", `/products/${P.napa}`, `/products/${P.metformin}`,
+  "/", "/search", "/search?letter=N", "/search?q=paracetamol", "/search?q=warfarin", "/search?q=zzzzzz", `/products/${P.napa}`, `/products/${P.metformin}`,
   "/products/no-such-product", "/substances/BDS-000001", "/check",
   `/check?ids=${P.warfarin}&ids=${P.aspirin}&ids=${P.domperidone}&ids=${P.metformin}`,
   `/check?ids=${P.chloramphenicol}&ids=${P.warfarin}`, "/signin", "/partners", "/privacy",
@@ -52,6 +52,12 @@ for (const look of LOOKS) {
     await page.getByRole("combobox", { name: "Add a medicine" }).fill("na");
     await expect(page.getByRole("listbox")).toBeVisible();
     await axe(page, `${look.name} /check, list open`);
+    // D75 (§6.11.1): the header search's open list, with the arrows on an option
+    await page.goto("/search?q=paracetamol");
+    await page.getByRole("combobox", { name: "Search medicines" }).fill("na");
+    await expect(page.locator("#hs-list")).toBeVisible();
+    await page.getByRole("combobox", { name: "Search medicines" }).press("ArrowDown");
+    await axe(page, `${look.name} header search, list open`);
     await anon.close();
 
     const reader = await contextFor(browser, look);

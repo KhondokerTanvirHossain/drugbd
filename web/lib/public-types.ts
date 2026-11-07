@@ -94,6 +94,14 @@ export type SearchStub = { conceptId: string; tradeName: string; status: "not_re
 export type SearchResult = { query: string; total: number; hasMore: boolean; counts: { substances: number; products: number };
   substances: SearchSubstance[]; products: (SearchProduct | SearchStub)[]; suggestion: string | null };
 
+/** §6.11.3 P17 GET /v1/products/browse: one page of the A–Z list of visible products, 50 a page, each with its label. */
+export type BrowseProduct = { conceptId: string; tradeName: string; darNumber: string; company: string; dosageForm: string;
+  genericContentRaw: string; clinicalDrug: { bdcId: string; displayName: string } | null; status: "approved" | "not_reviewed";
+  review: PublicLabel };
+/** `letters` holds the 27 keys, A…Z then `0-9`, with their visible counts (zeros included). */
+export type BrowseResult = { letter: string | null; total: number; page: number; hasMore: boolean;
+  letters: { letter: string; count: number }[]; products: BrowseProduct[] };
+
 export type SuggestRow = { conceptId: string; tradeName: string; dosageForm: string; status: "approved" | "not_reviewed";
   clinicalDisplayName: string | null; matched: { name: string; substance: string } | null; review?: PublicLabel | null };
 

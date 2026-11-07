@@ -1,7 +1,7 @@
 {
   "ci": {
     "collect": {
-      "url": ["http://localhost:3000/", "http://localhost:3000/search?q=paracetamol", "http://localhost:3000/products/186-0030-006--napa",
+      "url": ["http://localhost:3000/", "http://localhost:3000/search?q=paracetamol", "http://localhost:3000/search", "http://localhost:3000/products/186-0030-006--napa",
         "http://localhost:3000/substances/BDS-000001",
         "http://localhost:3000/check?ids=185-0138-012--g-warfarin&ids=076-0028-006--aspirin&ids=127-0263-018--domperidone"],
       "numberOfRuns": 3,

@@ -24,6 +24,8 @@ export const ENDPOINTS: Endpoint[] = [
   { method: "GET", path: "/v1/substances/{bdsId}/interactions?severity=&page=", what: "A substance's DDInter pairs with their text, 20 a page", access: ["Public", "All"] },
   { method: "GET", path: "/v1/search?q=&page=", what: "Search by brand, substance or DAR number: approved records, and stubs for the rest", access: ["Public", "All"] },
   { method: "GET", path: "/v1/products/suggest?q=&exclude=", what: "Up to 10 suggestions for the checker. Unapproved rows match on trade name and DAR only.", access: ["Public"] },
+  // D75 (§6.11.3) P17: the same wording in both modes, as /v1/public-mode (it lists only public records, each with its label).
+  { method: "GET", path: "/v1/products/browse?letter=&page=", what: "Every public product A to Z, by first letter, 50 a page, with the count for each letter", access: ["Public"] },
   { method: "GET", path: "/v1/products/{conceptId}/interactions?page=", what: "Pairs with approved products of every batch, by partner substance, 20 a page", access: ["Public", "All"] },
   { method: "GET", path: "/v1/clinical-drugs/{bdcId}", what: "A clinical drug, its ingredients and its approved brands", access: ["Public", "All"] },
   { method: "POST", path: "/v1/interactions/check", what: "Checks a list of products: alerts, duplicates, noData, notReviewed", access: ["Public", "All"] },

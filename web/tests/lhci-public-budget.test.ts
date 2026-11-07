@@ -25,6 +25,8 @@ const COMMON = {
 const GROUPS = [
   { url: "http://localhost:3000/", numeric: { ...COMMON, "resource-summary:document:size": 30720, "resource-summary:script:size": 133120 } },
   { url: "http://localhost:3000/search?q=paracetamol", numeric: { ...COMMON, "resource-summary:document:size": 51200, "resource-summary:script:size": 133120 } },
+  // D75 (§6.11.4): /search with no query, the medicine list, under the same budget as search
+  { url: "http://localhost:3000/search", numeric: { ...COMMON, "resource-summary:document:size": 51200, "resource-summary:script:size": 133120 } },
   { url: "http://localhost:3000/products/186-0030-006--napa", numeric: { ...COMMON, "resource-summary:document:size": 51200, "resource-summary:script:size": 133120 } },
   { url: "http://localhost:3000/substances/BDS-000001", numeric: { ...COMMON, "resource-summary:document:size": 51200, "resource-summary:script:size": 133120 } },
   { url: "http://localhost:3000/check?ids=185-0138-012--g-warfarin&ids=076-0028-006--aspirin&ids=127-0263-018--domperidone",
@@ -48,7 +50,7 @@ const failedKeys = (runs: object[]) => getAllAssertionResults({ assertMatrix: ma
   .map((r) => (r.auditProperty ? `${r.auditId}:${r.auditProperty.replace(".", ":")}` : r.auditId)).sort();
 
 describe("the public Lighthouse budget (§1.4 S5, §10.6, median of 3 runs)", () => {
-  it("collects the five S5 pages three times each, with Turnstile blocked", () => {
+  it("collects the five S5 pages and the medicine list (D75) three times each, with Turnstile blocked", () => {
     expect(config.ci.collect.url).toEqual(GROUPS.map((g) => g.url));
     expect(config.ci.collect.numberOfRuns).toBe(3);
     expect(config.ci.collect.settings.blockedUrlPatterns).toEqual(["https://challenges.cloudflare.com/*"]);

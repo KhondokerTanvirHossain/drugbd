@@ -980,6 +980,34 @@ export const P1C_COPY = {
 /** Typed view of the D74 row (§6.10): the show-mode variants. Each replaces an approved-only string in show mode only. */
 export const SHOW_COPY = SHOW_MODE;
 
+// ---- D75 (§6.11): the header search combobox and the medicine list, pinned verbatim by tests/browse-copy.test.ts. ----
+/** §6.11.1 the HeaderSearch island: its sr-only help (`hs-help`) and the last option of an open list. */
+export const HEADER_SEARCH = {
+  help: "Suggestions appear as you type. Up and down arrows to move, Enter to open, Esc to close.",
+  allResults: "All results for “{q}”",
+} as const;
+
+/**
+ * §6.11.2 the medicine list (`/search` with no query). The `0-9` choice reads `digitsPhrase` wherever a line names the
+ * letter ("{n} medicines starting with a number or symbol"). 500 is the page cap: 10 pages of 50.
+ */
+export const BROWSE_COPY = {
+  h1: "Medicines",
+  lede: "Every medicine on IntelliDrugs, A to Z. To find one by brand, substance or DAR number, use the search above.",
+  countOne: "{n} medicine",
+  countMany: "{n} medicines",
+  countLetterOne: "{n} medicine starting with {letter}",
+  countLetterMany: "{n} medicines starting with {letter}",
+  digitsPhrase: "a number or symbol",
+  barLabel: "Browse by first letter",
+  all: "All",
+  digits: "0–9",
+  capAll: "Showing the first 500 medicines. Choose a letter or search to find the others.",
+  capLetter: "Showing the first 500 medicines starting with {letter}. Search to find the others.",
+  emptyAll: "No medicines on IntelliDrugs yet.",
+  emptyLetter: "No medicine on IntelliDrugs starts with {letter} yet.",
+} as const;
+
 /** Typed views of the QA portal rows (§1.7), so modules never index NEW_COPY by row text. */
 export const QA_COPY = { role: QA_ROLE, account: QA_ACCOUNT, page: QA_PAGE, keys: QA_KEYS, reference: QA_REFERENCE_ROW } as const;
 

@@ -65,7 +65,8 @@ describe("/search (§6.3, Board P)", () => {
   it("validation never calls the API", async () => {
     expect(await render({ q: "a" })).toContain("Type at least 2 characters.");
     expect(await render({ q: "x".repeat(101) })).toContain("Use 100 characters or fewer.");
-    expect(await render({})).toContain("Type at least 2 characters.");
+    // D75 (§6.11.2): no q is the medicine list now (tests/browse-page.test.tsx); a q of 1 character after trim stays too short.
+    expect(await render({ q: " a " })).toContain("Type at least 2 characters.");
     expect(searchMedicines).not.toHaveBeenCalled();
   });
 

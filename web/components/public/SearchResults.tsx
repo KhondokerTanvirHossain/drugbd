@@ -74,7 +74,12 @@ function SubstanceHit({ s, mode }: { s: SearchSubstance; mode: PublicMode }) {
   );
 }
 
-function ProductHit({ p, q }: { p: SearchProduct; q: string }) {
+/** The fields the approved product hit renders: a search product, or a medicine-list row (§6.11.2). */
+export type ProductHitData = Pick<SearchProduct, "conceptId" | "tradeName" | "darNumber" | "company" | "dosageForm"
+  | "genericContentRaw" | "clinicalDrug" | "review">;
+
+/** §6.3 approved product hit, reused by the medicine list with an empty q (nothing marked, §6.11.2). */
+export function ProductHit({ p, q }: { p: ProductHitData; q: string }) {
   return (
     <article className={styles["s-res"]}>
       <div className={styles["s-res-main"]}>
