@@ -1,13 +1,12 @@
 "use client";
-import { useEffect, useRef, useState, type ComponentType, type KeyboardEvent, type RefObject } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState, type ComponentType, type KeyboardEvent } from "react";
 import { hasClinicalData } from "@/components/suggest/clinical-data";
+import { openPage } from "@/components/suggest/open-page";
 import type { SuggestOption } from "@/components/suggest/SuggestOptionBody";
 import { suggestable, useSuggest } from "@/components/suggest/useSuggest";
 import { HEADER_SEARCH, SEARCH_FIELD } from "@/lib/header-search-copy";
 import styles from "./Header.module.css";
 
-type Push = (href: string) => void;
 type Body = ComponentType<{ r: SuggestOption; nameClass: string; subClass: string }>;
 const MAX_OPTIONS = 10;
 
@@ -26,23 +25,10 @@ function loadBody(): Promise<Body> {
 const allResultsFor = (q: string) => HEADER_SEARCH.allResults.replace("{q}", () => q);
 
 /**
- * useRouter() needs the app router, which a server render outside the app (the header's static tests) does not mount. The
- * bridge renders only once the island runs and hands the router's push to the island.
- */
-function RouterBridge({ to }: { to: RefObject<Push | null> }) {
-  const router = useRouter();
-  useEffect(() => {
-    to.current = (href) => router.push(href);
-    return () => { to.current = null; };
-  }, [router, to]);
-  return null;
-}
-
-/**
  * Island (§6.11.1): the top bar's search field. Without JavaScript it is exactly the §6.1 field of the GET form to /search.
  * Once it runs it is an ARIA 1.2 combobox over /check/suggest: medicine options that carry clinical data, then "All results
  * for “{q}”". No option is active when the list opens, so Enter on its own still submits the search. Enter or a click on a
- * medicine opens its product page; on "All results" it submits the form. The ids (hs-*) never clash with the checker's cx-*.
+ * medicine opens its product page with a full page load; on "All results" it submits the form. The ids (hs-*) never clash with the checker's cx-*.
  */
 export default function HeaderSearch({ q }: { q: string }) {
   const [ready, setReady] = useState(false);
@@ -52,7 +38,6 @@ export default function HeaderSearch({ q }: { q: string }) {
   const [text, setText] = useState(q);
   const [Body, setBody] = useState<Body | null>(null);
   const input = useRef<HTMLInputElement>(null);
-  const push = useRef<Push | null>(null);
   // The trimmed query `rows` answer (null: none). Rows only ever answer the field's current text: typing anything else
   // clears them, so a medicine from an earlier query can never be highlighted or opened.
   const answered = useRef<string | null>(null);
@@ -119,9 +104,7 @@ export default function HeaderSearch({ q }: { q: string }) {
     close();
     const r = rows[i];
     if (i < all && r) {
-      const href = `/products/${encodeURIComponent(r.conceptId)}`;
-      if (push.current) push.current(href);
-      else window.location.assign(href);
+      openPage(`/products/${encodeURIComponent(r.conceptId)}`);   // a full load, so the bar renders for that page
     } else {
       input.current?.form?.requestSubmit();
     }
@@ -168,7 +151,6 @@ export default function HeaderSearch({ q }: { q: string }) {
       </label>
       {ready && (
         <>
-          <RouterBridge to={push} />
           <span id="hs-help" className="sr-only">{HEADER_SEARCH.help}</span>
           {/* mousedown keeps focus in the field, so a click on an option or the list's scrollbar never blurs it */}
           <ul className={styles.hsList} id="hs-list" role="listbox" aria-label={SEARCH_FIELD.label} hidden={!open}

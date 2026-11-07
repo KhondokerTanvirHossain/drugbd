@@ -2378,7 +2378,7 @@ The list is capped at 10 pages of 50 for each letter, which keeps the §6.3 anti
   | Input | Action |
   |---|---|
   | ArrowDown / ArrowUp | Opens the list and moves through the options, the last option included. |
-  | Enter on a medicine option | Navigates to `/products/{conceptId}` (`router.push`). |
+  | Enter on a medicine option | Opens `/products/{conceptId}` with a full page load (`window.location.assign`, through `components/suggest/open-page.ts`), so the top bar, the nav's `aria-current` and the field render for the product page; a soft `router.push` would keep the previous page's root layout (final review, 07/11/2026). |
   | Enter on "All results" | Submits the form. |
   | Esc | Closes the list; with the list closed, the field clears as a search input does. |
   | Tab, or a click outside | Closes the list. |
@@ -2392,7 +2392,7 @@ The list is capped at 10 pages of 50 for each letter, which keeps the §6.3 anti
 - **When it shows.** `/search` renders the list when `q` is absent or empty after trim. A `q` of 1 character keeps "Type at least 2 characters."; a longer `q` keeps the §6.3 results, unchanged.
 - **Parameters:**
   - `letter`: `A`–`Z` (case-insensitive) or `0-9`. `0-9` holds every name whose first character is not a letter A–Z. Any other value reads as no letter.
-  - `page`: the §6.3 rule (`parseSearchPage`: index 0–9, and past 9 it reads 9 with the cap line).
+  - `page`: `parseSearchPage` (index 0–9; past 9 it reads 9). Unlike §6.3, the cap line shows only when page 9 has more rows, so `?letter=Q&page=50` with 3 products reads page 9 with no cap line.
 - **Layout:**
   - `<h1>` "Medicines";
   - the lede "Every medicine on IntelliDrugs, A to Z. To find one by brand, substance or DAR number, use the search above.";

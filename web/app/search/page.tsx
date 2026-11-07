@@ -18,7 +18,7 @@ export async function generateMetadata({ searchParams }: Props) {
 
 /**
  * §6.3, and §6.11.2 with no query: the A–Z medicine list. Public scope for every session (§2.2). A bad page reads as 0; past
- * index 9 reads 9 with the cap line (Review Focus 2).
+ * index 9 reads 9 (Review Focus 2). Search shows the cap line there; the list shows it only when page 9 has more rows.
  */
 export default async function SearchPage({ searchParams }: Props) {
   const sp = await searchParams;

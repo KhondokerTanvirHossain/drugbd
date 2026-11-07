@@ -5,8 +5,9 @@ import { join } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const push = vi.fn(), replace = vi.fn();
+const { push, replace } = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push, replace }) }));
+vi.mock("@/components/suggest/open-page", () => ({ openPage: push }));
 import HeaderSearch from "@/components/HeaderSearch";
 import CheckerCombobox from "@/components/check/CheckerCombobox";
 import SuggestOptionBody from "@/components/suggest/SuggestOptionBody";
@@ -140,7 +141,7 @@ describe("HeaderSearch once it runs (§6.11.1)", () => {
     expect(input().getAttribute("aria-expanded")).toBe("false");
   });
 
-  it("ArrowDown and Enter on a medicine opens its product page with router.push", async () => {
+  it("ArrowDown and Enter on a medicine opens its product page with a full page load (openPage)", async () => {
     render(<Bar />);
     await typeAndOpen("nap");
     fireEvent.keyDown(input(), { key: "ArrowDown" });

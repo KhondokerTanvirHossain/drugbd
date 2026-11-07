@@ -241,6 +241,19 @@ test("header search: 'nap' suggests Napa with the pill; ArrowDown and Enter open
   await expect(page.locator("h1")).toHaveText('Results for "nap"');
 });
 
+test("header search on /check: a picked medicine opens with a full load, so the bar marks Medicines, not the checker (§6.11.1)", async ({ page }) => {
+  await page.goto("/check");
+  const nav = page.getByRole("navigation", { name: "Main" });
+  await expect(nav.getByRole("link", { name: "Interaction checker" }).first()).toHaveAttribute("aria-current", "page");
+  await typeInHeader(page, "nap", "Napa");
+  await headerOption(page, "Napa").click();
+  await expect(page).toHaveURL(new RegExp(`/products/${P.napa}$`));
+  await expect(page.locator("h1")).toHaveText("Napa");
+  await expect(nav.getByRole("link", { name: "Medicines" }).first()).toHaveAttribute("aria-current", "page");
+  await expect(nav.getByRole("link", { name: "Interaction checker" }).first()).not.toHaveAttribute("aria-current", "page");
+  await expect(headerSearch(page)).toHaveValue("");
+});
+
 test("/search lists every visible medicine with its label and the caution; a letter filters the list (§6.11.2)", async ({ page }) => {
   await page.goto("/search");
   await opensWithCaution(page);
