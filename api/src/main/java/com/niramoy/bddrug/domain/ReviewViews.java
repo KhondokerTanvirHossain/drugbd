@@ -16,4 +16,12 @@ public final class ReviewViews {
     public record ItemsPage(String batchId, int total, Map<String, Integer> filterCounts, List<ItemRow> items) {}
     public record VersionRow(String conceptId, Instant extractedAt, Long lastDecisionId, String displayStatus) {}
     public record Diff(Instant from, Instant to, String reason, List<SnapshotDiff.Row> rows) {}
+
+    /** §5.16 (D76): one counted open issue on a record, by role only (never an email). */
+    public record IssueEntry(String role, Instant at, String note) {}
+    /** One current record whose display status is issue, with its counted open issues oldest first. */
+    public record IssueRecord(String batchId, String conceptId, int index, String tradeName, String clinicalDisplayName,
+                              List<IssueEntry> issues) {}
+    /** Records with an issue reported, across every batch: oldest open issue first, {@code size} per page. */
+    public record IssuesPage(int total, int page, int size, boolean hasMore, List<IssueRecord> items) {}
 }

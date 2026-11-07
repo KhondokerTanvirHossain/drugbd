@@ -127,6 +127,41 @@ public class ReviewQueryService {
             }));
     }
 
+    /** §5.16 (D76): the page size of the cross-batch issue list. */
+    public static final int ISSUES_SIZE = 50;
+
+    /**
+     * §7.3 (D76): every current record, in any batch, whose display status is issue, each with its counted open issues
+     * (role, time, note; never an email), ordered by its oldest open issue, then batch id, then concept id.
+     */
+    public Mono<ReviewViews.IssuesPage> issues(String page) {
+        return Mono.fromCallable(() -> number(page, 0, 0, PAGE_MAX, "page"))
+            .flatMap(p -> port.batches()
+                .concatMap(b -> port.items(b.batchId()).flatMapIterable(items -> assess(items).stream()
+                    .filter(a -> ApprovalRule.ISSUE.equals(a.displayStatus()))
+                    .map(a -> issueRecord(b.batchId(), a))
+                    .filter(r -> !r.issues().isEmpty())
+                    .toList()))
+                .collectList()
+                .map(all -> {
+                    List<ReviewViews.IssueRecord> sorted = all.stream().sorted(ISSUE_ORDER).toList();
+                    long from = (long) p * ISSUES_SIZE;
+                    List<ReviewViews.IssueRecord> rows = sorted.stream().skip(from).limit(ISSUES_SIZE).toList();
+                    return new ReviewViews.IssuesPage(sorted.size(), p, ISSUES_SIZE, from + rows.size() < sorted.size(), rows);
+                }));
+    }
+
+    private static final java.util.Comparator<ReviewViews.IssueRecord> ISSUE_ORDER =
+        java.util.Comparator.<ReviewViews.IssueRecord, Instant>comparing(r -> r.issues().get(0).at())
+            .thenComparing(ReviewViews.IssueRecord::batchId).thenComparing(ReviewViews.IssueRecord::conceptId);
+
+    static ReviewViews.IssueRecord issueRecord(String batchId, Assessed a) {
+        List<ReviewViews.IssueEntry> issues = ApprovalRule.openIssues(a.facts().decisions(), a.facts().extractedAt()).stream()
+            .map(d -> new ReviewViews.IssueEntry(d.reviewerRole(), d.decidedAt(), d.note())).toList();
+        return new ReviewViews.IssueRecord(batchId, a.facts().conceptId(), a.index(), a.facts().tradeName(),
+            a.facts().clinicalDisplayName(), issues);
+    }
+
     public Mono<List<VersionRow>> versions(String batchId) {
         return requireBatch(batchId).then(port.items(batchId)).map(items -> assess(items).stream()
             .map(a -> new VersionRow(a.facts().conceptId(), a.version().extractedAt(), a.version().lastDecisionId(), a.displayStatus()))
