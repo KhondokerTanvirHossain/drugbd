@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  REVIEW_Q_MAX, getReviewDiff, getReviewItem, getReviewItems, getReviewVersions, listFlagPage, listReviewBatches, postDeskDecision,
+  REVIEW_Q_MAX, getReviewDiff, getReviewItem, getReviewItems, getReviewVersions, listFlagPage, listReviewBatches, listReviewIssues, postDeskDecision,
   resolveFlag,
 } from "@/lib/api";
 import { sameVersion } from "@/lib/review-types";
@@ -157,6 +157,24 @@ describe("flag pages (§5.16, §7.5)", () => {
     expect(page).toEqual({ items: [{ id: 3, targetType: "product", targetId: "N-1", message: "pack says 10 mg", status: "open",
       createdAt: "2026-10-12T09:00:00Z" }], page: 0, size: 50, hasMore: true });
     expect(JSON.stringify(page)).not.toContain("@");
+  });
+
+  it("issues (D76): one page read with the token; only the named fields reach the page; any failure throws", async () => {
+    const row = { batchId: "B-1", conceptId: "C-1", index: 3, tradeName: "Napa", clinicalDisplayName: null, extra: "x",
+      issues: [{ role: "pharmacist", at: "2026-10-12T09:00:00Z", note: "wrong", reviewerEmail: "p@x.org" }] };
+    const f = vi.fn().mockResolvedValue(ok({ total: 51, page: 1, size: 50, hasMore: false, items: [row] })); vi.stubGlobal("fetch", f);
+    const page = await listReviewIssues(1);
+    expect(f.mock.calls[0][0]).toBe("http://api:8080/v1/review/issues?page=1");
+    expect(headersOf(f.mock.calls[0]).get("X-Internal-Token")).toBe(TOKEN);
+    expect(page).toEqual({ total: 51, page: 1, size: 50, hasMore: false, items: [{ batchId: "B-1", conceptId: "C-1", index: 3,
+      tradeName: "Napa", clinicalDisplayName: null, issues: [{ role: "pharmacist", at: "2026-10-12T09:00:00Z", note: "wrong" }] }] });
+    expect(JSON.stringify(page)).not.toContain("@");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("{}", { status: 502 })));
+    await expect(listReviewIssues(0)).rejects.toThrow();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("{}", { status: 404 })));
+    await expect(listReviewIssues(0)).rejects.toThrow("no issue list");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(ok({ total: 0 })));
+    await expect(listReviewIssues(0)).rejects.toThrow("no issue list");
   });
 
   it("resolve sends the request id for the audit row", async () => {

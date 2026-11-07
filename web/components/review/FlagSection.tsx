@@ -6,8 +6,10 @@ import ResolveButton from "./desk/ResolveButton";
 import styles from "@/app/review/review.module.css";
 
 export type FlagKind = "reports" | "partner";
-export type FlagPaging = { rp: number; pp: number };
-export const flagsHref = (p: FlagPaging) => `/review/flags?${new URLSearchParams({ rp: String(p.rp), pp: String(p.pp) })}`;
+/** The page of each section: reviewer issues (ip, D76), problem reports (rp) and partner requests (pp). */
+export type FlagPaging = { ip: number; rp: number; pp: number };
+export const flagsHref = (p: FlagPaging) =>
+  `/review/flags?${new URLSearchParams({ ip: String(p.ip), rp: String(p.rp), pp: String(p.pp) })}`;
 
 function Target({ f }: { f: FlagItem }) {
   if (f.targetType === "check") return <>{DESK_NEW.reviewLists.interactionCheck}</>;

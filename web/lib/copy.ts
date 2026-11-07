@@ -847,7 +847,10 @@ export const NEW_COPY: Record<NewCopyState, Record<string, string>> = {
     waitingOne: "Batch {id} has 1 record waiting for a pharmacist.",
     waitingMany: "Batch {id} has {w} records waiting for a pharmacist.",
     noBatches: "No batches are in review.",
-    flagsLink: "Problem reports and partner requests",
+    flagsLink: "Reported issues",
+    issuesHeading: "Issues reported by reviewers ({n})",
+    issuesBatch: "Batch {id}",
+    noIssues: "No records have an issue reported.",
     reportsHeading: "Problem reports",
     partnerHeading: "Partner access requests",
     reported: "Reported {date}",
@@ -962,7 +965,8 @@ export const DESK_NEW = {
     | "issuePharmacist" | "issueEngineer" | "noLongerCounts" | "backSharedChange" | "carriedOver" | "approvedSenior"
     | "approvedSeniorMine" | "issueSenior", string>,
   shortcutsMenuItem: NEW_COPY[NEW_COPY_ROWS.shortcutsMenuItem] as Record<"item", string>,
-  reviewLists: NEW_COPY[NEW_COPY_ROWS.reviewLists] as Record<"waitingOne" | "waitingMany" | "noBatches" | "flagsLink" | "reportsHeading"
+  reviewLists: NEW_COPY[NEW_COPY_ROWS.reviewLists] as Record<"waitingOne" | "waitingMany" | "noBatches" | "flagsLink" | "issuesHeading"
+    | "issuesBatch" | "noIssues" | "reportsHeading"
     | "partnerHeading" | "reported" | "resolve" | "resolving" | "reportResolved" | "requestResolved" | "noReports" | "noRequests"
     | "loadErrorTitle" | "loadErrorBody" | "tryAgain" | "nextPage" | "previousPage" | "noScriptResolve" | "interactionCheck", string>,
   routeAware: NEW_COPY[NEW_COPY_ROWS.routeAware] as Record<"dataFound" | "dataFoundNoRoute" | "routeAssumedSuffix" | "allEntries"

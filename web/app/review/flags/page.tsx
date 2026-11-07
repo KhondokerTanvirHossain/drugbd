@@ -1,12 +1,13 @@
 import { cookies } from "next/headers";
 import TurnstileField from "@/components/TurnstileField";
 import FlagSection, { flagsHref, type FlagPaging } from "@/components/review/FlagSection";
+import IssueSection from "@/components/review/IssueSection";
 import ReviewToolbar from "@/components/review/ReviewToolbar";
 import { newestInReview } from "@/components/review/ReviewAccount";
 import Announce from "@/components/review/desk/Announce";
 import Banner from "@/components/ui/Banner";
 import { buttonClass } from "@/components/ui/Button";
-import { getPairQueue, listFlagPage, listReviewBatches } from "@/lib/api";
+import { getPairQueue, listFlagPage, listReviewBatches, listReviewIssues } from "@/lib/api";
 import { DESK_NEW, P1C_COPY, fill } from "@/lib/copy";
 import { KEYS_COOKIE, parseKeys } from "@/lib/desk-settings";
 import { cspNonce } from "@/lib/nonce";
@@ -31,18 +32,22 @@ const RESOLVE_OUTCOME: Record<string, string> = {
 
 const pageNo = (v: string) => (/^\d{1,5}$/.test(v) && Number(v) <= 10000 ? Number(v) : 0);
 
-/** §5.16: problem reports and partner access requests, 50 per section, Resolve through one form and one bot check. */
+/**
+ * §5.16: "Reported issues". Records with an issue reported by a reviewer (D76, from every batch, each linking to the desk),
+ * then problem reports and partner access requests (Resolve through one form and one bot check); 50 per section.
+ */
 export default async function FlagsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const session = await getSession();
   // §5.12 (QA portal, D66): app/review/layout.tsx admits qa and cannot see the path, so each review page answers qa itself.
   if (session?.role === "qa") return qaAccountView(session);
   if (!session || !isReviewer(session)) return null;   // app/review/layout.tsx has already answered the rest
   const sp = await searchParams;
-  const paging: FlagPaging = { rp: pageNo(firstParam(sp.rp)), pp: pageNo(firstParam(sp.pp)) };
+  const paging: FlagPaging = { ip: pageNo(firstParam(sp.ip)), rp: pageNo(firstParam(sp.rp)), pp: pageNo(firstParam(sp.pp)) };
   const t = DESK_NEW.reviewLists;
   const code = firstParam(sp.resolve);
   const outcome = code === "resolved" ? (firstParam(sp.kind) === "partner" ? t.requestResolved : t.reportResolved) : RESOLVE_OUTCOME[code];
-  const [reports, partner, batches, pairIssues] = await Promise.all([
+  const [issues, reports, partner, batches, pairIssues] = await Promise.all([
+    listReviewIssues(paging.ip).catch(() => null),
     listFlagPage("reports", paging.rp).catch(() => null), listFlagPage("partner", paging.pp).catch(() => null),
     listReviewBatches().catch(() => []),
     // §5.16 (P1C): seniors see how many pair issues are open; engineers have no list of them (§5.17).
@@ -53,7 +58,7 @@ export default async function FlagsPage({ searchParams }: { searchParams: Promis
   const store = await cookies();
   const siteKey = turnstileSiteKey();
   const any = (reports?.items.length ?? 0) + (partner?.items.length ?? 0) > 0;
-  const failed = reports === null || partner === null;
+  const failed = issues === null || reports === null || partner === null;
   return (
     <div className={styles.shell}>
       <ReviewToolbar session={session} theme={parseTheme(store.get(THEME_COOKIE)?.value)} batchId={newestInReview(batches)}
@@ -73,6 +78,7 @@ export default async function FlagsPage({ searchParams }: { searchParams: Promis
         ) : (
           <>
             {outcome && <Announce text={outcome} className="outcome" />}
+            <IssueSection page={issues} paging={paging} />
             <FlagSection kind="reports" page={reports} paging={paging} />
             <FlagSection kind="partner" page={partner} paging={paging} />
             {any && (
