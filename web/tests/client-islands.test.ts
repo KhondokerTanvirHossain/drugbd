@@ -16,10 +16,10 @@ function fixture(files: Record<string, string>): string {
 }
 
 describe("client-island allowlist (§4.2)", () => {
-  it("lists exactly the §4.2 islands", () => {
+  it("lists exactly the §4.2 islands and D75's HeaderSearch (§6.11.1)", () => {
     expect([...ISLANDS].sort()).toEqual([
       "app/error.tsx", "app/review/error.tsx", "app/signin/SignInButton.tsx", "components/AccountMenu.tsx",
-      "components/Expander.tsx", "components/ThemeSwitch.tsx", "components/TurnstileField.tsx",
+      "components/Expander.tsx", "components/HeaderSearch.tsx", "components/ThemeSwitch.tsx", "components/TurnstileField.tsx",
       "components/check/CheckerCombobox.tsx", "components/learn/GlossaryFilter.tsx", "components/learn/LearnRail.tsx",
       "components/review/ReviewDesk.tsx", "components/review/desk/DeskRecordContext.tsx",
     ]);

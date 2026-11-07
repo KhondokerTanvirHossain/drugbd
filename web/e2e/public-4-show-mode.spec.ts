@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { sql } from "./db";
-import { latestBatch } from "./public-helpers";
+import { arrowToHeaderOption, headerOption, headerSearch, latestBatch, typeInHeader } from "./public-helpers";
 import { PILOT_IDS as P } from "./review-helpers";
 import { signInAs } from "./session";
 
@@ -76,7 +76,7 @@ test("S11: landing, search, Napa's page, Check Napa with other medicines, add G 
   await opensWithCaution(page);
   await main(page).getByRole("link", { name: "Search medicines" }).first().click();
   await expect(page).toHaveURL(/\/search$/);
-  const box = page.getByRole("searchbox", { name: "Search medicines" }).first();
+  const box = headerSearch(page);   // D75 (§6.11.1): a combobox once the island runs
   await box.fill("napa");
   await box.press("Enter");
   await expect(page).toHaveURL(/\/search\?q=napa/);
@@ -220,4 +220,59 @@ test("Learn start, process, why and faq: no approved-only sentence, no Napa ques
   }
   await page.goto("/learn/start");
   await expect(page.locator("main")).toContainText("Marked until a pharmacist approves");
+});
+
+/* D75 (§6.11, §6.11.4), show mode: the header suggests every visible medicine with its pill, and /search with no query lists
+   every visible medicine A to Z with its label, opening with the caution. */
+test("header search: 'nap' suggests Napa with the pill; ArrowDown and Enter open it; Enter alone searches (§6.11.1)", async ({ page }) => {
+  await page.goto("/search?q=paracetamol");
+  await typeInHeader(page, "nap", "Napa");
+  await expect(headerOption(page, "Napa")).toContainText(NOT_REVIEWED);
+  await expect(page.locator("#hs-list > li").last()).toHaveText("All results for “nap”");
+  await axe(page, "header list open");
+  await arrowToHeaderOption(page, "Napa");
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(new RegExp(`/products/${P.napa}$`));
+  await expect(page.locator("h1")).toHaveText("Napa");
+
+  const box = await typeInHeader(page, "nap", "Napa");
+  await box.press("Enter");
+  await expect(page).toHaveURL(/\/search\?q=nap$/);
+  await expect(page.locator("h1")).toHaveText('Results for "nap"');
+});
+
+test("header search on /check: a picked medicine opens with a full load, so the bar marks Medicines, not the checker (§6.11.1)", async ({ page }) => {
+  await page.goto("/check");
+  const nav = page.getByRole("navigation", { name: "Main" });
+  await expect(nav.getByRole("link", { name: "Interaction checker" }).first()).toHaveAttribute("aria-current", "page");
+  await typeInHeader(page, "nap", "Napa");
+  await headerOption(page, "Napa").click();
+  await expect(page).toHaveURL(new RegExp(`/products/${P.napa}$`));
+  await expect(page.locator("h1")).toHaveText("Napa");
+  await expect(nav.getByRole("link", { name: "Medicines" }).first()).toHaveAttribute("aria-current", "page");
+  await expect(nav.getByRole("link", { name: "Interaction checker" }).first()).not.toHaveAttribute("aria-current", "page");
+  await expect(headerSearch(page)).toHaveValue("");
+});
+
+test("/search lists every visible medicine with its label and the caution; a letter filters the list (§6.11.2)", async ({ page }) => {
+  await page.goto("/search");
+  await opensWithCaution(page);
+  await expect(page.locator("h1")).toHaveText("Medicines");
+  const row = (id: string) => main(page).locator("article", { has: page.locator(`a[href="/products/${id}"]`) });
+  await expect(row(P.napa)).toContainText(NOT_REVIEWED);
+  await expect(row(P.napa)).toContainText("Filed as Paracetamol 500 mg");
+  await expect(row(P.clarith)).toContainText(PROBLEM);
+  await expect(row(P.simvastatin)).toContainText(PROBLEM);
+  await expect(main(page).locator(`a[href="/products/${P.amlodipine}"]`)).toHaveCount(0);   // removed from its batch file: hidden
+  expect(CLAIM.exec(await main(page).innerText())).toBeNull();
+  await axe(page, "/search, the medicine list");
+
+  const bar = page.getByRole("navigation", { name: "Browse by first letter" });
+  await bar.getByRole("link", { name: "C", exact: true }).click();
+  await expect(page).toHaveURL(/\/search\?letter=C$/);
+  await expect(bar.getByRole("link", { name: "C", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(main(page)).toContainText(/\d+ medicines? starting with C/);
+  await expect(row(P.clarith)).toBeVisible();
+  await expect(row(P.napa)).toHaveCount(0);
+  for (const name of await main(page).locator("article a[href^='/products/']").allTextContents()) expect(name, name).toMatch(/^[Cc]/);
 });

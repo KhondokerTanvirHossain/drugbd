@@ -1,20 +1,16 @@
 "use client";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
-import { suggestionSub } from "@/lib/check-summary";
-import ReviewStatus from "@/components/ui/ReviewStatus";
-import "@/components/ui/ProblemLine.css";
-import { NOT_REVIEWED, PROBLEM_REPORTED, PUBLIC_NEW, fill } from "@/lib/copy";
+import SuggestOptionBody, { type SuggestOption as Row } from "@/components/suggest/SuggestOptionBody";
+import { useSuggest } from "@/components/suggest/useSuggest";
+import { PUBLIC_NEW, fill } from "@/lib/copy";
 import { announce } from "@/lib/live-region";
 import { CHECK } from "@/lib/public-copy";
 import { checkHref } from "@/lib/public-params";
-import type { SuggestRow } from "@/lib/public-types";
 import styles from "./check.module.css";
 
-type Row = Pick<SuggestRow, "conceptId" | "tradeName" | "status" | "clinicalDisplayName" | "matched" | "review">;
 type Pending = { message: string | null; focusRemoveAt: number | null; focusInput: boolean };
 const NONE: Pending = { message: null, focusRemoveAt: null, focusInput: false };
-const DEBOUNCE_MS = 200;
 
 /**
  * §10.2 "Banners added after load use the same live region": the page's banners carry no role (Task 30), so after a
@@ -47,16 +43,19 @@ export default function CheckerCombobox({ ids, max, q }: { ids: string[]; max: n
   const [text, setText] = useState(q);
   const input = useRef<HTMLInputElement>(null);
   const pending = useRef<Pending>(NONE);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const seq = useRef(0);   // the latest suggestion request; an older or cancelled one never lands
   const box = useRef<HTMLDivElement>(null);
   // The latest requested id list. The ids prop lags one server render, so two quick actions built from it would lose the
   // first (a removed medicine comes back, an added one is dropped); every next URL is built from this instead.
   const want = useRef<string[]>(ids);
   const atMax = ids.length >= max;
+  // The shared debounce, seq guard and fetch (§6.11.1); the request sends the latest requested ids, read when it fires.
+  const { request, cancel: cancelSuggest } = useSuggest<Row>((data) => {
+    setRows(data);
+    setActive(data.length ? 0 : -1);
+    setOpen(true);
+  }, () => want.current);
 
   useEffect(() => { setReady(true); }, []);
-  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
   useEffect(() => { want.current = ids; }, [ids]);
 
   // Board P renderList: keep the active option in view as the arrows move it.
@@ -122,30 +121,9 @@ export default function CheckerCombobox({ ids, max, q }: { ids: string[]; max: n
     return () => form.removeEventListener("click", onClick);
   }, [router]);
 
-  function cancelSuggest(): number {
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = null;
-    return ++seq.current;
-  }
-
   function suggest(value: string) {
-    const mine = cancelSuggest();
-    const v = value.trim();
-    if (atMax || [...v].length < 2) { setRows([]); setOpen(false); return; }
-    timer.current = setTimeout(async () => {
-      let data: Row[] = [];
-      try {
-        const params = new URLSearchParams([["q", v], ...want.current.map((id): [string, string] => ["ids", id])]);
-        const res = await fetch(`/check/suggest?${params}`);
-        data = res.ok ? ((await res.json()) as Row[]) : [];
-      } catch {
-        data = [];
-      }
-      if (mine !== seq.current) return;
-      setRows(data);
-      setActive(data.length ? 0 : -1);
-      setOpen(true);
-    }, DEBOUNCE_MS);
+    if (atMax) { cancelSuggest(); setRows([]); setOpen(false); return; }
+    if (!request(value)) { setRows([]); setOpen(false); }
   }
 
   function add(r: Row) {
@@ -197,12 +175,7 @@ export default function CheckerCombobox({ ids, max, q }: { ids: string[]; max: n
               : rows.map((r, i) => (
                 <li key={r.conceptId} id={`cx-opt-${i}`} role="option" aria-selected={i === active} className={`s-opt ${styles["s-opt"]}`}
                   onMouseDown={(e) => e.preventDefault()} onClick={() => add(r)}>
-                  <span className={styles["s-opt-name"]}>{r.tradeName}</span>
-                  <span className={styles["s-opt-sub"]}>{r.status === "approved" || r.review ? suggestionSub(r) : NOT_REVIEWED}</span>
-                  {/* §6.7 show mode: a visible option that is not approved adds the pill (and the problem line) inside the option,
-                      so both are part of its accessible name */}
-                  {r.review && r.review !== "approved" && <span className={styles["s-opt-sub"]}><ReviewStatus status="pending" /></span>}
-                  {r.review === "problem" && <span className="problem-line">{PROBLEM_REPORTED}</span>}
+                  <SuggestOptionBody r={r} nameClass={styles["s-opt-name"]} subClass={styles["s-opt-sub"]} />
                 </li>
               ))}
           </ul>

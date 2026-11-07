@@ -1,6 +1,6 @@
 import "server-only";
-import type { CheckResult as PublicCheckResult, ClinicalDrugView, ProductInteractions, ProductStub, PublicProduct, PublicSubstance,
-  SearchResult as PublicSearchResult, SeverityFilter, SubstanceInteractions, SubstanceStub, SuggestRow } from "./public-types";
+import type { BrowseResult, CheckResult as PublicCheckResult, ClinicalDrugView, ProductInteractions, ProductStub, PublicProduct,
+  PublicSubstance, SearchResult as PublicSearchResult, SeverityFilter, SubstanceInteractions, SubstanceStub, SuggestRow } from "./public-types";
 import type {
   DeskOutcome, FilterKey, FlagItem, FlagPage, ItemsPage, ReviewBatchSummary, ReviewDiff, ReviewItem, ReviewerRole, VersionRow,
 } from "./review-types";
@@ -82,6 +82,13 @@ export function isStub(x: unknown): x is ProductStub | SubstanceStub {
 
 export const searchMedicines = (q: string, page: number) =>
   publicRead<PublicSearchResult>("/v1/search", new URLSearchParams({ q, page: String(page) }));
+/** §6.11.2 the medicine list (P17): `letter` A–Z or `0-9`, null for every letter. */
+export function browseMedicines(letter: string | null, page: number) {
+  const params = new URLSearchParams();
+  if (letter !== null) params.set("letter", letter);
+  params.set("page", String(page));
+  return publicRead<BrowseResult>("/v1/products/browse", params);
+}
 export const getPublicProduct = (id: string) => publicRead<PublicProduct | ProductStub>(`/v1/products/${enc(id)}`);
 export const getProductInteractions = (id: string, page: number) =>
   publicRead<ProductInteractions | ProductStub>(`/v1/products/${enc(id)}/interactions`, new URLSearchParams({ page: String(page) }));

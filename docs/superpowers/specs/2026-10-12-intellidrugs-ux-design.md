@@ -307,7 +307,7 @@ The boards do not cover the states below. Their copy is defined in the section n
 | Route | Purpose | Rendered by | Who can open it |
 |---|---|---|---|
 | `/` | Landing page | server | everyone |
-| `/search?q=&page=` | Medicine search (brands, substances, synonyms, DAR) | server | everyone |
+| `/search?q=&page=` | Medicine search (brands, substances, synonyms, DAR); *(D75)* with no `q`, the A–Z medicine list (`?letter=&page=`, §6.11.2) | server | everyone |
 | `/products/[conceptId]` | Product page; hidden-record stub when not approved (*D74, show mode*: stub only when hidden, §7.4.1; otherwise the labelled product page) | server | everyone (scoped) |
 | `/substances/[bdsId]` | Substance page: names, codes, interactions with text, products | server | everyone (scoped) |
 | `/check?ids=…&ids=…` | Interaction checker | server + combobox island | everyone (scoped) |
@@ -587,7 +587,7 @@ A build check, `scripts/check-client-islands.mjs` (run in `postbuild` next to th
 
 | Flow | Without JavaScript | With JavaScript |
 |---|---|---|
-| Search, product, substance, Learn | Full | Same, plus Expander and the glossary filter |
+| Search, product, substance, Learn | Full | Same, plus Expander, the glossary filter and *(D75)* the header search combobox (§6.11.1) |
 | Theme | Form POST, then reload | Instant |
 | Checker | GET form. "Add a medicine" is a text field with a "Find" submit. The server lists matches as submit buttons (`name="ids"`) inside the same form, with the current ids as hidden inputs. Remove is a submit button per medicine. | Combobox (§6.7.1) |
 | Account menu | `<details>`/`<summary>` | Adds Esc and outside click |
@@ -2347,6 +2347,119 @@ The Learn API table gains the row `GET /v1/public-mode`, "Which records the publ
 
 ---
 
+### 6.11 Search as you type and the medicine list (D75, Decision, PO 07/11/2026)
+
+The product owner's decision of 07/11/2026:
+- the top bar's search field suggests medicines as you type, as the checker's field does;
+- `/search` with no query lists every public medicine A to Z, so a reader can browse.
+
+The list is capped at 10 pages of 50 for each letter, which keeps the §6.3 anti-scraping page cap. Both modes (§6.10) apply unchanged: only visible products appear, each with its label.
+
+#### 6.11.1 Header search combobox (`HeaderSearch` island, `components/HeaderSearch.tsx`)
+
+- **Without JavaScript**, the field is exactly as before (§6.1): a GET form to `/search`, `input type="search" name="q"`.
+- **Once the island runs**, the field becomes an ARIA 1.2 combobox:
+  - attributes: `role="combobox"`, `aria-autocomplete="list"`, `aria-expanded`, `aria-controls="hs-list"`, `aria-activedescendant`;
+  - ids: `hs-input`, `hs-list`, `hs-opt-{i}`, which never clash with the checker's `cx-*` ids on `/check`;
+  - `aria-describedby="hs-help"`, an sr-only line "Suggestions appear as you type. Up and down arrows to move, Enter to open, Esc to close.";
+  - the visible label stays the existing sr-only `NAV.searchLabel`.
+- **Suggestions**:
+  - Fetched from `/check/suggest?q=` (the same route handler and rate limit, §4.3), with 200 ms debounce. A request runs only for 2 or more characters (code points, after trim). A stale or cancelled response never lands (the `seq` guard).
+  - The island keeps only the rows that carry clinical data (`status === "approved"` or a `review` label). An approved-only-mode row without data would open a stub, so it is never suggested here.
+- **Options**, at most 10, in the API's order. Each option is the same body as the checker's option (§6.7.1, §6.10):
+  - the trade name;
+  - the `suggestionSub` line;
+  - for a row that is not approved, the `NOT_REVIEWED` pill and, for `problem`, `PROBLEM_REPORTED`, all inside the option.
+
+  After the medicine options comes one last option, always present while the list is open: "All results for “{q}”" (`HEADER_SEARCH.allResults`).
+- **No auto-selection.** When the list opens, no option is active (`active = -1`), so Enter on its own submits the search as before.
+- **Keys and clicks**:
+
+  | Input | Action |
+  |---|---|
+  | ArrowDown / ArrowUp | Opens the list and moves through the options, the last option included. |
+  | Enter on a medicine option | Opens `/products/{conceptId}` with a full page load (`window.location.assign`, through `components/suggest/open-page.ts`), so the top bar, the nav's `aria-current` and the field render for the product page; a soft `router.push` would keep the previous page's root layout (final review, 07/11/2026). |
+  | Enter on "All results" | Submits the form. |
+  | Esc | Closes the list; with the list closed, the field clears as a search input does. |
+  | Tab, or a click outside | Closes the list. |
+  | Click on an option | Same as Enter on it. |
+
+- **Shared code.** The debounce, `seq` guard and fetch (`useSuggest`), and the option body (`SuggestOptionBody`), move to `components/suggest/`. The checker uses them too, and its behaviour and its tests are unchanged.
+- **Where it appears.** The island renders wherever the bar has the search field: `hasSearchBar`, so search, product, substance and checker pages. The §10.6 JavaScript budgets are unchanged and must still pass; the island is small, and the checker page already ships the same code.
+
+#### 6.11.2 Medicine list (`/search` with no query, `/search?letter=&page=`)
+
+- **When it shows.** `/search` renders the list when `q` is absent or empty after trim. A `q` of 1 character keeps "Type at least 2 characters."; a longer `q` keeps the §6.3 results, unchanged.
+- **Parameters:**
+  - `letter`: `A`–`Z` (case-insensitive) or `0-9`. `0-9` holds every name whose first character is not a letter A–Z. Any other value reads as no letter.
+  - `page`: `parseSearchPage` (index 0–9; past 9 it reads 9). Unlike §6.3, the cap line shows only when page 9 has more rows, so `?letter=Q&page=50` with 3 products reads page 9 with no cap line.
+- **Layout:**
+  - `<h1>` "Medicines";
+  - the lede "Every medicine on IntelliDrugs, A to Z. To find one by brand, substance or DAR number, use the search above.";
+  - the count line:
+    - with no letter: "{n} medicine[s]";
+    - with a letter: "{n} medicine[s] starting with {letter}";
+    - for `0-9`: "{n} medicine[s] starting with a number or symbol";
+  - the letter bar.
+- **Letter bar.** It is a `<nav aria-label="Browse by first letter">` with "All", then `A`–`Z`, then `0–9`:
+  - a letter with no visible product is a `<span aria-disabled="true">`, not a link;
+  - the current choice carries `aria-current="page"`;
+  - each link drops `page`.
+- **Rows.** They use the §6.3 approved product hit, reused, with an empty `q`, so nothing is marked. A row is the linked brand; the meta "form, company, DAR {dar}"; the "Filed as … Clinical drug …" line when there is a clinical drug; and the side label (`RecordLabel`, §6.10). The order is `lower(trade_name)`, `trade_name`, `concept_id`. Hidden products are never listed.
+- **Caution and pages.** `UnreviewedCaution` opens the page once when a listed row is not approved (`rendersUnreviewed`). Pages hold 50 rows with the §6.3 Previous and Next links, which keep the `letter`.
+- **Cap line.** At page index 9 with more rows:
+  - with no letter: "Showing the first 500 medicines. Choose a letter or search to find the others.";
+  - with a letter: "Showing the first 500 medicines starting with {letter}. Search to find the others."
+- **Empty states:**
+  - with no letter: "No medicines on IntelliDrugs yet.";
+  - with a letter: "No medicine on IntelliDrugs starts with {letter} yet."
+- **Copy.** The strings live in `BROWSE_COPY` and `HEADER_SEARCH`, in `lib/copy.ts` with the other rows, pinned verbatim by a unit test.
+- **Data.** The page reads P17 (§7.4). An API error throws to the public error page, as search does.
+
+#### 6.11.3 P17 `GET /v1/products/browse`
+
+- **Parameters:**
+  - `letter`: optional; `A`–`Z` or `0-9`; anything else is 400 `INVALID_QUERY`.
+  - `page`: 0–9 under public scope; anything else is 400.
+- **Response:**
+  ```
+  { letter: string|null, total, page, hasMore,
+    letters: [{letter, count}],
+    products: [{conceptId, tradeName, darNumber, company, dosageForm, genericContentRaw,
+                clinicalDrug: {bdcId, displayName}|null, status: "approved"|"not_reviewed", review}] }
+  ```
+  - `letters` has 27 entries, `A`…`Z` then `0-9`, counting visible products.
+  - `total` counts the visible products of `letter`, or of all letters.
+  - `products` holds 50 rows, sorted as above.
+- **Visibility.** Public scope only: a product is listed when its public label (`ReviewSql.publicLabelOf`, §7.4.1) is not NULL, so approved-only mode lists approved products and show mode lists every visible one. A present internal token must still match (`auth.present`), as for P16.
+- **First letter.** `upper(left(trade_name, 1))` when it matches `^[A-Za-z]`, otherwise `0-9`.
+- **Performance.** API p95 ≤ 300 ms (§10.6). The label is computed with the joined `latest` form (as P10 does after D74), not one subquery per row, and `letters` comes from one grouped query.
+
+#### 6.11.4 Tests
+
+- **API**
+  - Unit tests (`ProductQueryServiceTest`): `letter` and `page` validation, and a token that does not match.
+  - Integration test, in both modes:
+    - only visible products are listed, with their labels;
+    - removed records, load failures and products in no batch are never listed;
+    - letter grouping, a lower-case first letter and the `0-9` bucket;
+    - `letters` counts, `total` and `hasMore`;
+    - the sort order;
+    - page 10 is 400.
+- **Web unit tests**
+  - The browse page in both modes: the count lines, the letter bar (disabled, current), rows reusing the product hit, the caution, the cap lines, both empty states, and links keeping `letter`.
+  - `parseLetter`.
+  - `HeaderSearch`: no-JS markup, the combobox attributes after mount, rows without data filtered out, no auto-selection, the "All results" option, and the shared option body. The existing checker tests stay unchanged and pass.
+  - `BROWSE_COPY` and `HEADER_SEARCH` pinned verbatim.
+- **e2e (both modes)**
+  - Typing "nap" in the header shows Napa (with the pill in show mode); ArrowDown and Enter open its product page; Enter without arrowing goes to `/search?q=nap`.
+  - `/search` lists the visible medicines with the letter bar, and a letter filters the list.
+  - axe is clean on both.
+  - Lighthouse budgets hold on `/search` with no query and with `q=paracetamol`.
+
+
+---
+
 ## 7. API changes
 
 Every change keeps the `ApiResponse` envelope and the error mapping in `ApiExceptionHandler`. New errors use the existing codes (`INVALID_QUERY`, `NOT_FOUND`, `UNAUTHORIZED`, `CONFLICT`) with a `field`.
@@ -2530,6 +2643,7 @@ The web's public routes always send `scope=public` (§2.2). `scope=all` remains 
 | P8 | `GET /v1/clinical-drugs/{bdcId}` | none | `{bdcId, displayName, doseForm, route, ingredients:[{bdsId, name, strengthValue, strengthUnit, perValue, perUnit}], products:[{conceptId, tradeName, company, darNumber}]}`. Public scope: `products` lists public products only, and the whole response is 404 `NOT_FOUND` unless at least one public product maps to `bdcId`. | "Other brands of …" |
 | P9 | `GET /v1/substances/{bdsId}/interactions` | `severity` (optional), `page` (0–), `size=20` | `{bdsId, counts:{…per entry}, total, page, items:[{partnerName, partnerBdsId\|null, ddinterA, ddinterB, routeScope, severity, actions, interaction, management}]}`. Public scope: when the substance is not public, the substance stub `{bdsId, preferredName, hidden:true}`, never items or counts; `partnerBdsId` is `null` when the partner substance is not public (the partner's DDInter name is DDInter's own public data and stays). *(P1C)* Each item adds `pairReview:{state:"reviewed"\|"not_reviewed", reviewedAt\|null}` and `sourceUrl\|null` (the DDInter pair page, §5.6.6). | Substance page list with text |
 | P16 | `GET /v1/products/suggest` | `q` (2–100), `exclude` (0–20 concept ids already selected; excluded from the rows) | at most 10 `{conceptId, tradeName, dosageForm, status:"approved"\|"not_reviewed", clinicalDisplayName\|null, matched\|null}`. Unapproved rows match on trade name and DAR only. | Checker combobox |
+| P17 *(D75)* | `GET /v1/products/browse` | `letter` (`A`–`Z` or `0-9`, optional), `page` (0–9) | `{letter, total, page, hasMore, letters:[{letter, count}], products:[…50 full product rows with `review`]}` (§6.11.3) | Medicine list |
 | new | `GET /v1/stats` | none | `{registerProducts:39196, productsLoaded, substances, approvedProducts, inReviewProducts, batches:[{batchId, status, itemCount, approved, items:[{conceptId, tradeName, status:"approved"\|"not_reviewed", exampleUsable}]}]}`. `exampleUsable` is false when the item's `displayStatus` is `issue` or it is removed from the batch file, and in show mode also when the item's `review` is `problem` (§7.4.1 Privacy, amended 07/11/2026); Learn uses it to withdraw frozen examples (§6.8). **Decision: this is a deliberate, coarse public signal.** Learn's withdrawn block is itself visible, so a reader can tell that a pilot record is "withdrawn from examples" (issue reported, or removed, which the stub already says). It carries no note, role, time or reason, the item's `status` stays `not_reviewed`, and `/v1/stats` carries no other review detail. | Landing and Learn live numbers |
 
 **Search rules:**
@@ -4011,3 +4125,4 @@ P1A may ship as its own release: it changes the shared layout, security and the 
 | D72 | *(QA API reference, PO 19/10/2026)* The "API" section of `/review/qa` holds a full reference for the five QA endpoints and `POST /api/qa/mcp`: native `<details>` panels (the first open) with the method, full path, required header, every parameter with its rule, a copy-ready command reading `$INTELLIDRUGS_QA_KEY` with real pilot ids, an example answer marked Example, key fields and an error table. Example answers are generated by the real mappers and envelope code from typed example API bodies, rules come from the validators' constants, and tests fail when either drifts or when an example carries an email, a person, a note, a token or a key. Server-rendered only; the endpoints table and the single curl example are removed | §1.7, §3.4, §4.2, §5.18, §10.6, §11.1 |
 | D73 | *(QA guide, PO 19/10/2026)* Both MCP servers serve a versioned QA guide (six topics: overview, data_model, sources, checks, pitfalls, reporting) as a sixth read-only tool, `get_qa_guide` (optional `topic`; none gives the index and the overview; the result keeps the preamble-then-JSON shape), and as resources `intellidrugs://qa-guide/{topic}` (`text/markdown`; unknown uri `-32002`). One import-free module with a byte-identical stdio copy; `guideVersion` semver pinned to a content hash; every factual line tied to code, a test, this spec or a dated external page by a test-only claims map; field paths and source addresses checked against the QA API examples and `SourceLinks.java`. Hosted guide requests count toward the key's limit and write best-effort `qa_read` rows with route `guide`; the bundled stdio guide makes no request. Server version `1.1.0` | §5.18, §7.9.6, §7.9.8, §7.10.6, §7.11, §11.1 |
 | D74 | *(PO 06/11/2026)* The public site works now with unreviewed data, behind one API-owned server setting, `PUBLIC_SHOWS_UNREVIEWED` (code default off = approved-only, exactly as before; the production compose passes `${PUBLIC_SHOWS_UNREVIEWED:-true}`, so the release ships on; `false` in the host `.env` plus `docker-compose up -d --no-deps api web` turns it off). In show mode every product whose latest batch item is current and not a DGDA load failure is public with a label computed in the API by one rule in `ReviewSql` (`approved`; `not_reviewed`; `problem` = not approved with an open reviewer issue or a failed stage), carried to substances and clinical drugs; removed records, DGDA load failures and products in no batch stay stubs. The web reads the mode from the API (`GET /v1/public-mode`, `/v1/stats`), never from its environment, and shows `NOT_REVIEWED`, `PROBLEM_REPORTED`, `PAIR_UNREVIEWED` or `PAIR_PROBLEM`, and `UNREVIEWED_CAUTION` once per page that shows unapproved data; `APPROVED` and the verification line only when approved; no approved-only claim in show mode. Search, the checker, substance pages, partner links, other brands, "With other medicines" and source links cover every visible record. Both modes are tested (matrix, key integration tests, e2e with an `@approved-only` run). Unchanged: the desk, approvals, reopen, senior and pair review, the QA API and MCP (the QA guide's gate line made mode-neutral), robots, headers, caching, `scope=public` and the internal token. Supersedes in show mode G3's approval gate, D16, D26, D28, D53, D58, and in part D34, D43, D49, D56 and D60 | §1.2, §2.2, §3.4, §3.6, §6.1–§6.10, §7.4, §7.4.1, §8.3.1, §11, §12.3–§12.5 |
+| D75 | *(PO 07/11/2026)* The header search field suggests medicines as you type (an ARIA 1.2 combobox island over `/check/suggest`, no auto-selected option, so Enter still searches; Enter or click on a suggestion opens its product page; a last option "All results for “{q}”"), sharing the suggestion hook and option body with the checker. `/search` with no query is the A–Z medicine list of every visible product (P17 `GET /v1/products/browse`, 50 a page, a letter bar, at most 10 pages per letter, keeping the anti-scraping page cap) | §2.1, §4.4, §6.11, §7.4 |

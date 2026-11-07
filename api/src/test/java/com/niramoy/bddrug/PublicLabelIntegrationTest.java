@@ -20,8 +20,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * §7.4.1 (D74), §11.3: in show mode a record's public label is the same on every endpoint that names it (search, product,
- * P10 brand, P8 product, substance products, suggest, check products and sides, stats item), substance and clinical-drug
- * labels follow the carried rule, and the label agrees with the review desk's display status (ReviewQueryService): approved
+ * P10 brand, P8 product, substance products, suggest, P17 browse, check products and sides, stats item), substance and
+ * clinical-drug labels follow the carried rule, and the label agrees with the review desk's display status (ReviewQueryService): approved
  * exactly when the desk says approved, problem for an issue or a failed check, not_reviewed for pending, engineer checked,
  * back in review and a dismissed issue. Fixtures: PublicVisibilityMatrixIntegrationTest's.
  */
@@ -74,6 +74,8 @@ class PublicLabelIntegrationTest {
                 .isEqualTo(label);
             assertThat(one(get("/v1/products/suggest?q={q}", trade), "$.data[?(@.conceptId == '" + id + "')].review")).as(id + " suggest")
                 .isEqualTo(label);
+            assertThat(one(get("/v1/products/browse?letter={l}", trade.substring(0, 1)), "$.data.products[?(@.conceptId == '" + id +
+                "')].review")).as(id + " browse").isEqualTo(label);
             assertThat(one(get("/v1/clinical-drugs/{id}", "BDC-00090" + n), "$.data.products[?(@.conceptId == '" + id + "')].review"))
                 .as(id + " P8").isEqualTo(label);
             assertThat(JsonPath.<String>read(get("/v1/clinical-drugs/{id}", "BDC-00090" + n), "$.data.review")).as(id + " P8 carried")

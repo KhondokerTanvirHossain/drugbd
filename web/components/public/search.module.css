@@ -18,4 +18,23 @@
 .s-empty p { color: var(--fg-2); }
 .s-row { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
 .s-cap { font-size: 13.5px; color: var(--fg-2); }
+/* §6.11.2 the medicine list: the lede, the count line and the letter bar (32 px targets, §10.4; it wraps at 320 px). */
+.s-browse-h { display: flex; flex-direction: column; gap: 8px; }
+.s-lede { color: var(--fg-2); max-width: 70ch; }
+.s-count { font-size: 14px; color: var(--fg-2); }
+.s-letters ul { display: flex; flex-wrap: wrap; gap: 4px; }
+.s-letters a, .s-letters span { display: inline-flex; align-items: center; justify-content: center; min-width: 32px; min-height: 32px; padding: 0 8px; border-radius: 8px; font: 500 14px/1 var(--font-ui); }
+.s-letters a { color: var(--fg); text-decoration: none; box-shadow: inset 0 0 0 1px var(--line-strong); }
+.s-letters a:hover { background: var(--surface-2); }
+.s-letters a[aria-current="page"] { background: var(--accent); color: var(--on-accent); box-shadow: none; font-weight: 600; }
+.s-letters span { color: var(--fg-3); }
+/* The current choice when it has no medicine (a span): a ring, so the bar still shows where the reader is. */
+.s-letters span[aria-current="page"] { box-shadow: inset 0 0 0 2px var(--accent); color: var(--fg); font-weight: 600; }
+/* Windows High Contrast drops backgrounds and box shadows: borders outline the links, Highlight marks the current choice
+   (as tokens.css does for .filter[aria-current]). */
+@media (forced-colors: active) {
+  .s-letters a { border: 1px solid LinkText; }
+  .s-letters a[aria-current="page"] { forced-color-adjust: none; background: Highlight; color: HighlightText; border-color: Highlight; }
+  .s-letters span[aria-current="page"] { border: 2px solid CanvasText; }
+}
 @media (max-width: 720px) { .s-page { padding: 24px 16px 40px; } .s-res { grid-template-columns: 1fr; } .s-res-side { align-items: flex-start; text-align: left; } }

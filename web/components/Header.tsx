@@ -1,4 +1,5 @@
 import AccountMenu from "@/components/AccountMenu";
+import HeaderSearch from "@/components/HeaderSearch";
 import ThemeSwitch from "@/components/ThemeSwitch";
 import { buttonClass } from "@/components/ui/Button";
 import Wordmark from "@/components/ui/Wordmark";
@@ -61,10 +62,7 @@ export default function Header({ session, theme, batchId = null, path = "/", q =
       <a className={styles.home} href="/"><Wordmark size={searchBar ? 19 : 20} /></a>
       {searchBar && (
         <form role="search" method="get" action="/search" className={styles.searchForm}>
-          <label className="search">
-            <span className="sr-only">{NAV.searchLabel}</span>
-            <input type="search" name="q" defaultValue={q} placeholder={NAV.searchPlaceholder} minLength={2} maxLength={100} />
-          </label>
+          <HeaderSearch q={q} />
         </form>
       )}
       <nav aria-label={NAV.label} className={styles.nav}>

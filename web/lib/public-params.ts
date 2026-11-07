@@ -33,6 +33,17 @@ export function parseSearchPage(raw: Raw): { page: number; capped: boolean } {
   return n > SEARCH_PAGE_MAX ? { page: SEARCH_PAGE_MAX, capped: true } : { page: n, capped: false };
 }
 
+/** §6.11.2 the medicine list's keys, in the letter bar's order: A to Z, then every other first character. */
+export const BROWSE_DIGITS = "0-9";
+export const BROWSE_LETTERS: readonly string[] = [..."ABCDEFGHIJKLMNOPQRSTUVWXYZ", BROWSE_DIGITS];
+
+/** §6.11.2 `letter`: one letter A–Z in either case (read upper-case) or `0-9`; any other value reads as no letter (null). */
+export function parseLetter(raw: Raw): string | null {
+  const v = firstParam(raw);
+  if (v === BROWSE_DIGITS) return v;
+  return /^[A-Za-z]$/.test(v) ? v.toUpperCase() : null;
+}
+
 export function parseIndex(raw: Raw): number {
   const n = digits(raw);
   return n === null ? 0 : Math.min(n, INDEX_MAX);

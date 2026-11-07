@@ -4,12 +4,13 @@
  * that name "low risk" live in lib/copy.ts too, because the paraphrase guard scans every other file.
  */
 import { P1C_COPY } from "@/lib/copy";
+import { SEARCH_FIELD } from "@/lib/header-search-copy";
 
 export const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 
 export const NAV = {
   label: "Main", medicines: "Medicines", checker: "Interaction checker", learn: "Learn", partners: "For partners",
-  signIn: "Sign in", menu: "Menu", searchLabel: "Search medicines", searchPlaceholder: "Brand, substance or DAR number",
+  signIn: "Sign in", menu: "Menu", searchLabel: SEARCH_FIELD.label, searchPlaceholder: SEARCH_FIELD.placeholder,
   privacy: "Privacy",
 } as const;
 

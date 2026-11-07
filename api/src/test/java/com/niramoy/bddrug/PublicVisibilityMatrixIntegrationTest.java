@@ -211,6 +211,19 @@ class PublicVisibilityMatrixIntegrationTest {
         web.get().uri("/v1/products/suggest?q={q}", "secretolin").exchange().expectBody().jsonPath("$.data.length()").isEqualTo(0);
     }
 
+    /** P17 (§6.11.3): the A–Z list holds Pubol only; no hidden record is listed or counted, under any letter. */
+    @Test void browse() {
+        for (String uri : List.of("/v1/products/browse", "/v1/products/browse?letter=H", "/v1/products/browse?letter=P",
+                                  "/v1/products/browse?letter=S"))
+            clean(get(uri), uri);
+        web.get().uri("/v1/products/browse").exchange().expectBody()
+            .jsonPath("$.data.total").isEqualTo(1)
+            .jsonPath("$.data.products[*].conceptId").isEqualTo(List.of("M-PUB"))
+            .jsonPath("$.data.letters[?(@.letter == 'H')].count").isEqualTo(List.of(0));
+        web.get().uri("/v1/products/browse?letter=H").exchange().expectBody()
+            .jsonPath("$.data.total").isEqualTo(0).jsonPath("$.data.products.length()").isEqualTo(0);
+    }
+
     @Test void stats() {
         clean(get("/v1/stats"), "stats");
         // only Pubol is public: neither the dismissed record nor any other hidden one is counted as approved

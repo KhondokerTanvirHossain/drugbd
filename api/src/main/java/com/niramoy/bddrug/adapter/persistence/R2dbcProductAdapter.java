@@ -3,13 +3,17 @@ import com.niramoy.bddrug.application.port.ProductQueryPort;
 import com.niramoy.bddrug.domain.Ingredient;
 import com.niramoy.bddrug.domain.LoadedProduct;
 import com.niramoy.bddrug.domain.Product;
+import com.niramoy.bddrug.domain.ProductBrowse;
 import com.niramoy.bddrug.domain.PublicMode;
+import com.niramoy.bddrug.domain.PublicReview;
+import com.niramoy.bddrug.domain.SearchResult;
 import io.r2dbc.spi.Readable;
 import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import java.util.List;
+import java.util.Map;
 
 @Component
 public class R2dbcProductAdapter implements ProductQueryPort {
@@ -21,6 +25,8 @@ public class R2dbcProductAdapter implements ProductQueryPort {
      * public reads filter and decide on public_review only.
      */
     private final String withStatus;
+    /** §6.11.3 P17 reads under the mode: the grouped counts, and a page of every letter or of one (bound as :letter). */
+    private final String browseCounts, browseAll, browseLetter;
     private final DatabaseClient db;
     private final ClinicalDrugReader clinicalDrugs;
     public R2dbcProductAdapter(DatabaseClient db, ClinicalDrugReader clinicalDrugs, PublicMode mode) {
@@ -28,6 +34,33 @@ public class R2dbcProductAdapter implements ProductQueryPort {
         this.clinicalDrugs = clinicalDrugs;
         this.withStatus = "SELECT " + COLS + ", " + ReviewSql.statusOf("bp.concept_id") + " AS review_status, " +
                           ReviewSql.publicLabelOf("bp.concept_id", mode) + " AS public_review FROM curated.brand_product bp";
+        this.browseCounts = browseCounts(mode);
+        this.browseAll = browsePage(mode, false);
+        this.browseLetter = browsePage(mode, true);
+    }
+
+    /** A trade name's first-letter key (ProductBrowse.KEYS): its first character upper-cased when A–Z, otherwise 0-9. */
+    static final String FIRST_LETTER = "CASE WHEN bp.trade_name ~ '^[A-Za-z]' THEN upper(left(bp.trade_name, 1)) ELSE '" +
+                                       ProductBrowse.DIGITS + "' END";
+
+    /** Visible products (the one rule, §7.4.1) per first-letter key, in one grouped statement. */
+    static String browseCounts(PublicMode mode) {
+        return "WITH " + ReviewSql.latest(mode) + " SELECT " + FIRST_LETTER + " AS letter, count(*) AS n " +
+               "FROM curated.brand_product bp JOIN latest l ON l.concept_id = bp.concept_id AND l.pub GROUP BY 1";
+    }
+
+    /**
+     * A page of visible products with their labels, by lower(trade_name), trade_name, concept_id; {@code byLetter} adds the
+     * bound {@code :letter} key. The read may scan the whole visible catalogue, so the label is the set-based form (one join
+     * to the failed items, never a stage lookup per row: §6.11.3, §10.6).
+     */
+    static String browsePage(PublicMode mode, boolean byLetter) {
+        return "WITH " + ReviewSql.latest(mode) + " SELECT bp.concept_id, bp.trade_name, bp.dar_number, bp.company, bp.dosage_form, " +
+               "bp.generic_content_raw, bp.bdc_id, cd.display_name, " + ReviewSql.labelJoined("l", "f") + " AS review " +
+               "FROM curated.brand_product bp JOIN latest l ON l.concept_id = bp.concept_id AND l.pub " +
+               ReviewSql.failedJoin("l", "f") + " LEFT JOIN curated.clinical_drug cd ON cd.bdc_id = bp.bdc_id " +
+               (byLetter ? "WHERE " + FIRST_LETTER + " = :letter " : "") +
+               "ORDER BY lower(bp.trade_name), bp.trade_name, bp.concept_id LIMIT :limit OFFSET :offset";
     }
 
     /** A product row plus the BDC id it links to (resolved into Product.clinicalDrug afterwards). */
@@ -67,6 +100,26 @@ public class R2dbcProductAdapter implements ProductQueryPort {
                       "ORDER BY lower(trade_name), trade_name, concept_id")
             .map(r -> new LoadedProduct(r.get("concept_id", String.class), r.get("trade_name", String.class),
                 r.get("dosage_form", String.class), r.get("public_review", String.class)))
+            .all();
+    }
+
+    @Override public Mono<Map<String, Long>> browseCounts() {
+        return db.sql(browseCounts)
+            .map(r -> Map.entry(r.get("letter", String.class), r.get("n", Long.class)))
+            .all().collectMap(Map.Entry::getKey, Map.Entry::getValue);
+    }
+
+    @Override public Flux<ProductBrowse.Row> browse(String letter, int limit, int offset) {
+        var spec = letter == null ? db.sql(browseAll) : db.sql(browseLetter).bind("letter", letter);
+        return spec.bind("limit", limit).bind("offset", offset)
+            .map(r -> {
+                String bdc = r.get("bdc_id", String.class), review = r.get("review", String.class);
+                return new ProductBrowse.Row(r.get("concept_id", String.class), r.get("trade_name", String.class),
+                    r.get("dar_number", String.class), r.get("company", String.class), r.get("dosage_form", String.class),
+                    r.get("generic_content_raw", String.class),
+                    bdc == null ? null : new SearchResult.ClinicalRef(bdc, r.get("display_name", String.class)),
+                    PublicReview.approved(review) ? "approved" : "not_reviewed", review);
+            })
             .all();
     }
 

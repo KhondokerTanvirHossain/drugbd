@@ -1,6 +1,7 @@
-import { expect, test } from "@playwright/test";
+import AxeBuilder from "@axe-core/playwright";
+import { expect, test, type Page } from "@playwright/test";
 import { sql } from "./db";
-import { partnerRequests, publish, resetPublic } from "./public-helpers";
+import { arrowToHeaderOption, ensurePublished, headerOption, partnerRequests, publish, resetPublic, typeInHeader } from "./public-helpers";
 import { PILOT_IDS as P } from "./review-helpers";
 import { E2E_EMAILS, signInAs } from "./session";
 import { installTurnstileFake } from "./turnstile-fake";
@@ -207,7 +208,7 @@ test("an approved no-data product lists each approved partner as not checked, ne
 test("hostile URLs answer the site's own pages, never a 500 (Review Focus 2)", async ({ page }) => {
   const cases: [string, number, RegExp][] = [
     ["/search?q=ab%00", 200, /^Results for "ab"$|^No medicines match "ab"$/],
-    ["/search?q=%00%00", 200, /^Search medicines$/],
+    ["/search?q=%00%00", 200, /^Medicines$/],   // D75 (§6.11.2): blank after the controls read as spaces, so the medicine list
     ["/search?q=a%1F", 200, /^Search medicines$/],
     [`/products/${"x".repeat(5000)}`, 404, /^No medicine with the id /],
     ["/products/napa%00", 404, /^No medicine with the id /],
@@ -222,4 +223,58 @@ test("hostile URLs answer the site's own pages, never a 500 (Review Focus 2)", a
     await expect(page.getByRole("link", { name: "Skip to content" }), url).toBeAttached();
     await expect(page.locator("h1"), url).toHaveText(h1);
   }
+});
+
+/*
+ * D75 (§6.11, §6.11.4), approved-only mode: the header search suggests only approved medicines, and /search with no query
+ * lists only approved medicines A to Z, each with the approved pill and no caution.
+ */
+const WCAG = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
+async function axe(page: Page, state: string): Promise<void> {
+  await page.waitForTimeout(300);
+  const found = (await new AxeBuilder({ page }).withTags(WCAG).exclude("iframe").analyze()).violations.map((v) => `${v.id}: ${v.nodes.length}`);
+  expect(found, state).toEqual([]);
+}
+
+test("header search: 'nap' suggests Napa; ArrowDown and Enter open it; Enter alone searches (§6.11.1) @approved-only", async ({ page }) => {
+  ensurePublished(P.napa);   // afterAll resets it
+  await page.goto("/search?q=paracetamol");
+  await typeInHeader(page, "nap", "Napa");
+  await expect(headerOption(page, "Napa")).not.toContainText("Not yet reviewed by a pharmacist");
+  await expect(page.locator("#hs-list > li").last()).toHaveText("All results for “nap”");
+  await axe(page, "header list open");
+  await arrowToHeaderOption(page, "Napa");
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(new RegExp(`/products/${P.napa}$`));
+  await expect(page.locator("h1")).toHaveText("Napa");
+
+  const box = await typeInHeader(page, "nap", "Napa");
+  await box.press("Enter");
+  await expect(page).toHaveURL(/\/search\?q=nap$/);
+  await expect(page.locator("h1")).toHaveText('Results for "nap"');
+});
+
+test("/search with no query lists the approved medicines A to Z, and a letter filters the list (§6.11.2) @approved-only", async ({ page }) => {
+  ensurePublished(P.napa);
+  await page.goto("/search");
+  const main = page.locator("main");
+  await expect(page.locator("h1")).toHaveText("Medicines");
+  await expect(main).toContainText("Every medicine on IntelliDrugs, A to Z.");
+  await expect(main).toContainText(/\d+ medicines?/);
+  const bar = page.getByRole("navigation", { name: "Browse by first letter" });
+  await expect(bar.getByRole("link", { name: "All", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(main.locator(`article a[href="/products/${P.napa}"]`)).toBeVisible();
+  await expect(main.locator("article", { has: page.locator(`a[href="/products/${P.napa}"]`) })).toContainText("Approved by a pharmacist");
+  await expect(main.locator(`a[href="/products/${P.metformin}"]`)).toHaveCount(0);   // never approved here: never listed
+  await expect(main).not.toContainText(CAUTION);
+  await expect(main).not.toContainText("Not yet reviewed by a pharmacist");
+  await axe(page, "/search, the medicine list");
+
+  await bar.getByRole("link", { name: "N", exact: true }).click();
+  await expect(page).toHaveURL(/\/search\?letter=N$/);
+  await expect(bar.getByRole("link", { name: "N", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(main).toContainText(/\d+ medicines? starting with N/);
+  const names = await main.locator("article a[href^='/products/']").allTextContents();
+  expect(names).toContain("Napa");
+  for (const name of names) expect(name, name).toMatch(/^[Nn]/);
 });

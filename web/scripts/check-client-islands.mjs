@@ -4,7 +4,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-/** Spec §4.2, the complete allowlist (paths relative to web/). */
+/** Spec §4.2, the complete allowlist (paths relative to web/), plus D75's HeaderSearch (§6.11.1). */
 export const ISLANDS = [
   "components/ThemeSwitch.tsx",
   "app/signin/SignInButton.tsx",
@@ -12,6 +12,7 @@ export const ISLANDS = [
   "components/review/ReviewDesk.tsx",
   "components/review/desk/DeskRecordContext.tsx",
   "components/check/CheckerCombobox.tsx",
+  "components/HeaderSearch.tsx",   // D75 §6.11.1: the header search combobox
   "components/Expander.tsx",
   "components/AccountMenu.tsx",
   "components/learn/GlossaryFilter.tsx",
