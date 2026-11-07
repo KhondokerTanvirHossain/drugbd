@@ -28,4 +28,13 @@
 .s-letters a:hover { background: var(--surface-2); }
 .s-letters a[aria-current="page"] { background: var(--accent); color: var(--on-accent); box-shadow: none; font-weight: 600; }
 .s-letters span { color: var(--fg-3); }
+/* The current choice when it has no medicine (a span): a ring, so the bar still shows where the reader is. */
+.s-letters span[aria-current="page"] { box-shadow: inset 0 0 0 2px var(--accent); color: var(--fg); font-weight: 600; }
+/* Windows High Contrast drops backgrounds and box shadows: borders outline the links, Highlight marks the current choice
+   (as tokens.css does for .filter[aria-current]). */
+@media (forced-colors: active) {
+  .s-letters a { border: 1px solid LinkText; }
+  .s-letters a[aria-current="page"] { forced-color-adjust: none; background: Highlight; color: HighlightText; border-color: Highlight; }
+  .s-letters span[aria-current="page"] { border: 2px solid CanvasText; }
+}
 @media (max-width: 720px) { .s-page { padding: 24px 16px 40px; } .s-res { grid-template-columns: 1fr; } .s-res-side { align-items: flex-start; text-align: left; } }

@@ -51,11 +51,13 @@ function LetterBar({ counts, current }: { counts: Map<string, number>; current: 
  * §6.11.2 the medicine list: every visible product A to Z, 50 a page, by first letter, each row the §6.3 approved product
  * hit with its label. In show mode the page opens with the caution when a listed row is not approved (§6.10).
  */
-export default function BrowseList({ result, letter, page, capped, mode = "approved_only" }:
-    { result: BrowseResult; letter: string | null; page: number; capped: boolean; mode?: PublicMode }) {
+export default function BrowseList({ result, letter, page, mode = "approved_only" }:
+    { result: BrowseResult; letter: string | null; page: number; mode?: PublicMode }) {
   const counts = new Map(result.letters.map((x) => [x.letter, x.count]));
   const anyVisible = result.letters.some((x) => x.count > 0);
-  const atCap = capped || (page === SEARCH_PAGE_MAX && result.hasMore);
+  // §6.11.2 "At page index 9 with more rows": a page past 9 reads 9, and the line shows only when the choice really holds
+  // more than 500 medicines, so it never claims 500 beside a count line of 3 (unlike search, the list prints its count).
+  const atCap = page === SEARCH_PAGE_MAX && result.hasMore;
   const caution = rendersUnreviewed(mode, result.products.map((p) => p.review));
   return (
     <>

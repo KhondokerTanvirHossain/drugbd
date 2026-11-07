@@ -28,7 +28,7 @@ export default async function SearchPage({ searchParams }: Props) {
     const letter = parseLetter(sp.letter);
     const [r, mode] = await Promise.all([browseMedicines(letter, page), getPublicMode()]);
     if (!r.ok) throw new Error(`browse failed (${r.status})`);
-    return <BrowseList result={r.data} letter={letter} page={page} capped={capped} mode={mode} />;
+    return <BrowseList result={r.data} letter={letter} page={page} mode={mode} />;
   }
   if (problem) {
     return (

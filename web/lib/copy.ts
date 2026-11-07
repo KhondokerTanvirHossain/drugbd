@@ -981,11 +981,9 @@ export const P1C_COPY = {
 export const SHOW_COPY = SHOW_MODE;
 
 // ---- D75 (§6.11): the header search combobox and the medicine list, pinned verbatim by tests/browse-copy.test.ts. ----
-/** §6.11.1 the HeaderSearch island: its sr-only help (`hs-help`) and the last option of an open list. */
-export const HEADER_SEARCH = {
-  help: "Suggestions appear as you type. Up and down arrows to move, Enter to open, Esc to close.",
-  allResults: "All results for “{q}”",
-} as const;
+/** §6.11.1 the HeaderSearch island: its sr-only help (`hs-help`) and the last option of an open list. Defined in
+ *  lib/header-search-copy.ts so the island, which loads with every page, does not ship this module (§10.6). */
+export { HEADER_SEARCH } from "./header-search-copy";
 
 /**
  * §6.11.2 the medicine list (`/search` with no query). The `0-9` choice reads `digitsPhrase` wherever a line names the

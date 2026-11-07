@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { browseCount, browseHref } from "@/components/public/BrowseList";
 import { browseMedicines } from "@/lib/api";
 import { BROWSE_COPY, HEADER_SEARCH, fill } from "@/lib/copy";
+import * as LEAF from "@/lib/header-search-copy";
+import { NAV } from "@/lib/public-copy";
 import { BROWSE_DIGITS, BROWSE_LETTERS, parseLetter } from "@/lib/public-params";
 
 describe("BROWSE_COPY and HEADER_SEARCH (§6.11), verbatim", () => {
@@ -11,6 +13,10 @@ describe("BROWSE_COPY and HEADER_SEARCH (§6.11), verbatim", () => {
       allResults: "All results for “{q}”",
     });
     expect(fill(HEADER_SEARCH.allResults, { q: "nap" })).toBe("All results for “nap”");
+    // the island's light module (§10.6) is the one source: lib/copy re-exports it, NAV reads its search field
+    expect(HEADER_SEARCH).toBe(LEAF.HEADER_SEARCH);
+    expect(LEAF.SEARCH_FIELD).toEqual({ label: "Search medicines", placeholder: "Brand, substance or DAR number" });
+    expect([NAV.searchLabel, NAV.searchPlaceholder]).toEqual([LEAF.SEARCH_FIELD.label, LEAF.SEARCH_FIELD.placeholder]);
   });
 
   it("pins the medicine list strings", () => {

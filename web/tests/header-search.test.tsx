@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -238,11 +240,71 @@ describe("HeaderSearch once it runs (§6.11.1)", () => {
     expect(input().getAttribute("aria-expanded")).toBe("false");
   });
 
+  it("typing clears the highlight and the old rows at once, so Enter then searches for the new text", async () => {
+    render(<Bar />);
+    await typeAndOpen("nap");
+    fireEvent.keyDown(input(), { key: "ArrowDown" });
+    fireEvent.keyDown(input(), { key: "ArrowDown" });
+    expect(input().getAttribute("aria-activedescendant")).toBe("hs-opt-1");
+    fireEvent.change(input(), { target: { value: "napr" } });
+    expect(input().getAttribute("aria-activedescendant")).toBeNull();
+    expect(options().map((o) => o.textContent)).toEqual(["All results for “napr”"]);
+    expect(fireEvent.keyDown(input(), { key: "Enter" })).toBe(true);   // not prevented: the browser submits "napr"
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("after Esc and more typing, ArrowDown never reopens the earlier query's rows", async () => {
+    render(<Bar />);
+    await typeAndOpen("nap");
+    fireEvent.keyDown(input(), { key: "Escape" });
+    fireEvent.change(input(), { target: { value: "napx" } });
+    fireEvent.keyDown(input(), { key: "ArrowDown" });
+    expect(input().getAttribute("aria-expanded")).toBe("true");
+    expect(options().map((o) => o.textContent)).toEqual(["All results for “napx”"]);
+    expect(fireEvent.keyDown(input(), { key: "Enter" })).toBe(false);
+    expect(submit).toHaveBeenCalledTimes(1);
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("ArrowDown on a prefilled field asks for its rows; 'All results', once moved onto, stays active when they land", async () => {
+    render(<Bar q="nap" />);
+    input().focus();
+    fireEvent.keyDown(input(), { key: "ArrowDown" });
+    expect(input().getAttribute("aria-activedescendant")).toBe("hs-opt-0");
+    expect(options().map((o) => o.textContent)).toEqual(["All results for “nap”"]);
+    await waitFor(() => expect(options()).toHaveLength(4), { timeout: 1500 });
+    expect(String(fetchMock.mock.calls[0][0])).toBe("/check/suggest?q=nap");
+    expect(input().getAttribute("aria-activedescendant")).toBe("hs-opt-3");
+    expect(options()[3].getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("text that trims to the same query keeps its rows and asks nothing more", async () => {
+    render(<Bar />);
+    await typeAndOpen("nap");
+    fireEvent.change(input(), { target: { value: "nap " } });
+    await act(() => new Promise((r) => setTimeout(r, 300)));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(options()).toHaveLength(4);
+    expect(input().getAttribute("aria-expanded")).toBe("true");
+  });
+
   it("a failed request opens only 'All results'", async () => {
     fetchMock.mockImplementation(async () => new Response("[]", { status: 502 }));
     render(<Bar />);
     await typeAndOpen("nap", 1);
     expect(options()[0].textContent).toBe("All results for “nap”");
+  });
+});
+
+describe("the island stays light (§10.6): it loads with every page's root layout", () => {
+  it("never imports lib/copy or lib/public-copy, and loads the option body only on use", () => {
+    const src = readFileSync(join(process.cwd(), "components/HeaderSearch.tsx"), "utf8");
+    expect(src).toMatch(/^"use client";/);
+    expect(src).not.toMatch(/from "@\/lib\/(copy|public-copy|check-summary)"/);
+    expect(src).not.toMatch(/^import (?!type )[^;]*from "@\/components\/(suggest\/SuggestOptionBody|ui\/)/m);
+    expect(src).toMatch(/import\("@\/components\/suggest\/SuggestOptionBody"\)/);
+    const leaf = readFileSync(join(process.cwd(), "lib/header-search-copy.ts"), "utf8");
+    expect(leaf).not.toMatch(/^import /m);
   });
 });
 

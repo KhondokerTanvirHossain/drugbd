@@ -3,12 +3,12 @@ import "@/components/ui/ProblemLine.css";
 import { suggestionSub } from "@/lib/check-summary";
 import { NOT_REVIEWED, PROBLEM_REPORTED } from "@/lib/copy";
 import type { SuggestRow } from "@/lib/public-types";
+import { hasClinicalData } from "./clinical-data";
+
+export { hasClinicalData };
 
 /** A suggestion as /check/suggest serves it to the islands (§4.3). */
 export type SuggestOption = Pick<SuggestRow, "conceptId" | "tradeName" | "status" | "clinicalDisplayName" | "matched" | "review">;
-
-/** A row that carries clinical data: approved, or labelled (show mode serves every visible row in full, §6.10). */
-export const hasClinicalData = (r: Pick<SuggestRow, "status" | "review">) => r.status === "approved" || !!r.review;
 
 /**
  * The body of one suggestion option, shared by the checker and the header search (§6.7.1, §6.11.1): the trade name, the

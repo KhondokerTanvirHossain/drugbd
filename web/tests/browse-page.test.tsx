@@ -98,7 +98,7 @@ describe("/search with no query: the medicine list (§6.11.2), approved-only mod
     expect(text(await render({}))).toContain("use the search above. 1 medicine All");
   });
 
-  it("pages of 50 keep the letter: Previous and Next, and the cap line at index 9 (or past it)", async () => {
+  it("pages of 50 keep the letter: Previous and Next, and the cap line at index 9 (or past it) when more rows exist", async () => {
     browseMedicines.mockResolvedValue({ ok: true, data: { ...ALL, letter: "N", total: 600, hasMore: true, letters: letters({ N: 600 }) } });
     const p1 = await render({ letter: "N", page: "1" });
     expect(p1).toContain('href="/search?letter=N&amp;page=0">Previous page</a>');
@@ -120,6 +120,14 @@ describe("/search with no query: the medicine list (§6.11.2), approved-only mod
     browseMedicines.mockResolvedValue({ ok: true, data: { ...ALL, letter: "0-9", total: 700, hasMore: true, letters: letters({ "0-9": 700 }) } });
     expect(await render({ letter: "0-9", page: "9" }))
       .toContain("Showing the first 500 medicines starting with a number or symbol. Search to find the others.");
+    // past index 9 with only 3 for the letter: page 9 is empty and the cap line never claims 500 (§6.11.2)
+    browseMedicines.mockResolvedValue({ ok: true, data: { ...ALL, letter: "Q", total: 3, page: 9, hasMore: false, products: [],
+      letters: letters({ Q: 3 }) } });
+    const few = await render({ letter: "Q", page: "50" });
+    expect(browseMedicines).toHaveBeenLastCalledWith("Q", 9);
+    expect(few).toContain("3 medicines starting with Q");
+    expect(few).not.toContain("Showing the first 500");
+    expect(few).not.toContain("Next page");
     browseMedicines.mockResolvedValue({ ok: true, data: { ...ALL, total: 51, hasMore: false, letters: letters({ N: 51 }) } });
     const last = await render({ page: "1" });
     expect(last).not.toContain("Next page");
