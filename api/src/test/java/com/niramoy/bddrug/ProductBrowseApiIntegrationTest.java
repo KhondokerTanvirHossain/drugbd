@@ -27,9 +27,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  *       (B, more than one page);</li>
  *   <li>visible in show mode only: A-1 Ecosprin and W-2 Coumarol (pending: not_reviewed), C-EYE Optimycin (an open issue:
  *       problem), C-CAP Chloramex (pending with a failed stage: problem), Z-SYM "(Bracket)" (pending, under 0-9);</li>
- *   <li>hidden in both modes: D-1 Motigut (approved, then removed from its batch file), X-NOMAP Herbex ("not found at
- *       source") and X-NAD Xenadrug ("not a registered Drug product"), the DGDA load failures, and A-NOBDC Asprin Plus and
- *       X-NOSUB Newdrug, in no batch.</li>
+ *   <li>visible in show mode only, by its latest item: R-OLD Rebatch (ok in the older batch BR-rm, pending in the newer
+ *       BR-1: not_reviewed);</li>
+ *   <li>hidden in both modes: D-1 Motigut (approved, then removed from its batch file), R-RM Reremoved (ok in the older
+ *       batch, removed from the newer one's file), X-NOMAP Herbex ("not found at source") and X-NAD Xenadrug ("not a
+ *       registered Drug product"), the DGDA load failures, and A-NOBDC Asprin Plus and X-NOSUB Newdrug, in no batch.</li>
  * </ul>
  */
 @Testcontainers
@@ -39,8 +41,8 @@ class ProductBrowseApiIntegrationTest {
     @Container static PostgreSQLContainer<?> pg = new PostgreSQLContainer<>("postgres:16");
     @DynamicPropertySource static void props(DynamicPropertyRegistry r) { TestSupport.props(r, pg); }
 
-    static final List<String> HIDDEN = List.of("D-1", "X-NOMAP", "X-NAD", "A-NOBDC", "X-NOSUB");
-    static final List<String> UNAPPROVED = List.of("A-1", "W-2", "C-EYE", "C-CAP", "Z-SYM");
+    static final List<String> HIDDEN = List.of("D-1", "R-RM", "X-NOMAP", "X-NAD", "A-NOBDC", "X-NOSUB");
+    static final List<String> UNAPPROVED = List.of("A-1", "W-2", "C-EYE", "C-CAP", "Z-SYM", "R-OLD");
 
     @BeforeAll static void seed() throws Exception {
         PilotSeed.migrateAndSeed(pg);
@@ -53,14 +55,16 @@ class ProductBrowseApiIntegrationTest {
              ('Z-BN','Z02','নাপা','Test Pharma','Tablet','Herb 1 mg',NULL,'parsed',NULL),
              ('Z-ACC','Z03','Écran','Test Pharma','Lotion','Herb 1 mg',NULL,'parsed',NULL),
              ('Z-SYM','Z04','(Bracket)','Test Pharma','Tablet','Herb 1 mg',NULL,'parsed',NULL),
-             ('X-NAD','X02','Xenadrug','Test Pharma','Tablet','Herb 1 mg',NULL,'parsed',NULL);
+             ('X-NAD','X02','Xenadrug','Test Pharma','Tablet','Herb 1 mg',NULL,'parsed',NULL),
+             ('R-OLD','R01','Rebatch','Test Pharma','Tablet','Herb 1 mg',NULL,'parsed',NULL),
+             ('R-RM','R02','Reremoved','Test Pharma','Tablet','Herb 1 mg',NULL,'parsed',NULL);
             INSERT INTO curated.brand_product (concept_id, dar_number, trade_name, company, dosage_form, generic_content_raw, bdc_id, parse_status, parse_note)
              SELECT 'BK-' || lpad(i::text, 2, '0'), 'BK' || lpad(i::text, 2, '0'), 'Bulk' || lpad(i::text, 2, '0'), 'Test Pharma', 'Tablet',
                     'Herb 1 mg', NULL, 'parsed', NULL
              FROM generate_series(1, 55) i;
 
-            INSERT INTO ops.batch (batch_id, item_count, run_at) VALUES ('BR-1', 15, now() - interval '1 hour'), ('BR-2', 55, now()),
-             ('BR-rm', 1, now() - interval '2 hour');
+            INSERT INTO ops.batch (batch_id, item_count, run_at) VALUES ('BR-1', 17, now() - interval '1 hour'), ('BR-2', 55, now()),
+             ('BR-rm', 3, now() - interval '2 hour');
             INSERT INTO ops.batch_item (batch_id, source, concept_id, review, note, extracted_at) VALUES
              ('BR-1','DGDA-Drugs','W-1','ok',NULL, now() - interval '1 hour'),
              ('BR-1','DGDA-Drugs','N-1','ok',NULL, now() - interval '1 hour'),
@@ -76,7 +80,11 @@ class ProductBrowseApiIntegrationTest {
              ('BR-1','DGDA-Drugs','Z-SYM','pending',NULL, now() - interval '1 hour'),
              ('BR-1','DGDA-Drugs','X-NOMAP','issue','not found at source', now() - interval '1 hour'),
              ('BR-1','DGDA-Drugs','X-NAD','issue','not a registered Drug product', now() - interval '1 hour'),
-             ('BR-rm','DGDA-Drugs','D-1','ok','removed from batch file', now() - interval '2 hour');
+             ('BR-rm','DGDA-Drugs','D-1','ok','removed from batch file', now() - interval '2 hour'),
+             ('BR-rm','DGDA-Drugs','R-OLD','ok',NULL, now() - interval '2 hour'),
+             ('BR-1','DGDA-Drugs','R-OLD','pending',NULL, now() - interval '1 hour'),
+             ('BR-rm','DGDA-Drugs','R-RM','ok',NULL, now() - interval '2 hour'),
+             ('BR-1','DGDA-Drugs','R-RM','ok','removed from batch file', now() - interval '1 hour');
             INSERT INTO ops.stage_result (batch_id, concept_id, stage, status, note) VALUES
              ('BR-1','C-CAP','clinical','fail','no clinical drug'), ('BR-1','C-CAP','dgda','ok','found'),
              ('BR-1','W-1','dgda','warn','spelling'), ('BR-1','X-NOMAP','dgda','fail','not found at source');
@@ -123,16 +131,22 @@ class ProductBrowseApiIntegrationTest {
 
     /** Removed records, DGDA load failures and products in no batch are never listed, in any letter. */
     @Test void removedLoadFailuresAndProductsInNoBatchAreNeverListed() {
-        for (String letter : List.of("M", "H", "X", "A", "N")) {
+        for (String letter : List.of("M", "H", "X", "A", "N", "R")) {
             String body = str(web.get().uri("/v1/products/browse?letter={l}", letter).exchange().expectStatus().isOk()
                 .expectBody().returnResult().getResponseBody());
-            assertThat(body).as(letter).doesNotContain("Motigut", "Herbex", "Xenadrug", "Asprin Plus", "Newdrug", "\"hidden\"", "\"issue\"");
+            assertThat(body).as(letter).doesNotContain("Motigut", "Reremoved", "Herbex", "Xenadrug", "Asprin Plus", "Newdrug", "\"hidden\"",
+                "\"issue\"");
         }
         web.get().uri("/v1/products/browse?letter=M").exchange().expectStatus().isOk().expectBody()
             .jsonPath("$.data.total").isEqualTo(0).jsonPath("$.data.products.length()").isEqualTo(0);
         web.get().uri("/v1/products/browse?letter=X").exchange().expectStatus().isOk().expectBody()
             .jsonPath("$.data.total").isEqualTo(0).jsonPath("$.data.products.length()").isEqualTo(0);
+        web.get().uri("/v1/products/browse?letter=R").exchange().expectStatus().isOk().expectBody()
+            .jsonPath("$.data.products[*].conceptId").isEqualTo(expectedR());
     }
+
+    /** The latest item decides (§7.4.1): Rebatch, ok in an older batch but pending in the newer one, is not approved. */
+    List<String> expectedR() { return List.of(); }
 
     /** A–Z by the upper-cased first letter; a lower-case first letter is filed under its capital; every other name is 0-9. */
     @Test void lettersGroupByFirstLetterWithALowerCaseLetterAndThe09Bucket() {
@@ -220,7 +234,7 @@ class ProductBrowseApiIntegrationTest {
             .jsonPath("$.errors[0].field").isEqualTo("page");
         web.get().uri("/v1/products/browse?page=x").exchange().expectStatus().isBadRequest().expectBody()
             .jsonPath("$.errors[0].code").isEqualTo("INVALID_QUERY");
-        for (String bad : List.of("AB", "1", "%", "ক", "0–9"))
+        for (String bad : List.of("AB", "1", "%", "ক", "0–9", " ", "  ", " A"))
             web.get().uri("/v1/products/browse?letter={l}", bad).exchange().expectStatus().isBadRequest().expectBody()
                 .jsonPath("$.errors[0].code").isEqualTo("INVALID_QUERY").jsonPath("$.errors[0].field").isEqualTo("letter");
         web.get().uri("/v1/products/browse?letter=").exchange().expectStatus().isOk().expectBody()

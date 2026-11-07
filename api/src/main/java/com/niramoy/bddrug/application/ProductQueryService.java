@@ -117,12 +117,14 @@ public class ProductQueryService {
     public Flux<LoadedProduct> loaded(Scope scope) { return port.loaded(scope == Scope.PUBLIC); }
 
     /**
-     * §6.11.3 P17: one page of the A–Z list of visible products under the public mode. {@code letter}: absent or blank for
-     * every letter, else A–Z in either case (read upper-case) or 0-9; anything else is a 400, as is a page outside 0–9.
+     * §6.11.3 P17: one page of the A–Z list of visible products under the public mode. {@code letter}: absent or empty for
+     * every letter, else A–Z in either case (read upper-case) or 0-9; anything else (whitespace included) is a 400, as is a
+     * page outside 0–9.
      */
     public Mono<ProductBrowse> browse(String letter, int page) {
-        String key = letter == null || letter.isBlank() ? null : ProductBrowse.key(letter);
-        if (key == null && letter != null && !letter.isBlank())
+        boolean absent = letter == null || letter.isEmpty();
+        String key = absent ? null : ProductBrowse.key(letter);
+        if (key == null && !absent)
             return Mono.error(new InvalidQueryException("letter", "letter must be A-Z or 0-9"));
         if (page < 0 || page > BROWSE_PAGE_MAX)
             return Mono.error(new InvalidQueryException("page", "page must be 0-" + BROWSE_PAGE_MAX));

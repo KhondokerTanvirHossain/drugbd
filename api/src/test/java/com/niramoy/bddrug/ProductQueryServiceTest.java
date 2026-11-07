@@ -147,7 +147,7 @@ class ProductQueryServiceTest {
 
     @Test void browseRejectsAnyLetterButAToZOr09() {
         FakePort port = new FakePort();
-        for (String bad : List.of("AB", "1", "5", "-", "0", "09", "0-9 ", " A", "\u00c4", "\u00e9", "\u0995", "0\u20139", "a\u0000", "%", "all"))
+        for (String bad : List.of("AB", "1", "5", "-", "0", "09", "0-9 ", " A", "  ", " ", "\t", "\u00c4", "\u00e9", "\u0995", "0\u20139", "a\u0000", "%", "all"))
             StepVerifier.create(browseService(port).browse(bad, 0))
                 .expectErrorSatisfies(e -> assertThat(((InvalidQueryException) e).field()).as(bad).isEqualTo("letter")).verify();
         assertThat(port.calls).isEmpty();
@@ -163,12 +163,12 @@ class ProductQueryServiceTest {
         assertThat(browseCall(port)).containsExactly("browse", null, 50, 450);
     }
 
-    @Test void browseReadsALowerCaseLetterUpperCaseAndABlankOneAsNoLetter() {
+    @Test void browseReadsALowerCaseLetterUpperCaseAndAnEmptyOneAsNoLetter() {
         FakePort port = new FakePort();
         StepVerifier.create(browseService(port).browse("b", 2))
             .assertNext(b -> assertThat(b.letter()).isEqualTo("B")).verifyComplete();
         assertThat(browseCall(port)).containsExactly("browse", "B", 50, 100);
-        for (String none : java.util.Arrays.asList(null, "", "  ")) {
+        for (String none : java.util.Arrays.asList(null, "")) {
             FakePort p = new FakePort();
             StepVerifier.create(browseService(p).browse(none, 0))
                 .assertNext(b -> assertThat(b.letter()).isNull()).verifyComplete();

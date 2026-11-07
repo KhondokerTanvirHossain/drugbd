@@ -149,6 +149,21 @@ class PublicVisibilityMatrixShowUnreviewedIntegrationTest extends PublicVisibili
             .jsonPath("$.data[0].conceptId").isEqualTo("M-PEND");
     }
 
+    /** P17: the visible products, each with its label; removed, the load failure and no batch are never listed or counted. */
+    @Test @Override void browse() {
+        for (String uri : List.of("/v1/products/browse", "/v1/products/browse?letter=H", "/v1/products/browse?letter=P",
+                                  "/v1/products/browse?letter=S"))
+            showClean(get(uri), uri);
+        web.get().uri("/v1/products/browse").exchange().expectBody()
+            .jsonPath("$.data.total").isEqualTo(7)
+            .jsonPath("$.data.letters[?(@.letter == 'H')].count").isEqualTo(List.of(6));
+        web.get().uri("/v1/products/browse?letter=H").exchange().expectBody()
+            .jsonPath("$.data.products[*].conceptId").isEqualTo(List.of("M-BACK", "M-DIS", "M-ENG", "M-FAIL", "M-ISS", "M-PEND"))
+            .jsonPath("$.data.products[*].status").value(v -> assertThat((List<?>) v).hasSize(6).allMatch("not_reviewed"::equals));
+        LABELS.forEach((id, label) -> web.get().uri("/v1/products/browse?letter=H").exchange().expectBody()
+            .jsonPath("$.data.products[?(@.conceptId == '" + id + "')].review").isEqualTo(List.of(label)));
+    }
+
     @Test @Override void stats() {
         showClean(get("/v1/stats"), "stats");
         web.get().uri("/v1/stats").exchange().expectBody()
