@@ -118,6 +118,12 @@ export type ReviewDiff = { from: string; to: string; reason: "rerun" | "shared_c
 /** A flag as /review/flags shows it: never the reporter's or resolver's email (§2.2). */
 export type FlagItem = { id: number; targetType: string; targetId: string; message: string; status: string; createdAt: string };
 export type FlagPage = { items: FlagItem[]; page: number; size: number; hasMore: boolean };
+/** §5.16 (D76): one counted open issue on a record, by role only (the API never sends an email). */
+export type IssueEntry = { role: ReviewerRole; at: string; note: string };
+/** A record whose display status is issue, from any batch; `index` is its place in its batch. */
+export type IssueRecord = { batchId: string; conceptId: string; index: number; tradeName: string; clinicalDisplayName: string | null;
+  issues: IssueEntry[] };
+export type IssuesPage = { total: number; items: IssueRecord[]; page: number; size: number; hasMore: boolean };
 
 /** What a saved (or replayed) decision returns (§7.2). */
 export type DeskOutcome = { review: string; displayStatus: DisplayStatus; batchStatus: string; version: Version; replayed: boolean };

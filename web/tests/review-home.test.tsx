@@ -48,7 +48,7 @@ describe("/review (§2.1, §5.16)", () => {
     expect(html).toContain("Batch status: <b>In review</b>");
     expect(html).toContain("Batch status: <b>Approved</b>");
     expect(html).toContain("Run 12/10/2026 08:00 UTC");
-    expect(html).toContain('<a href="/review/flags">Problem reports and partner requests</a>');
+    expect(html).toContain('<a href="/review/flags">Reported issues</a>');
     expect(html).not.toContain("pharm@e2e.test</a>");
   });
 

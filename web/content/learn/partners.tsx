@@ -41,6 +41,7 @@ export const ENDPOINTS: Endpoint[] = [
   { method: "GET", path: "/v1/review/batches/{b}/versions", what: "Each record's version, for stale detection", access: ["Reviewer"] },
   { method: "GET", path: "/v1/review/batches/{b}/items/{c}", what: "One record for the review desk: source, extraction, checks, interactions and history", access: ["Reviewer"] },
   { method: "GET", path: "/v1/review/batches/{b}/items/{c}/diff?from=", what: "What changed since an earlier extraction", access: ["Reviewer"] },
+  { method: "GET", path: "/v1/review/issues?page=", what: "Records with an issue reported by a reviewer, from every batch, 50 a page, oldest first", access: ["Reviewer"] },
   { method: "GET", path: "/v1/review/pairs?show=&pairs=&severity=&page=", what: "Senior review: the interaction pairs to review, with each pair's review state", access: ["Reviewer"] },
   { method: "GET", path: "/v1/review/substances?q=&page=", what: "Senior review: substances with their pair counts across all batches", access: ["Reviewer"] },
   { method: "GET", path: "/v1/review/substances/{bdsId}", what: "Senior review: one substance's pairs across all batches", access: ["Reviewer"] },

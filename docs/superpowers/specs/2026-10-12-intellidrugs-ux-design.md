@@ -322,7 +322,7 @@ The boards do not cover the states below. Their copy is defined in the section n
 | `/review/[batchId]` | Redirects 307 to the first record in the current filter that needs review for the viewer's role, otherwise record 1 | server | pharmacist, engineer |
 | `/review/[batchId]/[conceptId]?show=&q=` | **The workspace**. One route. The batch layout (toolbar and the ReviewDesk island) persists across records; the record page renders the filters, the list and the detail pane (§5.8.1). | server + ReviewDesk and DeskRecordContext islands | pharmacist, engineer |
 | `/review/[batchId]/versions` | Version tokens for stale detection (route handler, JSON) | server | pharmacist, engineer |
-| `/review/flags` | Open problem reports and partner access requests, with Resolve (§5.16) | server | pharmacist, engineer |
+| `/review/flags` | "Reported issues": *(D76)* records with an issue reported by a reviewer, from every batch, then open problem reports and partner access requests, with Resolve (§5.16) | server | pharmacist, engineer |
 | `/review/pairs?show=&pairs=&severity=&page=` | *(P1C)* Senior pair queue: every stored pair between substances we hold, from all batches, Major first (PO D3(b), §5.17) | server + SeniorDesk island | senior (others: not-authorised page, §5.17) |
 | `/review/substances?q=&page=` | *(P1C)* Senior review: the substances we hold, from all batches (§5.17) | server | senior |
 | `/review/substances/[bdsId]?pairs=&severity=&page=` | *(P1C)* Senior review by substance: brands from every batch, mappings, codes with source links, and pairs (§5.17) | server + SeniorDesk island | senior |
@@ -1392,17 +1392,18 @@ No board draws these two pages. They use the reviewer toolbar (§5.1, without th
 - For each `in_review` batch, an info `Banner` with Board DS's copy and live values: title "Batch `{id}` has {w} record[s] waiting for a pharmacist." (w = current items not approved) and body "The batch is approved when every record is approved by a pharmacist."
 - When no batch is `in_review`: "No batches are in review." in place of the banners.
 - A list (`<ul>`) of every batch, `in_review` first, then by `runAt`, newest first. Each row is a link to `/review/{batchId}` with the mono batch id, a `ProgressMeter`, "{a} of {n} approved", "Batch status: **In review**" or "**Approved**", and "Run {fmtUtc(runAt)}".
-- A link "Problem reports and partner requests" to `/review/flags`. The AccountMenu shows the same item for reviewers (§6.2).
+- A link "Reported issues" *(D76; was "Problem reports and partner requests")* to `/review/flags`. The AccountMenu shows the same item for reviewers (§6.2).
 
 **Flags (`/review/flags`):**
 
-- `<h1>` "Problem reports and partner requests", then two sections, each with an `<h2>`: "Problem reports" (every open flag except partner requests) and "Partner access requests" (`targetType: "other"`, `targetId: "partner-access"`, §6.9).
+- `<h1>` "Reported issues" *(D76)*, then three sections, each with an `<h2>`: *(D76)* "Issues reported by reviewers ({n})", "Problem reports" (every open flag except partner requests) and "Partner access requests" (`targetType: "other"`, `targetId: "partner-access"`, §6.9).
+- *(D76)* **Issues reported by reviewers.** Every current record, from every batch, whose display status is `issue` (§5.2), read with `GET /v1/review/issues` (§7.3); n is that total. Ordered by the record's oldest counted open issue, then batch id, then concept id. Each item: the trade name (bold) linking to the record in the desk under the issue filter (`/review/{b}/{c}?show=issue`), " · {clinical display name}" when there is one, "Batch {id}" (mono), then each counted open issue oldest first: the desk history's role line ("Issue reported by a pharmacist. Note:", "… by an engineer …", "… by a senior pharmacist …"), the note in `.raw` (left out when empty), and "Reported {fmtDhaka(at)}". Role only, never an email. No Resolve: an issue closes in the desk (an engineer's fix and re-run, or a pharmacist's Dismiss issue, §5.10a), and the record then leaves the list. Empty: "No records have an issue reported." A QA account keeps the §5.12 QA account view and makes no read (notes are team-only, §7.10).
 - Each item: the target (a product or substance links to its public page; a check shows "Interaction check"), the message in `.raw` (`white-space: pre-wrap`), and "Reported {fmtDhaka(createdAt)}". No reporter email (§2.2).
 - "Resolve" (tonal sm, busy label "Resolving") posts to the existing `resolveFlagAction` with the one shared `TurnstileField` (action `resolve`, §9.2). Outcomes keep the existing `RESOLVE_OUTCOME` map, except that `resolved` reads "Report resolved." (or "Request resolved." for a partner request), shown in a `role="status"` line and announced.
 - Empty sections: "No open problem reports." and "No open partner requests."
 - *(P1C)* For seniors, when k > 0, a line under the `<h1>`: "Pair issues reported by senior pharmacists: {k}", linking to `/review/pairs?show=issue` (§5.17).
 - API error: crit `Banner` "Couldn't load the reports." / "Nothing was changed. Check your connection and try again." with "Try again".
-- Paging: 50 per section (§7.5), with "Next page" and "Previous page" links.
+- Paging: 50 per section (§7.5), with "Next page" and "Previous page" links. *(D76)* Each section keeps its own page in the query (`ip` for reviewer issues, `rp` for problem reports, `pp` for partner requests), and every paging and Try again link carries all three. A failed read of any section is the page's API error state.
 - Without JavaScript the list reads fully; Resolve needs the bot check and shows the `<noscript>` line "Resolving needs JavaScript for the bot check."
 
 ### 5.17 Senior clinical review (P1C, PO D2, D3, D5; D49, D51, D52)
@@ -1916,7 +1917,7 @@ curl -H "Authorization: Bearer $INTELLIDRUGS_QA_KEY" "https://{SITE_HOST}/api/qa
 
 - the `summary` (avatar button) carries sr-only text "Account menu for {own name}" (Board P);
 - head: avatar, own name and own email; for reviewers, the role badge plus "Batch {id}"; *(QA portal)* for role `qa`, the badge "QA" and no batch;
-- items: "Review desk" and "Problem reports and partner requests" (reviewers only), *(P1C)* "Senior review" (seniors only, to `/review/pairs`), *(QA portal)* "QA tools" (roles `qa`, `engineer` and `senior`, to `/review/qa`; after "Senior review"), the theme control; on `/review/*` also "Keyboard shortcuts and settings" and the "Single-key shortcuts" control (§5.14); then "Sign out" (form POST to `/signout`, §2.1).
+- items: "Review desk" and "Reported issues" *(D76; was "Problem reports and partner requests")* (reviewers only), *(P1C)* "Senior review" (seniors only, to `/review/pairs`), *(QA portal)* "QA tools" (roles `qa`, `engineer` and `senior`, to `/review/qa`; after "Senior review"), the theme control; on `/review/*` also "Keyboard shortcuts and settings" and the "Single-key shortcuts" control (§5.14); then "Sign out" (form POST to `/signout`, §2.1).
 
 ### 6.3 Search (`/search?q=`)
 
@@ -2526,6 +2527,13 @@ GET /v1/review/batches/{b}/items?show=all|needs|warn|issue|approved|nodata&q=&pa
 
 GET /v1/review/batches/{b}/versions
 → [ { conceptId, extractedAt, lastDecisionId, displayStatus } ]
+
+GET /v1/review/issues?page=0                    (D76; ReviewIssuesController; page 0–10000, else 400 INVALID_QUERY field page)
+→ { total, page, size: 50, hasMore,
+    items: [ { batchId, conceptId, index, tradeName, clinicalDisplayName,
+               issues: [ { role, at, note } ] } ] }   // current items whose displayStatus is issue, from every batch; issues are
+                                                     // the counted open issues (ApprovalRule.openIssues), oldest first; ordered
+                                                     // by issues[0].at, then batchId, then conceptId; never an email
 
 GET /v1/review/batches/{b}/items/{c}            header X-Viewer-Email (token-gated; never echoed)
 → ReviewItem {
@@ -4126,3 +4134,4 @@ P1A may ship as its own release: it changes the shared layout, security and the 
 | D73 | *(QA guide, PO 19/10/2026)* Both MCP servers serve a versioned QA guide (six topics: overview, data_model, sources, checks, pitfalls, reporting) as a sixth read-only tool, `get_qa_guide` (optional `topic`; none gives the index and the overview; the result keeps the preamble-then-JSON shape), and as resources `intellidrugs://qa-guide/{topic}` (`text/markdown`; unknown uri `-32002`). One import-free module with a byte-identical stdio copy; `guideVersion` semver pinned to a content hash; every factual line tied to code, a test, this spec or a dated external page by a test-only claims map; field paths and source addresses checked against the QA API examples and `SourceLinks.java`. Hosted guide requests count toward the key's limit and write best-effort `qa_read` rows with route `guide`; the bundled stdio guide makes no request. Server version `1.1.0` | §5.18, §7.9.6, §7.9.8, §7.10.6, §7.11, §11.1 |
 | D74 | *(PO 06/11/2026)* The public site works now with unreviewed data, behind one API-owned server setting, `PUBLIC_SHOWS_UNREVIEWED` (code default off = approved-only, exactly as before; the production compose passes `${PUBLIC_SHOWS_UNREVIEWED:-true}`, so the release ships on; `false` in the host `.env` plus `docker-compose up -d --no-deps api web` turns it off). In show mode every product whose latest batch item is current and not a DGDA load failure is public with a label computed in the API by one rule in `ReviewSql` (`approved`; `not_reviewed`; `problem` = not approved with an open reviewer issue or a failed stage), carried to substances and clinical drugs; removed records, DGDA load failures and products in no batch stay stubs. The web reads the mode from the API (`GET /v1/public-mode`, `/v1/stats`), never from its environment, and shows `NOT_REVIEWED`, `PROBLEM_REPORTED`, `PAIR_UNREVIEWED` or `PAIR_PROBLEM`, and `UNREVIEWED_CAUTION` once per page that shows unapproved data; `APPROVED` and the verification line only when approved; no approved-only claim in show mode. Search, the checker, substance pages, partner links, other brands, "With other medicines" and source links cover every visible record. Both modes are tested (matrix, key integration tests, e2e with an `@approved-only` run). Unchanged: the desk, approvals, reopen, senior and pair review, the QA API and MCP (the QA guide's gate line made mode-neutral), robots, headers, caching, `scope=public` and the internal token. Supersedes in show mode G3's approval gate, D16, D26, D28, D53, D58, and in part D34, D43, D49, D56 and D60 | §1.2, §2.2, §3.4, §3.6, §6.1–§6.10, §7.4, §7.4.1, §8.3.1, §11, §12.3–§12.5 |
 | D75 | *(PO 07/11/2026)* The header search field suggests medicines as you type (an ARIA 1.2 combobox island over `/check/suggest`, no auto-selected option, so Enter still searches; Enter or click on a suggestion opens its product page; a last option "All results for “{q}”"), sharing the suggestion hook and option body with the checker. `/search` with no query is the A–Z medicine list of every visible product (P17 `GET /v1/products/browse`, 50 a page, a letter bar, at most 10 pages per letter, keeping the anti-scraping page cap) | §2.1, §4.4, §6.11, §7.4 |
+| D76 | *(PO 07/11/2026)* `/review/flags` is "Reported issues": its first section lists every record with an issue reported by a reviewer, from every batch (role, note and date, never an email), each linking to the record in the desk's issue filter; issues close in the desk, so there is no Resolve there. New reviewer read `GET /v1/review/issues` | §2.1, §5.16, §7.3 |

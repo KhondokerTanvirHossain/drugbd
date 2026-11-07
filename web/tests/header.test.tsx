@@ -55,7 +55,7 @@ describe("Header (§6.1)", () => {
     expect(html).toContain('<form action="/signout" method="post"><button type="submit" class="btn btn--plain btn--sm">Sign out</button></form>');
     expect(html).not.toMatch(/href="\/(batches|flags)"/);
     expect(html).toContain('<a href="/review">Review desk</a>');
-    expect(html).toContain('<a href="/review/flags">Problem reports and partner requests</a>');
+    expect(html).toContain('<a href="/review/flags">Reported issues</a>');
     expect(html).not.toContain('href="/signin"');
   });
 

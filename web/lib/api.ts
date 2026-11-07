@@ -2,7 +2,7 @@ import "server-only";
 import type { BrowseResult, CheckResult as PublicCheckResult, ClinicalDrugView, ProductInteractions, ProductStub, PublicProduct,
   PublicSubstance, SearchResult as PublicSearchResult, SeverityFilter, SubstanceInteractions, SubstanceStub, SuggestRow } from "./public-types";
 import type {
-  DeskOutcome, FilterKey, FlagItem, FlagPage, ItemsPage, ReviewBatchSummary, ReviewDiff, ReviewItem, ReviewerRole, VersionRow,
+  DeskOutcome, FilterKey, FlagItem, FlagPage, IssueEntry, IssueRecord, IssuesPage, ItemsPage, ReviewBatchSummary, ReviewDiff, ReviewItem, ReviewerRole, VersionRow,
 } from "./review-types";
 import type { PairOutcome, PairQuery, PairsPage, SubstanceDetail, SubstancesPage } from "./senior-types";
 import { SENIOR_PAGE_SIZE } from "./senior-types";
@@ -374,6 +374,21 @@ export async function listFlagPage(kind: keyof typeof FLAG_FILTERS, page: number
     items: data.items.map((f: FlagItem) => ({ id: f.id, targetType: f.targetType, targetId: f.targetId, message: f.message,
       status: f.status, createdAt: f.createdAt })),
     page: data.page, size: data.size, hasMore: data.hasMore === true,
+  };
+}
+
+/**
+ * §5.16 (D76): records with an issue reported, across every batch, 50 a page, oldest open issue first. Each field is copied
+ * by name, so nothing the API might add later reaches the page. Throws on any failure, as listFlagPage does.
+ */
+export async function listReviewIssues(page: number): Promise<IssuesPage> {
+  const data = await reviewData<IssuesPage>(`/v1/review/issues?${new URLSearchParams({ page: String(page) })}`);
+  if (!data || !Array.isArray(data.items)) throw new Error("API error: no issue list");
+  return {
+    total: data.total, page: data.page, size: data.size, hasMore: data.hasMore === true,
+    items: data.items.map((r: IssueRecord) => ({ batchId: r.batchId, conceptId: r.conceptId, index: r.index, tradeName: r.tradeName,
+      clinicalDisplayName: r.clinicalDisplayName ?? null,
+      issues: (r.issues ?? []).map((i: IssueEntry) => ({ role: i.role, at: i.at, note: i.note ?? "" })) })),
   };
 }
 
