@@ -17,8 +17,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * §7.3 (D76) GET /v1/review/issues: every current record, across batches, whose display status is issue. Read-only seed:
- * I-A holds two open records (I-TWO with two counted issues, I-ENG with one) and five that must not appear (a dismissed
- * issue, an issue from before the re-run, the pipeline's own "not found at source", a removed item, an approved one);
+ * I-A holds two open records (I-TWO with two counted issues, I-ENG with one) and seven that must not appear (a dismissed
+ * issue and an issue from before the re-run, each once with the stored column still "issue" so the counted-decision rule
+ * itself is what drops them, the pipeline's own "not found at source", a removed item, an approved one);
  * I-B holds I-NEW; I-P holds 50 more, so the list spans two pages of 50.
  */
 @Testcontainers
@@ -38,6 +39,8 @@ class ReviewIssuesIntegrationTest {
              ('I-P','in_review',50,'2026-10-07T00:00:00Z');
             INSERT INTO ops.batch_item (batch_id, source, concept_id, review, note, extracted_at) VALUES
              ('I-A','DGDA-Drugs','I-DISM','pending',NULL,'2026-10-01T01:00:00Z'),
+             ('I-A','DGDA-Drugs','I-DISM2','issue',NULL,'2026-10-01T01:00:00Z'),
+             ('I-A','DGDA-Drugs','I-STALE','issue',NULL,'2026-10-05T00:00:00Z'),
              ('I-A','DGDA-Drugs','I-ENG','issue',NULL,'2026-10-01T01:00:00Z'),
              ('I-A','DGDA-Drugs','I-GONE','issue','removed from batch file','2026-10-01T01:00:00Z'),
              ('I-A','DGDA-Drugs','I-OK','ok',NULL,'2026-10-01T01:00:00Z'),
@@ -50,6 +53,9 @@ class ReviewIssuesIntegrationTest {
             INSERT INTO ops.review_decision (batch_id, concept_id, decision, note, reviewer_email, reviewer_role, decided_at) VALUES
              ('I-A','I-DISM','issue','looked wrong','pharm@example.org','pharmacist','2026-10-02T00:00:00Z'),
              ('I-A','I-DISM','dismiss','checked: the record is right','senior@example.org','senior','2026-10-03T00:00:00Z'),
+             ('I-A','I-DISM2','issue','stale column','pharm@example.org','pharmacist','2026-10-02T00:00:00Z'),
+             ('I-A','I-DISM2','dismiss','dismissed but column says issue','senior@example.org','senior','2026-10-03T00:00:00Z'),
+             ('I-A','I-STALE','issue','before the re-run','pharm@example.org','pharmacist','2026-10-02T00:00:00Z'),
              ('I-A','I-ENG','issue','route should be otic','Eng@example.org','engineer','2026-10-03T00:00:00Z'),
              ('I-A','I-GONE','issue','wrong product','pharm@example.org','pharmacist','2026-10-01T02:00:00Z'),
              ('I-A','I-OK','ok','','pharm@example.org','pharmacist','2026-10-02T00:00:00Z'),
@@ -84,7 +90,7 @@ class ReviewIssuesIntegrationTest {
             .jsonPath("$.data.items[0].batchId").isEqualTo("I-A")
             .jsonPath("$.data.items[0].conceptId").isEqualTo("I-TWO")
             .jsonPath("$.data.items[0].tradeName").isEqualTo("Twomol")
-            .jsonPath("$.data.items[0].index").isEqualTo(6)
+            .jsonPath("$.data.items[0].index").isEqualTo(8)
             .jsonPath("$.data.items[0].issues.length()").isEqualTo(2)
             .jsonPath("$.data.items[0].issues[0].role").isEqualTo("pharmacist")
             .jsonPath("$.data.items[0].issues[0].at").isEqualTo("2026-10-02T00:00:00Z")
@@ -93,7 +99,7 @@ class ReviewIssuesIntegrationTest {
             .jsonPath("$.data.items[0].issues[1].note").isEqualTo("agree: 500 mg in DGDA")
             .jsonPath("$.data.items[1].conceptId").isEqualTo("I-ENG")
             .jsonPath("$.data.items[1].tradeName").isEqualTo("I-ENG")
-            .jsonPath("$.data.items[1].index").isEqualTo(2)
+            .jsonPath("$.data.items[1].index").isEqualTo(3)
             .jsonPath("$.data.items[1].issues[0].role").isEqualTo("engineer")
             .jsonPath("$.data.items[2].batchId").isEqualTo("I-B")
             .jsonPath("$.data.items[2].conceptId").isEqualTo("I-NEW")
@@ -116,8 +122,9 @@ class ReviewIssuesIntegrationTest {
         for (String uri : new String[]{"/v1/review/issues", "/v1/review/issues?page=1"}) {
             String body = new String(internal(web).get().uri(uri).exchange().expectStatus().isOk().expectBody()
                 .returnResult().getResponseBody(), StandardCharsets.UTF_8);
-            assertThat(body).as(uri).doesNotContain("I-DISM").doesNotContain("I-RERUN").doesNotContain("I-SRC")
-                .doesNotContain("I-GONE").doesNotContain("I-OK").doesNotContain("@").doesNotContain("checked: the record is right");
+            assertThat(body).as(uri).doesNotContain("I-DISM").doesNotContain("I-STALE").doesNotContain("I-RERUN").doesNotContain("I-SRC")
+                .doesNotContain("I-GONE").doesNotContain("I-OK").doesNotContain("@").doesNotContain("checked: the record is right")
+                .doesNotContain("before the re-run").doesNotContain("stale column");
         }
     }
 

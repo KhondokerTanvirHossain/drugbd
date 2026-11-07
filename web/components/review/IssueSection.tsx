@@ -13,7 +13,8 @@ function who(i: IssueEntry): string {
 
 /**
  * §5.16 (D76): records with an issue reported by a reviewer, from every batch, oldest open issue first. Each links to its
- * record in the desk under the "Issue reported" filter, where an engineer re-runs it or a pharmacist dismisses the issue;
+ * record in the desk under the "Issue reported" filter, where an engineer fixes and re-runs it, a pharmacist
+ * approves it, or a senior pharmacist dismisses the issue;
  * there is no Resolve here. Notes are reviewer text, shown to signed-in reviewers only, in `.raw`.
  */
 export default function IssueSection({ page, paging }: { page: IssuesPage; paging: FlagPaging }) {
