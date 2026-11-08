@@ -8,7 +8,7 @@ Before D77 the DDInter stage dropped a pair's interaction id when DDInter's page
 - When the page is still empty, it writes that id to `curated.ddinter_pair.interaction_id`. Nothing else: no text, severity, action, name, review, decision, stamp or snapshot. The link is not part of a record's approval view (§8.3.1) nor of a pair's review content hash (§7.7), so no record goes back to review and no senior pair shows "changed".
 - A pair whose page has a text now is only listed (`has text now, left for the next pipeline run`): its text is reviewable content, so the next pipeline run of a batch that holds it stores text and link together.
 - DDInter is read at one request per second, like the pipeline, and every response is kept in `raw.http_snapshot`. Expect about 10 to 15 minutes for 300 pairs.
-- One transaction, committed at the end. `--dry-run` reads and reports, then rolls back.
+- Each pair is committed as soon as it is done, so no row stays locked while DDInter is read for the next pair: a senior pharmacist deciding a pair never waits on the job. `--dry-run` reads and reports, and rolls each pair back. Still, run it when no pipeline run (`bddrug-etl`) is in progress, so the two do not read DDInter at the same time.
 
 ## Run it
 

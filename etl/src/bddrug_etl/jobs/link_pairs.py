@@ -8,7 +8,8 @@ pair between two mapped entries and stores the id of each one whose page is stil
 review, decision or stamp, so no batch has to be re-run. A pair whose page has a text now is only listed: the next
 pipeline run of a batch that holds it stores the text and the link together.
 
-Everything runs in one transaction, committed at the end (``--dry-run`` rolls it back). The final log line is
+Each pair is committed as soon as it is done, so no row stays locked while DDInter is read for the next one (a senior's
+pair decision waits at most for one pair); ``--dry-run`` rolls each one back instead. The final log line is
 ``linked=N has_text=N not_listed=N failed=N``; the exit code is 1 when a DDInter read failed (run it again later).
 """
 import argparse
@@ -47,15 +48,12 @@ def main(argv: list[str] | None = None, *,
     args = parser.parse_args(argv)
     connect = connect or (lambda: psycopg.connect(os.environ.get("DATABASE_URL", "")))
     with connect() as conn, client_factory(conn) as client:
-        stats = link_empty_pairs(conn, client)
+        stats = link_empty_pairs(conn, client, conn.rollback if args.dry_run else conn.commit)
         for a, b in stats.has_text:
             log.info("has text now, left for the next pipeline run: %s/%s", a, b)
         for a, b in stats.failed:
             log.warning("DDInter read failed: %s/%s", a, b)
-        if args.dry_run:
-            conn.rollback()
-        else:
-            conn.commit()
+        conn.rollback() if args.dry_run else conn.commit()
     log.info("%slinked=%d has_text=%d not_listed=%d failed=%d", "dry run, rolled back: " if args.dry_run else "",
              len(stats.linked), len(stats.has_text), len(stats.not_listed), len(stats.failed))
     return 1 if stats.failed else 0

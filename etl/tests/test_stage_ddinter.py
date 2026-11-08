@@ -1184,6 +1184,16 @@ def test_link_empty_pairs_links_only_listed_pairs_whose_page_is_empty(conn):
     assert again.linked == [] and ("DDInter1951", "DDInter20") not in again.has_text + again.not_listed + again.failed
 
 
+def test_link_empty_pairs_calls_after_pair_once_per_pair_after_its_write(conn):
+    _legacy_pairs(conn)
+    seen = []
+    stats = link_empty_pairs(conn, _ChangedUpstream(text=EMPTY_50001),
+                             lambda: seen.append(conn.execute(PAIR_SQL).fetchone()[0]))
+    assert len(seen) == len(stats.linked) + len(stats.has_text) + len(stats.not_listed) + len(stats.failed) == 3
+    # numeric id order: DDInter1675/DDInter393 first, then DDInter1951/DDInter20, written before its own hook runs
+    assert seen == [None, "50001", "50001"]
+
+
 def test_link_empty_pairs_asks_the_other_side_and_skips_an_unreadable_drug(conn):
     _legacy_pairs(conn)
     client = _ChangedUpstream(text=EMPTY_50001,

@@ -41,7 +41,7 @@ when the product's savepoint commits; the pipeline then re-opens the other produ
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import TypeVar
 
@@ -724,11 +724,13 @@ class LinkStats:
     failed: list[Pair] = field(default_factory=list)      # a DDInter read failed: nothing written, try again later
 
 
-def link_empty_pairs(conn: psycopg.Connection, client: DDInterClient) -> LinkStats:
+def link_empty_pairs(conn: psycopg.Connection, client: DDInterClient,
+                     after_pair: Callable[[], None] | None = None) -> LinkStats:
     """Store the interaction id of every pair that has none, both of whose DDInter entries are mapped, and whose
     DDInter page is empty: what ``_ensure_text`` now stores (D77) for pairs a run before it left without a link.
 
-    Writes only ``curated.ddinter_pair.interaction_id`` (and the client's HTTP snapshots) in the caller's transaction.
+    Writes only ``curated.ddinter_pair.interaction_id`` (and the client's HTTP snapshots) in the caller's transaction;
+    ``after_pair`` (the CLI's commit) runs after each pair, so no row stays locked while DDInter is read for the next one.
     A link is not part of what a record's approval covers (``load.snapshots.approval_view``) nor of a pair's review
     content (the API's PairContent), so no review, decision or stamp changes. A pair whose page has a text now is not
     linked: its text is reviewable content and comes with the next pipeline run, which stores text and link together.
@@ -743,34 +745,41 @@ def link_empty_pairs(conn: psycopg.Connection, client: DDInterClient) -> LinkSta
               AND EXISTS (SELECT 1 FROM curated.substance_code c WHERE c.system = 'DDINTER' AND c.code = p.ddinter_b)""",
     ).fetchall()
     for a, b in sorted(rows, key=lambda r: (_idkey(r[0]), _idkey(r[1]))):
-        pair = (a, b)
-        iid, unsure = None, False
-        for side, partner in ((a, b), (b, a)):  # lower id side first, as _ensure_text asks
-            if side in unreadable:
-                unsure = True
-                continue
-            try:
-                iid = client.pair_interaction_id(side, partner)
-            except _READ_ERRORS:
-                unreadable.add(side)
-                unsure = True
-                continue
-            if iid is not None:
-                break
-        if iid is None:
-            (stats.failed if unsure else stats.not_listed).append(pair)
+        _link_one(conn, client, (a, b), unreadable, stats)
+        if after_pair is not None:
+            after_pair()
+    return stats
+
+
+def _link_one(conn: psycopg.Connection, client: DDInterClient, pair: Pair, unreadable: set[str], stats: LinkStats) -> None:
+    """``link_empty_pairs`` for one pair: classify it into ``stats`` and store its id when its page is empty."""
+    a, b = pair
+    iid, unsure = None, False
+    for side, partner in ((a, b), (b, a)):  # lower id side first, as _ensure_text asks
+        if side in unreadable:
+            unsure = True
             continue
         try:
-            text = _clean_interaction(client.interaction(iid))
+            iid = client.pair_interaction_id(side, partner)
         except _READ_ERRORS:
-            stats.failed.append(pair)
+            unreadable.add(side)
+            unsure = True
             continue
-        if text is not None:
-            stats.has_text.append(pair)
-            continue
-        if conn.execute(
-                """UPDATE curated.ddinter_pair SET interaction_id = %s
-                    WHERE ddinter_a = %s AND ddinter_b = %s AND interaction_id IS NULL RETURNING 1""",
-                (iid, a, b)).fetchone() is not None:
-            stats.linked.append(pair)
-    return stats
+        if iid is not None:
+            break
+    if iid is None:
+        (stats.failed if unsure else stats.not_listed).append(pair)
+        return
+    try:
+        text = _clean_interaction(client.interaction(iid))
+    except _READ_ERRORS:
+        stats.failed.append(pair)
+        return
+    if text is not None:
+        stats.has_text.append(pair)
+        return
+    if conn.execute(
+            """UPDATE curated.ddinter_pair SET interaction_id = %s
+                WHERE ddinter_a = %s AND ddinter_b = %s AND interaction_id IS NULL RETURNING 1""",
+            (iid, a, b)).fetchone() is not None:
+        stats.linked.append(pair)
