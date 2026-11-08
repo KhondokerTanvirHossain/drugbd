@@ -138,7 +138,8 @@ describe("approved product (§6.5 items 1–5)", () => {
     expect(html).toContain("drugbank, confidence 1.0, systemic");
     expect(html).toContain('href="https://mor.nlm.nih.gov/RxNav/search?searchBy=RXCUI&amp;searchTerm=161"');
     expect(html).toContain('target="_blank"');
-    expect(html).toContain("Search ICD-11 for XM5DJ7");
+    expect(html).toContain("ICD-11 code list (OCL)");
+    expect(html).toContain("https://tr.ocl.dghs.gov.bd/#/orgs/MoHFW/sources/ICD-11-MMS/concepts/XM5DJ7/");
     expect(html).toContain('<span class="code">387517004</span><span class="code">90332006</span>');
   });
 

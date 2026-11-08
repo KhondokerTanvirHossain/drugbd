@@ -84,6 +84,10 @@ export const DESK = {
   interactionFull: "Interaction description, in full.",
   noManagementForPair: " DDInter has no management text for this pair.",
   noTextHeading: "{k} {pairs} with no text in DDInter 2.0",
+  /** D77: the "no text" list when some pairs without text are shown with their partner's group instead. */
+  noTextHeadingOther: "{k} other {pairs} with no text in DDInter 2.0",
+  /** D77: a partner's pairs with this record, grouped (a combination record has one pair per ingredient). */
+  partnerGroup: "{n} {pairs} with {partner}",
   noTextWith: "with {records}",
   noTextClosing: "{actions}DDInter 2.0 has no interaction or management text for {this}.",
   noTextUnknown: ` ${UNCLASSIFIED_NOT_LOW_RISK}`,

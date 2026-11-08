@@ -152,29 +152,86 @@ function Card({ p, id, heading, partners, details }: { p: AnyPair; id: string; h
   );
 }
 
-function NoText<P extends AnyPair>({ pairs, withOf, detailsOf }: { pairs: P[]; withOf: (p: P) => ReactNode; detailsOf?: (p: P) => ReactNode }) {
-  const groups = SEVERITIES.map((sev) => [sev, pairs.filter((p) => severityOf(p.severity) === sev)] as const).filter(([, g]) => g.length > 0);
+type RowProps<P extends AnyPair> = { withOf: (p: P) => ReactNode; detailsOf?: (p: P) => ReactNode };
+
+/** One pair without text: names, partners, DDInter ids, link, details and review state; `level` adds its severity chip. */
+function NoTextRow<P extends AnyPair>({ p, withOf, detailsOf, level }: RowProps<P> & { p: P; level?: boolean }) {
+  return (
+    <li><b>{p.substance} + {p.partnerSubstance}</b>{" "}
+      {level && <><Severity level={severityOf(p.severity)} />{" "}</>}
+      <span className={s.ntxWith}>{fillNodes(DESK.noTextWith, { records: withOf(p) })}</span> {mono(`${p.ddinterA}/${p.ddinterB}`)}
+      {p.source && <> <SourceOf source={p.source} /></>}
+      {detailsOf?.(p)}
+      {p.pairReview && <PairReviewState {...p.pairReview} surface="reviewer" />}</li>
+  );
+}
+
+/** "DDInter 2.0 has no interaction or management text for this pair / these pairs." and, for an unknown one, why it counts. */
+function noTextClosing(pairs: AnyPair[]) {
   const actions = [...new Set(pairs.flatMap((p) => p.actions))];
+  return <p className={s.ingQ}>{fill(DESK.noTextClosing, { actions: actions.length ? fill(DESK.actionIn, { actions: actions.join(", ") }) : "",
+    this: pairs.length === 1 ? "this pair" : "these pairs" })}{pairs.some((p) => severityOf(p.severity) === "unknown") && DESK.noTextUnknown}</p>;
+}
+
+function NoText<P extends AnyPair>({ pairs, withOf, detailsOf, other }: RowProps<P> & { pairs: P[]; other: boolean }) {
+  const groups = SEVERITIES.map((sev) => [sev, pairs.filter((p) => severityOf(p.severity) === sev)] as const).filter(([, g]) => g.length > 0);
   const n = pairs.length;
   return (
     <div className={s.ntx}>
-      <p className={s.subH}>{fill(DESK.noTextHeading, { k: n, pairs: pairWord(n) })}</p>
+      <p className={s.subH}>{fill(other ? DESK.noTextHeadingOther : DESK.noTextHeading, { k: n, pairs: pairWord(n) })}</p>
       {groups.map(([sev, g]) => (
         <div className={s.ntxG} key={sev}>
           <Severity level={sev} count={g.length} />
-          <ul className={s.ntxList}>{g.map((p) => (
-            <li key={`${p.ddinterA}/${p.ddinterB}`}><b>{p.substance} + {p.partnerSubstance}</b>{" "}
-              <span className={s.ntxWith}>{fillNodes(DESK.noTextWith, { records: withOf(p) })}</span> {mono(`${p.ddinterA}/${p.ddinterB}`)}
-              {p.source && <> <SourceOf source={p.source} /></>}
-              {detailsOf?.(p)}
-              {p.pairReview && <PairReviewState {...p.pairReview} surface="reviewer" />}</li>
-          ))}</ul>
+          <ul className={s.ntxList}>{g.map((p) => <NoTextRow key={`${p.ddinterA}/${p.ddinterB}`} p={p} withOf={withOf} detailsOf={detailsOf} />)}</ul>
         </div>
       ))}
-      <p className={s.ingQ}>{fill(DESK.noTextClosing, { actions: actions.length ? fill(DESK.actionIn, { actions: actions.join(", ") }) : "",
-        this: n === 1 ? "this pair" : "these pairs" })}{groups.some(([sev]) => sev === "unknown") && DESK.noTextUnknown}</p>
+      {noTextClosing(pairs)}
     </div>
   );
+}
+
+/**
+ * D77: a combination record has one pair per ingredient with the same partner, often one with text and one without.
+ * Each partner with a text pair gets one group: its pairs with text (cards, worst first, as the API orders them), then its
+ * pairs without text. Pairs without text whose partner has no text pair stay in the "no text" list. A group of one card is
+ * that card alone, so a single-ingredient record renders as before.
+ */
+export function partnerGroups<P extends AnyPair>(pairs: P[]): { groups: { partner: string; withText: P[]; noText: P[] }[]; rest: P[] } {
+  const groups = new Map<string, { partner: string; withText: P[]; noText: P[] }>();
+  for (const p of pairs.filter(hasText)) {
+    const g = groups.get(p.partnerSubstance) ?? { partner: p.partnerSubstance, withText: [], noText: [] };
+    g.withText.push(p);
+    groups.set(p.partnerSubstance, g);
+  }
+  const rest: P[] = [];
+  for (const p of pairs.filter((x) => !hasText(x))) {
+    const g = groups.get(p.partnerSubstance);
+    if (g) g.noText.push(p);
+    else rest.push(p);
+  }
+  return { groups: [...groups.values()], rest };
+}
+
+function PairsBlock<P extends AnyPair>({ pairs, card, ...row }: RowProps<P> & { pairs: P[]; card: (p: P) => ReactNode }) {
+  const { groups, rest } = partnerGroups(pairs);
+  return <>
+    {groups.length > 0 && <div className={s.pairs}>{groups.map((g) => {
+      const n = g.withText.length + g.noText.length;
+      if (n === 1) return <Fragment key={g.partner}>{card(g.withText[0])}</Fragment>;
+      const label = fill(DESK.partnerGroup, { n, pairs: pairWord(n), partner: g.partner });
+      return (
+        <div className={s.pGroup} key={g.partner} role="group" aria-label={label}>
+          <p className={s.pGroupH}>{label}</p>
+          {g.withText.map((p) => <Fragment key={`${p.ddinterA}/${p.ddinterB}`}>{card(p)}</Fragment>)}
+          {g.noText.length > 0 && <div className={s.ntxG}>
+            <ul className={s.ntxList}>{g.noText.map((p) => <NoTextRow key={`${p.ddinterA}/${p.ddinterB}`} p={p} {...row} level />)}</ul>
+            {noTextClosing(g.noText)}
+          </div>}
+        </div>
+      );
+    })}</div>}
+    {rest.length > 0 && <NoText pairs={rest} {...row} other={groups.some((g) => g.noText.length > 0)} />}
+  </>;
 }
 
 type Line = { substance: string; partnerSubstance: string; reason: string; side: "this" | "partner"; route: string | null };
@@ -240,10 +297,9 @@ function BatchBlock({ item, brand }: { item: ReviewItem; brand: string }) {
       {item.ingredients.filter((g) => g.ddinter.chosen.length > 0 && !pairs.some((p) => p.substance === g.name)).map((g) => (
         <p className={s.ingQ} key={g.name}>{fill(DESK.noneInvolve, { n: totalBatchPairs, name: g.name })}</p>
       ))}
-      {pairs.some(hasText) && <div className={s.pairs}>{pairs.filter(hasText).map((p) => (
+      <PairsBlock pairs={pairs} withOf={recordsOf} card={(p) => (
         <Card key={`${p.ddinterA}/${p.ddinterB}`} p={p} id={`pair-${p.ddinterA}-${p.ddinterB}`} heading="h5" partners={recordsOf(p)} />
-      ))}</div>}
-      {pairs.some((p) => !hasText(p)) && <NoText pairs={pairs.filter((p) => !hasText(p))} withOf={recordsOf} />}
+      )} />
       {noData.length > 0 && <NoDataLines list={noData} />}
       {others.map((line) => <p className={s.ingQ} key={line}>{line}</p>)}
       {same.map((n) => <p className={s.ingQ} key={`${n.substance}+${n.partnerSubstance}`}>{fill(ra.notCheckedSameProduct, { a: n.substance, b: n.partnerSubstance })}</p>)}
@@ -273,13 +329,10 @@ function OtherGroup({ item, brand, approved, senior }: { item: ReviewItem; brand
       <p className={s.ingQ}>{fill(DESK.batchFound, { p: pairs.length, pairs: pairWord(pairs.length) })}
         {nc.length > 0 && fill(DESK.batchNotChecked, { nc: nc.length, pairs: pairWord(nc.length) })}</p>
       {chips(severityCounts(pairs), o.chips)}
-      {pairs.some(hasText) && <div className={s.pairs}>{pairs.filter(hasText).map((p) => (
+      <PairsBlock pairs={pairs} withOf={(p) => inlinePartners(p.partners, p.partnerCount)} detailsOf={details} card={(p) => (
         <Card key={`${p.ddinterA}/${p.ddinterB}`} p={p} id={`other-${tag}-${p.ddinterA}-${p.ddinterB}`} heading="h6"
           partners={inlinePartners(p.partners, p.partnerCount)} details={details(p)} />
-      ))}</div>}
-      {pairs.some((p) => !hasText(p)) && (
-        <NoText pairs={pairs.filter((p) => !hasText(p))} withOf={(p) => inlinePartners(p.partners, p.partnerCount)} detailsOf={details} />
-      )}
+      )} />
       {noData.length > 0 && <NoDataLines list={noData} />}
       {own.map((line) => <p className={s.ingQ} key={line}>{line}</p>)}
       {theirs.map((n) => <PartnerLines key={`${n.reason}/${n.route}/${n.substance}+${n.partnerSubstance}`} n={n} senior={senior} />)}

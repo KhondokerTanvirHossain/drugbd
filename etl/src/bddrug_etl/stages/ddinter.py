@@ -27,6 +27,8 @@ DDInter rows still cover every candidate entry: they are shared substance facts.
 DDInter free text (interaction, management, disease text, food description and management) goes through
 ``clean_text``: a placeholder ("None", "-", empty, ...) is stored as NULL, never as text. A pair whose interaction
 AND management are both missing gets no text row and is reported as ``text_missing``, like a pair without a text.
+Its interaction id is still stored on the pair row (D77): DDInter lists the pair, its page is only empty, and the
+pair keeps its link. A pair with no stored id is one neither drug's interact-with list names.
 A text row stored before this rule, with a placeholder in a field, counts as not stored: the next run re-fetches
 it and replaces it, or deletes it when DDInter still has neither text (idempotent, no migration needed).
 
@@ -43,6 +45,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import TypeVar
 
+import httpx
 import psycopg
 
 from bddrug_etl.ddinter.client import DDInterClient, InteractWithList
@@ -196,7 +199,8 @@ class _Run:
         self._pair_lists: dict[str, _PairList | None] = {}
         self._diseases: dict[str, dict[str, dict]] = {}
         self._foods: dict[str, dict[str, dict]] = {}
-        self.texts: dict[Pair, tuple[str, InteractionText] | None] = {}  # None: neither side lists the pair
+        # None: neither side lists the pair; (iid, None): DDInter lists it but its page has no text (D77)
+        self.texts: dict[Pair, tuple[str, InteractionText | None] | None] = {}
 
     def candidates(self, keys: frozenset[str]) -> list[_Entry]:
         found: dict[str, _Entry] = {}
@@ -458,10 +462,16 @@ def _clean_interaction(text: InteractionText) -> InteractionText | None:
     return InteractionText(interaction, management, tuple(text.refs))
 
 
+def _no_text(hit: tuple[str, InteractionText | None] | None) -> bool:
+    """The run found no text for the pair: neither side lists it, or DDInter's page for it is empty."""
+    return hit is None or hit[1] is None
+
+
 def _ensure_text(conn, run: _Run, pair: Pair, pending: _Pending) -> None:
     """Make sure the pair's interaction text is stored; fetch at most once per run, and not at all
     if a previous run stored it (the pair row carries the interaction id). A stored row with a placeholder
-    counts as not stored (re-fetched); a text that is empty upstream is not stored and its old row is deleted."""
+    counts as not stored (re-fetched); a text that is empty upstream is not stored and its old row is deleted.
+    The pair row carries the interaction id whenever DDInter lists the pair, also when its page is empty (D77)."""
     a, b = pair
     if pair not in run.texts:
         row = conn.execute(
@@ -485,11 +495,12 @@ def _ensure_text(conn, run: _Run, pair: Pair, pending: _Pending) -> None:
         else:
             text = _clean_interaction(run.client.interaction(iid))
             run.fetched.add(pair)
-            run.texts[pair] = None if text is None else (iid, text)
+            run.texts[pair] = (iid, text)
     hit = run.texts[pair]
-    if hit is None:
+    if hit is None or hit[1] is None:
         # No text this run: a row left from before the placeholder rule (both fields placeholders) is removed,
         # so the pair reads as text missing rather than showing "None". Nothing to delete on later runs.
+        # Runs before the link below, so it reads the row the pair showed until now.
         deleted = conn.execute(
             f"""DELETE FROM curated.ddinter_interaction_text t USING curated.ddinter_pair p
                  WHERE p.ddinter_a = %s AND p.ddinter_b = %s AND t.interaction_id = p.interaction_id
@@ -499,9 +510,9 @@ def _ensure_text(conn, run: _Run, pair: Pair, pending: _Pending) -> None:
         ).fetchone() is not None
         if deleted:
             pending.changed.ddinter_ids |= {a, b}
-    else:
+    if hit is not None:
         iid, text = hit
-        text_changed = conn.execute(
+        text_changed = text is not None and conn.execute(
             """INSERT INTO curated.ddinter_interaction_text (interaction_id, interaction, management, refs)
                VALUES (%s, %s, %s, %s)
                ON CONFLICT (interaction_id) DO UPDATE SET interaction = EXCLUDED.interaction,
@@ -595,7 +606,7 @@ def _process(conn: psycopg.Connection, run: _Run, cid: str, plan: _ProductPlan, 
     # A pair without text is reported only on the products it applies to (§8.1 item 3): one side chosen by this
     # product, the other chosen by an in-scope product. Fetching texts stays as wide as before (shared facts).
     text_missing = sorted(p for p in fetchable
-                          if p in run.texts and run.texts[p] is None and _applies(p, chosen_ids, run.scope_chosen))
+                          if p in run.texts and _no_text(run.texts[p]) and _applies(p, chosen_ids, run.scope_chosen))
     notes.extend(f"DDInter text not found for {a}/{b}" for a, b in text_missing)
 
     evidence = {"mappings": mappings, "coverage": coverage, "pair_count": len(pairs),
@@ -696,3 +707,70 @@ def map_and_load_ddinter(conn: psycopg.Connection, client: DDInterClient, concep
         return []
     plan = plan_ddinter(conn, client, concept_ids)
     return [plan.process(conn, cid, changes) for cid in concept_ids]
+
+
+# --- D77 one-off backfill: the links of pairs stored before empty DDInter pages kept their id --------------------------
+
+# What a DDInter read can raise besides a database error (``DDInterClient.interact_with`` catches the same list)
+_READ_ERRORS = (httpx.HTTPError, RuntimeError, ValueError, KeyError, TypeError, AttributeError)
+
+
+@dataclass
+class LinkStats:
+    """``link_empty_pairs``: what happened to each unlinked pair between two mapped DDInter entries."""
+    linked: list[Pair] = field(default_factory=list)      # DDInter lists the pair and its page is empty: id stored
+    has_text: list[Pair] = field(default_factory=list)    # its page has a text now: left for the next pipeline run
+    not_listed: list[Pair] = field(default_factory=list)  # neither drug's interact-with list names the pair
+    failed: list[Pair] = field(default_factory=list)      # a DDInter read failed: nothing written, try again later
+
+
+def link_empty_pairs(conn: psycopg.Connection, client: DDInterClient) -> LinkStats:
+    """Store the interaction id of every pair that has none, both of whose DDInter entries are mapped, and whose
+    DDInter page is empty: what ``_ensure_text`` now stores (D77) for pairs a run before it left without a link.
+
+    Writes only ``curated.ddinter_pair.interaction_id`` (and the client's HTTP snapshots) in the caller's transaction.
+    A link is not part of what a record's approval covers (``load.snapshots.approval_view``) nor of a pair's review
+    content (the API's PairContent), so no review, decision or stamp changes. A pair whose page has a text now is not
+    linked: its text is reviewable content and comes with the next pipeline run, which stores text and link together.
+    A drug whose interact-with list cannot be read is not asked again; its pairs are ``failed`` unless the other side
+    lists them."""
+    stats = LinkStats()
+    unreadable: set[str] = set()
+    rows = conn.execute(
+        """SELECT p.ddinter_a, p.ddinter_b FROM curated.ddinter_pair p
+            WHERE p.interaction_id IS NULL
+              AND EXISTS (SELECT 1 FROM curated.substance_code c WHERE c.system = 'DDINTER' AND c.code = p.ddinter_a)
+              AND EXISTS (SELECT 1 FROM curated.substance_code c WHERE c.system = 'DDINTER' AND c.code = p.ddinter_b)""",
+    ).fetchall()
+    for a, b in sorted(rows, key=lambda r: (_idkey(r[0]), _idkey(r[1]))):
+        pair = (a, b)
+        iid, unsure = None, False
+        for side, partner in ((a, b), (b, a)):  # lower id side first, as _ensure_text asks
+            if side in unreadable:
+                unsure = True
+                continue
+            try:
+                iid = client.pair_interaction_id(side, partner)
+            except _READ_ERRORS:
+                unreadable.add(side)
+                unsure = True
+                continue
+            if iid is not None:
+                break
+        if iid is None:
+            (stats.failed if unsure else stats.not_listed).append(pair)
+            continue
+        try:
+            text = _clean_interaction(client.interaction(iid))
+        except _READ_ERRORS:
+            stats.failed.append(pair)
+            continue
+        if text is not None:
+            stats.has_text.append(pair)
+            continue
+        if conn.execute(
+                """UPDATE curated.ddinter_pair SET interaction_id = %s
+                    WHERE ddinter_a = %s AND ddinter_b = %s AND interaction_id IS NULL RETURNING 1""",
+                (iid, a, b)).fetchone() is not None:
+            stats.linked.append(pair)
+    return stats

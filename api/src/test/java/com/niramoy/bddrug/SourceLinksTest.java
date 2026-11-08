@@ -21,7 +21,8 @@ class SourceLinksTest {
         "ATC|N02|https://atcddd.fhi.no/atc_ddd_index/?code=N02&showdescription=no|WHO ATC/DDD Index",
         "DRUGBANK|DB00316|https://go.drugbank.com/drugs/DB00316|DrugBank",
         "SNOMEDCT|387517004|https://mor.nlm.nih.gov/RxNav/search?searchBy=SNOMEDCT&searchTerm=387517004|RxNav (SNOMED CT search)",
-        "ICD11_XM|XM5DJ7|https://icd.who.int/browse/latest-release/mms/en|Search ICD-11 for XM5DJ7",
+        "ICD11_XM|XM5DJ7|https://tr.ocl.dghs.gov.bd/#/orgs/MoHFW/sources/ICD-11-MMS/concepts/XM5DJ7/|ICD-11 code list (OCL)",
+        "ICD11_XM|XM79J1|https://tr.ocl.dghs.gov.bd/#/orgs/MoHFW/sources/ICD-11-MMS/concepts/XM79J1/|ICD-11 code list (OCL)",
         "DDINTER|DDInter14|https://ddinter2.scbdd.com/server/drug-detail/DDInter14/|DDInter 2.0",
         "DDINTER|DDInter352|https://ddinter2.scbdd.com/server/drug-detail/DDInter352/|DDInter 2.0",
     })

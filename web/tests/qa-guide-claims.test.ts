@@ -198,7 +198,10 @@ const PATTERNS: Record<string, Origin> = {
     { file: `${PIPELINE}/rxnav/client.py`, needle: 'BASE = "https://rxnav.nlm.nih.gov/REST"' },
   "https://atcddd.fhi.no/atc_ddd_index/?code={c}&showdescription=no": '"https://atcddd.fhi.no/atc_ddd_index/?code={c}&showdescription=no"',
   "https://go.drugbank.com/drugs/{c}": '"https://go.drugbank.com/drugs/{c}"',
-  "https://icd.who.int/browse/latest-release/mms/en": 'ICD11_HOME = "https://icd.who.int/browse/latest-release/mms/en"',
+  // guide 1.8.0 (D77): the XM code's concept in DGDA's ICD-11 list on OCL, and that concept as JSON (external, dated)
+  "https://tr.ocl.dghs.gov.bd/#/orgs/MoHFW/sources/ICD-11-MMS/concepts/{c}/":
+    'OCL_ICD11_CONCEPT = "https://tr.ocl.dghs.gov.bd/#/orgs/MoHFW/sources/ICD-11-MMS/concepts/"',
+  "https://api.tr.ocl.dghs.gov.bd/orgs/MoHFW/sources/ICD-11-MMS/concepts/{c}/": null,
   "https://ddinter2.scbdd.com/server/drug-detail/{c}/": '"https://ddinter2.scbdd.com/server/drug-detail/{c}/"',
   "https://ddinter2.scbdd.com/server/interact/{interactionId}/": '"https://ddinter2.scbdd.com/server/interact/" + interactionId + "/"',
   "https://dailymed.nlm.nih.gov/dailymed/search.cfm?labeltype=all&query={name}": null,

@@ -17,7 +17,8 @@ public final class SourceLinks {
     public record Source(String url, String label, Instant fetchedAt) {}
 
     public static final String OCL_CONCEPT = "https://tr.ocl.dghs.gov.bd/#/orgs/MoHFW/sources/DGDA-Drugs/concepts/";
-    static final String ICD11_HOME = "https://icd.who.int/browse/latest-release/mms/en";
+    /** D77: an XM code's concept in DGDA's ICD-11 list on the same OCL server; it holds the WHO browser link (browser_url). */
+    static final String OCL_ICD11_CONCEPT = "https://tr.ocl.dghs.gov.bd/#/orgs/MoHFW/sources/ICD-11-MMS/concepts/";
 
     private record Rule(Pattern pattern, String url, String label) {}
 
@@ -29,7 +30,7 @@ public final class SourceLinks {
         "DRUGBANK", new Rule(Pattern.compile("^DB[0-9]{5}$"), "https://go.drugbank.com/drugs/{c}", "DrugBank"),
         "SNOMEDCT", new Rule(Pattern.compile("^[0-9]{6,18}$"),
             "https://mor.nlm.nih.gov/RxNav/search?searchBy=SNOMEDCT&searchTerm={c}", "RxNav (SNOMED CT search)"),
-        "ICD11_XM", new Rule(Pattern.compile("^XM[0-9A-Z]{4}$"), ICD11_HOME, "Search ICD-11 for {c}"),
+        "ICD11_XM", new Rule(Pattern.compile("^XM[0-9A-Z]{4}$"), OCL_ICD11_CONCEPT + "{c}/", "ICD-11 code list (OCL)"),
         "DDINTER", new Rule(Pattern.compile("^DDInter[0-9]{1,6}$"),
             "https://ddinter2.scbdd.com/server/drug-detail/{c}/", "DDInter 2.0"));
     private static final Pattern INTERACTION_ID = Pattern.compile("^[0-9]{1,9}$");

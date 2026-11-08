@@ -15,7 +15,7 @@ export const NAPA: PublicProduct = {
       names: [{ name: "Paracetamol", type: "dgda_content", source: "dgda-ocl" }, { name: "acetaminophen", type: "rxnorm", source: "rxnav" },
         { name: "Acetaminophen", type: "icd11", source: "dgda-ocl" }, { name: "Acetaminophen", type: "ddinter", source: "ddinter2" }],
       codes: [
-        { system: "ICD11_XM", code: "XM5DJ7", routeScope: "any", method: "xm", confidence: 1, source: SRC("https://icd.who.int/browse/latest-release/mms/en", "Search ICD-11 for XM5DJ7", "2026-10-11T21:00:00Z") },
+        { system: "ICD11_XM", code: "XM5DJ7", routeScope: "any", method: "xm", confidence: 1, source: SRC("https://tr.ocl.dghs.gov.bd/#/orgs/MoHFW/sources/ICD-11-MMS/concepts/XM5DJ7/", "ICD-11 code list (OCL)", "2026-10-11T21:00:00Z") },
         { system: "RXCUI", code: "161", routeScope: "any", method: "rxnav-exact", confidence: 1, source: SRC("https://mor.nlm.nih.gov/RxNav/search?searchBy=RXCUI&searchTerm=161", "RxNav") },
         { system: "ATC", code: "N02BE01", routeScope: "any", method: "rxnav-exact", confidence: 1, source: SRC("https://atcddd.fhi.no/atc_ddd_index/?code=N02BE01&showdescription=no", "WHO ATC/DDD Index") },
         { system: "DRUGBANK", code: "DB00316", routeScope: "any", method: "rxnav-exact", confidence: 1, source: SRC("https://go.drugbank.com/drugs/DB00316", "DrugBank") },

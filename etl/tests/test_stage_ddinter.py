@@ -1,3 +1,4 @@
+import contextlib
 import pathlib
 from decimal import Decimal
 
@@ -8,7 +9,8 @@ from testcontainers.postgres import PostgresContainer
 from bddrug_etl.ddinter.client import DDInterPairRow, InteractWithList, InteractWithRow, severity
 from bddrug_etl.ddinter.html import DDInterDrug, InteractionText
 from bddrug_etl.parse.names import route_for_dosage_form
-from bddrug_etl.stages.ddinter import _mapped_chosen, map_and_load_ddinter, plan_ddinter
+from bddrug_etl.jobs import link_pairs
+from bddrug_etl.stages.ddinter import LinkStats, _mapped_chosen, link_empty_pairs, map_and_load_ddinter, plan_ddinter
 from bddrug_etl.stages.results import SharedChanges, write_stage_results
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -789,10 +791,36 @@ def test_placeholder_text_is_not_stored_and_the_pair_warns_text_missing(conn, in
         assert r.evidence["text_missing"] == [["DDInter1951", "DDInter20"]]
     assert client.text_calls == ["50001"]  # fetched once per run, not again for the second product
     assert conn.execute("SELECT count(*) FROM curated.ddinter_interaction_text").fetchone()[0] == 0
-    # the severity survives: missing text is never "no interaction"
+    # the severity survives: missing text is never "no interaction"; DDInter lists the pair, so it keeps its link (D77)
     assert conn.execute(
         "SELECT severity, interaction_id FROM curated.ddinter_pair WHERE ddinter_a = 'DDInter1951' AND ddinter_b = 'DDInter20'"
-    ).fetchone() == ("major", None)
+    ).fetchone() == ("major", "50001")
+
+
+def test_empty_page_keeps_its_link_and_a_rerun_reads_the_page_by_its_id(conn):
+    """D77: a pair whose DDInter page is empty stores its interaction id; the next run re-reads that page directly
+    (no interact-with lookup), changes nothing while it is still empty, and stores the text once DDInter has one."""
+    empty = {"50001": InteractionText("None", "-", ())}
+    changes = SharedChanges()
+    map_and_load_ddinter(conn, _ChangedUpstream(text=empty), ["warf", "asa"], changes)
+    assert conn.execute(PAIR_SQL).fetchone() == ("50001",)
+    assert {"DDInter1951", "DDInter20"} <= changes.ddinter_ids  # the link is new
+    conn.commit()
+    client, changes = _ChangedUpstream(text=empty), SharedChanges()
+    res = map_and_load_ddinter(conn, client, ["warf", "asa"], changes)
+    assert changes == SharedChanges()
+    assert client.text_calls == ["50001"] and client.pair_calls == []
+    for r in res:
+        assert (r.status, r.note) == ("warn", TEXT_NOTE), r
+        assert r.evidence["text_missing"] == [["DDInter1951", "DDInter20"]] and r.evidence["text_fetch_count"] == 1
+    conn.commit()
+    client, changes = FakeDDInter(), SharedChanges()
+    res = map_and_load_ddinter(conn, client, ["warf", "asa"], changes)
+    assert all(r.status == "ok" and r.evidence["text_missing"] == [] for r in res), res
+    assert client.pair_calls == [] and client.text_calls == ["50001"]
+    assert conn.execute(TEXT_SQL).fetchone() == (
+        "Aspirin may increase the anticoagulant effect of warfarin.", "Monitor INR closely.", ["Ref A", "Ref B"])
+    assert changes == SharedChanges(ddinter_ids={"DDInter1951", "DDInter20"})
 
 
 def test_one_placeholder_field_is_stored_as_null_and_the_other_kept(conn):
@@ -1110,3 +1138,99 @@ def test_ddinter352_pair_list_is_stored_without_text_fetches(conn):
     assert conn.execute("""SELECT count(*), count(*) FILTER (WHERE severity = 'major') FROM curated.ddinter_pair
                             WHERE 'DDInter352' IN (ddinter_a, ddinter_b)""").fetchone() == (112, 1)
     assert not any("DDInter352" in call for call in client.pair_calls)
+
+
+# --- D77 backfill: link_empty_pairs ----------------------------------------------------------------------------------
+
+LINK_SQL = "SELECT ddinter_a, ddinter_b, interaction_id FROM curated.ddinter_pair ORDER BY ddinter_a, ddinter_b"
+EMPTY_50001 = {"50001": InteractionText("None", "-", ())}
+
+
+def _legacy_pairs(conn):
+    """Pairs as a run before D77 left them: three pairs between mapped entries without their id."""
+    map_and_load_ddinter(conn, FakeDDInter(), ["warf", "asa", "clar", "simva"])
+    conn.execute("UPDATE curated.ddinter_pair SET interaction_id = NULL")
+    conn.commit()
+
+
+def test_link_empty_pairs_links_only_listed_pairs_whose_page_is_empty(conn):
+    _legacy_pairs(conn)
+    texts_before = conn.execute("SELECT * FROM curated.ddinter_interaction_text ORDER BY interaction_id").fetchall()
+    pairs_before = conn.execute(
+        "SELECT ddinter_a, ddinter_b, severity, actions, partner_name_a, partner_name_b FROM curated.ddinter_pair "
+        "ORDER BY ddinter_a, ddinter_b").fetchall()
+    client = _ChangedUpstream(text=EMPTY_50001, one_sided={("DDInter1675", "DDInter393"), ("DDInter393", "DDInter1675")})
+    stats = link_empty_pairs(conn, client)
+    assert stats == LinkStats(linked=[("DDInter1951", "DDInter20")], has_text=[("DDInter1951", "DDInter393")],
+                              not_listed=[("DDInter1675", "DDInter393")], failed=[])
+    assert conn.execute(LINK_SQL).fetchall() == [
+        ("DDInter14", "DDInter1951", None),    # DDInter14 is not mapped: not asked, as the stage fetches no text for it
+        ("DDInter1675", "DDInter393", None),   # neither side lists it
+        ("DDInter1675", "DDInter79", None),    # DDInter79 is not mapped
+        ("DDInter1951", "DDInter20", "50001"),  # listed, page empty: linked
+        ("DDInter1951", "DDInter393", None),   # its page has a text now: left for the next pipeline run
+    ]
+    assert all("DDInter14" not in c and "DDInter79" not in c for c in client.pair_calls), client.pair_calls
+    assert client.text_calls == ["50001", "50002"]
+    # nothing else written: texts, severities, actions and names as before
+    assert conn.execute("SELECT * FROM curated.ddinter_interaction_text ORDER BY interaction_id").fetchall() == texts_before
+    assert conn.execute(
+        "SELECT ddinter_a, ddinter_b, severity, actions, partner_name_a, partner_name_b FROM curated.ddinter_pair "
+        "ORDER BY ddinter_a, ddinter_b"
+    ).fetchall() == pairs_before
+    conn.commit()
+    # idempotent: a second run links nothing new and never touches a linked pair
+    again = link_empty_pairs(conn, _ChangedUpstream(text=EMPTY_50001))
+    assert again.linked == [] and ("DDInter1951", "DDInter20") not in again.has_text + again.not_listed + again.failed
+
+
+def test_link_empty_pairs_asks_the_other_side_and_skips_an_unreadable_drug(conn):
+    _legacy_pairs(conn)
+    client = _ChangedUpstream(text=EMPTY_50001,
+                              fail={("pair_interaction_id", ("DDInter1951", "DDInter20")): RuntimeError("DDInter HTTP 500")})
+    stats = link_empty_pairs(conn, client)
+    assert stats.linked == [("DDInter1951", "DDInter20")]          # found from DDInter20's list
+    assert ("DDInter1951", "DDInter393") not in client.pair_calls  # DDInter1951's list is not read again
+    assert sorted(stats.has_text) == [("DDInter1675", "DDInter393"), ("DDInter1951", "DDInter393")]
+    assert stats.failed == [] and stats.not_listed == []
+
+
+def test_link_empty_pairs_reports_failed_reads_and_writes_nothing_for_them(conn):
+    _legacy_pairs(conn)
+    both = {("pair_interaction_id", ("DDInter1951", "DDInter20")): RuntimeError("down"),
+            ("pair_interaction_id", ("DDInter20", "DDInter1951")): RuntimeError("down"),
+            ("interaction", "50004"): RuntimeError("down")}
+    stats = link_empty_pairs(conn, _ChangedUpstream(text=EMPTY_50001, fail=both))
+    assert sorted(stats.failed) == [("DDInter1675", "DDInter393"), ("DDInter1951", "DDInter20")]
+    assert conn.execute("SELECT count(*) FROM curated.ddinter_pair WHERE interaction_id IS NOT NULL").fetchone()[0] == 0
+
+
+class _Keep:
+    """A connection the CLI's ``with connect()`` does not close."""
+    def __init__(self, c):
+        self.c = c
+
+    def __enter__(self):
+        return self.c
+
+    def __exit__(self, *exc):
+        return False
+
+
+@pytest.mark.parametrize("dry_run", [True, False])
+def test_link_pairs_cli_commits_or_rolls_back(conn, dry_run):
+    _legacy_pairs(conn)
+    client = _ChangedUpstream(text=EMPTY_50001)
+    code = link_pairs.main(["--dry-run"] if dry_run else [], connect=lambda: _Keep(conn),
+                           client_factory=lambda c: contextlib.nullcontext(client))
+    assert code == 0
+    conn.rollback()
+    linked = conn.execute(
+        "SELECT interaction_id FROM curated.ddinter_pair WHERE ddinter_a = 'DDInter1951' AND ddinter_b = 'DDInter20'").fetchone()
+    assert linked == ((None,) if dry_run else ("50001",))
+
+
+def test_link_pairs_cli_exits_1_when_a_read_failed(conn):
+    _legacy_pairs(conn)
+    client = _ChangedUpstream(text=EMPTY_50001, fail={("interaction", "50002"): RuntimeError("down")})
+    assert link_pairs.main([], connect=lambda: _Keep(conn), client_factory=lambda c: contextlib.nullcontext(client)) == 1
