@@ -183,6 +183,55 @@ describe("P1C: the combination fix (§5.6.2)", () => {
   });
 });
 
+describe("D77: a combination record's pairs are grouped by partner (§5.6.2)", () => {
+  // Bactipront's shape (0002, 09/11/2026): Sulphamethoxazole + Ciprofloxacin has text, Trimethoprim + Ciprofloxacin has none
+  const ref = (n: string, i: number) => ({ conceptId: n, tradeName: n, index: i });
+  const pair = (substance: string, partnerSubstance: string, ids: [string, string], severity: string, text: string | null,
+                partner: [string, number]) => ({ ddinterA: ids[0], ddinterB: ids[1], nameA: substance, nameB: partnerSubstance, substance,
+    partnerSubstance, severity, actions: [severity === "unknown" ? "unknown" : "metabolism"], interaction: text, management: null,
+    partners: [ref(...partner)], source: { url: `https://ddinter2.scbdd.com/server/interact/${ids[0].slice(7)}/`, label: "Full record in DDInter 2.0", fetchedAt: null } });
+  const pairs = [
+    pair("Sulphamethoxazole", "Ciprofloxacin", ["DDInter1700", "DDInter390"], "minor", "May prolong the QT interval.", ["Aprocin", 3]),
+    pair("Sulphamethoxazole", "Salbutamol", ["DDInter1700", "DDInter1640"], "minor", "May increase QT prolongation.", ["Azmasol", 7]),
+    pair("Trimethoprim", "Atorvastatin", ["DDInter1850", "DDInter120"], "unknown", null, ["Atova", 2]),
+    pair("Trimethoprim", "Ciprofloxacin", ["DDInter1850", "DDInter390"], "unknown", null, ["Aprocin", 3]),
+  ];
+  const item = pilotItem("amoxycillin", { batchPairs: { totalBatchPairs: 28, pairs, notChecked: [] } });
+  const html = r(<Interactions item={item} />);
+  const text = strip(html);
+
+  it("a partner with a text pair holds its pairs without text too, each with its severity chip and closing line", () => {
+    expect(html).toContain('<div class="pGroup" role="group" aria-label="2 pairs with Ciprofloxacin"><p class="pGroupH">2 pairs with Ciprofloxacin</p>');
+    const group = html.slice(html.indexOf('aria-label="2 pairs with Ciprofloxacin"'), html.indexOf("Salbutamol</h5>"));
+    expect(group).toContain('<h5 class="pair-names">Sulphamethoxazole + Ciprofloxacin</h5>');
+    expect(group).toContain("<b>Trimethoprim + Ciprofloxacin</b>");
+    expect(group).toContain('<span class="sev sev--unclassified">Severity not classified by DDInter</span>');
+    expect(strip(group)).toContain("with Aprocin (record 3)");
+    expect(group).toContain('href="https://ddinter2.scbdd.com/server/interact/1850/"');
+    expect(strip(group)).toContain("DDInter 2.0 has no interaction or management text for this pair. A pair whose severity is not classified by DDInter is never treated as low risk.");
+  });
+
+  it("a partner with one pair is its card alone, and the pairs whose partner has no text pair stay in the 'other' list", () => {
+    expect(html).not.toContain("pairs with Salbutamol");
+    expect(html).toContain('<h5 class="pair-names">Sulphamethoxazole + Salbutamol</h5>');
+    expect(text).toContain("1 other pair with no text in DDInter 2.0");
+    const list = html.slice(html.indexOf("1 other pair with no text"));
+    expect(list).toContain("<b>Trimethoprim + Atorvastatin</b>");
+    expect(list).not.toContain("Trimethoprim + Ciprofloxacin");
+    expect(html.match(/Trimethoprim \+ Ciprofloxacin/g)).toHaveLength(1);
+  });
+
+  it("the summary still counts every pair once", () => {
+    expect(text).toContain("4 pairs found in DDInter 2.0.");
+  });
+
+  it("with no grouped pair without text, the list keeps its plain heading", () => {
+    const only = r(<Interactions item={pilotItem("amoxycillin", { batchPairs: { totalBatchPairs: 28, pairs: [pairs[0], pairs[2]], notChecked: [] } })} />);
+    expect(strip(only)).toContain("1 pair with no text in DDInter 2.0");
+    expect(only).not.toContain("pGroup");
+  });
+});
+
 describe("P1C: every pair card says it is from DDInter and shows its senior-review state (§5.6.2)", () => {
   const card = (over: Partial<BatchPairs["pairs"][number]>) => pilotItem("g-warfarin", { batchPairs: { totalBatchPairs: 28, notChecked: [],
     pairs: [{ ddinterA: "DDInter1951", ddinterB: "DDInter20", nameA: "Warfarin", nameB: "Acetylsalicylic acid", substance: "Warfarin",
@@ -215,6 +264,16 @@ describe("P1C: In other batches (§5.6.2)", () => {
     pairReview: { state: "not_reviewed", at: null, mine: false, note: null },
     partners: Array.from({ length: Math.min(count, 5) }, (_, i) => partner(i + 1, approved)), partnerCount: count, ...over });
   const napa = (otherPairs: OtherPairs) => pilotItem("napa", { otherPairs });
+
+  it("D77: a combination's pairs with one partner in other batches are grouped, details kept", () => {
+    const html = r(<Interactions item={napa({ otherBatches: 1, notChecked: [], pairs: [other(true, 1),
+      other(true, 1, { ddinterA: "DDInter20", nameA: "Acetylsalicylic acid", substance: "Acetylsalicylic acid", interaction: null,
+        severity: "unknown" })] })} />);
+    expect(html).toContain('aria-label="2 pairs with Ibuprofen"');
+    expect(html).toContain("<b>Acetylsalicylic acid + Ibuprofen</b>");
+    expect(html.match(/<details/g)?.length).toBe(2);
+    expect(html).not.toContain("with no text in DDInter 2.0");
+  });
 
   it("two subgroups by the partner's status, each with its summary and chips", () => {
     const html = r(<Interactions item={napa({ otherBatches: 2, notChecked: [], pairs: [other(true, 1), other(false, 2, { severity: "minor" })] })} />);

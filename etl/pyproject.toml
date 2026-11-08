@@ -9,6 +9,7 @@ test = ["pytest==8.3.4", "respx==0.21.1", "testcontainers[postgres]==4.8.2"]
 
 [project.scripts]
 bddrug-etl = "bddrug_etl.jobs.run_pipeline:main"
+bddrug-link-pairs = "bddrug_etl.jobs.link_pairs:main"
 
 [build-system]
 requires = ["setuptools>=75"]

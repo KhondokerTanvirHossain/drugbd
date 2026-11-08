@@ -43,7 +43,7 @@ const SPEC_ROWS = [
   "Pair label and pair review state lines: `FROM_DDINTER`, `PAIR_REVIEWED`, `PAIR_NOT_REVIEWED` (public and reviewer), and the reviewer-only \"changed\" and \"issue\" lines",
   "Desk: \"With other medicines\" groups, cross-batch partner lines, the partner `<details>` summaries (\"All {n} medicines\", \"{s} of {n} medicines\"), \"and {k} more.\" and \"See every brand of {partner substance}\", the outside-this-batch text-missing note, the same-product text-missing note, the no-data line for other batches, \"no other batches\" lines",
   "Dismiss issue: control, panel, consequence sentence, hints, 409 outcomes, the not-saved and unconfirmed failure banners (report channel), announcements, history entries and the dismissal \"No longer counts\" suffix",
-  "Source links: link labels, \"fetched on {date}\", the ICD-11 search link, the evidence drawer's \"Sources\" section, the product page's \"Source\" column",
+  "Source links: link labels, \"fetched on {date}\", the ICD-11 code link, the evidence drawer's \"Sources\" section, the product page's \"Source\" column",
   "Product page \"With other approved medicines\" (cross-batch, grouped by partner substance) and its paging",
   // P2 final review finding 3 (the spec's "*(P2)* " marker removed, as for P1C)
   "Public page could not load (`app/error.tsx`)",

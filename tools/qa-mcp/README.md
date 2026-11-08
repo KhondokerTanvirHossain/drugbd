@@ -161,7 +161,7 @@ Nothing here is clinical advice.
 ```
 
 - **Unreviewed.** Records are returned whether or not a pharmacist approved them; `displayStatus` and `review` say where each stands.
-- **Cite.** A finding names the JSON field path (for example `data.extraction.ingredients[0].strengthValue`, or `.evidence.parsed` of the `data.stages` entry whose `stage` is `clinical`) and the `link` (`{ url, label, fetchedAt }`) it was checked against: the DGDA register, RxNav, WHO ATC/DDD, DrugBank, SNOMED CT through RxNav, ICD-11 search, or the DDInter entry or pair page.
+- **Cite.** A finding names the JSON field path (for example `data.extraction.ingredients[0].strengthValue`, or `.evidence.parsed` of the `data.stages` entry whose `stage` is `clinical`) and the `link` (`{ url, label, fetchedAt }`) it was checked against: the DGDA register, RxNav, WHO ATC/DDD, DrugBank, SNOMED CT through RxNav, the ICD-11 code in DGDA's list on OCL, or the DDInter entry or pair page.
 - **No data is not safety.** A substance with DDInter coverage `none`, or a pair with missing text, is a gap to report, never a sign that a combination is safe.
 - **Findings only.** This server cannot change anything; a QA run reports what it found and never claims a fix.
 - **Not clinical advice.**

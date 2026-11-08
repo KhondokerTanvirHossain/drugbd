@@ -157,7 +157,9 @@ class ReviewQueryCrossBatchIntegrationTest {
             .jsonPath("$.data.ingredients[0].codes[?(@.system == 'RXCUI')].source.fetchedAt").isEqualTo(List.of("2026-10-11T22:00:00Z"))
             .jsonPath("$.data.ingredients[0].codes[?(@.system == 'ATC')].source.fetchedAt").isEqualTo(List.of("2026-10-11T22:01:00Z"))
             .jsonPath("$.data.ingredients[0].codes[?(@.system == 'ATC')].source.label").isEqualTo(List.of("WHO ATC/DDD Index"))
-            .jsonPath("$.data.ingredients[0].codes[?(@.system == 'ICD11_XM')].source.label").isEqualTo(List.of("Search ICD-11 for XM6XF8"));
+            .jsonPath("$.data.ingredients[0].codes[?(@.system == 'ICD11_XM')].source.label").isEqualTo(List.of("ICD-11 code list (OCL)"))
+            .jsonPath("$.data.ingredients[0].codes[?(@.system == 'ICD11_XM')].source.url")
+            .isEqualTo(List.of("https://tr.ocl.dghs.gov.bd/#/orgs/MoHFW/sources/ICD-11-MMS/concepts/XM6XF8/"));
     }
 
     // ---- §7.3 otherPairs

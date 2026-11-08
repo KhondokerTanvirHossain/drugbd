@@ -28,6 +28,9 @@
 .chipRow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .subH { font: 600 13.5px/1.3 var(--font-ui); color: var(--fg); }
 .pairs { display: flex; flex-direction: column; gap: 10px; }
+/* D77: one partner's pairs with a combination record */
+.pGroup { display: flex; flex-direction: column; gap: 8px; padding-left: 12px; box-shadow: inset 2px 0 0 var(--line-strong); }
+.pGroupH { font: 600 13px/1.3 var(--font-ui); color: var(--fg-2); }
 .ntx { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border-radius: var(--r-panel); box-shadow: inset 0 0 0 1px var(--line-strong); background: var(--canvas); }
 .ntxG { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
 .ntxList { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--fg); }

@@ -18,7 +18,7 @@ const SRC: Record<string, (c: string) => Source> = {
   ATC: (c) => ({ url: `https://atcddd.fhi.no/atc_ddd_index/?code=${c}&showdescription=no`, label: "WHO ATC/DDD Index", fetchedAt: FETCHED }),
   DRUGBANK: (c) => ({ url: `https://go.drugbank.com/drugs/${c}`, label: "DrugBank", fetchedAt: FETCHED }),
   SNOMEDCT: (c) => ({ url: `https://mor.nlm.nih.gov/RxNav/search?searchBy=SNOMEDCT&searchTerm=${c}`, label: "RxNav (SNOMED CT search)", fetchedAt: FETCHED }),
-  ICD11_XM: (c) => ({ url: "https://icd.who.int/browse/latest-release/mms/en", label: `Search ICD-11 for ${c}`, fetchedAt: FETCHED }),
+  ICD11_XM: (c) => ({ url: `https://tr.ocl.dghs.gov.bd/#/orgs/MoHFW/sources/ICD-11-MMS/concepts/${c}/`, label: "ICD-11 code list (OCL)", fetchedAt: FETCHED }),
   DDINTER: (c) => ({ url: `https://ddinter2.scbdd.com/server/drug-detail/${c}/`, label: "DDInter 2.0", fetchedAt: FETCHED }),
 };
 function napaWithSources(): ReviewItem {
@@ -33,10 +33,10 @@ const link = (href: string, label: string) =>
 describe("source links on the desk (§5.6.6, §11.2)", () => {
   const item = napaWithSources();
 
-  it("the comparison table: the DGDA register in the header, the XM code's ICD-11 search, every code chip", () => {
+  it("the comparison table: the DGDA register in the header, the XM code's concept in the OCL ICD-11 list, every code chip", () => {
     const html = r(<ComparisonTable item={item} />);
     expect(html).toContain(`DGDA source ${link("https://tr.ocl.dghs.gov.bd/#/orgs/MoHFW/sources/DGDA-Drugs/concepts/186-0030-006--napa/", "DGDA register (OCL)")} fetched on 12/10/2026`);
-    expect(html).toContain(`<span class="mono">XM5DJ7</span> ${link("https://icd.who.int/browse/latest-release/mms/en", "Search ICD-11 for XM5DJ7")}`);
+    expect(html).toContain(`<span class="mono">XM5DJ7</span> ${link("https://tr.ocl.dghs.gov.bd/#/orgs/MoHFW/sources/ICD-11-MMS/concepts/XM5DJ7/", "ICD-11 code list (OCL)")}`);
     expect(html).toContain('href="https://mor.nlm.nih.gov/RxNav/search?searchBy=RXCUI&amp;searchTerm=161"');
     expect(html).toContain('href="https://atcddd.fhi.no/atc_ddd_index/?code=N02BE01&amp;showdescription=no"');
     expect(html).toContain('href="https://go.drugbank.com/drugs/DB00316"');

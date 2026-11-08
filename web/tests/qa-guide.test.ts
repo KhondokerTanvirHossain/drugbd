@@ -41,6 +41,9 @@ const GUIDE_HISTORY: readonly { version: string; sha256: string }[] = [
   // 1.7.0 (D74): the overview's gate line is mode-neutral; a server setting decides whether the public site shows approved
   // records only or every record with its label, and QA reads are the same either way (§7.4.1, §7.11)
   { version: "1.7.0", sha256: "8a9c82438f65536591b8b87a2c150d270193cd1de096fd3b218386baa0589b15" },
+  // 1.8.0 (D77): an ICD11_XM code links to its concept in DGDA's ICD-11 list on OCL, whose JSON gives the WHO browser page
+  // (sources); the pipeline keeps the interaction id of a listed pair whose DDInter page is empty, not a finding (checks)
+  { version: "1.8.0", sha256: "58fda2a007d488e246f047d37ca3270005622931ef0fff531acdc37c01788217" },
 ];
 
 const contentHash = () => createHash("sha256")

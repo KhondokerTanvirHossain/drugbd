@@ -113,7 +113,7 @@ export const RECORD_BODY = {
     names: [{ name: "Acetaminophen", type: "icd11", source: "dgda-ocl" }, { name: "Paracetamol", type: "dgda_content", source: "dgda-ocl" }],
     codes: [
       { system: "ICD11_XM", code: "XM5DJ7", routeScope: "any", method: "xm", confidence: 1,
-        source: { url: "https://icd.who.int/browse/latest-release/mms/en", label: "Search ICD-11 for XM5DJ7", fetchedAt: FETCHED } },
+        source: { url: "https://tr.ocl.dghs.gov.bd/#/orgs/MoHFW/sources/ICD-11-MMS/concepts/XM5DJ7/", label: "ICD-11 code list (OCL)", fetchedAt: FETCHED } },
       { system: "RXCUI", code: "161", routeScope: "any", method: "rxnav-exact", confidence: 1,
         source: { url: "https://mor.nlm.nih.gov/RxNav/search?searchBy=RXCUI&searchTerm=161", label: SOURCE_LABEL.rxnav, fetchedAt: FETCHED } },
       { system: "ATC", code: "N02BE01", routeScope: "any", method: "rxnav-exact", confidence: 1,
