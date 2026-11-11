@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import ReviewStatus from "@/components/ui/ReviewStatus";
-import { PairText } from "@/components/ui/PairCard";
+import { PairText, PairTexts } from "@/components/ui/PairCard";
 import Severity from "@/components/ui/Severity";
 import { SourceOf } from "@/components/ui/SourceLink";
 import { DESK_NEW, FROM_DDINTER, NO_TEXT, P1C_COPY, UNKNOWN_PAIR_LINE, fill } from "@/lib/copy";
@@ -51,11 +51,9 @@ export default function PairRow({ p, heading }: { p: PairView; heading: "h2" | "
   // §5.17.2 item 2: the entry no held product is checked against; both when neither is.
   const notChosen = p.brandCounts.a === 0 && p.brandCounts.b === 0
     ? fillNodes(r.eitherId, { a: mono(p.ddinterA), b: mono(p.ddinterB) }) : mono(p.brandCounts.a === 0 ? p.ddinterA : p.ddinterB);
+  // D78: with any DDInter text, both are shown (PairTexts); with none, the no-text line as before.
   const body = p.management ?? p.interaction;
-  const management = p.management !== null;
-  const suffix = management ? "" : DESK.noManagementForPair;
-  const footer = body === null ? (severityOf(p.severity) === "unknown" ? UNKNOWN_PAIR_LINE : NO_TEXT)
-    : `${management ? DESK.managementTruncated : DESK.interactionTruncated}${suffix}`;
+  const footer = severityOf(p.severity) === "unknown" ? UNKNOWN_PAIR_LINE : NO_TEXT;
   return (
     <article className={`pair-row ${s.row}`} id={id} aria-labelledby={`${id}-h`} data-pair={pairKey(p.ddinterA, p.ddinterB)}>
       <div className={s.rowHead}>
@@ -77,9 +75,9 @@ export default function PairRow({ p, heading }: { p: PairView; heading: "h2" | "
         <Side side={p.substanceA} total={p.brandCounts.a} list={sideA} />
         <Side side={p.substanceB} total={p.brandCounts.b} list={sideB} />
       </details>
-      <PairText id={id} text={body === null ? undefined : { kind: management ? "management" : "interaction", body }} source={footer}
-        sourceOpen={body === null ? undefined : `${management ? DESK.managementFull : DESK.interactionFull}${suffix}`}
-        link={p.source ? <SourceOf source={p.source} /> : undefined} surface="reviewer" />
+      {body === null
+        ? <PairText id={id} source={footer} link={p.source ? <SourceOf source={p.source} /> : undefined} surface="reviewer" />
+        : <PairTexts id={id} interaction={p.interaction} management={p.management} link={p.source ? <SourceOf source={p.source} /> : undefined} />}
       <PairStateLine ddinterA={p.ddinterA} ddinterB={p.ddinterB} review={p.review} />
       {p.review.state === "changed" && p.changes.length > 0 && (
         <details className={s.details}>

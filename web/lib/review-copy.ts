@@ -78,11 +78,12 @@ export const DESK = {
   noneInvolve: "None of the {n} batch pairs from DDInter 2.0 involve {name}.",
   pairWith: "With {partners}. ",
   record: "{name} (record {k})",
-  managementTruncated: "Management, truncated.",
-  managementFull: "Management, in full.",
-  interactionTruncated: "Interaction description, truncated.",
-  interactionFull: "Interaction description, in full.",
-  noManagementForPair: " DDInter has no management text for this pair.",
+  /** D78: both DDInter texts on reviewer surfaces (PairTexts). */
+  textInteraction: "Interaction",
+  textManagement: "Management",
+  noInteractionText: "DDInter 2.0 gives no interaction text for this pair.",
+  noManagementText: "DDInter 2.0 gives no management text for this pair.",
+  textsSource: "Interaction and management text from DDInter 2.0, in full.",
   noTextHeading: "{k} {pairs} with no text in DDInter 2.0",
   /** D77: the "no text" list when some pairs without text are shown with their partner's group instead. */
   noTextHeadingOther: "{k} other {pairs} with no text in DDInter 2.0",

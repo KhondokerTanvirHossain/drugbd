@@ -135,18 +135,14 @@ function PartnerList({ partners, count, substance, bdsId, senior }:
 
 // ---- the parts every group shares
 
+/** D78: both DDInter texts, labelled and in full (PairTexts); a missing one says so. */
 function Card({ p, id, heading, partners, details }: { p: AnyPair; id: string; heading: PairHeading; partners: ReactNode; details?: ReactNode }) {
-  const management = p.management !== null;
-  const kind = management ? "management" : "interaction";
-  const suffix = management ? "" : DESK.noManagementForPair;
   return (
     <PairCard id={id} severity={p.severity} names={`${p.substance} + ${p.partnerSubstance}`} heading={heading}
       meta={<>{FROM_DDINTER}. {fillNodes(DESK.pairWith, { partners })}{p.actions.length > 0 && fill(DESK.actionIn, { actions: p.actions.join(", ") })}
         {mono(`${p.ddinterA}/${p.ddinterB}`)}</>}
       details={details}
-      text={{ kind, body: (p.management ?? p.interaction)! }}
-      source={`${management ? DESK.managementTruncated : DESK.interactionTruncated}${suffix}`}
-      sourceOpen={`${management ? DESK.managementFull : DESK.interactionFull}${suffix}`}
+      texts={{ interaction: p.interaction, management: p.management }}
       link={p.source ? <SourceOf source={p.source} /> : undefined}
       review={p.pairReview ? <PairReviewState {...p.pairReview} surface="reviewer" /> : undefined} surface="reviewer" />
   );
