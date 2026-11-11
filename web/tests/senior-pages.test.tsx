@@ -91,6 +91,22 @@ describe("the pair queue (§5.17.1, §5.17.2)", () => {
     expect(html).not.toContain("banner--warn");
   });
 
+  it("D78: a pair row shows both DDInter texts in full, a missing one in words; a pair with neither keeps its no-text line", async () => {
+    getPairQueue.mockResolvedValue(pairsPage([pairView({ interaction: "Aspirin may increase bleeding.", management: "Avoid the combination." })]));
+    let html = await queue();
+    expect(html).toContain("<dt>Interaction</dt><dd>Aspirin may increase bleeding.</dd>");
+    expect(html).toContain("<dt>Management</dt><dd>Avoid the combination.</dd>");
+    expect(strip(html)).toContain("Interaction and management text from DDInter 2.0, in full.");
+    getPairQueue.mockResolvedValue(pairsPage([pairView({ interaction: "Aspirin may increase bleeding.", management: null })]));
+    html = await queue();
+    expect(html).toContain("<dt>Interaction</dt><dd>Aspirin may increase bleeding.</dd>");
+    expect(html).toMatch(/<dt>Management<\/dt><dd class="[^"]*none[^"]*">DDInter 2.0 gives no management text for this pair.<\/dd>/);
+    getPairQueue.mockResolvedValue(pairsPage([pairView({ interaction: null, management: null, severity: "unknown" })]));
+    html = await queue();
+    expect(html).not.toContain("<dt>Interaction</dt>");
+    expect(strip(html)).toContain("not classified");
+  });
+
   it("a pair that does not apply: one plain line, never a warning tone; either id when neither side is chosen", async () => {
     getPairQueue.mockResolvedValue(pairsPage([pairView({ applies: false, brands: [pairView().brands[1]], brandCounts: { a: 0, b: 1, batches: 1 } })]));
     let html = await queue();

@@ -128,12 +128,34 @@ describe("the batch block (§5.6.2)", () => {
     expect(html).toContain('aria-label="Batch pairs by severity"');
   });
 
-  it("pairs with text are cards, management first, interaction otherwise, with mono ids", () => {
+  it("pairs with text are cards showing both DDInter texts in full, a missing one said in words, with mono ids (D78)", () => {
     expect(html).toContain('<h5 class="pair-names">Warfarin + Acetylsalicylic acid</h5>');
     expect(html).toContain('<p class="pair-meta">From DDInter 2.0. With Aspirin (record 2). Action in DDInter: synergy. <span class="mono">DDInter1951/DDInter20</span></p>');
-    expect(html).toContain('<span class="whenClosed">Management, truncated.</span><span class="whenOpen">Management, in full.</span>');
-    expect(html).toContain("Interaction description, truncated. DDInter has no management text for this pair.");
+    const aspirin = html.slice(html.indexOf("Acetylsalicylic acid</h5>"), html.indexOf("Clarithromycin</h5>"));
+    expect(aspirin).toContain("<dt>Interaction</dt><dd>May increase bleeding.</dd>");
+    expect(aspirin).toContain("<dt>Management</dt><dd>Avoid the combination; monitor INR.</dd>");
+    expect(aspirin.indexOf("<dt>Interaction</dt>")).toBeLessThan(aspirin.indexOf("<dt>Management</dt>"));
+    const clarith = html.slice(html.indexOf("Clarithromycin</h5>"));
+    expect(clarith).toContain("<dt>Interaction</dt><dd>May increase the effect of warfarin.</dd>");
+    expect(clarith).toMatch(/<dt>Management<\/dt><dd class="[^"]*none[^"]*">DDInter 2.0 gives no management text for this pair.<\/dd>/);
+    expect(text).toContain("Interaction and management text from DDInter 2.0, in full.");
+    expect(html).not.toContain("truncated.");
     expect(html.indexOf("Acetylsalicylic acid</h5>")).toBeLessThan(html.indexOf("Clarithromycin</h5>"));
+  });
+
+  it("a pair with management only says DDInter gives no interaction text, never borrows one for the other (D78)", () => {
+    const only = { ...bp.pairs[0], interaction: null };
+    const h = r(<Interactions item={pilotItem("g-warfarin", { batchPairs: { ...bp, pairs: [only] } })} />);
+    expect(h).toMatch(/<dt>Interaction<\/dt><dd class="[^"]*none[^"]*">DDInter 2.0 gives no interaction text for this pair.<\/dd>/);
+    expect(h).toContain("<dt>Management</dt><dd>Avoid the combination; monitor INR.</dd>");
+  });
+
+  it("a DDInter placeholder counts as no text (§3.6)", () => {
+    const placeholder = { ...bp.pairs[0], interaction: "None", management: " - " };
+    const h = r(<Interactions item={pilotItem("g-warfarin", { batchPairs: { ...bp, pairs: [placeholder] } })} />);
+    expect(h).toContain("DDInter 2.0 gives no interaction text for this pair.");
+    expect(h).toContain("DDInter 2.0 gives no management text for this pair.");
+    expect(h).not.toMatch(/<dd>None<\/dd>|<dd> - <\/dd>/);
   });
 
   it("pairs without text are grouped, and an unclassified pair is never low risk", () => {
@@ -242,7 +264,7 @@ describe("P1C: every pair card says it is from DDInter and shows its senior-revi
     const html = r(<Interactions item={card({
       source: { url: "https://ddinter2.scbdd.com/server/interact/3039/", label: "Full record in DDInter 2.0", fetchedAt: null },
       pairReview: { state: "reviewed", at: "2026-10-15T03:00:00Z", mine: false, note: null } })} />);
-    expect(html).toContain('Management, truncated.</span><span class="whenOpen">Management, in full.</span> <a class="src-link" href="https://ddinter2.scbdd.com/server/interact/3039/" target="_blank" rel="noopener noreferrer">Full record in DDInter 2.0<span class="sr-only"> (opens in a new tab)</span></a>');
+    expect(html).toContain('<p class="pair-source">Interaction and management text from DDInter 2.0, in full. <a class="src-link" href="https://ddinter2.scbdd.com/server/interact/3039/" target="_blank" rel="noopener noreferrer">Full record in DDInter 2.0<span class="sr-only"> (opens in a new tab)</span></a></p>');
     expect(html).toContain('<p class="pair-review">Pair reviewed by a senior pharmacist on 15/10/2026</p></article>');
     expect(html).not.toMatch(/rv--approved/);
   });
